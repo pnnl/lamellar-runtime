@@ -43,6 +43,7 @@ pub(crate) struct LibfabricPutFuture<T: Remote> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    local_op: bool,
 }
 
 impl<T: Remote> LibfabricPutFuture<T> {
@@ -106,7 +107,9 @@ impl<T: Remote> LibfabricPutFuture<T> {
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
@@ -114,7 +117,11 @@ impl<T: Remote> LibfabricPutFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler
             .clone()
-            .spawn_task(async move { self.alloc.ofi.wait_all().unwrap() }, counters)
+            .spawn_task(async move { 
+                if !self.local_op {
+                    self.alloc.ofi.wait_all().unwrap();
+                }
+            }, counters)
     }
 }
 
@@ -141,7 +148,9 @@ impl<T: Remote> Future for LibfabricPutFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
 
         Poll::Ready(())
     }
@@ -156,6 +165,7 @@ pub(crate) struct LibfabricGetFuture<T> {
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
     result: Box<T>,
+    local_op: bool,
 }
 
 impl<T: Remote> LibfabricGetFuture<T> {
@@ -177,8 +187,9 @@ impl<T: Remote> LibfabricGetFuture<T> {
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
-        self.alloc.ofi.wait_all().unwrap();
-        // unsafe { self.result.assume_init_read() }
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         *self.result
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
@@ -187,7 +198,9 @@ impl<T: Remote> LibfabricGetFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                self.alloc.ofi.wait_all().unwrap();
+                if !self.local_op {
+                    self.alloc.ofi.wait_all().unwrap();
+                }
                 *self.result
             },
             counters,
@@ -218,8 +231,11 @@ impl<T: Remote> Future for LibfabricGetFuture<T> {
         if !self.spawned {
             self.exec_at();
         }
+
         let this = self.project();
-        this.alloc.ofi.wait_all().unwrap();
+        if !*this.local_op {
+            this.alloc.ofi.wait_all().unwrap();
+        }
 
         // Poll::Ready(unsafe { this.result.assume_init_read() })
         Poll::Ready(**this.result)
@@ -236,6 +252,7 @@ pub(crate) struct LibfabricGetBufferFuture<T> {
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
     result: Vec<T>,
+    local_op: bool,
 }
 
 impl<T: Remote> LibfabricGetBufferFuture<T> {
@@ -253,7 +270,9 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_at();
 
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         std::mem::take(&mut self.result)
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
@@ -262,7 +281,9 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                self.alloc.ofi.wait_all().unwrap();
+                if !self.local_op {
+                    self.alloc.ofi.wait_all().unwrap();
+                }
                 std::mem::take(&mut self.result)
             },
             counters,
@@ -294,7 +315,9 @@ impl<T: Remote> Future for LibfabricGetBufferFuture<T> {
             self.exec_at();
         }
         let this = self.project();
-        this.alloc.ofi.wait_all().unwrap();
+        if !*this.local_op {
+            this.alloc.ofi.wait_all().unwrap();
+        }
         Poll::Ready(std::mem::take(this.result))
     }
 }
@@ -309,6 +332,7 @@ pub(crate) struct LibfabricGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    local_op: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricGetIntoBufferFuture<T, B> {
@@ -328,16 +352,21 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricGetIntoBufferFuture<T, B> {
 
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        let ofi = self.alloc.ofi.clone();
         self.scheduler
             .clone()
-            .spawn_task(async move { ofi.wait_all().unwrap() }, counters)
+            .spawn_task(async move { 
+                if !self.local_op {
+                    self.alloc.ofi.wait_all().unwrap();
+                }
+            }, counters)
     }
 }
 
@@ -366,7 +395,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricGetIntoBufferFuture<
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         Poll::Ready(())
     }
 }
@@ -388,6 +419,7 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            local_op: pe == self.ofi.my_pe,
         }
         .into()
     }
@@ -423,6 +455,7 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            local_op: pe == self.ofi.my_pe,
         }
         .into()
     }
@@ -455,6 +488,7 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            local_op: false,
         }
         .into()
     }
@@ -482,6 +516,7 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            local_op: false,
         }
         .into()
     }
@@ -514,6 +549,7 @@ impl CommAllocRdma for LibfabricAlloc {
             scheduler: scheduler.clone(),
             counters,
             result: Box::new(T::default()),
+            local_op: pe == self.ofi.my_pe,
         }
         .into()
     }
@@ -556,6 +592,7 @@ impl CommAllocRdma for LibfabricAlloc {
             scheduler: scheduler.clone(),
             counters,
             result: vec![T::default(); len],
+            local_op: pe == self.ofi.my_pe,
         }
         .into()
     }
@@ -584,6 +621,7 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            local_op: pe == self.ofi.my_pe,
         }
         .into()
     }
@@ -636,6 +674,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            local_op: pe == self.alloc.ofi.my_pe,
         }
         .into()
     }
@@ -683,6 +722,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            local_op: pe == self.alloc.ofi.my_pe,
         }
         .into()
     }
@@ -752,6 +792,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             scheduler: scheduler.clone(),
             counters,
             result: Box::new(T::default()),
+            local_op: pe == self.alloc.ofi.my_pe,
         }
         .into()
     }
@@ -791,6 +832,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             scheduler: scheduler.clone(),
             counters,
             result: vec![T::default(); len],
+            local_op: pe == self.alloc.ofi.my_pe,
         }
         .into()
     }
@@ -830,6 +872,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            local_op: pe == self.alloc.ofi.my_pe,
         }
         .into()
     }

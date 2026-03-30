@@ -38,6 +38,7 @@ pub(crate) struct LibfabricAtomicFuture<T> {
     pub(super) remote_pes: Vec<usize>,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
+    pub(crate) local_op: bool,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -58,16 +59,22 @@ impl<T: Send + 'static> LibfabricAtomicFuture<T> {
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        let ofi = self.alloc.ofi.clone();
-        self.scheduler
-            .clone()
-            .spawn_task(async move { ofi.wait_all().unwrap() }, counters)
+        self.scheduler.clone().spawn_task(
+            async move {
+                if !self.local_op {
+                    self.alloc.ofi.wait_all().unwrap();
+                }
+            },
+            counters,
+        )
     }
 }
 
@@ -94,7 +101,9 @@ impl<T: Send + 'static> Future for LibfabricAtomicFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         Poll::Ready(())
     }
 }
@@ -106,6 +115,7 @@ pub(crate) struct LibfabricAtomicFetchFuture<T> {
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
     pub(crate) result: Box<T>,
+    pub(crate) local_op: bool,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -133,7 +143,9 @@ impl<T: Remote> LibfabricAtomicFetchFuture<T> {
     }
     pub(crate) fn block(mut self) -> T {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         *self.result
     }
 
@@ -169,7 +181,9 @@ impl<T: Remote> Future for LibfabricAtomicFetchFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
 
         Poll::Ready(*self.result)
     }
@@ -183,6 +197,7 @@ pub(crate) struct LibfabricAtomicCompareExchangeFuture<T> {
     current: T,
     new: T,
     pub(crate) result: Box<T>,
+    pub(crate) local_op: bool,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -205,7 +220,9 @@ impl<T: Remote + PartialEq> LibfabricAtomicCompareExchangeFuture<T> {
 
     pub(crate) fn block(mut self) -> Result<T, T> {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         compare_exchange_result(*self.result, self.current)
     }
 
@@ -241,7 +258,9 @@ impl<T: Remote + PartialEq> Future for LibfabricAtomicCompareExchangeFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         Poll::Ready(compare_exchange_result(*self.result, self.current))
     }
 }
@@ -260,6 +279,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             remote_pes: vec![pe],
             offset,
             op,
+            local_op: pe == self.ofi.my_pe,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -284,6 +304,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             remote_pes: (0..self.num_pes()).collect(),
             offset,
             op,
+            local_op: false,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -309,6 +330,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             offset,
             op: op,
             result: Box::new(T::default()),
+            local_op: pe == self.ofi.my_pe,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -338,6 +360,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             current,
             new,
             result: Box::new(T::default()),
+            local_op: pe == self.ofi.my_pe,
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
@@ -386,6 +409,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             remote_pes: vec![pe],
             offset,
             op,
+            local_op: pe == self.alloc.ofi.my_pe,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -440,6 +464,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             offset,
             op: op,
             result: Box::new(T::default()),
+            local_op: pe == self.alloc.ofi.my_pe,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -479,6 +504,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             current,
             new,
             result: Box::new(T::default()),
+            local_op: pe == self.alloc.ofi.my_pe,
             scheduler: scheduler.clone(),
             counters,
             spawned: false,

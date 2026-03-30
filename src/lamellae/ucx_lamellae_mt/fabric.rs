@@ -520,7 +520,7 @@ impl UcxMtAlloc {
     unsafe fn negate_atomic_value<T: Copy>(value: T) -> T {
         let num_bytes = std::mem::size_of::<T>();
         let mut bytes = vec![0u8; num_bytes];
-        std::ptr::copy_nonoverlapping(
+        std::ptr::copy(
             (&value as *const T).cast::<u8>(),
             bytes.as_mut_ptr(),
             num_bytes,
@@ -550,7 +550,7 @@ impl UcxMtAlloc {
         }
 
         let mut result = std::mem::MaybeUninit::<T>::uninit();
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
+        std::ptr::copy(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
         result.assume_init()
     }
 
@@ -805,6 +805,14 @@ impl UcxMtAlloc {
             self.num_bytes(),
         );
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            std::ptr::copy(
+                src_addr.as_ptr() as *const u8,
+                (self.start() + offset) as *mut u8,
+                src_addr.len() * std::mem::size_of::<T>(),
+            );
+            return None;
+        }
         let (remote_addr, rkey) = &self.remote_keys[pe];
         let comm_group_id = LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len();
         trace!(target: "ucx",
@@ -850,6 +858,14 @@ impl UcxMtAlloc {
             self.num_bytes(),
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            std::ptr::copy(
+                (self.start() + offset) as *const u8,
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return None;
+        }
         let (remote_addr, rkey) = &self.remote_keys[pe];
         let req = self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].endpoints[pe]
             .get(
@@ -876,6 +892,11 @@ impl UcxMtAlloc {
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            let addr = CommAllocAddr(self.start() + offset);
+            crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
+            return None;
+        }
         let (remote_addr, rkey) = &self.remote_keys[pe];
         let req = match op {
             AtomicOp::Write(val) => {
@@ -936,6 +957,11 @@ impl UcxMtAlloc {
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            let addr = CommAllocAddr(self.start() + offset);
+            crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
+            return None;
+        }
         let req = match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
@@ -988,6 +1014,16 @@ impl UcxMtAlloc {
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            let addr = CommAllocAddr(self.start() + offset);
+            result[0] = crate::lamellae::comm::atomic::net_atomic_compare_exchange(
+                compare,
+                result[0],
+                &addr,
+            )
+            .unwrap_or_else(|v| v);
+            return None;
+        }
         let (remote_addr, rkey) = &self.remote_keys[pe];
         // result[0] must be pre-initialized to `new` (Z) before calling;
         // after completion it holds the original remote value (old Y).

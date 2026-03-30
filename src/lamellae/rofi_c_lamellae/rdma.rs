@@ -51,7 +51,7 @@ impl<T: Remote> RofiCPutFuture<T> {
         if pe != self.my_pe {
             unsafe { rofi_c_put(std::slice::from_ref(val), dst, pe).expect("rofi_c_put failed") }
         } else {
-            unsafe { std::ptr::copy_nonoverlapping(val as *const T, dst as *mut T, 1) }
+            unsafe { std::ptr::copy(val as *const T, dst as *mut T, 1) }
         }
     }
     fn exec_put_buf(&self, pe: usize, src: &MemregionRdmaInputInner<T>) {
@@ -60,7 +60,7 @@ impl<T: Remote> RofiCPutFuture<T> {
         if pe != self.my_pe {
             unsafe { rofi_c_put(src.as_slice(), dst, pe).expect("rofi_c_put failed") }
         } else {
-            unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) }
+            unsafe { std::ptr::copy(src.as_ptr(), dst as *mut T, src.len()) }
         }
     }
 
@@ -130,12 +130,14 @@ impl<T: Remote> Future for RofiCPutFuture<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct RofiCGetFuture<T: Remote> {
+    my_pe: usize,
     addr: CommAllocAddr,
     pe: usize,
     offset: usize,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    issued_network: bool,
     result: Box<T>,
 }
 
@@ -143,16 +145,26 @@ impl<T: Remote> RofiCGetFuture<T> {
     fn exec_at(&mut self) {
         trace!("rofi_c get at: {:?} {:?}", self.pe, self.offset);
         let src = (self.addr.0 + self.offset * std::mem::size_of::<T>()) as usize;
-        unsafe {
-            rofi_c_get(src, std::slice::from_mut(&mut *self.result), self.pe)
-                .expect("rofi_c_get failed")
-        };
+        if self.pe == self.my_pe {
+            unsafe {
+                std::ptr::copy(src as *const T, &mut *self.result as *mut T, 1)
+            }
+            self.issued_network = false;
+        } else {
+            unsafe {
+                rofi_c_get(src, std::slice::from_mut(&mut *self.result), self.pe)
+                    .expect("rofi_c_get failed")
+            };
+            self.issued_network = true;
+        }
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
-        rofi_c_wait();
+        if self.issued_network {
+            rofi_c_wait();
+        }
         *self.result
     }
 
@@ -187,13 +199,16 @@ impl<T: Remote> Future for RofiCGetFuture<T> {
         if !self.spawned {
             self.exec_at();
         }
-        rofi_c_wait();
+        if self.issued_network {
+            rofi_c_wait();
+        }
         Poll::Ready(*self.result)
     }
 }
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct RofiCGetBufferFuture<T: Remote> {
+    my_pe: usize,
     addr: CommAllocAddr,
     pe: usize,
     offset: usize,
@@ -201,6 +216,7 @@ pub(crate) struct RofiCGetBufferFuture<T: Remote> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    issued_network: bool,
     result: Vec<T>,
 }
 
@@ -208,13 +224,23 @@ impl<T: Remote> RofiCGetBufferFuture<T> {
     fn exec_at(&mut self) {
         trace!("rofi_c get buffer at: {:?} {:?}", self.pe, self.offset);
         let src = (self.addr.0 + self.offset * std::mem::size_of::<T>()) as usize;
-        unsafe { rofi_c_get(src, &mut self.result, self.pe).expect("rofi_c_get failed") };
+        if self.pe == self.my_pe {
+            unsafe {
+                std::ptr::copy(src as *const T, self.result.as_mut_ptr(), self.len)
+            }
+            self.issued_network = false;
+        } else {
+            unsafe { rofi_c_get(src, &mut self.result, self.pe).expect("rofi_c_get failed") };
+            self.issued_network = true;
+        }
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_at();
-        rofi_c_wait();
+        if self.issued_network {
+            rofi_c_wait();
+        }
         std::mem::take(&mut self.result)
     }
 
@@ -249,13 +275,16 @@ impl<T: Remote> Future for RofiCGetBufferFuture<T> {
         if !self.spawned {
             self.exec_at();
         }
-        rofi_c_wait();
+        if self.issued_network {
+            rofi_c_wait();
+        }
         Poll::Ready(std::mem::take(&mut self.result))
     }
 }
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct RofiCGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    my_pe: usize,
     addr: CommAllocAddr,
     pe: usize,
     offset: usize,
@@ -263,28 +292,46 @@ pub(crate) struct RofiCGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    issued_network: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> RofiCGetIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let src = (self.addr.0 + self.offset * std::mem::size_of::<T>()) as usize;
-        unsafe { rofi_c_get(src, self.dst.as_mut_slice(), self.pe).expect("rofi_c_get failed") };
+        if self.pe == self.my_pe {
+            unsafe {
+                std::ptr::copy(
+                    src as *const T,
+                    self.dst.as_mut_slice().as_mut_ptr(),
+                    self.dst.len(),
+                )
+            }
+            self.issued_network = false;
+        } else {
+            unsafe { rofi_c_get(src, self.dst.as_mut_slice(), self.pe).expect("rofi_c_get failed") };
+            self.issued_network = true;
+        }
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
-        rofi_c_wait();
+        if self.issued_network {
+            rofi_c_wait();
+        }
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
+        let issued_network = self.issued_network;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         let scheduler = self.scheduler.clone();
         scheduler.spawn_task(
             async move {
-                rofi_c_wait();
+                if issued_network {
+                    rofi_c_wait();
+                }
             },
             counters,
         )
@@ -316,7 +363,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for RofiCGetIntoBufferFuture<T, B
         if !self.spawned {
             self.exec_op();
         }
-        rofi_c_wait();
+        if self.issued_network {
+            rofi_c_wait();
+        }
         Poll::Ready(())
     }
 }
@@ -355,7 +404,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             unsafe { rofi_c_put(std::slice::from_ref(&src), dst, pe).expect("rofi_c_put failed") }
         } else {
             trace!("rofi_c put unmanaged val locally addr: {:x?}", self.start());
-            unsafe { std::ptr::copy_nonoverlapping(&src as *const T, dst as *mut T, 1) }
+            unsafe { std::ptr::copy(&src as *const T, dst as *mut T, 1) }
         }
     }
 
@@ -367,7 +416,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             rofi_c_wait();
         } else {
             trace!("rofi_c put blocking val locally addr: {:x?}", self.start());
-            unsafe { std::ptr::copy_nonoverlapping(&src as *const T, dst as *mut T, 1) }
+            unsafe { std::ptr::copy(&src as *const T, dst as *mut T, 1) }
         }
         
     }
@@ -403,7 +452,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         if pe != self.my_pe {
             unsafe { rofi_c_put(src.as_slice(), dst, pe).expect("rofi_c_put failed") }
         } else {
-            unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) }
+            unsafe { std::ptr::copy(src.as_ptr(), dst as *mut T, src.len()) }
         }
     }
 
@@ -435,7 +484,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
                         .expect("rofi_c_put failed")
                 }
             } else {
-                unsafe { std::ptr::copy_nonoverlapping(&src as *const T, dst as *mut T, 1) }
+                unsafe { std::ptr::copy(&src as *const T, dst as *mut T, 1) }
             }
         }
     }
@@ -470,7 +519,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             if pe != self.my_pe {
                 unsafe { rofi_c_put(src.as_slice(), dst, pe).expect("rofi_c_put failed") }
             } else {
-                unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) }
+                unsafe { std::ptr::copy(src.as_ptr(), dst as *mut T, src.len()) }
             }
         }
     }
@@ -483,12 +532,14 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         offset: usize,
     ) -> RdmaGetHandle<T> {
         RofiCGetFuture {
+            my_pe: self.my_pe,
             addr: CommAllocAddr(self.start()),
             pe,
             offset,
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            issued_network: false,
             result: Box::new(T::default()),
         }
         .into()
@@ -497,15 +548,15 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
         let mut val: T = T::default();
         let val_slice = std::slice::from_mut(&mut val);
-        unsafe {
-            rofi_c_get(
-                (self.start() + offset * std::mem::size_of::<T>()) as usize,
-                val_slice,
-                pe,
-            )
-            .expect("rofi_c_get failed")
-        };
-        rofi_c_wait();
+        let src = (self.start() + offset * std::mem::size_of::<T>()) as usize;
+        if pe == self.my_pe {
+            unsafe { std::ptr::copy(src as *const T, &mut val as *mut T, 1) }
+        } else {
+            unsafe {
+                rofi_c_get(src, val_slice, pe).expect("rofi_c_get failed")
+            };
+            rofi_c_wait();
+        }
         val
     }
 
@@ -518,6 +569,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         len: usize,
     ) -> RdmaGetBufferHandle<T> {
         RofiCGetBufferFuture {
+            my_pe: self.my_pe,
             addr: CommAllocAddr(self.start()),
             pe,
             offset,
@@ -525,6 +577,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            issued_network: false,
             result: vec![T::default(); len],
         }
         .into()
@@ -532,15 +585,13 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
 
     fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
         let mut dst = vec![T::default(); len];
-        unsafe {
-            rofi_c_get(
-                (self.start() + offset * std::mem::size_of::<T>()) as usize,
-                &mut dst,
-                pe,
-            )
-            .expect("rofi_c_get failed")
-        };
-        rofi_c_wait();
+        let src = (self.start() + offset * std::mem::size_of::<T>()) as usize;
+        if pe == self.my_pe {
+            unsafe { std::ptr::copy(src as *const T, dst.as_mut_ptr(), len) }
+        } else {
+            unsafe { rofi_c_get(src, &mut dst, pe).expect("rofi_c_get failed") };
+            rofi_c_wait();
+        }
         dst
     }
 
@@ -553,6 +604,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         dst: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
         RofiCGetIntoBufferFuture {
+            my_pe: self.my_pe,
             addr: CommAllocAddr(self.start()),
             pe,
             offset,
@@ -560,6 +612,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            issued_network: false,
         }
         .into()
     }
@@ -570,15 +623,21 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
     ) {
-        unsafe {
-            rofi_c_get(
-                (self.start() + offset * std::mem::size_of::<T>()) as usize,
-                dst.as_mut_slice(),
-                pe,
-            )
-            .expect("rofi_c_get failed");
+        let src = (self.start() + offset * std::mem::size_of::<T>()) as usize;
+        if pe == self.my_pe {
+            unsafe {
+                std::ptr::copy(
+                    src as *const T,
+                    dst.as_mut_slice().as_mut_ptr(),
+                    dst.len(),
+                )
+            }
+        } else {
+            unsafe {
+                rofi_c_get(src, dst.as_mut_slice(), pe).expect("rofi_c_get failed");
+            }
+            rofi_c_wait();
         }
-        rofi_c_wait();
     }
 
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
@@ -587,13 +646,19 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
     ) {
-        unsafe {
-            rofi_c_get(
-                (self.start() + offset * std::mem::size_of::<T>()) as usize,
-                dst.as_mut_slice(),
-                pe,
-            )
-            .expect("rofi_c_get failed");
+        let src = (self.start() + offset * std::mem::size_of::<T>()) as usize;
+        if pe == self.my_pe {
+            unsafe {
+                std::ptr::copy(
+                    src as *const T,
+                    dst.as_mut_slice().as_mut_ptr(),
+                    dst.len(),
+                )
+            }
+        } else {
+            unsafe {
+                rofi_c_get(src, dst.as_mut_slice(), pe).expect("rofi_c_get failed");
+            }
         }
     }
 }

@@ -40,6 +40,7 @@ pub(crate) struct LibfabricMtPutFuture<T: Remote> {
     alloc: LibfabricMtAlloc,
     offset: usize,
     op: AllocOp<T>,
+    local_op: bool,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
@@ -106,15 +107,22 @@ impl<T: Remote> LibfabricMtPutFuture<T> {
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler
-            .clone()
-            .spawn_task(async move { self.alloc.ofi.wait_all().unwrap() }, counters)
+        self.scheduler.clone().spawn_task(
+            async move {
+                if !self.local_op {
+                    self.alloc.ofi.wait_all().unwrap();
+                }
+            },
+            counters,
+        )
     }
 }
 
@@ -141,7 +149,9 @@ impl<T: Remote> Future for LibfabricMtPutFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
 
         Poll::Ready(())
     }
@@ -152,6 +162,7 @@ pub(crate) struct LibfabricMtGetFuture<T> {
     alloc: LibfabricMtAlloc,
     pe: usize,
     offset: usize,
+    local_op: bool,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
@@ -177,7 +188,9 @@ impl<T: Remote> LibfabricMtGetFuture<T> {
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         // unsafe { self.result.assume_init_read() }
         *self.result
     }
@@ -187,7 +200,9 @@ impl<T: Remote> LibfabricMtGetFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                self.alloc.ofi.wait_all().unwrap();
+                if !self.local_op {
+                    self.alloc.ofi.wait_all().unwrap();
+                }
                 *self.result
             },
             counters,
@@ -222,7 +237,7 @@ impl<T: Remote> Future for LibfabricMtGetFuture<T> {
         this.alloc.ofi.wait_all().unwrap();
 
         // Poll::Ready(unsafe { this.result.assume_init_read() })
-        Poll::Ready(**this.result)
+        Poll::Ready(*self.result)
     }
 }
 
@@ -232,6 +247,7 @@ pub(crate) struct LibfabricMtGetBufferFuture<T> {
     pe: usize,
     offset: usize,
     len: usize,
+    local_op: bool,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
@@ -253,7 +269,9 @@ impl<T: Remote> LibfabricMtGetBufferFuture<T> {
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_at();
 
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         std::mem::take(&mut self.result)
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
@@ -262,7 +280,9 @@ impl<T: Remote> LibfabricMtGetBufferFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                self.alloc.ofi.wait_all().unwrap();
+                if !self.local_op {
+                    self.alloc.ofi.wait_all().unwrap();
+                }
                 std::mem::take(&mut self.result)
             },
             counters,
@@ -293,9 +313,10 @@ impl<T: Remote> Future for LibfabricMtGetBufferFuture<T> {
         if !self.spawned {
             self.exec_at();
         }
-        let this = self.project();
-        this.alloc.ofi.wait_all().unwrap();
-        Poll::Ready(std::mem::take(this.result))
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
+        Poll::Ready(std::mem::take(&mut self.result))
     }
 }
 
@@ -306,6 +327,7 @@ pub(crate) struct LibfabricMtGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<
     pe: usize,
     offset: usize,
     dst: LamellarBuffer<T, B>,
+    local_op: bool,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
@@ -328,16 +350,24 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricMtGetIntoBufferFuture<T, B> {
 
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        let ofi = self.alloc.ofi.clone();
         self.scheduler
             .clone()
-            .spawn_task(async move { ofi.wait_all().unwrap() }, counters)
+            .spawn_task(
+                async move {
+                    if !self.local_op {
+                        self.alloc.ofi.wait_all().unwrap();
+                    }
+                },
+                counters,
+            )
     }
 }
 
@@ -366,7 +396,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricMtGetIntoBufferFutur
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        if !self.local_op {
+            self.alloc.ofi.wait_all().unwrap();
+        }
         Poll::Ready(())
     }
 }
@@ -380,11 +412,13 @@ impl CommAllocRdma for LibfabricMtAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
+        let local_op = pe == self.ofi.my_pe;
         LibfabricMtPutFuture {
             my_pe: self.ofi.my_pe,
             alloc: self.clone(),
             offset: offset,
             op: AllocOp::Put(pe, src),
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -430,11 +464,13 @@ impl CommAllocRdma for LibfabricMtAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
+        let local_op = pe == self.ofi.my_pe;
         LibfabricMtPutFuture {
             my_pe: self.ofi.my_pe,
             alloc: self.clone(),
             offset,
             op: AllocOp::PutBuf(pe, src.into()),
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -467,6 +503,7 @@ impl CommAllocRdma for LibfabricMtAlloc {
             alloc: self.clone(),
             offset,
             op: AllocOp::PutAll(pes, src.into()),
+            local_op: false,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -505,6 +542,7 @@ impl CommAllocRdma for LibfabricMtAlloc {
             alloc: self.clone(),
             offset,
             op: AllocOp::PutAllBuf(pes, src.into()),
+            local_op: false,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -546,10 +584,12 @@ impl CommAllocRdma for LibfabricMtAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
+        let local_op = pe == self.ofi.my_pe;
         LibfabricMtGetFuture {
             alloc: self.clone(),
             pe,
             offset,
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -587,11 +627,13 @@ impl CommAllocRdma for LibfabricMtAlloc {
         offset: usize,
         len: usize,
     ) -> RdmaGetBufferHandle<T> {
+        let local_op = pe == self.ofi.my_pe;
         LibfabricMtGetBufferFuture {
             alloc: self.clone(),
             pe,
             offset,
             len,
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -615,12 +657,14 @@ impl CommAllocRdma for LibfabricMtAlloc {
         offset: usize,
         dst: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
+        let local_op = pe == self.ofi.my_pe;
         LibfabricMtGetIntoBufferFuture {
             my_pe: self.ofi.my_pe,
             alloc: self.clone(),
             pe,
             offset,
             dst,
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -667,12 +711,13 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
             "put called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-
+        let local_op = pe == self.alloc.ofi.my_pe;
         LibfabricMtPutFuture {
             my_pe: self.alloc.ofi.my_pe,
             alloc: self.alloc.clone(),
             offset: offset,
             op: AllocOp::Put(pe, src),
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -734,12 +779,13 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
             "put_buffer called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-
+        let local_op = pe == self.alloc.ofi.my_pe;
         LibfabricMtPutFuture {
             my_pe: self.alloc.ofi.my_pe,
             alloc: self.alloc.clone(),
             offset,
             op: AllocOp::PutBuf(pe, src.into()),
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,

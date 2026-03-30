@@ -41,6 +41,7 @@ pub(crate) struct UcxMtPutFuture<T: Remote> {
     alloc: UcxMtAlloc,
     offset: usize,
     op: AllocOp<T>,
+    local_op: bool,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
@@ -117,7 +118,7 @@ impl<T: Remote> UcxMtPutFuture<T> {
         self.exec_op();
         if let Some(request) = self.request.take() {
             request.wait().expect("ucx put failed");
-        } else {
+        } else if !self.local_op {
             self.alloc.wait_all();
         }
         self.spawned = true;
@@ -131,7 +132,7 @@ impl<T: Remote> UcxMtPutFuture<T> {
             async move {
                 if let Some(request) = self.request.take() {
                     request.wait().expect("ucx put failed");
-                } else {
+                } else if !self.local_op {
                     self.alloc.wait_all();
                 }
             },
@@ -167,7 +168,7 @@ impl<T: Remote> Future for UcxMtPutFuture<T> {
         *this.spawned = true;
         if let Some(request) = this.request.take() {
             let _ = request.wait().expect("ucx put failed");
-        } else {
+        } else if !*this.local_op {
             this.alloc.wait_all();
         }
 
@@ -180,6 +181,7 @@ pub(crate) struct UcxMtGetFuture<T> {
     alloc: UcxMtAlloc,
     pe: usize,
     offset: usize,
+    local_op: bool,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
@@ -205,7 +207,7 @@ impl<T: Remote> UcxMtGetFuture<T> {
         self.exec_at();
         if let Some(request) = self.request.take() {
             request.wait().expect("ucx get failed");
-        } else {
+        } else if !self.local_op {
             self.alloc.wait_all();
         }
         *self.result
@@ -218,7 +220,7 @@ impl<T: Remote> UcxMtGetFuture<T> {
             async move {
                 if let Some(request) = self.request.take() {
                     request.wait().expect("ucx get failed");
-                } else {
+                } else if !self.local_op {
                     self.alloc.wait_all();
                 }
                 *self.result
@@ -254,7 +256,7 @@ impl<T: Remote> Future for UcxMtGetFuture<T> {
         let this = self.project();
         if let Some(request) = this.request.take() {
             request.wait().expect("ucx get failed");
-        } else {
+        } else if !*this.local_op {
             this.alloc.wait_all();
         }
 
@@ -268,6 +270,7 @@ pub(crate) struct UcxMtGetBufferFuture<T> {
     pe: usize,
     offset: usize,
     len: usize,
+    local_op: bool,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
@@ -290,7 +293,7 @@ impl<T: Remote> UcxMtGetBufferFuture<T> {
         self.spawned = true;
         if let Some(request) = self.request.take() {
             request.wait().expect("ucx get buffer failed");
-        } else {
+        } else if !self.local_op {
             self.alloc.wait_all();
         }
         std::mem::take(&mut self.result)
@@ -304,7 +307,7 @@ impl<T: Remote> UcxMtGetBufferFuture<T> {
             async move {
                 if let Some(request) = self.request.take() {
                     request.wait().expect("ucx get buffer failed");
-                } else {
+                } else if !self.local_op {
                     self.alloc.wait_all();
                 }
                 std::mem::take(&mut self.result)
@@ -341,7 +344,7 @@ impl<T: Remote> Future for UcxMtGetBufferFuture<T> {
         *this.spawned = true;
         if let Some(request) = this.request.take() {
             request.wait().expect("ucx get buffer failed");
-        } else {
+        } else if !*this.local_op {
             this.alloc.wait_all();
         }
 
@@ -355,6 +358,7 @@ pub(crate) struct UcxMtGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     alloc: UcxMtAlloc,
     pe: usize,
     offset: usize,
+    local_op: bool,
     dst: LamellarBuffer<T, B>,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
@@ -385,7 +389,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtGetIntoBufferFuture<T, B> {
         self.exec_op();
         if let Some(request) = self.request.take() {
             request.wait().expect("ucx get into buffer failed");
-        } else {
+        } else if !self.local_op {
             self.alloc.wait_all();
         }
         self.spawned = true;
@@ -397,11 +401,16 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtGetIntoBufferFuture<T, B> {
         std::mem::swap(&mut counters, &mut self.counters);
         let request = self.request.take();
         let alloc = self.alloc.clone();
+        let local_op = self.local_op;
         self.scheduler.clone().spawn_task(
             async move {
                 match request {
                     Some(request) => request.wait().expect("ucx get failed"),
-                    None => alloc.wait_all(),
+                    None => {
+                        if !local_op {
+                            alloc.wait_all()
+                        }
+                    }
                 };
             },
             counters,
@@ -438,7 +447,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtGetIntoBufferFuture<T, B
         *this.spawned = true;
         if let Some(request) = this.request.take() {
             request.wait().expect("ucx get into buffer failed");
-        } else {
+        } else if !*this.local_op {
             this.alloc.wait_all();
         }
 
@@ -464,11 +473,13 @@ impl CommAllocRdma for UcxMtAlloc {
             self.start() + offset,
             std::mem::size_of::<T>()
         );
+        let local_op = pe == self.my_pe;
         UcxMtPutFuture {
             my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
             op: AllocOp::Put(pe, src.into()),
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -515,12 +526,13 @@ impl CommAllocRdma for UcxMtAlloc {
     ) -> RdmaHandle<T> {
         //  self.put_amt
         //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-
+        let local_op = pe == self.my_pe;
         UcxMtPutFuture {
             my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
             op: AllocOp::PutBuf(pe, src.into()),
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -656,10 +668,12 @@ impl CommAllocRdma for UcxMtAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
+        let local_op = pe == self.my_pe;
         UcxMtGetFuture {
             alloc: self.clone(),
             pe,
             offset,
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -691,11 +705,13 @@ impl CommAllocRdma for UcxMtAlloc {
             len,
             self
         );
+        let local_op = pe == self.my_pe;
         UcxMtGetBufferFuture {
             alloc: self.clone(),
             pe,
             offset,
             len,
+            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -719,11 +735,13 @@ impl CommAllocRdma for UcxMtAlloc {
         offset: usize,
         dst: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
+        let local_op = pe == self.my_pe;
         UcxMtGetIntoBufferFuture {
             my_pe: self.my_pe,
             alloc: self.clone(),
             pe,
             offset,
+            local_op,
             dst,
             spawned: false,
             scheduler: scheduler.clone(),

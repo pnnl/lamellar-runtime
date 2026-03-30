@@ -1378,7 +1378,7 @@ impl LibfabricMtAlloc {
     unsafe fn negate_atomic_value<OFI: Copy>(value: OFI) -> OFI {
         let num_bytes = std::mem::size_of::<OFI>();
         let mut bytes = vec![0u8; num_bytes];
-        std::ptr::copy_nonoverlapping(
+        std::ptr::copy(
             (&value as *const OFI).cast::<u8>(),
             bytes.as_mut_ptr(),
             num_bytes,
@@ -1408,7 +1408,7 @@ impl LibfabricMtAlloc {
         }
 
         let mut result = std::mem::MaybeUninit::<OFI>::uninit();
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
+        std::ptr::copy(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
         result.assume_init()
     }
 
@@ -1685,6 +1685,14 @@ impl LibfabricMtAlloc {
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        if pe == self.ofi.my_pe {
+            std::ptr::copy(
+                src_addr.as_ptr() as *const u8,
+                (self.start() + offset) as *mut u8,
+                src_addr.len() * std::mem::size_of::<T>(),
+            );
+            return Ok(());
+        }
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe
@@ -1756,6 +1764,14 @@ impl LibfabricMtAlloc {
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        if pe == self.ofi.my_pe {
+            std::ptr::copy(
+                (self.start() + offset) as *const u8,
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return Ok(());
+        }
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe
@@ -1840,6 +1856,14 @@ impl LibfabricMtAlloc {
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        if pe == self.ofi.my_pe {
+            std::ptr::copy(
+                (self.start() + offset) as *const u8,
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return Ok(());
+        }
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe
@@ -1869,6 +1893,12 @@ impl LibfabricMtAlloc {
         op: &LamellarAtomicOp<T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
+        if pe == self.ofi.my_pe {
+            let offset_bytes = offset * std::mem::size_of::<T>();
+            let addr = CommAllocAddr(self.start() + offset_bytes);
+            crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
+            return Ok(());
+        }
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_op::<T, u8>(pe, offset, op, blocking)
@@ -1955,6 +1985,12 @@ impl LibfabricMtAlloc {
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
+        if pe == self.ofi.my_pe {
+            let offset_bytes = offset * std::mem::size_of::<T>();
+            let addr = CommAllocAddr(self.start() + offset_bytes);
+            crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
+            return Ok(());
+        }
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_fetch_op::<T, u8>(pe, offset, op, result, blocking)
@@ -2058,7 +2094,7 @@ impl LibfabricMtAlloc {
         Ok(())
     }
 
-    pub(crate) fn atomic_compare_exchange_op_inner<T: 'static>(
+    pub(crate) fn atomic_compare_exchange_op_inner<T: 'static + Copy>(
         &self,
         pe: usize,
         offset: usize,
@@ -2067,6 +2103,18 @@ impl LibfabricMtAlloc {
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
+        if pe == self.ofi.my_pe {
+            let offset_bytes = offset * std::mem::size_of::<T>();
+            let addr = CommAllocAddr(self.start() + offset_bytes);
+            result[0] = match crate::lamellae::comm::atomic::net_atomic_compare_exchange(
+                current,
+                new,
+                &addr,
+            ) {
+                Ok(old) | Err(old) => old,
+            };
+            return Ok(());
+        }
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_compare_exchange_op::<T, u8>(pe, offset, current, new, result, blocking)
