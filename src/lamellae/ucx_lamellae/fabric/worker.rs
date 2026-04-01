@@ -5,7 +5,7 @@ use super::{context::Context, error::Error};
 
 use pmi::{pmi::Pmi, pmix::PmiX};
 
-use tracing::debug;
+use tracing::*;
 
 #[derive(Debug)]
 pub(crate) struct Worker {
@@ -29,9 +29,30 @@ impl Worker {
             unsafe { ucp_worker_create(context.handle, params.as_ptr(), handle.as_mut_ptr()) };
         Error::from_status(status)?;
 
+        // Worker created; take the handle and query the worker to see which
+        // attributes UCX actually set (thread mode, max AM header, address flags)
+        let h = unsafe { handle.assume_init() };
+        let mut wattr = MaybeUninit::<ucp_worker_attr_t>::uninit();
+        unsafe {
+            (*wattr.as_mut_ptr()).field_mask = (ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_THREAD_MODE
+                | ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER
+                | ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS)
+                .0 as _;
+        }
+        let qstatus = unsafe { ucp_worker_query(h, wattr.as_mut_ptr()) };
+        match Error::from_status(qstatus) {
+            Ok(()) => {
+                let wattr = unsafe { wattr.assume_init() };
+                debug!("ucx worker attrs: thread_mode={:?}, address_flags={}, max_am_header={}",
+                    wattr.thread_mode, wattr.address_flags, wattr.max_am_header);
+            }
+            Err(e) => debug!("ucp_worker_query failed: {:?}", e),
+        }
+
         Ok(Arc::new(Worker {
             _context: context,
-            handle: unsafe { handle.assume_init() },
+            handle: h,
+            // progress_lock: Arc::new(Mutex::new(std::time::Instant::now())),
         }))
     }
 
@@ -64,7 +85,7 @@ impl Worker {
             Ok(())
         } else if UCS_PTR_IS_PTR(request) {
             loop {
-                let _res = unsafe { ucp_worker_progress(self.handle) };
+                let _res = self.progress();
                 if UCS_PTR_IS_PTR(request) {
                     if unsafe { ucp_request_check_status(request as _) }
                         != ucs_status_t::UCS_INPROGRESS

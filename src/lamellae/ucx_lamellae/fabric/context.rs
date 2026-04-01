@@ -81,7 +81,7 @@ impl Context {
         // Allow multiple workers to be created and used from different threads.
         // Setting this to 1 requests the UCP to support shared multi-threaded workers.
         params.mt_workers_shared = 1;
-        params.estimated_num_ppn = pmi.ranks_on_node(pmi.rank()).len() as usize;
+        params.estimated_num_ppn = pmi.ranks_on_node(pmi.node()).len() as usize;
         params.request_size = 0;
         params.request_init = None;
         params.request_cleanup = None;

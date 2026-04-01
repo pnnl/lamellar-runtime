@@ -66,8 +66,8 @@ impl Context {
     pub(crate) fn new_with_config(config: &Config, pmi: Arc<PmiX>) -> Result<Arc<Self>, Error> {
         let features = ucp_feature::UCP_FEATURE_RMA
             | ucp_feature::UCP_FEATURE_AMO64
-            | ucp_feature::UCP_FEATURE_AMO32
-            | ucp_feature::UCP_FEATURE_EXPORTED_MEMH;
+            | ucp_feature::UCP_FEATURE_AMO32;
+            // | ucp_feature::UCP_FEATURE_EXPORTED_MEMH;
 
         let mut params: ucp_params_t = Default::default();
         params.field_mask = (ucp_params_field::UCP_PARAM_FIELD_FEATURES
@@ -80,7 +80,7 @@ impl Context {
         // Allow multiple workers to be created and used from different threads.
         // Setting this to 1 requests the UCP to support shared multi-threaded workers.
         params.mt_workers_shared = 1;
-        params.estimated_num_ppn = pmi.ranks_on_node(pmi.rank()).len() as usize;
+        params.estimated_num_ppn = pmi.ranks_on_node(pmi.node()).len() as usize;
         params.request_size = 0;
         params.request_init = None;
         params.request_cleanup = None;

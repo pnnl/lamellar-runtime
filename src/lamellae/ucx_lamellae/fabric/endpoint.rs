@@ -18,7 +18,7 @@ use lamellar_ucx_sys::{
 
 use super::{error::Error, memory_region::RKey, worker::Worker};
 
-use tracing::debug;
+use tracing::{*};
 
 pub(crate) struct UcxRequest {
     pub(crate) request: ucs_status_ptr_t,
@@ -71,7 +71,7 @@ impl UcxRequest {
 
 impl Drop for UcxRequest {
     fn drop(&mut self) {
-        if !self.request.is_null() {
+        if UCS_PTR_IS_PTR(self.request) {
             unsafe { ucp_request_free(self.request as _) };
         }
     }
@@ -170,8 +170,9 @@ impl Endpoint {
                 remote_addr as _,
                 rkey.handle,
                 &ucp_request_param_t {
-                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
+                        // ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
+                        // | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },

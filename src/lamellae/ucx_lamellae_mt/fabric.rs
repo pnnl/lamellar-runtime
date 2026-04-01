@@ -95,6 +95,7 @@ impl UcxWorld {
             remote_keys.clone(),
         )
         .unwrap();
+        Self::warmup_peer_puts(&my_pmi, &utility_comm_group.worker, &exchange_buffer, my_pe, num_pes);
         UcxWorld {
             pmi: my_pmi,
             my_pe,
@@ -204,6 +205,29 @@ impl UcxWorld {
             .unwrap()
             .push((alloc.clone(), buffer_keys));
         Ok(alloc)
+    }
+
+    // Found this was necessary in the offchance that the first call to a intranode PE
+    // happened simultaneously (in a MT environment) with other operations like progress or flush 
+    fn warmup_peer_puts(
+        pmi: &Arc<PmiX>,
+        worker: &Arc<Worker>,
+        exchange_buffer: &UcxMtAlloc,
+        my_pe: usize,
+        num_pes: usize,
+    ) {
+        for pe in 0..num_pes {
+            if pe == my_pe {
+                continue;
+            }
+            unsafe {
+                exchange_buffer.put_inner(pe, 0, std::slice::from_ref(&my_pe), false, false);
+            }
+        }
+
+        worker
+            .wait_all()
+            .expect("Failed final worker flush after UCX warm-up puts");
     }
 
     pub(crate) fn alloc(
@@ -882,7 +906,7 @@ impl UcxMtAlloc {
         }
     }
 
-    pub(crate) fn inner_atomic_op<T: Copy>(
+    pub(crate) fn inner_atomic_op<T: Copy + 'static>(
         &self,
         pe: usize,
         offset: usize,
@@ -947,7 +971,7 @@ impl UcxMtAlloc {
         }
     }
 
-    pub(crate) fn inner_atomic_fetch_op<T: Copy>(
+    pub(crate) fn inner_atomic_fetch_op<T: Copy + 'static>(
         &self,
         pe: usize,
         offset: usize,
@@ -1004,7 +1028,7 @@ impl UcxMtAlloc {
         }
     }
 
-    pub(crate) fn inner_atomic_compare_exchange_op<T: Copy>(
+    pub(crate) fn inner_atomic_compare_exchange_op<T: Copy + 'static>(
         &self,
         pe: usize,
         offset: usize,

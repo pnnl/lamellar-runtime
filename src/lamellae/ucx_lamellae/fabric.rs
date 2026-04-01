@@ -232,6 +232,32 @@ impl UcxWorld {
             .map(|a| Endpoint::new(worker.clone(), a).unwrap())
             .collect::<Vec<_>>();
 
+        // // Flush all endpoints to ensure wireup handshakes are complete before
+        // // unpacking rkeys. Rkeys are bound to the ep's cfg_index at unpack time;
+        // // if the ep is still in its pre-wireup configuration (e.g. cfg_index=1)
+        // // when we unpack, and later transitions to its final configuration
+        // // (e.g. cfg_index=3) after wireup completes, UCX will assert that the
+        // // rkey's stored ep_cfg_index matches the current ep_cfg_index and abort.
+        // for ep in &endpoints {
+        //     ep.ep_wait_all().expect("Failed to flush endpoint during wireup");
+        // }
+
+        // // Drain any remaining incoming operations (e.g. remote-initiated wireup
+        // // replies, proto_reconfig AMs) that were queued while the ep flushes
+        // // were in progress. Without this second pass, UCX marks newly-connected
+        // // endpoints as "reconfiguring" for the first application-level put and
+        // // issues a proto_reconfig probe to the remote side — which fails because
+        // // the remote cannot find a matching protocol for the transient state.
+        // worker.wait_all().expect("Failed to flush worker after wireup");
+
+        // // Global synchronization barrier: ensure all PEs have finished wireup
+        // // and completed their worker flushes before any PE proceeds to rkey
+        // // exchange. This prevents proto_reconfig probes arriving at a remote PE
+        // // that hasn't finished its own wireup yet.
+        // my_pmi.barrier(false).unwrap();
+
+        debug!("PE {}: Completed endpoint wireup", my_pmi.rank());
+
         let my_pe = my_pmi.rank();
         let num_pes = my_pmi.ranks().len();
         #[cfg(feature = "enable-on-node-shmem")]
@@ -240,7 +266,8 @@ impl UcxWorld {
         let mut same_node_pes = vec![false; num_pes];
         #[cfg(feature = "enable-on-node-shmem")]
         if !disable_on_node_shmem {
-            let pes_on_node = my_pmi.ranks_on_node(my_pmi.rank());
+            let pes_on_node = my_pmi.ranks_on_node(my_pmi.node());
+            debug!("PE {}: PEs on same node: {:?}", my_pe, pes_on_node);
             if !pes_on_node.is_empty() {
                 for pe in pes_on_node {
                     if pe < num_pes {
@@ -271,6 +298,9 @@ impl UcxWorld {
             remote_keys.clone(),
         )
         .unwrap();
+
+        Self::warmup_peer_puts(&my_pmi, &worker, &exchange_buffer, my_pe, num_pes);
+
         let barrier_buffer = Self::initial_alloc(
             false,
             &context,
@@ -307,6 +337,30 @@ impl UcxWorld {
             exchange_buffer: Some(exchange_buffer),
             barrier: Some(Arc::new(Mutex::new(UcxBarrier::new(num_pes, my_pe, barrier_buffer)))),
         }
+    }
+
+
+    // Found this was necessary in the offchance that the first call to a intranode PE
+    // happened simultaneously (in a MT environment) with other operations like progress or flush 
+    fn warmup_peer_puts(
+        pmi: &Arc<PmiX>,
+        worker: &Arc<Worker>,
+        exchange_buffer: &UcxAlloc,
+        my_pe: usize,
+        num_pes: usize,
+    ) {
+        for pe in 0..num_pes {
+            if pe == my_pe {
+                continue;
+            }
+            unsafe {
+                exchange_buffer.put_inner(pe, 0, std::slice::from_ref(&my_pe), false, false);
+            }
+        }
+
+        worker
+            .wait_all()
+            .expect("Failed final worker flush after UCX warm-up puts");
     }
 
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
@@ -761,6 +815,7 @@ fn build_same_node_segments(
     }
 
     for (pe, is_same_node) in same_node_pes.iter().enumerate() {
+        debug!("PE {} same node with PE {}: {}", my_pe, pe, is_same_node);
         if !*is_same_node {
             continue;
         }
@@ -926,7 +981,7 @@ impl UcxAlloc {
     unsafe fn negate_atomic_value<T: Copy>(value: T) -> T {
         let num_bytes = std::mem::size_of::<T>();
         let mut bytes = vec![0u8; num_bytes];
-        std::ptr::copy_nonoverlapping(
+        std::ptr::copy(
             (&value as *const T).cast::<u8>(),
             bytes.as_mut_ptr(),
             num_bytes,
@@ -956,7 +1011,7 @@ impl UcxAlloc {
         }
 
         let mut result = std::mem::MaybeUninit::<T>::uninit();
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
+        std::ptr::copy(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
         result.assume_init()
     }
 
@@ -1253,7 +1308,7 @@ impl UcxAlloc {
         decrement_ref_count(ref_count)
     }
 
-    pub(crate) unsafe fn put_inner<T>(
+    pub(crate) unsafe fn put_inner<T: Copy>(
         &self,
         pe: usize,
         offset: usize, //with respect to T
@@ -1272,9 +1327,17 @@ impl UcxAlloc {
             self.num_bytes(),
         );
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            std::ptr::copy(
+                src_addr.as_ptr() as *const u8,
+                (self.start() + offset) as *mut u8,
+                src_addr.len() * std::mem::size_of::<T>(),
+            );
+            return None;
+        }
         #[cfg(feature = "enable-on-node-shmem")]
         if let Some(addr) = self.same_node_addr(pe, offset) {
-            std::ptr::copy_nonoverlapping(
+            std::ptr::copy(
                 src_addr.as_ptr() as *const u8,
                 addr.as_ptr::<u8>() as *mut u8,
                 src_addr.len() * std::mem::size_of::<T>(),
@@ -1287,11 +1350,12 @@ impl UcxAlloc {
             panic!("put_inner missing remote key for pe {}", pe);
         };
         trace!(target: "ucx",
-            "put to pe {} at remote addr {:x} + offset {:?}, final addr: {:x}",
+            "put to pe {} at remote addr {:x} + offset {:?}, final addr: {:x} rkey: {:?}",
             pe,
             remote_addr,
             offset,
-            remote_addr + offset
+            remote_addr + offset,
+            rkey
         );
         let req = self.endpoints[pe].put(
             src_addr.as_ptr() as _,
@@ -1328,9 +1392,17 @@ impl UcxAlloc {
             self.num_bytes(),
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            std::ptr::copy(
+                (self.start() + offset) as *const u8,
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return None;
+        }
         #[cfg(feature = "enable-on-node-shmem")]
         if let Some(addr) = self.same_node_addr(pe, offset) {
-            std::ptr::copy_nonoverlapping(
+            std::ptr::copy(
                 addr.as_ptr::<u8>(),
                 dst_addr.as_mut_ptr() as *mut u8,
                 dst_addr.len() * std::mem::size_of::<T>(),
@@ -1366,6 +1438,11 @@ impl UcxAlloc {
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            let addr = CommAllocAddr(self.start() + offset);
+            crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
+            return None;
+        }
         #[cfg(feature = "enable-on-node-shmem")]
         {
             if let Some(addr) = self.same_node_addr(pe, offset) {
@@ -1431,6 +1508,11 @@ impl UcxAlloc {
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            let addr = CommAllocAddr(self.start() + offset);
+            crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
+            return None;
+        }
         #[cfg(feature = "enable-on-node-shmem")]
         {
             if let Some(addr) = self.same_node_addr(pe, offset) {
@@ -1500,6 +1582,16 @@ impl UcxAlloc {
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        if pe == self.my_pe {
+            let addr = CommAllocAddr(self.start() + offset);
+            result[0] = crate::lamellae::comm::atomic::net_atomic_compare_exchange(
+                compare,
+                result[0],
+                &addr,
+            )
+            .unwrap_or_else(|v| v);
+            return None;
+        }
         #[cfg(feature = "enable-on-node-shmem")]
         {
             if let Some(addr) = self.same_node_addr(pe, offset) {
