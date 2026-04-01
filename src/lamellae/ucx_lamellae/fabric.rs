@@ -232,32 +232,6 @@ impl UcxWorld {
             .map(|a| Endpoint::new(worker.clone(), a).unwrap())
             .collect::<Vec<_>>();
 
-        // // Flush all endpoints to ensure wireup handshakes are complete before
-        // // unpacking rkeys. Rkeys are bound to the ep's cfg_index at unpack time;
-        // // if the ep is still in its pre-wireup configuration (e.g. cfg_index=1)
-        // // when we unpack, and later transitions to its final configuration
-        // // (e.g. cfg_index=3) after wireup completes, UCX will assert that the
-        // // rkey's stored ep_cfg_index matches the current ep_cfg_index and abort.
-        // for ep in &endpoints {
-        //     ep.ep_wait_all().expect("Failed to flush endpoint during wireup");
-        // }
-
-        // // Drain any remaining incoming operations (e.g. remote-initiated wireup
-        // // replies, proto_reconfig AMs) that were queued while the ep flushes
-        // // were in progress. Without this second pass, UCX marks newly-connected
-        // // endpoints as "reconfiguring" for the first application-level put and
-        // // issues a proto_reconfig probe to the remote side — which fails because
-        // // the remote cannot find a matching protocol for the transient state.
-        // worker.wait_all().expect("Failed to flush worker after wireup");
-
-        // // Global synchronization barrier: ensure all PEs have finished wireup
-        // // and completed their worker flushes before any PE proceeds to rkey
-        // // exchange. This prevents proto_reconfig probes arriving at a remote PE
-        // // that hasn't finished its own wireup yet.
-        // my_pmi.barrier(false).unwrap();
-
-        debug!("PE {}: Completed endpoint wireup", my_pmi.rank());
-
         let my_pe = my_pmi.rank();
         let num_pes = my_pmi.ranks().len();
         #[cfg(feature = "enable-on-node-shmem")]
@@ -267,7 +241,6 @@ impl UcxWorld {
         #[cfg(feature = "enable-on-node-shmem")]
         if !disable_on_node_shmem {
             let pes_on_node = my_pmi.ranks_on_node(my_pmi.node());
-            debug!("PE {}: PEs on same node: {:?}", my_pe, pes_on_node);
             if !pes_on_node.is_empty() {
                 for pe in pes_on_node {
                     if pe < num_pes {
@@ -342,6 +315,7 @@ impl UcxWorld {
 
     // Found this was necessary in the offchance that the first call to a intranode PE
     // happened simultaneously (in a MT environment) with other operations like progress or flush 
+    // if this becomes a bottleneck it may be sufficient to just do a put to each node instead of each PE, but for now we will do it to each PE to be safe
     fn warmup_peer_puts(
         pmi: &Arc<PmiX>,
         worker: &Arc<Worker>,
@@ -815,7 +789,7 @@ fn build_same_node_segments(
     }
 
     for (pe, is_same_node) in same_node_pes.iter().enumerate() {
-        debug!("PE {} same node with PE {}: {}", my_pe, pe, is_same_node);
+        trace!("PE {} same node with PE {}: {}", my_pe, pe, is_same_node);
         if !*is_same_node {
             continue;
         }
