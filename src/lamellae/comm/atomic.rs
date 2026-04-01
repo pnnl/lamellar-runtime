@@ -528,33 +528,23 @@ pub(crate) trait CommAllocAtomic {
     fn atomic_fetch_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T;
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        current: T,
-        new: T,
-        pe: usize,
-        offset: usize,
+        _scheduler: &Arc<Scheduler>,
+        _counters: Vec<Arc<AMCounters>>,
+        _current: T,
+        _new: T,
+        _pe: usize,
+        _offset: usize,
     ) -> AtomicCompareExchangeOpHandle<T> {
-        let _ = scheduler;
-        let _ = counters;
-        let _ = current;
-        let _ = new;
-        let _ = pe;
-        let _ = offset;
         panic!("atomic_compare_exchange not supported for this backend")
     }
     fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
-        scheduler: &Arc<Scheduler>,
-        current: T,
-        new: T,
-        pe: usize,
-        offset: usize,
+        _scheduler: &Arc<Scheduler>,
+        _current: T,
+        _new: T,
+        _pe: usize,
+        _offset: usize,
     ) -> Result<T, T> {
-        let _ = current;
-        let _ = new;
-        let _ = pe;
-        let _ = offset;
         panic!("atomic_compare_exchange_blocking not supported for this backend")
     }
 }

@@ -35,16 +35,15 @@ fn create_launch_block(
                 let __dir = output_dir.trim_end_matches('/');
                 std::fs::create_dir_all(__dir)
                     .expect("lamellar_main: failed to create output directory");
-                // prterun: use a conservative directive set for compatibility
-                // across PRTE/OpenMPI versions.
-                
+                // PRRTE dir= mode can fail with PMIX_ERR_EXISTS in some bundled builds.
+                // Use file= mode instead and keep outputs grouped under the requested dir.
                 prterun_args.insert(
                     0,
                     format!("--merge-stderr-to-stdout"),
                 );
                 prterun_args.insert(
                     0,
-                    format!("--output=directory={}", __dir),
+                    format!("--output=file={}/", __dir),
                 );
             }
         }

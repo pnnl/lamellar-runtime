@@ -8,7 +8,7 @@ use crate::{
         rdma::private::{LamellarRdmaGet, LamellarRdmaPut, Sealed},
         *,
     },
-    lamellae::{CommAllocRdma, RdmaGetBufferHandle, RdmaGetIntoBufferHandle},
+    lamellae::{ RdmaGetBufferHandle, RdmaGetIntoBufferHandle},
     memregion::{
         AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
     },

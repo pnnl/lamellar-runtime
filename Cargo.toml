@@ -35,8 +35,8 @@ pmix-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true, feat
 ] }
 lamellar_main = { path = "./lamellar_main", optional = true }
 prrte-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
-# lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+# lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
+lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
 # rofisys = { version = "0.4", optional = true }
@@ -153,9 +153,17 @@ vendored-pmi = ["pmi/vendored"]
 opt-level = 3
 lto = true
 codegen-units = 1
+
+[profile.release-dev]
+inherits = "release"
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+
+[profile.release-debug]
+inherits = "release-dev"
 debug = true
-# panic = "abort"
-[profile.release.package."*"]
+[profile.release-debug.package."*"]
 debug = true
 
 

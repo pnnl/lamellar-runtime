@@ -43,73 +43,23 @@ impl LamellarAm for RecvAm {
             let end = start + self.buffer_size;
             let my_start = lamellar::current_pe * self.buffer_size;
             let res_send_buf = self.buffer.res_send_buffer.sub_region(start..end);
-            // let res_send_slice = res_send_buf.as_mut_slice();
             let idx_recv_buf = self.buffer.idx_recv_buffer.sub_region(start..end);
             let idx_recv_slice = idx_recv_buf.as_mut_slice();
 
-            while self.finished.load(Ordering::SeqCst) == 0 {
-                // let mut first = true;
-
-                while idx_recv_slice[self.buffer_size - 1] == usize::MAX {
+            'outer: while self.finished.load(Ordering::SeqCst) == 0 {
+                while idx_recv_slice[0] == usize::MAX {
                     if self.finished.load(Ordering::SeqCst) != 0 {
-                        break;
+                        break 'outer;
                     }
                     async_std::task::yield_now().await;
                 }
-                idx_recv_slice[self.buffer_size - 1] = usize::MAX;
-                // for (i, (r, s)) in idx_recv_slice
-                //     .iter_mut()
-                //     .zip(res_send_slice.iter_mut())
-                //     .enumerate()
-                // {
-                //     // let mut timer = std::time::Instant::now();
-                //     while *r == usize::MAX {
-                //         if self.finished.load(Ordering::SeqCst) != 0 {
-                //             break;
-                //         }
-                //         async_std::task::yield_now().await;
-                //         // if timer.elapsed().as_secs_f64() > 1.0 {
-                //         //     if i != 0 {
-                //         //         let s = std::cmp::max(i as isize - 5 as isize, 0isize) as usize;
-                //         //         let e = std::cmp::min(i + 5, end - start);
-                //         //         println!(
-                //         //             "waiting for idx data from: {} at elem {} {} {s}-{e} {:?}",
-                //         //             self.remote_pe,
-                //         //             i,
-                //         //             *r == usize::MAX,
-                //         //             &self.buffer.idx_recv_buffer.as_mut_slice()[s..e]
-                //         //         );
-                //         //     }
-                //         //     timer = std::time::Instant::now();
-                //         // }
-                //     }
-                //     // if first {
-                //     //     first = false;
-                //     //     println!(
-                //     //         "recived something from: {} {} {}",
-                //     //         self.remote_pe,
-                //     //         *r,
-                //     //         start / self.buffer_size
-                //     //     );
-                //     // }
-                //     *s = lamellar::current_pe; // data[*r];
-                //     *r = usize::MAX;
-                //     cnt += 1;
-                // }
-                // println!(
-                //     "[pe:{:?}] sending back to: {} at {} {:?} {:?}",
-                //     lamellar::current_pe,
-                //     self.remote_pe,
-                //     my_start / self.buffer_size,
-                //     &res_send_buf.as_mut_slice()[0..5],
-                //     &res_send_slice[0..5]
-                // );
+
+                idx_recv_slice[0] = usize::MAX;
                 self.buffer
                     .res_recv_buffer
                     .put_buffer(self.remote_pe, my_start, res_send_buf.clone())
                     .await;
             }
-            println!("{} recv_cnt: {}", self.remote_pe, cnt);
         }
     }
 }
@@ -132,21 +82,11 @@ impl LamellarAm for SendAm {
             while buffers.is_none() {
                 buffers = self.buffers[self.remote_pe].lock().await.pop_front();
                 async_std::task::yield_now().await;
-
-                // match &mut lock {
-                //     None => {
-                //         async_std::task::yield_now().await;
-                //         lock = self.buffers[self.remote_pe].try_lock();
-                //     }
-                //     Some(lock) => {
-                //         buffers = lock.pop_front();
-                //     }
-                // }
             }
         }
         let buffer = buffers.unwrap();
         let start = self.remote_pe * self.buffer_size;
-        let end = start + self.buffer_size;
+        let end = start + self.indices.len();
         let my_start = lamellar::current_pe * self.buffer_size;
 
         unsafe {
@@ -159,11 +99,6 @@ impl LamellarAm for SendAm {
                     .unwrap(),
                 self.indices.len(),
             );
-            // println!(
-            //     "sending to {} at {}",
-            //     self.remote_pe,
-            //     my_start / self.buffer_size
-            // );
             let _comm = self.comm_lock.acquire().await;
             buffer
                 .idx_recv_buffer
@@ -173,72 +108,33 @@ impl LamellarAm for SendAm {
                     buffer.idx_send_buffer.sub_region(start..end),
                 )
                 .await;
+            
+            let sub_reg = buffer.res_recv_buffer.sub_region(start..end);
 
-            while buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[self.buffer_size - 1]
+            let mut t_start = std::time::Instant::now();
+
+            while sub_reg.as_mut_slice()[0]
                 == usize::MAX
             {
+                if t_start.elapsed().as_secs() > 5 {
+                    println!(
+                        "[pe:{:?} send_am tid:{:?},{:?}] timeout waiting for response from: {} at {} {:?} len: {}",
+                        lamellar::current_pe,
+                        lamellar::tid,
+                        std::thread::current().id(),
+                        self.remote_pe,
+                        my_start,
+                        &sub_reg.as_mut_slice()[0..5],
+                        self.indices.len()
+                    );
+                    t_start = std::time::Instant::now();
+                }
                 async_std::task::yield_now().await;
             }
-            buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[self.buffer_size - 1] =
+            buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[0] =
                 usize::MAX;
-            // for _i in 0..self.indices.len() {
-            // let mut first = true;
-            // for (i, elem) in buffer
-            //     .res_recv_buffer
-            //     .sub_region(start..end)
-            //     .as_mut_slice()
-            //     .unwrap()
-            //     .iter_mut()
-            //     .enumerate()
-            // {
-            //     // let mut timer = std::time::Instant::now();
-            //     while *elem == usize::MAX {
-            //         async_std::task::yield_now().await;
-            //         // if timer.elapsed().as_secs_f64() > 1.0 {
-            //         //     let s = std::cmp::max(i as isize - 5 as isize, 0isize) as usize;
-            //         //     let e = std::cmp::min(i + 5, end - start);
-            //         //     for pe in 0..lamellar::num_pes {
-            //         //         let pe_start = pe * self.buffer_size;
-            //         //         let pe_end = pe_start + self.buffer_size;
-            //         //         println!(
-            //         //             "waiting for response data from: {} at elem {} {s}-{e} [pe:{pe}] {:?}",
-            //         //             self.remote_pe,
-            //         //             i,
-            //         //             &buffer
-            //         //                 .res_recv_buffer
-            //         //                 .sub_region(pe_start..pe_end)
-            //         //                 .as_mut_slice()
-            //         //                 .unwrap()[s..e]
-            //         //         );
-            //         //     }
-            //         //     timer = std::time::Instant::now();
-            //         // }
-            //     }
-            //     // if first {
-            //     //     first = false;
-            //     //     println!(
-            //     //         "recived response from: {} {} at {}",
-            //     //         self.remote_pe,
-            //     //         *elem,
-            //     //         start / self.buffer_size
-            //     //     );
-            //     // }
-            //     *elem = usize::MAX;
-            // }
-            // // for elem in buffer
-            // //     .res_recv_buffer
-            // //     .sub_region(start..end)
-            // //     .as_mut_slice()
-            // //     .unwrap()
-            // //     .iter_mut()
-            // // {
-            // //     *elem = usize::MAX;
-            // // }
-            // println!("response back from {}", self.remote_pe);
-            // // }
-            // // let mut lock = self.buffers[self.remote_pe].try_lock();
+            
             self.buffers[self.remote_pe].lock().await.push_back(buffer);
-            // println!("Done with send {}", self.remote_pe);
         }
     }
 }
@@ -255,42 +151,22 @@ struct MyAm {
 #[local_am]
 impl LamellarAm for MyAm {
     async fn exec(self) {
-        // let timer = std::time::Instant::now();
         let indices_slice = unsafe { self.indices.as_mut_slice() };
 
         println!("my_am: {:?} {:?}", indices_slice.len(), self.buffer_size);
 
-        // let my_pe = lamellar::current_pe;
         let num_pes = lamellar::num_pes;
         let mut pe_bufs = vec![vec![]; num_pes];
         let timer = std::time::Instant::now();
         let mut cnt = 0;
         let task_group = LamellarTaskGroup::new(lamellar::team.clone());
-        // let mut reqs = Vec::new();
-        // for _i in 0..num_pes {
-        //     reqs.push(VecDeque::new());
-        // }
         for i in indices_slice.iter() {
             let pe = i / self.table_size_per_pe;
             let offset = lamellar::current_pe; //i % self.table_size_per_pe;
             pe_bufs[pe].push(offset);
-            if pe_bufs[pe].len() > self.buffer_size {
+            if pe_bufs[pe].len() >= self.buffer_size {
                 let mut indices = vec![];
                 std::mem::swap(&mut indices, &mut pe_bufs[pe]);
-                // if reqs[pe].len() > 10 {
-                //     if let Some(req) = reqs[pe].pop_front() {
-                //         // println!("need to wait for pe: {}", pe);
-                //         req.await;
-                //     }
-                // }
-                // if pe != lamellar::current_pe {
-                // reqs[pe].push_back(lamellar::world.exec_am_local(SendAm {
-                //     indices,
-                //     buffers: self.buffers.clone(),
-                //     remote_pe: pe,
-                //     buffer_size: self.buffer_size,
-                //     comm_lock: self.comm_lock.clone(),
-                // }));
                 let _ = task_group
                     .exec_am_local(SendAm {
                         indices,
@@ -301,18 +177,30 @@ impl LamellarAm for MyAm {
                     })
                     .spawn();
                 cnt += 1;
-                // }
+            }
+        }
+        for (pe, indices) in pe_bufs.drain(..).enumerate() {
+            if indices.len() > 0 {
+                let _ = task_group
+                    .exec_am_local(SendAm {
+                        indices,
+                        buffers: self.buffers.clone(),
+                        remote_pe: pe,
+                        buffer_size: self.buffer_size,
+                        comm_lock: self.comm_lock.clone(),
+                    })
+                    .spawn();
+                cnt += 1;
             }
         }
         println!("launch time {:?} {:?}", cnt, timer.elapsed());
-        // for (pe, bufs) in pe_bufs.iter().enumerate() {
-        //     // println!("pe: {}, cnt: {}", pe, bufs.len());
-        //     while let Some(req) = reqs[pe].pop_front() {
-        //         req.await;
-        //     }
-        // }
         task_group.await_all().await;
-        println!("cnt: {} {:?}", cnt, timer.elapsed());
+        println!(
+            "[pe:{:?}] my_am finished at {} cnt: {} time:{:?} ",
+            lamellar::current_pe,
+            lamellar::current_pe * self.buffer_size / self.buffer_size,
+            cnt, timer.elapsed()
+         );
     }
 }
 
@@ -433,5 +321,4 @@ fn main() {
         ((indices.len() * num_pes) as f64 / 1000000.0) / timer.elapsed().as_secs_f64()
     );
     finished.store(1, Ordering::SeqCst);
-    // unsafe { println!("{:?}", recv_buffer.as_slice()) };
 }

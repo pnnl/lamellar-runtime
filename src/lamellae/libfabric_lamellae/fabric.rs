@@ -402,7 +402,7 @@ impl Ofi {
         let mut same_node_pes = vec![false; num_pes];
         #[cfg(feature = "enable-on-node-shmem")]
         if !disable_on_node_shmem {
-            let ranks_on_node = my_pmi.ranks_on_node(my_pmi.rank());
+            let ranks_on_node = my_pmi.ranks_on_node(my_pmi.node());
             if !ranks_on_node.is_empty() {
                 for pe in ranks_on_node {
                     if pe < same_node_pes.len() {
