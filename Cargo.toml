@@ -40,7 +40,7 @@ lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = tr
 memmap = "0.7.0"
 page_size = "0.6.0"
 # rofisys = { version = "0.4", optional = true }
-rofisys = { path = "../rofi-sys-junction", optional = true }
+rofisys = { git = "https://github.com/pnnl/rofi-sys.git", optional = true }
 inventory = "0.3.21"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_bytes = "0.11.17"
