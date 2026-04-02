@@ -208,7 +208,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     
     let import = if cfg!(feature = "use-prterun") {
         quote! {
-            use prrte_sys::prterun_path;
+            use ::lamellar::prrte_sys::prterun_path;
         }
     } else {
         quote! {}
@@ -346,7 +346,7 @@ pub fn test(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     // let name = format!("{}_launched", name.to_string());
     #[cfg(feature = "use-prterun")]
-    let res = create_launch_test_block((quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}), test_attr, vis, sig, &name, quote! {use prrte_sys::prterun_path;});
+    let res = create_launch_test_block((quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}), test_attr, vis, sig, &name, quote! {use ::lamellar::prrte_sys::prterun_path;});
 
     #[cfg(feature = "use-srun")]
     let res = create_launch_test_block((quote! {"SRUN_LAUNCHED"}, quote! {"srun"}), test_attr, vis, sig, &name, quote! {});

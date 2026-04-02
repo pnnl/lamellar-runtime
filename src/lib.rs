@@ -312,6 +312,9 @@ pub use lamellar_impl::Dist;
 #[cfg(feature="enable-lamellar-main")]
 pub use lamellar_main::main;
 
+#[cfg(feature = "enable-lamellar-main")]
+pub extern crate prrte_sys;
+
 
 
 //#[doc(hidden)]
