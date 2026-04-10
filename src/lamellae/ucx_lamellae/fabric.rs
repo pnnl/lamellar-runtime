@@ -371,7 +371,7 @@ impl UcxWorld {
         }
         matches!(
             op,
-            AtomicOp::Read
+            AtomicOp::Read(_)
                 | AtomicOp::Write(_)
                 | AtomicOp::Cas(_, _)
                 | AtomicOp::Sum(_)
@@ -952,11 +952,11 @@ impl std::fmt::Debug for UcxAlloc {
 }
 
 impl UcxAlloc {
-    unsafe fn negate_atomic_value<T: Copy>(value: T) -> T {
+    unsafe fn negate_atomic_value<T>(value: *mut T) {
         let num_bytes = std::mem::size_of::<T>();
         let mut bytes = vec![0u8; num_bytes];
         std::ptr::copy(
-            (&value as *const T).cast::<u8>(),
+            value.cast::<u8>(),
             bytes.as_mut_ptr(),
             num_bytes,
         );
@@ -984,26 +984,24 @@ impl UcxAlloc {
             }
         }
 
-        let mut result = std::mem::MaybeUninit::<T>::uninit();
-        std::ptr::copy(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
-        result.assume_init()
+        std::ptr::copy(bytes.as_ptr(), value.cast::<u8>(), num_bytes);
     }
 
-    fn ucx_atomic_update<T: Copy>(op: &AtomicOp<T>) -> (ucp_atomic_op_t, T) {
+    fn ucx_atomic_update<T: Copy>(op: &mut AtomicOp<T>) -> (ucp_atomic_op_t, *const T) {
         match op {
-            AtomicOp::Write(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP, *val),
-            AtomicOp::Sum(val) | AtomicOp::FetchSum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, *val),
+            AtomicOp::Write(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP, val.as_ref().get_ref()),
+            AtomicOp::Sum(val) | AtomicOp::FetchSum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, val.as_ref().get_ref()),
             AtomicOp::Sub(val) => (
                 ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
-                unsafe { Self::negate_atomic_value(*val) },
+                unsafe { Self::negate_atomic_value(val.as_mut().get_unchecked_mut()); val.as_ref().get_ref() },
             ),
             AtomicOp::FetchSub(val) => (
                 ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
-                unsafe { Self::negate_atomic_value(*val) },
+                unsafe { Self::negate_atomic_value(val.as_mut().get_unchecked_mut()); val.as_ref().get_ref() },
             ),
-            AtomicOp::BitAnd(val) | AtomicOp::FetchBitAnd(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, *val),
-            AtomicOp::BitOr(val) | AtomicOp::FetchBitOr(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, *val),
-            AtomicOp::BitXor(val) | AtomicOp::FetchBitXor(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, *val),
+            AtomicOp::BitAnd(val) | AtomicOp::FetchBitAnd(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, val.as_ref().get_ref()),
+            AtomicOp::BitOr(val) | AtomicOp::FetchBitOr(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, val.as_ref().get_ref()),
+            AtomicOp::BitXor(val) | AtomicOp::FetchBitXor(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, val.as_ref().get_ref()),
             _ => panic!("Unsupported atomic operation"),
         }
     }
@@ -1160,7 +1158,7 @@ impl UcxAlloc {
 
         let alloc = UcxAlloc {
             mem,
-            data_num_bytes: size,
+            data_num_bytes: data_bytes,
             my_pe: self.my_pe,
             num_pes: self.num_pes,
             #[cfg(feature = "enable-on-node-shmem")]
@@ -1407,23 +1405,11 @@ impl UcxAlloc {
         pe: usize,
         offset: usize,
         blocking: bool,
-        op: &AtomicOp<T>,
+        op: &mut AtomicOp<T>,
         managed: bool,
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
-        if pe == self.my_pe {
-            let addr = CommAllocAddr(self.start() + offset);
-            crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
-            return None;
-        }
-        #[cfg(feature = "enable-on-node-shmem")]
-        {
-            if let Some(addr) = self.same_node_addr(pe, offset) {
-                crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
-                return None;
-            }
-        }
         let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
             (remote_info.addr, &remote_info.rkey)
         } else {
@@ -1432,7 +1418,7 @@ impl UcxAlloc {
         let req = match op {
             AtomicOp::Write(val) => {
                 self.endpoints[pe].atomic_swap(
-                    *val,
+                    val.as_ref().get_ref(),
                     &ATOMIC_PUT_TMP as *const _ as *mut T,
                     remote_addr + offset,
                     rkey,
@@ -1477,31 +1463,19 @@ impl UcxAlloc {
         pe: usize,
         offset: usize,
         blocking: bool,
-        op: &AtomicOp<T>,
+        op: &mut AtomicOp<T>,
         result: &mut [T],
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
-        if pe == self.my_pe {
-            let addr = CommAllocAddr(self.start() + offset);
-            crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
-            return None;
-        }
-        #[cfg(feature = "enable-on-node-shmem")]
-        {
-            if let Some(addr) = self.same_node_addr(pe, offset) {
-                crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
-                return None;
-            }
-        }
         let req = match op {
-            AtomicOp::Read => {
+            AtomicOp::Read(zero) => {
                 let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
                     (remote_info.addr, &remote_info.rkey)
                 } else {
                     panic!("inner_atomic_fetch_op missing remote key for pe {} (read)", pe);
                 };
-                self.endpoints[pe].atomic_get(result.as_mut_ptr(), remote_addr + offset, rkey)
+                self.endpoints[pe].atomic_get(&**zero, result.as_mut_ptr(), remote_addr + offset, rkey)
             }
             AtomicOp::Write(_)
             | AtomicOp::FetchSum(_)
@@ -1551,33 +1525,11 @@ impl UcxAlloc {
         pe: usize,
         offset: usize,
         blocking: bool,
-        compare: T,
+        compare: *const T,
         result: &mut [T],
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
-        if pe == self.my_pe {
-            let addr = CommAllocAddr(self.start() + offset);
-            result[0] = crate::lamellae::comm::atomic::net_atomic_compare_exchange(
-                compare,
-                result[0],
-                &addr,
-            )
-            .unwrap_or_else(|v| v);
-            return None;
-        }
-        #[cfg(feature = "enable-on-node-shmem")]
-        {
-            if let Some(addr) = self.same_node_addr(pe, offset) {
-                result[0] = crate::lamellae::comm::atomic::net_atomic_compare_exchange(
-                    compare,
-                    result[0],
-                    &addr,
-                )
-                .unwrap_or_else(|v| v);
-                return None;
-            }
-        }
         let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
             (remote_info.addr, &remote_info.rkey)
         } else {

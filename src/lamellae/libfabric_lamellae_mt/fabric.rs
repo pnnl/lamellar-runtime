@@ -590,7 +590,7 @@ impl Ofi {
             LamellarAtomicOp::BitOr(_) => AtomicOpKind::BitOr,
             LamellarAtomicOp::BitXor(_) => AtomicOpKind::BitXor,
             LamellarAtomicOp::BitAnd(_) => AtomicOpKind::BitAnd,
-            LamellarAtomicOp::Read => AtomicOpKind::Read,
+            LamellarAtomicOp::Read(_) => AtomicOpKind::Read,
             LamellarAtomicOp::Write(_) => AtomicOpKind::Write,
             LamellarAtomicOp::Cas(_, _) => AtomicOpKind::Cas,
             LamellarAtomicOp::FetchMin(_) => AtomicOpKind::Min,
@@ -1375,11 +1375,11 @@ impl From<LibfabricMtAlloc> for CommAlloc {
 
 static ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
 impl LibfabricMtAlloc {
-    unsafe fn negate_atomic_value<OFI: Copy>(value: OFI) -> OFI {
+    unsafe fn negate_atomic_value<OFI>(value: *mut OFI) {
         let num_bytes = std::mem::size_of::<OFI>();
         let mut bytes = vec![0u8; num_bytes];
         std::ptr::copy(
-            (&value as *const OFI).cast::<u8>(),
+            value.cast::<u8>(),
             bytes.as_mut_ptr(),
             num_bytes,
         );
@@ -1407,9 +1407,7 @@ impl LibfabricMtAlloc {
             }
         }
 
-        let mut result = std::mem::MaybeUninit::<OFI>::uninit();
-        std::ptr::copy(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
-        result.assume_init()
+        std::ptr::copy(bytes.as_ptr(), value.cast::<u8>(), num_bytes);
     }
 
     pub(crate) fn new(
@@ -1890,15 +1888,9 @@ impl LibfabricMtAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &LamellarAtomicOp<T>,
+        op: &mut LamellarAtomicOp<T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        if pe == self.ofi.my_pe {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            let addr = CommAllocAddr(self.start() + offset_bytes);
-            crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
-            return Ok(());
-        }
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_op::<T, u8>(pe, offset, op, blocking)
@@ -1930,7 +1922,7 @@ impl LibfabricMtAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &LamellarAtomicOp<T>,
+        op: &mut LamellarAtomicOp<T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
@@ -1942,10 +1934,8 @@ impl LibfabricMtAlloc {
         let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
-        let src = op.src().expect("Atomic operation has no source");
-        let src = *(src as *const T as *const OFI);
-        let src = match op {
-            LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+        match op {
+            LamellarAtomicOp::Sub(src) => Self::negate_atomic_value(src.as_mut().get_unchecked_mut() as *mut T as *mut OFI),
             LamellarAtomicOp::FetchMin(_)
             | LamellarAtomicOp::FetchMax(_)
             | LamellarAtomicOp::FetchSum(_)
@@ -1959,10 +1949,10 @@ impl LibfabricMtAlloc {
             LamellarAtomicOp::Cas(_, _) => {
                 panic!("Compare atomic ops must use the compare path")
             }
-            _ => src,
+            _ => {}
         };
-        let buf = std::slice::from_ref(&src);
-        // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
+        let src = op.src() as *const OFI;
+        let buf = std::slice::from_raw_parts(src, 1);
         let cg =
             &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
         cg.post_put(blocking, || {
@@ -1981,16 +1971,10 @@ impl LibfabricMtAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &LamellarAtomicOp<T>,
+        op: &mut LamellarAtomicOp<T>,
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        if pe == self.ofi.my_pe {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            let addr = CommAllocAddr(self.start() + offset_bytes);
-            crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
-            return Ok(());
-        }
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_fetch_op::<T, u8>(pe, offset, op, result, blocking)
@@ -2022,7 +2006,7 @@ impl LibfabricMtAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &LamellarAtomicOp<T>,
+        op: &mut LamellarAtomicOp<T>,
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
@@ -2035,61 +2019,42 @@ impl LibfabricMtAlloc {
         let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
-        // let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
         let res = &mut *(result as *mut [T] as *mut [OFI]);
         let cg =
             &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
 
-        match op.src() {
-            Some(src) => {
-                let src = *(src as *const T as *const OFI);
-                let src = match op {
-                    LamellarAtomicOp::FetchSub(_) => Self::negate_atomic_value(src),
-                    LamellarAtomicOp::Min(_)
-                    | LamellarAtomicOp::Max(_)
-                    | LamellarAtomicOp::Sum(_)
-                    | LamellarAtomicOp::Sub(_)
-                    | LamellarAtomicOp::Prod(_)
-                    | LamellarAtomicOp::BitOr(_)
-                    | LamellarAtomicOp::BitXor(_)
-                    | LamellarAtomicOp::BitAnd(_) => {
-                        panic!("Non-fetch atomic ops must use the non-fetch path")
-                    }
-                    LamellarAtomicOp::Cas(_, _) => {
-                        panic!("Compare atomic ops must use the compare path")
-                    }
-                    _ => src,
-                };
-                let buf = std::slice::from_ref(&src);
-                cg.post_get(blocking, || {
-                    cg.ep.fetch_atomic_from(
-                        buf,
-                        None,
-                        res,
-                        None,
-                        &cg.mapped_addresses[pe],
-                        remote_dst_addr,
-                        &remote_key,
-                        op.into(),
-                    )
-                })?;
+        match op {
+            LamellarAtomicOp::FetchSub(src) => Self::negate_atomic_value(src.as_mut().get_unchecked_mut() as *mut T as *mut OFI),
+            LamellarAtomicOp::Min(_)
+            | LamellarAtomicOp::Max(_)
+            | LamellarAtomicOp::Sum(_)
+            | LamellarAtomicOp::Sub(_)
+            | LamellarAtomicOp::Prod(_)
+            | LamellarAtomicOp::BitOr(_)
+            | LamellarAtomicOp::BitXor(_)
+            | LamellarAtomicOp::BitAnd(_) => {
+                panic!("Non-fetch atomic ops must use the non-fetch path")
             }
-            None => {
-                let buf_val = res[0];
-                cg.post_get(blocking, || {
-                    cg.ep.fetch_atomic_from(
-                        std::slice::from_ref(&buf_val),
-                        None,
-                        res,
-                        None,
-                        &cg.mapped_addresses[pe],
-                        remote_dst_addr,
-                        &remote_key,
-                        op.into(),
-                    )
-                })?;
+            LamellarAtomicOp::Cas(_, _) => {
+                panic!("Compare atomic ops must use the compare path")
             }
+            _ => {},
         };
+
+        let src = op.src() as *const OFI;
+        let buf = std::slice::from_raw_parts(src, 1);
+        cg.post_get(blocking, || {
+            cg.ep.fetch_atomic_from(
+                buf,
+                None,
+                res,
+                None,
+                &cg.mapped_addresses[pe],
+                remote_dst_addr,
+                &remote_key,
+                op.into(),
+            )
+        })?;
 
         Ok(())
     }
@@ -2098,23 +2063,12 @@ impl LibfabricMtAlloc {
         &self,
         pe: usize,
         offset: usize,
-        current: T,
-        new: T,
+        current: *const T,
+        new: *const T,
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        if pe == self.ofi.my_pe {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            let addr = CommAllocAddr(self.start() + offset_bytes);
-            result[0] = match crate::lamellae::comm::atomic::net_atomic_compare_exchange(
-                current,
-                new,
-                &addr,
-            ) {
-                Ok(old) | Err(old) => old,
-            };
-            return Ok(());
-        }
+       
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_compare_exchange_op::<T, u8>(pe, offset, current, new, result, blocking)
@@ -2146,8 +2100,8 @@ impl LibfabricMtAlloc {
         &self,
         pe: usize,
         offset: usize,
-        current: T,
-        new: T,
+        current: *const T,
+        new: *const T,
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
@@ -2160,17 +2114,17 @@ impl LibfabricMtAlloc {
         let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
         let remote_key = remote_alloc_info.key();
 
-        let new = *(&new as *const T as *const OFI);
-        let current = *(&current as *const T as *const OFI);
+        let new_slice = std::slice::from_raw_parts(new as *const OFI, 1);
+        let current_slice = std::slice::from_raw_parts(current as *const OFI, 1);
         let res = &mut *(result as *mut [T] as *mut [OFI]);
         let cg =
             &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
 
         cg.post_get(blocking, || {
             cg.ep.compare_atomic_swap_to(
-                std::slice::from_ref(&new),
+                new_slice,
                 None,
-                std::slice::from_ref(&current),
+                current_slice,
                 None,
                 res,
                 None,

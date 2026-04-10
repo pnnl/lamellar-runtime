@@ -1030,20 +1030,20 @@ impl<T: Dist> NetworkAtomicArray<T> {
         let comm = array.inner.data.team.lamellae.comm();
         let dummy_val = array.dummy_val();
         UnsafeAtomicOpSupport {
-            load: comm.atomic_op_avail::<T>(AtomicOp::Read),
-            store: comm.atomic_op_avail::<T>(AtomicOp::Write(dummy_val)),
-            swap: comm.atomic_op_avail::<T>(AtomicOp::Write(dummy_val)),
-            cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(dummy_val, dummy_val)),
-            add: comm.atomic_op_avail::<T>(AtomicOp::Sum(dummy_val)),
-            fetch_add: comm.atomic_op_avail::<T>(AtomicOp::Sum(dummy_val)),
-            prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(dummy_val)),
-            fetch_prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(dummy_val)),
-            bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(dummy_val)),
-            fetch_bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(dummy_val)),
-            bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(dummy_val)),
-            fetch_bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(dummy_val)),
-            bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(dummy_val)),
-            fetch_bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(dummy_val)),
+            load: comm.atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
+            store: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(dummy_val))),
+            swap: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(dummy_val))),
+            cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(Box::pin(dummy_val), Box::pin(dummy_val))),
+            add: comm.atomic_op_avail::<T>(AtomicOp::Sum(Box::pin(dummy_val))),
+            fetch_add: comm.atomic_op_avail::<T>(AtomicOp::Sum(Box::pin(dummy_val))),
+            prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(Box::pin(dummy_val))),
+            fetch_prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(Box::pin(dummy_val))),
+            bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(Box::pin(dummy_val))),
+            fetch_bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(Box::pin(dummy_val))),
+            bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(Box::pin(dummy_val))),
+            fetch_bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(Box::pin(dummy_val))),
+            bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(Box::pin(dummy_val))),
+            fetch_bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(Box::pin(dummy_val))),
         }
     }
 

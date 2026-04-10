@@ -37,7 +37,6 @@ pub(crate) struct UcxMtAtomicFuture<T> {
     pub(super) remote_pes: Vec<usize>,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
-    pub(crate) local_op: bool,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -52,14 +51,14 @@ impl<T: Remote + Send + 'static> UcxMtAtomicFuture<T> {
             self.offset
         );
         for pe in &self.remote_pes {
-            self.request = UcxMtAlloc::inner_atomic_op(&self.alloc, *pe, self.offset, false, &self.op, true);
+            self.request = UcxMtAlloc::inner_atomic_op(&self.alloc, *pe, self.offset, false, &mut self.op, true);
         }
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
         if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
-        } else if !self.local_op {
+        } else {
             self.alloc.wait_all();
         }
         self.spawned = true;
@@ -73,7 +72,7 @@ impl<T: Remote + Send + 'static> UcxMtAtomicFuture<T> {
             async move {
                 if let Some(request) = self.request.take() {
                     request.wait().expect("Failed to wait for UcxRequest");
-                } else if !self.local_op {
+                } else {
                     self.alloc.wait_all();
                 }
             },
@@ -108,7 +107,7 @@ impl<T: Remote + Send + 'static> Future for UcxMtAtomicFuture<T> {
         }
         if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
-        } else if !self.local_op {
+        } else {
             self.alloc.wait_all();
         }
         Poll::Ready(())
@@ -121,7 +120,6 @@ pub(crate) struct UcxMtAtomicFetchFuture<T> {
     pub(super) remote_pe: usize,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
-    pub(crate) local_op: bool,
     pub(crate) result: Box<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -141,7 +139,7 @@ impl<T: Remote + Send + 'static> UcxMtAtomicFetchFuture<T> {
             self.remote_pe,
             self.offset,
             false,
-            &self.op,
+            &mut self.op,
             std::slice::from_mut(self.result.as_mut()),
         );
         self.spawned = true;
@@ -150,7 +148,7 @@ impl<T: Remote + Send + 'static> UcxMtAtomicFetchFuture<T> {
         self.exec_op();
         if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
-        } else if !self.local_op {
+        } else {
             self.alloc.wait_all();
         }
         *self.result
@@ -164,7 +162,7 @@ impl<T: Remote + Send + 'static> UcxMtAtomicFetchFuture<T> {
             async move {
                 if let Some(request) = self.request.take() {
                     request.wait().expect("Failed to wait for UcxRequest");
-                } else if !self.local_op {
+                } else {
                     self.alloc.wait_all();
                 }
                 *self.result
@@ -199,7 +197,7 @@ impl<T: Remote + Send + 'static> Future for UcxMtAtomicFetchFuture<T> {
         }
         if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
-        } else if !self.local_op {
+        } else {
             self.alloc.wait_all();
         }
         Poll::Ready(*self.result)
@@ -211,9 +209,8 @@ pub(crate) struct UcxMtAtomicCompareExchangeFuture<T> {
     pub(crate) alloc: UcxMtAlloc,
     pub(super) remote_pe: usize,
     pub(crate) offset: usize,
-    pub(super) current: T,
+    pub(super) current: Pin<Box<T>>,
     pub(super) new: T,
-    pub(crate) local_op: bool,
     pub(crate) result: Box<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -230,7 +227,7 @@ impl<T: Remote + Send + PartialEq + 'static> UcxMtAtomicCompareExchangeFuture<T>
             self.remote_pe,
             self.offset,
             false,
-            self.current,
+            self.current.as_ref().get_ref(),
             std::slice::from_mut(self.result.as_mut()),
         );
         self.spawned = true;
@@ -240,16 +237,14 @@ impl<T: Remote + Send + PartialEq + 'static> UcxMtAtomicCompareExchangeFuture<T>
         self.exec_op();
         if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
-        } else if !self.local_op {
+        } else {
             self.alloc.wait_all();
         }
-        compare_exchange_result(*self.result, self.current)
+        compare_exchange_result(*self.result, *self.current)
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
         self.exec_op();
-        let current = self.current;
-        let local_op = self.local_op;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         let alloc = self.alloc.clone();
@@ -257,10 +252,10 @@ impl<T: Remote + Send + PartialEq + 'static> UcxMtAtomicCompareExchangeFuture<T>
             async move {
                 if let Some(request) = self.request.take() {
                     request.wait().expect("Failed to wait for UcxRequest");
-                } else if !local_op {
+                } else {
                     alloc.wait_all();
                 }
-                compare_exchange_result(*self.result, current)
+                compare_exchange_result(*self.result, *self.current)
             },
             counters,
         )
@@ -292,10 +287,10 @@ impl<T: Remote + Send + PartialEq + 'static> Future for UcxMtAtomicCompareExchan
         }
         if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
-        } else if !self.local_op {
+        } else {
             self.alloc.wait_all();
         }
-        Poll::Ready(compare_exchange_result(*self.result, self.current))
+        Poll::Ready(compare_exchange_result(*self.result, *self.current))
     }
 }
 
@@ -308,13 +303,11 @@ impl CommAllocAtomic for UcxMtAlloc {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T> {
-        let local_op = pe == self.my_pe;
         UcxMtAtomicFuture {
             alloc: self.clone(),
             remote_pes: vec![pe],
             offset,
             op,
-            local_op,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -325,14 +318,14 @@ impl CommAllocAtomic for UcxMtAlloc {
     fn atomic_op_blocking<T: Remote>(
         &self,
         _scheduler: &Arc<Scheduler>,
-        op: AtomicOp<T>,
+        mut op: AtomicOp<T>,
         pe: usize,
         offset: usize,
     ) {
-        UcxMtAlloc::inner_atomic_op(self, pe, offset, true, &op, true);
+        UcxMtAlloc::inner_atomic_op(self, pe, offset, true, &mut op, true);
     }
-    fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        UcxMtAlloc::inner_atomic_op(self, pe, offset, false, &op, false);
+    fn atomic_op_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, pe: usize, offset: usize) {
+        UcxMtAlloc::inner_atomic_op(self, pe, offset, false, &mut op, false);
     }
     fn atomic_op_all<T: Remote>(
         &self,
@@ -347,7 +340,6 @@ impl CommAllocAtomic for UcxMtAlloc {
             remote_pes: pes,
             offset,
             op,
-            local_op: false,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -355,9 +347,9 @@ impl CommAllocAtomic for UcxMtAlloc {
         }
         .into()
     }
-    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, offset: usize) {
         for pe in 0..self.num_pes {
-            UcxMtAlloc::inner_atomic_op(self, pe, offset, false, &op, false);
+            UcxMtAlloc::inner_atomic_op(self, pe, offset, false, &mut op, false);
         }
     }
 
@@ -369,13 +361,11 @@ impl CommAllocAtomic for UcxMtAlloc {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        let local_op = pe == self.my_pe;
         UcxMtAtomicFetchFuture {
             alloc: self.clone(),
             remote_pe: pe,
             offset,
             op: op,
-            local_op,
             result: Box::new(T::default()),
             spawned: false,
             scheduler: scheduler.clone(),
@@ -388,7 +378,7 @@ impl CommAllocAtomic for UcxMtAlloc {
     fn atomic_fetch_op_blocking<T: Remote>(
         &self,
         _scheduler: &Arc<Scheduler>,
-        op: AtomicOp<T>,
+        mut op: AtomicOp<T>,
         pe: usize,
         offset: usize,
     ) -> T {
@@ -398,7 +388,7 @@ impl CommAllocAtomic for UcxMtAlloc {
             pe,
             offset,
             true,
-            &op,
+            &mut op,
             std::slice::from_mut(&mut result),
         );
         result
@@ -413,14 +403,12 @@ impl CommAllocAtomic for UcxMtAlloc {
         pe: usize,
         offset: usize,
     ) -> AtomicCompareExchangeOpHandle<T> {
-        let local_op = pe == self.my_pe;
         UcxMtAtomicCompareExchangeFuture {
             alloc: self.clone(),
             remote_pe: pe,
             offset,
-            current,
+            current: Box::pin(current),
             new,
-            local_op,
             result: Box::new(new),
             spawned: false,
             scheduler: scheduler.clone(),
@@ -444,7 +432,7 @@ impl CommAllocAtomic for UcxMtAlloc {
             pe,
             offset,
             true,
-            current,
+            &current,
             std::slice::from_mut(&mut result),
         );
         compare_exchange_result(result, current)
@@ -470,7 +458,6 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             remote_pes: vec![pe],
             offset,
             op,
-            local_op: false,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -478,21 +465,21 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, mut op: AtomicOp<T>, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        UcxMtAlloc::inner_atomic_op(&self.alloc, pe, offset, true, &op, true);
+        UcxMtAlloc::inner_atomic_op(&self.alloc, pe, offset, true, &mut op, true);
     }
-    fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        UcxMtAlloc::inner_atomic_op(&self.alloc, pe, offset, false, &op, false);
+        UcxMtAlloc::inner_atomic_op(&self.alloc, pe, offset, false, &mut op, false);
     }
     fn atomic_op_all<T: Remote>(
         &self,
@@ -503,7 +490,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
     ) -> AtomicOpHandle<T> {
         self.atomic_op(scheduler, counters, op, self.remote_pe, offset)
     }
-    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, offset: usize) {
         self.atomic_op_unmanaged(op, self.remote_pe, offset);
     }
 
@@ -525,7 +512,6 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             remote_pe: pe,
             offset,
             op: op,
-            local_op: false,
             result: Box::new(T::default()),
             spawned: false,
             scheduler: scheduler.clone(),
@@ -535,7 +521,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
         .into()
     }
 
-    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, mut op: AtomicOp<T>, pe: usize, offset: usize) -> T {
         assert_eq!(
             pe, self.remote_pe,
             "atomic fetch op called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
@@ -547,7 +533,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             pe,
             offset,
             true,
-            &op,
+            &mut op,
             std::slice::from_mut(&mut result),
         );
         result
@@ -571,9 +557,8 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             alloc: self.alloc.clone(),
             remote_pe: pe,
             offset,
-            current,
+            current: Box::pin(current),
             new,
-            local_op: false,
             result: Box::new(new),
             spawned: false,
             scheduler: scheduler.clone(),
@@ -602,7 +587,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             pe,
             offset,
             true,
-            current,
+            &current,
             std::slice::from_mut(&mut result),
         );
         compare_exchange_result(result, current)

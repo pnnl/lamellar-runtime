@@ -241,7 +241,7 @@ impl Endpoint {
     pub(crate) fn atomic_op<T>(
         &self,
         op: ucp_atomic_op_t,
-        value: T,
+        value: *const T,
         remote_addr: usize,
         rkey: &RKey,
         managed: bool,
@@ -254,7 +254,7 @@ impl Endpoint {
             ucp_atomic_op_nbx(
                 self.handle,
                 op,
-                &value as *const T as _,
+                value  as _,
                 1 as _,
                 remote_addr as _,
                 rkey_handle,
@@ -284,19 +284,19 @@ impl Endpoint {
 
     pub(crate) fn atomic_get<T>(
         &self,
+        zero: *const T,
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
     ) -> UcxRequest {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
-        let zero: MaybeUninit<T> = MaybeUninit::uninit();
         let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
                 ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
-                zero.as_ptr() as _,
+                zero as _,
                 1 as _,
                 remote_addr as _,
                 rkey_handle,
@@ -322,7 +322,7 @@ impl Endpoint {
     pub(crate) fn atomic_swap<T>(
         &self,
         // buf: *const u8,
-        value: T,
+        value: *const T,
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
@@ -335,7 +335,7 @@ impl Endpoint {
             ucp_atomic_op_nbx(
                 self.handle,
                 ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP,
-                &value as *const T as _,
+                value as _,
                 1 as _,
                 remote_addr as _,
                 rkey_handle,
@@ -366,7 +366,7 @@ impl Endpoint {
 
     pub(crate) fn atomic_compare_swap<T>(
         &self,
-        compare: T,
+        compare: *const T,
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
@@ -377,7 +377,7 @@ impl Endpoint {
             ucp_atomic_op_nbx(
                 self.handle,
                 ucp_atomic_op_t::UCP_ATOMIC_OP_CSWAP,
-                &compare as *const T as _,
+                compare as _,
                 1 as _,
                 remote_addr as _,
                 rkey_handle,
@@ -404,7 +404,7 @@ impl Endpoint {
     pub(crate) fn atomic_fetch_op<T>(
         &self,
         op: ucp_atomic_op_t,
-        value: T,
+        value: *const T,
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
@@ -415,7 +415,7 @@ impl Endpoint {
             ucp_atomic_op_nbx(
                 self.handle,
                 op,
-                &value as *const T as _,
+                value as _,
                 1 as _,
                 remote_addr as _,
                 rkey_handle,

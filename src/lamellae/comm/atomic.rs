@@ -420,30 +420,31 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
     }
 }
 
-#[derive(Clone, Copy)]
+// we need to pin box the values in the AtomicOp because these will be passed as input to the remote operation, and their address need to remain stable for the duration of the operation,
+#[derive(Clone)]
 pub(crate) enum AtomicOp<T> {
     // Non-fetch operations
-    Min(T),
-    Max(T),
-    Sum(T),
-    Sub(T), // backends only expose a sum/add op, we expose subtraction via negating the value and using sum/add
-    Prod(T),
-    BitOr(T),
-    BitXor(T),
-    BitAnd(T),
-    Write(T),
+    Min(Pin<Box<T>>),
+    Max(Pin<Box<T>>),
+    Sum(Pin<Box<T>>),
+    Sub(Pin<Box<T>>), // backends only expose a sum/add op, we expose subtraction via negating the value and using sum/add
+    Prod(Pin<Box<T>>),
+    BitOr(Pin<Box<T>>),
+    BitXor(Pin<Box<T>>),
+    BitAnd(Pin<Box<T>>),
+    Write(Pin<Box<T>>),
     // Fetch operations (return the old value)
-    FetchMin(T),
-    FetchMax(T),
-    FetchSum(T),
-    FetchSub(T),
-    FetchProd(T),
-    FetchBitOr(T),
-    FetchBitXor(T),
-    FetchBitAnd(T),
-    Read,
+    FetchMin(Pin<Box<T>>),
+    FetchMax(Pin<Box<T>>),
+    FetchSum(Pin<Box<T>>),
+    FetchSub(Pin<Box<T>>),
+    FetchProd(Pin<Box<T>>),
+    FetchBitOr(Pin<Box<T>>),
+    FetchBitXor(Pin<Box<T>>),
+    FetchBitAnd(Pin<Box<T>>),
+    Read(Pin<Box<T>>), // ucx requires us to do a fetch-add with an addend of 0 in order to do a remote read, so we can use the FetchSum variant with an addend of 0 for that case, but we want to be able to distinguish that from an actual fetch-add operation where the addend is 0, so we have a separate Read variant for that case
     // Compare-and-swap
-    Cas(T, T),
+    Cas(Pin<Box<T>>, Pin<Box<T>>),
 }
 
 impl<T> std::fmt::Debug for AtomicOp<T> {
@@ -466,34 +467,34 @@ impl<T> std::fmt::Debug for AtomicOp<T> {
             AtomicOp::FetchBitOr(_) => write!(f, "FetchBitOr"),
             AtomicOp::FetchBitXor(_) => write!(f, "FetchBitXor"),
             AtomicOp::FetchBitAnd(_) => write!(f, "FetchBitAnd"),
-            AtomicOp::Read => write!(f, "Read"),
+            AtomicOp::Read(_) => write!(f, "Read"),
             AtomicOp::Cas(_, _) => write!(f, "Cas"),
         }
     }
 }
 
 impl<T> AtomicOp<T> {
-    pub(crate) fn src(&self) -> Option<&T> {
+    pub(crate) fn src(&self) -> *const T {
         match self {
-            AtomicOp::Min(slice)
-            | AtomicOp::Max(slice)
-            | AtomicOp::Sum(slice)
-            | AtomicOp::Sub(slice)
-            | AtomicOp::Prod(slice)
-            | AtomicOp::BitOr(slice)
-            | AtomicOp::BitXor(slice)
-            | AtomicOp::BitAnd(slice)
-            | AtomicOp::Write(slice)
-            | AtomicOp::FetchMin(slice)
-            | AtomicOp::FetchMax(slice)
-            | AtomicOp::FetchSum(slice)
-            | AtomicOp::FetchSub(slice)
-            | AtomicOp::FetchProd(slice)
-            | AtomicOp::FetchBitOr(slice)
-            | AtomicOp::FetchBitXor(slice)
-            | AtomicOp::FetchBitAnd(slice)
-            | AtomicOp::Cas(slice, _) => Some(slice),
-            AtomicOp::Read => None,
+            AtomicOp::Min(val)
+            | AtomicOp::Max(val)
+            | AtomicOp::Sum(val)
+            | AtomicOp::Sub(val)
+            | AtomicOp::Prod(val)
+            | AtomicOp::BitOr(val)
+            | AtomicOp::BitXor(val)
+            | AtomicOp::BitAnd(val)
+            | AtomicOp::Write(val)
+            | AtomicOp::FetchMin(val)
+            | AtomicOp::FetchMax(val)
+            | AtomicOp::FetchSum(val)
+            | AtomicOp::FetchSub(val)
+            | AtomicOp::FetchProd(val)
+            | AtomicOp::FetchBitOr(val)
+            | AtomicOp::FetchBitXor(val)
+            | AtomicOp::FetchBitAnd(val)
+            | AtomicOp::Read(val)
+            | AtomicOp::Cas(val, _) => val.as_ref().get_ref(),
         }
     }
 }
@@ -750,27 +751,27 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
     let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
     match op {
         AtomicOp::Write(val) => {
-            (&mut *(dst as *mut A)).store(*val);
+            (&mut *(dst as *mut A)).store(**val);
         }
         AtomicOp::Sum(val) => {
-            (&mut *(dst as *mut A)).fetch_add(*val);
+            (&mut *(dst as *mut A)).fetch_add(**val);
         }
         AtomicOp::Sub(val) => {
-            (&mut *(dst as *mut A)).fetch_sub(*val);
+            (&mut *(dst as *mut A)).fetch_sub(**val);
         }
         AtomicOp::Prod(val) => {
-            (&mut *(dst as *mut A)).fetch_mul(*val);
+            (&mut *(dst as *mut A)).fetch_mul(**val);
         }
         AtomicOp::BitOr(val) => {
-            (&mut *(dst as *mut A)).fetch_or(*val);
+            (&mut *(dst as *mut A)).fetch_or(**val);
         }
         AtomicOp::BitXor(val) => {
-            (&mut *(dst as *mut A)).fetch_xor(*val);
+            (&mut *(dst as *mut A)).fetch_xor(**val);
         }
         AtomicOp::BitAnd(val) => {
-            (&mut *(dst as *mut A)).fetch_and(*val);
+            (&mut *(dst as *mut A)).fetch_and(**val);
         }
-        AtomicOp::Read => {
+        AtomicOp::Read(_) => {
             panic!("Read atomic op not supported in this context");
         }
         AtomicOp::Cas(_, _) => {
@@ -795,16 +796,16 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
 unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A, result: *mut T) {
     let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
     let res = match op {
-        AtomicOp::FetchMin(val) => (&mut *(dst as *mut A)).fetch_min(*val),
-        AtomicOp::FetchMax(val) => (&mut *(dst as *mut A)).fetch_max(*val),
-        AtomicOp::FetchSum(val) => (&mut *(dst as *mut A)).fetch_add(*val),
-        AtomicOp::FetchSub(val) => (&mut *(dst as *mut A)).fetch_sub(*val),
-        AtomicOp::FetchProd(val) => (&mut *(dst as *mut A)).fetch_mul(*val),
-        AtomicOp::FetchBitOr(val) => (&mut *(dst as *mut A)).fetch_or(*val),
-        AtomicOp::FetchBitXor(val) => (&mut *(dst as *mut A)).fetch_xor(*val),
-        AtomicOp::FetchBitAnd(val) => (&mut *(dst as *mut A)).fetch_and(*val),
-        AtomicOp::Read => (&*dst).load(),
-        AtomicOp::Write(val) => (&mut *(dst as *mut A)).swap(*val),
+        AtomicOp::FetchMin(val) => (&mut *(dst as *mut A)).fetch_min(**val),
+        AtomicOp::FetchMax(val) => (&mut *(dst as *mut A)).fetch_max(**val),
+        AtomicOp::FetchSum(val) => (&mut *(dst as *mut A)).fetch_add(**val),
+        AtomicOp::FetchSub(val) => (&mut *(dst as *mut A)).fetch_sub(**val),
+        AtomicOp::FetchProd(val) => (&mut *(dst as *mut A)).fetch_mul(**val),
+        AtomicOp::FetchBitOr(val) => (&mut *(dst as *mut A)).fetch_or(**val),
+        AtomicOp::FetchBitXor(val) => (&mut *(dst as *mut A)).fetch_xor(**val),
+        AtomicOp::FetchBitAnd(val) => (&mut *(dst as *mut A)).fetch_and(**val),
+        AtomicOp::Read(_) => (&*dst).load(),
+        AtomicOp::Write(val) => (&mut *(dst as *mut A)).swap(**val),
         AtomicOp::Cas(_, _) => panic!("Cas atomic op not supported in this context"),
         // Reject non-fetch variants in fetch path
         AtomicOp::Min(_)

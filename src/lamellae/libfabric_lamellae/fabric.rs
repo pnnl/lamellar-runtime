@@ -265,7 +265,7 @@ impl CommGroup {
         let mut prev_expected_cnt = pending.load(Ordering::SeqCst);
         let mut old_cnt = cntr.read();
         let mut expected_cnt = pending.load(Ordering::SeqCst);
-        let mut cur_cnt = cntr.read();
+        let mut cur_cnt = old_cnt;
         trace!(
                 "{dir} before.  expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
                 cntr.read(),
@@ -687,7 +687,7 @@ impl Ofi {
             LamellarAtomicOp::BitOr(_) => AtomicOpKind::BitOr,
             LamellarAtomicOp::BitXor(_) => AtomicOpKind::BitXor,
             LamellarAtomicOp::BitAnd(_) => AtomicOpKind::BitAnd,
-            LamellarAtomicOp::Read => AtomicOpKind::Read,
+            LamellarAtomicOp::Read(_) => AtomicOpKind::Read,
             LamellarAtomicOp::Write(_) => AtomicOpKind::Write,
             LamellarAtomicOp::Cas(_, _) => AtomicOpKind::Cas,
             LamellarAtomicOp::FetchMin(_) => AtomicOpKind::Min,
@@ -1199,81 +1199,6 @@ impl Ofi {
         }
     }
 
-    // pub(crate) unsafe fn inner_put<T: Copy>(
-    //     &self,
-    //     pe: usize,
-    //     src_addr: &[T],
-    //     dst_addr: usize,
-    //     blocking: bool,
-    // ) -> Result<(), libfabric::error::Error> {
-    //     let cg = &self.utility_comm_group.lock();
-    //     let (offset, mr, remote_alloc_info) = {
-    //         let table = self.alloc_manager.mr_info_table.read();
-    //         let alloc_info = table
-    //             .iter()
-    //             .find(|e| e.contains(&dst_addr))
-    //             .expect("Invalid address");
-
-    //         (
-    //             alloc_info.start(),
-    //             alloc_info.mr(),
-    //             alloc_info.remote_info(&pe).expect(&format!(
-    //                 "PE {} is not part of the sub allocation group",
-    //                 pe
-    //             )),
-    //         )
-    //     };
-
-    //     let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
-    //     trace!(
-    //         target: "libfabric",
-    //         "Remote destination address for PE {}: {:?}",
-    //         pe,
-    //         remote_dst_addr
-    //     );
-
-    //     let remote_key = remote_alloc_info.key();
-    //     if std::mem::size_of_val(src_addr) < self.info_entry.tx_attr().inject_size() {
-    //         trace!(
-    //             target: "libfabric",
-    //             "Injecting write to PE {} at address {:?}",
-    //             pe,
-    //             remote_dst_addr
-    //         );
-    //         self.post_put(blocking, || unsafe {
-    //             self.ep.inject_write_to(
-    //                 src_addr,
-    //                 &self.mapped_addresses[pe],
-    //                 remote_dst_addr,
-    //                 &remote_key,
-    //             )
-    //         })?;
-    //     } else {
-    //         let mut curr_idx = 0;
-    //         while curr_idx < src_addr.len() {
-    //             let msg_len = std::cmp::min(
-    //                 src_addr.len() - curr_idx,
-    //                 self.info_entry.ep_attr().max_msg_size(),
-    //             );
-
-    //             self.post_put(blocking, || unsafe {
-    //                 self.ep.write_to(
-    //                     &src_addr[curr_idx..curr_idx + msg_len],
-    //                     Some(&mr.descriptor()),
-    //                     &self.mapped_addresses[pe],
-    //                     remote_dst_addr,
-    //                     &remote_key,
-    //                 )
-    //             })?;
-
-    //             remote_dst_addr = remote_dst_addr.add(msg_len);
-    //             curr_idx += msg_len;
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
-
     pub(crate) fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.alloc_manager
             .local_addr(remote_pe, remote_addr)
@@ -1619,11 +1544,11 @@ fn build_same_node_segments(
     (bases, segments)
 }
 impl LibfabricAlloc {
-    unsafe fn negate_atomic_value<OFI: Copy>(value: OFI) -> OFI {
+    unsafe fn negate_atomic_value<OFI>(value: *mut OFI) {
         let num_bytes = std::mem::size_of::<OFI>();
         let mut bytes = vec![0u8; num_bytes];
         std::ptr::copy(
-            (&value as *const OFI).cast::<u8>(),
+            value.cast::<u8>(),
             bytes.as_mut_ptr(),
             num_bytes,
         );
@@ -1651,9 +1576,8 @@ impl LibfabricAlloc {
             }
         }
 
-        let mut result = std::mem::MaybeUninit::<OFI>::uninit();
-        std::ptr::copy(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
-        result.assume_init()
+        // let mut result = std::mem::MaybeUninit::<OFI>::uninit();
+        std::ptr::copy(bytes.as_ptr(), value.cast::<u8>(), num_bytes);
     }
 
     pub(crate) fn new(
@@ -2195,23 +2119,9 @@ impl LibfabricAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &LamellarAtomicOp<T>,
+        op: &mut LamellarAtomicOp<T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        if pe == self.ofi.my_pe {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            let addr = CommAllocAddr(self.start() + offset_bytes);
-            crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
-            return Ok(());
-        }
-        #[cfg(feature = "enable-on-node-shmem")]
-        {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
-                crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
-                return Ok(());
-            }
-        }
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_op::<T, u8>(pe, offset, op, blocking)
@@ -2243,7 +2153,7 @@ impl LibfabricAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &LamellarAtomicOp<T>,
+        op: &mut LamellarAtomicOp<T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
@@ -2255,10 +2165,9 @@ impl LibfabricAlloc {
         let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
-        let src = op.src().expect("Atomic operation has no source");
-        let src = *(src as *const T as *const OFI);
-        let src = match op {
-            LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+       
+        match op {
+            LamellarAtomicOp::Sub(src) => Self::negate_atomic_value(src.as_mut().get_unchecked_mut()),
             LamellarAtomicOp::FetchMin(_)
             | LamellarAtomicOp::FetchMax(_)
             | LamellarAtomicOp::FetchSum(_)
@@ -2272,10 +2181,10 @@ impl LibfabricAlloc {
             LamellarAtomicOp::Cas(_, _) => {
                 panic!("Compare atomic ops must use the compare path")
             }
-            _ => src,
+            _ => {}
         };
-        let buf = std::slice::from_ref(&src);
-        // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
+        let src = op.src() as *const OFI;
+        let buf = std::slice::from_raw_parts(src, 1);
         let cg = &self.ofi.comm_group;
         cg.post_put(blocking, || {
             cg.ep.atomic_inject_to(
@@ -2293,24 +2202,10 @@ impl LibfabricAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &LamellarAtomicOp<T>,
+        op: &mut LamellarAtomicOp<T>,
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        if pe == self.ofi.my_pe {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            let addr = CommAllocAddr(self.start() + offset_bytes);
-            crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
-            return Ok(());
-        }
-        #[cfg(feature = "enable-on-node-shmem")]
-        {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
-                crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
-                return Ok(());
-            }
-        }
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_fetch_op::<T, u8>(pe, offset, op, result, blocking)
@@ -2342,7 +2237,7 @@ impl LibfabricAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &LamellarAtomicOp<T>,
+        op: &mut LamellarAtomicOp<T>,
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
@@ -2359,56 +2254,37 @@ impl LibfabricAlloc {
         let res = &mut *(result as *mut [T] as *mut [OFI]);
         let cg = &self.ofi.comm_group;
 
-        match op.src() {
-            Some(src) => {
-                let src = *(src as *const T as *const OFI);
-                let src = match op {
-                    LamellarAtomicOp::FetchSub(_) => Self::negate_atomic_value(src),
-                    LamellarAtomicOp::Min(_)
-                    | LamellarAtomicOp::Max(_)
-                    | LamellarAtomicOp::Sum(_)
-                    | LamellarAtomicOp::Sub(_)
-                    | LamellarAtomicOp::Prod(_)
-                    | LamellarAtomicOp::BitOr(_)
-                    | LamellarAtomicOp::BitXor(_)
-                    | LamellarAtomicOp::BitAnd(_) => {
-                        panic!("Non-fetch atomic ops must use the non-fetch path")
-                    }
-                    LamellarAtomicOp::Cas(_, _) => {
-                        panic!("Compare atomic ops must use the compare path")
-                    }
-                    _ => src,
-                };
-                let buf = std::slice::from_ref(&src);
-                cg.post_get(blocking, || {
-                    cg.ep.fetch_atomic_from(
-                        buf,
-                        None,
-                        res,
-                        None,
-                        &cg.mapped_addresses[pe],
-                        remote_dst_addr,
-                        &remote_key,
-                        op.into(),
-                    )
-                })?;
+        match op {
+            LamellarAtomicOp::FetchSub(src) => Self::negate_atomic_value(src.as_mut().get_unchecked_mut()),
+            LamellarAtomicOp::Min(_)
+            | LamellarAtomicOp::Max(_)
+            | LamellarAtomicOp::Sum(_)
+            | LamellarAtomicOp::Sub(_)
+            | LamellarAtomicOp::Prod(_)
+            | LamellarAtomicOp::BitOr(_)
+            | LamellarAtomicOp::BitXor(_)
+            | LamellarAtomicOp::BitAnd(_) => {
+                panic!("Non-fetch atomic ops must use the non-fetch path")
             }
-            None => {
-                let buf_val = res[0];
-                cg.post_get(blocking, || {
-                    cg.ep.fetch_atomic_from(
-                        std::slice::from_ref(&buf_val),
-                        None,
-                        res,
-                        None,
-                        &cg.mapped_addresses[pe],
-                        remote_dst_addr,
-                        &remote_key,
-                        op.into(),
-                    )
-                })?;
+            LamellarAtomicOp::Cas(_, _) => {
+                panic!("Compare atomic ops must use the compare path")
             }
+            _ => {},
         };
+        let src = op.src() as *const OFI;
+        let buf = std::slice::from_raw_parts(src , 1);
+        cg.post_get(blocking, || {
+            cg.ep.fetch_atomic_from(
+                buf,
+                None,
+                res,
+                None,
+                &cg.mapped_addresses[pe],
+                remote_dst_addr,
+                &remote_key,
+                op.into(),
+            )
+        })?;
 
         Ok(())
     }
@@ -2417,37 +2293,11 @@ impl LibfabricAlloc {
         &self,
         pe: usize,
         offset: usize,
-        current: T,
-        new: T,
+        current: *const T,
+        new: *const T,
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        if pe == self.ofi.my_pe {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            let addr = CommAllocAddr(self.start() + offset_bytes);
-            result[0] = match crate::lamellae::comm::atomic::net_atomic_compare_exchange(
-                current,
-                new,
-                &addr,
-            ) {
-                Ok(old) | Err(old) => old,
-            };
-            return Ok(());
-        }
-        #[cfg(feature = "enable-on-node-shmem")]
-        {
-            let offset_bytes = offset * std::mem::size_of::<T>();
-            if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
-                result[0] = match crate::lamellae::comm::atomic::net_atomic_compare_exchange(
-                    current,
-                    new,
-                    &addr,
-                ) {
-                    Ok(old) | Err(old) => old,
-                };
-                return Ok(());
-            }
-        }
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_atomic_compare_exchange_op::<T, u8>(
@@ -2499,8 +2349,8 @@ impl LibfabricAlloc {
         &self,
         pe: usize,
         offset: usize,
-        current: T,
-        new: T,
+        current: *const T,
+        new: *const T,
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
@@ -2513,16 +2363,15 @@ impl LibfabricAlloc {
         let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
         let remote_key = remote_alloc_info.key();
 
-        let new = *(&new as *const T as *const OFI);
-        let current = *(&current as *const T as *const OFI);
+        let new_slice = std::slice::from_raw_parts(new as *const OFI, 1);
+        let current_slice = std::slice::from_raw_parts(current as *const OFI, 1);
         let res = &mut *(result as *mut [T] as *mut [OFI]);
         let cg = &self.ofi.comm_group;
-
         cg.post_get(blocking, || {
             cg.ep.compare_atomic_swap_to(
-                std::slice::from_ref(&new),
+                new_slice,
                 None,
-                std::slice::from_ref(&current),
+                current_slice,
                 None,
                 res,
                 None,
@@ -2637,6 +2486,26 @@ impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
     }
 }
 
+impl<T> From<&mut LamellarAtomicOp<T>> for AtomicOp {
+    fn from(op: &mut LamellarAtomicOp<T>) -> Self {
+        match op {
+            LamellarAtomicOp::Min(_) => AtomicOp::Min,
+            LamellarAtomicOp::Max(_) => AtomicOp::Max,
+            LamellarAtomicOp::Sum(_) => AtomicOp::Sum,
+            LamellarAtomicOp::Sub(_) => AtomicOp::Sum, // Sub can be implemented as Add with negative value
+            LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
+            // LamellarAtomicOp::LogicalOr(_) => AtomicOp::Lor,
+            // LamellarAtomicOp::LogicalXor(_) => AtomicOp::Lxor,
+            // LamellarAtomicOp::LogicalAnd(_) => AtomicOp::Land,
+            LamellarAtomicOp::BitOr(_) => AtomicOp::Bor,
+            LamellarAtomicOp::BitXor(_) => AtomicOp::Bxor,
+            LamellarAtomicOp::BitAnd(_) => AtomicOp::Band,
+            LamellarAtomicOp::Write(_) => AtomicOp::AtomicWrite,
+            _ => panic!("unexpected atomic op"),
+        }
+    }
+}
+
 impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
     fn from(op: &LamellarAtomicOp<T>) -> Self {
         match op {
@@ -2648,8 +2517,26 @@ impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::FetchBitXor(_) => FetchAtomicOp::Bxor,
             LamellarAtomicOp::FetchBitAnd(_) => FetchAtomicOp::Band,
             LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
-            LamellarAtomicOp::Read => FetchAtomicOp::AtomicRead,
+            LamellarAtomicOp::Read(_) => FetchAtomicOp::AtomicRead,
             LamellarAtomicOp::Cas(_, _) => panic!("Cas conversion to FetchAtomicOp not supported"),
+            _ => panic!("Non-fetch atomic ops must use non-fetch path"),
+        }
+    }
+}
+
+impl<T> From<&mut LamellarAtomicOp<T>> for FetchAtomicOp {
+    fn from(op: &mut LamellarAtomicOp<T>) -> Self {
+        match op {
+            LamellarAtomicOp::FetchMin(_) => FetchAtomicOp::Min,
+            LamellarAtomicOp::FetchMax(_) => FetchAtomicOp::Max,
+            LamellarAtomicOp::FetchSum(_) => FetchAtomicOp::Sum,
+            LamellarAtomicOp::FetchSub(_) => FetchAtomicOp::Sum,
+            LamellarAtomicOp::FetchProd(_) => FetchAtomicOp::Prod,
+            LamellarAtomicOp::FetchBitOr(_) => FetchAtomicOp::Bor,
+            LamellarAtomicOp::FetchBitXor(_) => FetchAtomicOp::Bxor,
+            LamellarAtomicOp::FetchBitAnd(_) => FetchAtomicOp::Band,
+            LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
+            LamellarAtomicOp::Read(_) => FetchAtomicOp::AtomicRead,
             _ => panic!("Non-fetch atomic ops must use non-fetch path"),
         }
     }
@@ -2682,7 +2569,7 @@ impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::FetchBitXor(_) => FetchAtomicOp::Bxor,
             LamellarAtomicOp::FetchBitAnd(_) => FetchAtomicOp::Band,
             LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
-            LamellarAtomicOp::Read => FetchAtomicOp::AtomicRead,
+            LamellarAtomicOp::Read(_) => FetchAtomicOp::AtomicRead,
             LamellarAtomicOp::Cas(_, _) => panic!("Cas conversion to FetchAtomicOp not supported"),
             _ => panic!("Non-fetch atomic ops must use non-fetch path"),
         }
