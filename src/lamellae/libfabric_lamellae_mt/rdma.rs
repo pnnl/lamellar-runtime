@@ -237,7 +237,7 @@ impl<T: Remote> Future for LibfabricMtGetFuture<T> {
         this.alloc.ofi.wait_all().unwrap();
 
         // Poll::Ready(unsafe { this.result.assume_init_read() })
-        Poll::Ready(*self.result)
+        Poll::Ready(**this.result)
     }
 }
 
@@ -854,6 +854,7 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
             alloc: self.alloc.clone(),
             pe,
             offset,
+            local_op: false,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -893,6 +894,7 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
             pe,
             offset,
             len,
+            local_op: false,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -933,6 +935,7 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
             pe,
             offset,
             dst,
+            local_op: false,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
