@@ -95,8 +95,8 @@ impl<T: Dist> Future for ArrayOpHandle<T> {
         let this = self.as_mut().project();
         let res = match this.state.project() {
             OpStateProj::Am(op_handle) => op_handle.poll(cx),
-            OpStateProj::Network(op_handle) => return op_handle.poll(cx),
-            OpStateProj::Rdma(op_handle) => return op_handle.poll(cx),
+            OpStateProj::Network(op_handle) => op_handle.poll(cx),
+            OpStateProj::Rdma(op_handle) => op_handle.poll(cx),
             _ => Poll::Ready(()),
         };
         if res.is_ready() {
