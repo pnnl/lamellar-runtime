@@ -16,7 +16,7 @@ use crate::{
 
 use super::comm::{LibfabricComm, HEAP_SIZE};
 
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 impl CommMem for LibfabricComm {
     #[tracing::instrument(skip(self), level = "debug")]
@@ -70,7 +70,7 @@ impl CommMem for LibfabricComm {
                     padding,
                     size,
                 )?;
-                info!(
+                trace!(
                     "new rt alloc: 0x{:x}-0x{:x} {} {} {:?}", // {:?}",
                     addr,
                     addr + size,
