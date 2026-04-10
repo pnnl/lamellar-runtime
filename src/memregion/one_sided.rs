@@ -818,7 +818,14 @@ impl<T: Remote> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
                 .inner
                 .mr
                 .as_casted_mut_slice()
-                .expect("should be aligned");
+                .unwrap_or_else(|e| {
+                    if let MemRegionError::MemNotAlignedError = e {
+                        panic!("mem region is not properly aligned for type T, size_of<T>={} num_bytes={} align={} calc_align={}, cannot get slice for mem region: {:?}", 
+                        std::mem::size_of::<T>(), self.mr.inner.mr.num_bytes(), std::mem::align_of::<T>(), self.mr.inner.mr.num_bytes() % std::mem::size_of::<T>(), e);
+                    } else {
+                        panic!("unexpected error getting slice for mem region: {:?}",e);
+                    }
+                });
             if slice.len() == 0 {
                 slice
             } else {

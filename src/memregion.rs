@@ -858,6 +858,11 @@ impl<T: Remote> MemoryRegion<T> {
         trace!("new memregion alloc {:?}", temp.alloc,);
         Ok(temp)
     }
+
+    pub(crate) fn num_bytes(&self) -> usize {
+        self.alloc.num_bytes()
+    }
+
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn from_remote_addr(
         addr: usize,

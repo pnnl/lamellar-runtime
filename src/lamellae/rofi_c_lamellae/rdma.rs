@@ -49,7 +49,7 @@ impl<T: Remote> RofiCPutFuture<T> {
         trace!("rofi_c put val to pe {} addr: {:?}", pe, self.addr);
         let dst = (self.addr.0 + self.offset * std::mem::size_of::<T>()) as usize;
         if pe != self.my_pe {
-            unsafe { rofi_c_put(std::slice::from_ref(val), dst, pe).expect("rofi_c_put failed") }
+            unsafe { rofi_c_put(std::slice::from_ref(val), dst, pe).expect(&format!("rofi_c_put failed {}", pe)) }
         } else {
             unsafe { std::ptr::copy(val as *const T, dst as *mut T, 1) }
         }
@@ -58,7 +58,7 @@ impl<T: Remote> RofiCPutFuture<T> {
         trace!("rofi_c put buf to pe {} addr: {:?}", pe, self.addr);
         let dst = (self.addr.0 + self.offset * std::mem::size_of::<T>()) as usize;
         if pe != self.my_pe {
-            unsafe { rofi_c_put(src.as_slice(), dst, pe).expect("rofi_c_put failed") }
+            unsafe { rofi_c_put(src.as_slice(), dst, pe).expect(&format!("rofi_c_put failed dst: {} offset: {} addr: 0x{:x} len: {}", pe, self.offset, dst, src.len())) }
         } else {
             unsafe { std::ptr::copy(src.as_ptr(), dst as *mut T, src.len()) }
         }

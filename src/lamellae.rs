@@ -90,7 +90,7 @@ pub(crate) enum AllocationType {
 
 impl Default for Backend {
     fn default() -> Self {
-        println!("default backend: {}", config().backend);
+        // println!("default backend: {}", config().backend);
         match config().backend.as_str() {
             "rofi_c" => {
                 #[cfg(feature = "enable-rofi-c")]
