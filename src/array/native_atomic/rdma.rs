@@ -485,7 +485,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NativeAtomicArray<T> {
 #[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicGetPeAm {
     array: __NativeAtomicByteArray, //inner of the indices we need to place data into
-    local_index: usize,           //local index
+    local_index: usize,             //local index
 }
 
 #[lamellar_impl::rt_am]

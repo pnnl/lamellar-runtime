@@ -71,9 +71,9 @@ pub struct UnsafeArray<T: Remote> {
 
 #[derive(crate::Deserialize, crate::Serialize, Clone, Copy, Debug, Default)]
 pub(crate) struct UnsafeAtomicOpSupport {
-    pub(crate) load: bool, //read
+    pub(crate) load: bool,  //read
     pub(crate) store: bool, //write
-    pub(crate) swap: bool, //cas
+    pub(crate) swap: bool,  //cas
     pub(crate) cas: bool,
     pub(crate) add: bool, // this is for add and sub
     pub(crate) fetch_add: bool,
@@ -131,10 +131,8 @@ impl<'de, T: Dist + 'static> serde::Deserialize<'de> for UnsafeArray<T> {
         let inner = array.array;
         let mem_region = unsafe { inner.data.mem_region.as_base::<T>() };
         let sample = mem_region.as_slice()[0];
-        let atomic_support = UnsafeArray::<T>::detect_atomic_support(
-            inner.data.team.lamellae.comm(),
-            sample,
-        );
+        let atomic_support =
+            UnsafeArray::<T>::detect_atomic_support(inner.data.team.lamellae.comm(), sample);
         Ok(UnsafeArray {
             inner,
             mem_region,
@@ -347,7 +345,8 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         sample: T,
     ) -> UnsafeAtomicOpSupport {
         UnsafeAtomicOpSupport {
-            load: comm.atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
+            load: comm
+                .atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
             store: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(sample))),
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(sample))),
             cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(Box::pin(sample), Box::pin(sample))),
@@ -1018,10 +1017,8 @@ impl<T: Dist + 'static> From<__UnsafeByteArray> for UnsafeArray<T> {
         let inner = array.inner;
         let mem_region = unsafe { inner.data.mem_region.as_base::<T>() };
         let sample = mem_region.as_slice()[0];
-        let atomic_support = UnsafeArray::<T>::detect_atomic_support(
-            inner.data.team.lamellae.comm(),
-            sample,
-        );
+        let atomic_support =
+            UnsafeArray::<T>::detect_atomic_support(inner.data.team.lamellae.comm(), sample);
         UnsafeArray {
             inner,
             mem_region,
@@ -1035,10 +1032,8 @@ impl<T: Dist + 'static> From<&__UnsafeByteArray> for UnsafeArray<T> {
     fn from(array: &__UnsafeByteArray) -> Self {
         let mem_region = unsafe { array.inner.data.mem_region.as_base::<T>() };
         let sample = mem_region.as_slice()[0];
-        let atomic_support = UnsafeArray::<T>::detect_atomic_support(
-            array.inner.data.team.lamellae.comm(),
-            sample,
-        );
+        let atomic_support =
+            UnsafeArray::<T>::detect_atomic_support(array.inner.data.team.lamellae.comm(), sample);
         UnsafeArray {
             inner: array.inner.clone(),
             mem_region,

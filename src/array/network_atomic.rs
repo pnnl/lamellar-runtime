@@ -7,16 +7,16 @@ mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::NativeAtomicType;
 use crate::array::private::ArrayExecAm;
-use crate::array::r#unsafe::__UnsafeByteArray;
 use crate::array::r#unsafe::UnsafeAtomicOpSupport;
+use crate::array::r#unsafe::__UnsafeByteArray;
+use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
+use crate::lamellae::{AtomicOp, CommInfo};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
-use crate::array::*;
 use crate::{Darc, Remote};
-use crate::lamellae::{AtomicOp, CommInfo};
 
 use serde::ser::SerializeSeq;
 use std::any::TypeId;
@@ -805,8 +805,7 @@ pub struct __NetworkAtomicByteArray {
     pub(crate) array: __UnsafeByteArray,
     pub(crate) orig_t: NetworkAtomicType,
 }
-impl __NetworkAtomicByteArray {
-}
+impl __NetworkAtomicByteArray {}
 
 /// Internal runtime local-data wrapper for NetworkAtomic arrays.
 /// Not intended for direct use by library users.
@@ -819,7 +818,6 @@ pub struct __NetworkAtomicLocalData<T: Remote> {
     start_index: usize,
     end_index: usize,
 }
-
 
 /// Internal iterator for `__NetworkAtomicLocalData`.
 /// Not intended for direct use by library users.
@@ -1030,7 +1028,8 @@ impl<T: Dist> NetworkAtomicArray<T> {
         let comm = array.inner.data.team.lamellae.comm();
         let dummy_val = array.dummy_val();
         UnsafeAtomicOpSupport {
-            load: comm.atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
+            load: comm
+                .atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
             store: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(dummy_val))),
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(dummy_val))),
             cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(Box::pin(dummy_val), Box::pin(dummy_val))),

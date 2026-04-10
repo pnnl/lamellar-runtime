@@ -32,7 +32,6 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
         RwLock::new(HashMap::new());
@@ -403,7 +402,6 @@ impl LamellarWorld {
     {
         self.team.spawn_am_local(am)
     }
-
 }
 
 impl LamellarEnv for LamellarWorld {
@@ -468,7 +466,6 @@ impl Drop for LamellarWorld {
                 lamellae.comm().barrier();
             }
 
-            
             // LAMELLAES.write().clear();
             debug!("LamellarWorld dropped");
         } else {

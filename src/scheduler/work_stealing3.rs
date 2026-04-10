@@ -56,7 +56,8 @@ impl WorkStealingThread {
                 let work_q = WORK_Q.get_or(|| work_q);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
                 let mut rng = rand::rng();
-                let t = rand::distr::Uniform::try_from(0..worker.work_stealers.len()).expect("error getting uniform distribution");
+                let t = rand::distr::Uniform::try_from(0..worker.work_stealers.len())
+                    .expect("error getting uniform distribution");
                 let mut timer = std::time::Instant::now();
                 while worker.panic.load(Ordering::SeqCst) == 0
                     && (

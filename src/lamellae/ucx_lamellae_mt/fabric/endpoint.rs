@@ -254,7 +254,7 @@ impl Endpoint {
             ucp_atomic_op_nbx(
                 self.handle,
                 op,
-                value  as _,
+                value as _,
                 1 as _,
                 remote_addr as _,
                 rkey_handle,
@@ -438,7 +438,6 @@ impl Endpoint {
         };
         UcxRequest::new(request, self.worker.clone(), false)
     }
-
 }
 
 impl Drop for Endpoint {

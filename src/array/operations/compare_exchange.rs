@@ -325,7 +325,8 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         new: T,
         eps: T,
     ) -> Result<T, T> {
-        self.compare_exchange_epsilon(index, current, new, eps).block()
+        self.compare_exchange_epsilon(index, current, new, eps)
+            .block()
     }
 
     /// This call performs a batched version of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
@@ -681,7 +682,8 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         new: T,
         eps: T,
     ) -> Result<T, T> {
-        self.compare_exchange_epsilon(index, current, new, eps).block()
+        self.compare_exchange_epsilon(index, current, new, eps)
+            .block()
     }
 
     /// This call performs a batched version of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,

@@ -308,7 +308,13 @@ impl CommAllocRdma for ShmemAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         self.put_unmanaged(src, pe, offset)
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -491,7 +497,13 @@ impl CommAllocRdma for ShmemAlloc {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
@@ -583,7 +595,13 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         self.put_unmanaged(src, pe, offset)
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -738,7 +756,13 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         assert_eq!(
             pe, self.remote_pe,
             "blocking_get_buffer called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",

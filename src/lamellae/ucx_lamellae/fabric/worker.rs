@@ -34,17 +34,20 @@ impl Worker {
         let h = unsafe { handle.assume_init() };
         let mut wattr = MaybeUninit::<ucp_worker_attr_t>::uninit();
         unsafe {
-            (*wattr.as_mut_ptr()).field_mask = (ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_THREAD_MODE
-                | ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER
-                | ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS)
-                .0 as _;
+            (*wattr.as_mut_ptr()).field_mask =
+                (ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_THREAD_MODE
+                    | ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER
+                    | ucp_worker_attr_field::UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS)
+                    .0 as _;
         }
         let qstatus = unsafe { ucp_worker_query(h, wattr.as_mut_ptr()) };
         match Error::from_status(qstatus) {
             Ok(()) => {
                 let wattr = unsafe { wattr.assume_init() };
-                debug!("ucx worker attrs: thread_mode={:?}, address_flags={}, max_am_header={}",
-                    wattr.thread_mode, wattr.address_flags, wattr.max_am_header);
+                debug!(
+                    "ucx worker attrs: thread_mode={:?}, address_flags={}, max_am_header={}",
+                    wattr.thread_mode, wattr.address_flags, wattr.max_am_header
+                );
             }
             Err(e) => debug!("ucp_worker_query failed: {:?}", e),
         }

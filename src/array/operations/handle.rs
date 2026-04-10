@@ -1,8 +1,7 @@
 use crate::{
     array::{AmDist, LamellarByteArray},
     lamellae::{
-        AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, RdmaGetHandle,
-        Remote,
+        AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, RdmaGetHandle, Remote,
     },
     lamellar_request::LamellarRequest,
     scheduler::LamellarTask,
@@ -510,7 +509,7 @@ impl<R: Dist + PartialEq> Future for ArrayResultOpHandle<R> {
 /// a task handle for a batched array operation that returns results
 #[pin_project(PinnedDrop)]
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
-pub struct ArrayResultBatchOpHandle<R: AmDist > {
+pub struct ArrayResultBatchOpHandle<R: AmDist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) state: BatchResultOpState<R>, //reqs: ,
     results: Vec<Result<R, R>>,
@@ -522,7 +521,7 @@ pub(crate) enum BatchResultOpState<R> {
 }
 
 #[pinned_drop]
-impl<R: AmDist > PinnedDrop for ArrayResultBatchOpHandle<R> {
+impl<R: AmDist> PinnedDrop for ArrayResultBatchOpHandle<R> {
     fn drop(self: Pin<&mut Self>) {
         let mut this = self.project();
         if let BatchResultOpState::Reqs(reqs) = &mut this.state {
@@ -534,7 +533,7 @@ impl<R: AmDist > PinnedDrop for ArrayResultBatchOpHandle<R> {
     }
 }
 
-impl<R: AmDist > ArrayResultBatchOpHandle<R> {
+impl<R: AmDist> ArrayResultBatchOpHandle<R> {
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
@@ -610,7 +609,7 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
     }
 }
 
-impl<R: AmDist > Future for ArrayResultBatchOpHandle<R> {
+impl<R: AmDist> Future for ArrayResultBatchOpHandle<R> {
     type Output = Vec<Result<R, R>>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();

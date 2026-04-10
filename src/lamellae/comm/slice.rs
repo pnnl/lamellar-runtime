@@ -125,7 +125,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         }
         self.inner_alloc.put(scheduler, counters, src, pe, offset)
     }
-    fn put_blocking<U: Remote>(&self, _scheduler: &Arc<Scheduler>, src: U, pe: usize, offset: usize) {
+    fn put_blocking<U: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: U,
+        pe: usize,
+        offset: usize,
+    ) {
         if std::any::type_name::<T>() != std::any::type_name::<U>() {
             println!(
                 "Type mismatch in put_blocking: CommSlice<{:?}> vs put_blocking<{:?}>",
@@ -281,7 +287,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         self.inner_alloc
             .get_buffer(scheduler, counters, pe, offset, len)
     }
-    fn blocking_get_buffer<U: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<U> {
+    fn blocking_get_buffer<U: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<U> {
         if std::any::type_name::<T>() != std::any::type_name::<U>() {
             println!(
                 "Type mismatch in get_buffer: CommSlice<{:?}> vs get_buffer<{:?}>",
@@ -289,7 +301,8 @@ impl<T> CommAllocRdma for CommSlice<T> {
                 std::any::type_name::<U>()
             );
         }
-        self.inner_alloc.blocking_get_buffer(_scheduler, pe, offset, len)
+        self.inner_alloc
+            .blocking_get_buffer(_scheduler, pe, offset, len)
     }
     fn get_into_buffer<U: Remote, B: AsLamellarBuffer<U>>(
         &self,
@@ -323,7 +336,8 @@ impl<T> CommAllocRdma for CommSlice<T> {
                 std::any::type_name::<U>()
             );
         }
-        self.inner_alloc.blocking_get_into_buffer(_scheduler, pe, offset, dst)
+        self.inner_alloc
+            .blocking_get_into_buffer(_scheduler, pe, offset, dst)
     }
     fn get_into_buffer_unmanaged<U: Remote, B: AsLamellarBuffer<U>>(
         &self,

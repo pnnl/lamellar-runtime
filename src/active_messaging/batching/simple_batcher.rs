@@ -779,7 +779,11 @@ impl SimpleBatcher {
             team_addr: req_data.team.darc_addr(),
             // team: req_data.team.clone(),
         };
-        trace!("serializing am header for {:?} ,req: {:?}", am_header, req_data);
+        trace!(
+            "serializing am header for {:?} ,req: {:?}",
+            am_header,
+            req_data
+        );
         crate::serialize_into(
             &mut data_buf[i..i + *AM_HEADER_LEN.get().expect("am header size not calculated")],
             &am_header,
@@ -895,7 +899,11 @@ impl SimpleBatcher {
             false,
         )
         .unwrap();
-        trace!("deserialized am header for {:?} from msg: {:?}", am_header, msg);
+        trace!(
+            "deserialized am header for {:?} from msg: {:?}",
+            am_header,
+            msg
+        );
         // am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
         let (team, world) =
             ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
@@ -963,7 +971,11 @@ impl SimpleBatcher {
             false,
         )
         .unwrap();
-        trace!("deserialized am header for {:?} from msg: {:?}", am_header, msg);
+        trace!(
+            "deserialized am header for {:?} from msg: {:?}",
+            am_header,
+            msg
+        );
         let (team, world) =
             ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
         // ame.get_team_and_world(&am_header.team);

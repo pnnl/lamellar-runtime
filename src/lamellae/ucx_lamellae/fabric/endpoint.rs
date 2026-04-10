@@ -3,8 +3,6 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 
-
-
 // use ucx1_sys::*;
 
 use lamellar_ucx_sys::{
@@ -18,7 +16,7 @@ use lamellar_ucx_sys::{
 
 use super::{error::Error, memory_region::RKey, worker::Worker};
 
-use tracing::{*};
+use tracing::*;
 
 pub(crate) struct UcxRequest {
     pub(crate) request: ucs_status_ptr_t,
@@ -171,8 +169,8 @@ impl Endpoint {
                 rkey.handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
-                        // ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        // | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
+                    // ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
+                    // | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -442,7 +440,6 @@ impl Endpoint {
         };
         UcxRequest::new(request, self.worker.clone(), false)
     }
-
 }
 
 impl Drop for Endpoint {

@@ -82,8 +82,7 @@ pub struct __GlobalLockByteArray {
     pub(crate) array: __UnsafeByteArray,
 }
 
-impl __GlobalLockByteArray {
-}
+impl __GlobalLockByteArray {}
 
 /// Provides mutable access to a PEs local data to provide "local" indexing while maintaining safety guarantees of the array type.
 ///
@@ -822,10 +821,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GlobalLockArray<T> {
             .await
             .expect("PE in team");
 
-        GlobalLockArray {
-            lock,
-            array,
-        }
+        GlobalLockArray { lock, array }
     }
 }
 

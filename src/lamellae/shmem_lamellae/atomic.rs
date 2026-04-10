@@ -151,13 +151,19 @@ pub(crate) struct ShmemAtomicCompareExchangeFuture<T> {
 
 impl<T: Remote> ShmemAtomicCompareExchangeFuture<T> {
     fn exec_op(&mut self) {
-        self.result = Some(net_atomic_compare_exchange(self.current, self.new, &self.dst));
+        self.result = Some(net_atomic_compare_exchange(
+            self.current,
+            self.new,
+            &self.dst,
+        ));
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Result<T, T> {
         self.exec_op();
-        self.result.take().expect("compare_exchange result should be set")
+        self.result
+            .take()
+            .expect("compare_exchange result should be set")
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
@@ -165,7 +171,11 @@ impl<T: Remote> ShmemAtomicCompareExchangeFuture<T> {
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
-            async move { self.result.take().expect("compare_exchange result should be set") },
+            async move {
+                self.result
+                    .take()
+                    .expect("compare_exchange result should be set")
+            },
             counters,
         )
     }
@@ -195,7 +205,11 @@ impl<T: Remote> Future for ShmemAtomicCompareExchangeFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        Poll::Ready(self.result.take().expect("compare_exchange result should be set"))
+        Poll::Ready(
+            self.result
+                .take()
+                .expect("compare_exchange result should be set"),
+        )
     }
 }
 
@@ -222,7 +236,13 @@ impl CommAllocAtomic for ShmemAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote + 'static>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote + 'static>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
@@ -291,7 +311,13 @@ impl CommAllocAtomic for ShmemAlloc {
         }
         .into()
     }
-    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
@@ -367,7 +393,13 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote + 'static>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote + 'static>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
@@ -430,7 +462,13 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         }
         .into()
     }
-    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T {
         assert_eq!(
             pe, self.remote_pe,
             "blocking atomic fetch op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",

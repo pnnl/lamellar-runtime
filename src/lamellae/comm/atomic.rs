@@ -9,28 +9,31 @@ use crate::lamellae::libfabric_lamellae::atomic::{
 };
 #[cfg(feature = "enable-libfabric-mt")]
 use crate::lamellae::libfabric_lamellae_mt::atomic::{
-    LibfabricMtAtomicCompareExchangeFuture, LibfabricMtAtomicFetchFuture,
-    LibfabricMtAtomicFuture,
+    LibfabricMtAtomicCompareExchangeFuture, LibfabricMtAtomicFetchFuture, LibfabricMtAtomicFuture,
 };
-#[cfg(feature = "enable-ucx")]
-use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
-#[cfg(feature = "enable-ucx")]
-use crate::lamellae::ucx_lamellae::atomic::UcxAtomicCompareExchangeFuture;
-#[cfg(feature = "enable-ucx-mt")]
-use crate::lamellae::ucx_lamellae_mt::atomic::{UcxMtAtomicFetchFuture, UcxMtAtomicFuture};
-#[cfg(feature = "enable-ucx-mt")]
-use crate::lamellae::ucx_lamellae_mt::atomic::UcxMtAtomicCompareExchangeFuture;
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::atomic::RofiCAtomicFuture;
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::atomic::{
     RofiCAtomicCompareExchangeFuture, RofiCAtomicFetchFuture,
 };
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae::atomic::UcxAtomicCompareExchangeFuture;
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
+#[cfg(feature = "enable-ucx-mt")]
+use crate::lamellae::ucx_lamellae_mt::atomic::UcxMtAtomicCompareExchangeFuture;
+#[cfg(feature = "enable-ucx-mt")]
+use crate::lamellae::ucx_lamellae_mt::atomic::{UcxMtAtomicFetchFuture, UcxMtAtomicFuture};
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
-        local_lamellae::atomic::{LocalAtomicFetchFuture, LocalAtomicFuture,LocalAtomicCompareExchangeFuture},
-        shmem_lamellae::atomic::{ShmemAtomicFetchFuture, ShmemAtomicFuture,ShmemAtomicCompareExchangeFuture},
+        local_lamellae::atomic::{
+            LocalAtomicCompareExchangeFuture, LocalAtomicFetchFuture, LocalAtomicFuture,
+        },
+        shmem_lamellae::atomic::{
+            ShmemAtomicCompareExchangeFuture, ShmemAtomicFetchFuture, ShmemAtomicFuture,
+        },
         CommAllocAddr,
     },
     scheduler::Scheduler,
@@ -54,10 +57,10 @@ pub(crate) fn atomic_type_supported<T: 'static>() -> bool {
 
 use pin_project::pin_project;
 use std::{
+    cmp::PartialEq,
     pin::Pin,
     sync::{atomic::*, Arc},
     task::{Context, Poll},
-    cmp::PartialEq,
 };
 // pub(crate) trait NetworkAtomic {
 //     fn supported() -> bool {
@@ -508,7 +511,13 @@ pub(crate) trait CommAllocAtomic {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T>;
-    fn atomic_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize);
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    );
     fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
     fn atomic_op_all<T: Remote>(
         &self,
@@ -526,7 +535,13 @@ pub(crate) trait CommAllocAtomic {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T>;
-    fn atomic_fetch_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T;
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T;
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
         _scheduler: &Arc<Scheduler>,
@@ -724,23 +739,55 @@ pub(crate) fn net_atomic_compare_exchange<T: Copy + 'static>(
         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
             typed_atomic_compare_exchange::<u8, T>(current, new, &*(dst_addr.as_ptr() as *const u8))
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-            typed_atomic_compare_exchange::<u16, T>(current, new, &*(dst_addr.as_ptr() as *const u16))
+            typed_atomic_compare_exchange::<u16, T>(
+                current,
+                new,
+                &*(dst_addr.as_ptr() as *const u16),
+            )
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-            typed_atomic_compare_exchange::<u32, T>(current, new, &*(dst_addr.as_ptr() as *const u32))
+            typed_atomic_compare_exchange::<u32, T>(
+                current,
+                new,
+                &*(dst_addr.as_ptr() as *const u32),
+            )
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-            typed_atomic_compare_exchange::<u64, T>(current, new, &*(dst_addr.as_ptr() as *const u64))
+            typed_atomic_compare_exchange::<u64, T>(
+                current,
+                new,
+                &*(dst_addr.as_ptr() as *const u64),
+            )
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-            typed_atomic_compare_exchange::<usize, T>(current, new, &*(dst_addr.as_ptr() as *const usize))
+            typed_atomic_compare_exchange::<usize, T>(
+                current,
+                new,
+                &*(dst_addr.as_ptr() as *const usize),
+            )
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
             typed_atomic_compare_exchange::<i8, T>(current, new, &*(dst_addr.as_ptr() as *const i8))
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-            typed_atomic_compare_exchange::<i16, T>(current, new, &*(dst_addr.as_ptr() as *const i16))
+            typed_atomic_compare_exchange::<i16, T>(
+                current,
+                new,
+                &*(dst_addr.as_ptr() as *const i16),
+            )
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-            typed_atomic_compare_exchange::<i32, T>(current, new, &*(dst_addr.as_ptr() as *const i32))
+            typed_atomic_compare_exchange::<i32, T>(
+                current,
+                new,
+                &*(dst_addr.as_ptr() as *const i32),
+            )
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-            typed_atomic_compare_exchange::<i64, T>(current, new, &*(dst_addr.as_ptr() as *const i64))
+            typed_atomic_compare_exchange::<i64, T>(
+                current,
+                new,
+                &*(dst_addr.as_ptr() as *const i64),
+            )
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-            typed_atomic_compare_exchange::<isize, T>(current, new, &*(dst_addr.as_ptr() as *const isize))
+            typed_atomic_compare_exchange::<isize, T>(
+                current,
+                new,
+                &*(dst_addr.as_ptr() as *const isize),
+            )
         } else {
             panic!("Unsupported atomic operation type");
         }

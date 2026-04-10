@@ -98,7 +98,10 @@ fn main() {
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();
     println!("=== Network Atomic Benchmark ===");
-    println!("PE {}/{}: comparing likely HW atomics vs AM fallback\n", my_pe, num_pes);
+    println!(
+        "PE {}/{}: comparing likely HW atomics vs AM fallback\n",
+        my_pe, num_pes
+    );
 
     // ========== Hardware vs AM Timing ==========
     println!("\n--- Hardware vs AM Timing (usize vs UsizeWrap) ---");
@@ -155,7 +158,12 @@ fn main() {
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_wrap
-                .store(indices[i], UsizeWrap { val: (i as usize) + 1 })
+                .store(
+                    indices[i],
+                    UsizeWrap {
+                        val: (i as usize) + 1,
+                    },
+                )
                 .spawn();
         }
         bench_wrap.wait_all();
@@ -173,7 +181,12 @@ fn main() {
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_wrap
-                .swap(indices[i], UsizeWrap { val: (i as usize) + 7 })
+                .swap(
+                    indices[i],
+                    UsizeWrap {
+                        val: (i as usize) + 7,
+                    },
+                )
                 .spawn();
         }
         bench_wrap.wait_all();
@@ -206,13 +219,18 @@ fn main() {
 
         let start = Instant::now();
         for i in 0..iters {
-            let _ = bench_wrap.fetch_add(indices[i], UsizeWrap { val: 1 }).spawn();
+            let _ = bench_wrap
+                .fetch_add(indices[i], UsizeWrap { val: 1 })
+                .spawn();
         }
         bench_wrap.wait_all();
         let am = start.elapsed();
         print_cmp_row("fetch_add", hw, am);
     }
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(100)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(100))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 100 }))
@@ -244,7 +262,9 @@ fn main() {
 
         let start = Instant::now();
         for i in 0..iters {
-            let _ = bench_wrap.fetch_sub(indices[i], UsizeWrap { val: 1 }).spawn();
+            let _ = bench_wrap
+                .fetch_sub(indices[i], UsizeWrap { val: 1 })
+                .spawn();
         }
         bench_wrap.wait_all();
         let am = start.elapsed();
@@ -259,7 +279,6 @@ fn main() {
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.mul(indices[i], 3).spawn();
@@ -284,7 +303,6 @@ fn main() {
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.fetch_mul(indices[i], 3).spawn();
@@ -294,7 +312,9 @@ fn main() {
 
         let start = Instant::now();
         for i in 0..iters {
-            let _ = bench_wrap.fetch_mul(indices[i], UsizeWrap { val: 3 }).spawn();
+            let _ = bench_wrap
+                .fetch_mul(indices[i], UsizeWrap { val: 3 })
+                .spawn();
         }
         bench_wrap.wait_all();
         let am = start.elapsed();
@@ -302,14 +322,16 @@ fn main() {
     }
 
     // bit_and
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xFFFF)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xFFFF))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xFFFF }))
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.bit_and(indices[i], 0x0FFF).spawn();
@@ -329,14 +351,16 @@ fn main() {
     }
 
     // fetch_bit_and
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xFFFF)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xFFFF))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xFFFF }))
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.fetch_bit_and(indices[i], 0x0FFF).spawn();
@@ -363,7 +387,6 @@ fn main() {
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.bit_or(indices[i], 0x0100).spawn();
@@ -390,7 +413,6 @@ fn main() {
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.fetch_bit_or(indices[i], 0x0100).spawn();
@@ -410,14 +432,16 @@ fn main() {
     }
 
     // bit_xor
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xAAAA)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xAAAA))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xAAAA }))
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.bit_xor(indices[i], 0x5555).spawn();
@@ -437,14 +461,16 @@ fn main() {
     }
 
     // fetch_bit_xor
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xAAAA)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xAAAA))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xAAAA }))
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.fetch_bit_xor(indices[i], 0x5555).spawn();
@@ -471,7 +497,6 @@ fn main() {
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         let mut expected_usize = vec![0usize; bench_len];
         for i in 0..iters {
@@ -528,7 +553,12 @@ fn main() {
 
         let start = Instant::now();
         for i in 0..iters {
-            bench_wrap.blocking_store(indices[i], UsizeWrap { val: (i as usize) + 1 });
+            bench_wrap.blocking_store(
+                indices[i],
+                UsizeWrap {
+                    val: (i as usize) + 1,
+                },
+            );
         }
         let am = start.elapsed();
         print_cmp_row("blocking_store", hw, am);
@@ -542,7 +572,12 @@ fn main() {
 
         let start = Instant::now();
         for i in 0..iters {
-            let _ = bench_wrap.blocking_swap(indices[i], UsizeWrap { val: (i as usize) + 7 });
+            let _ = bench_wrap.blocking_swap(
+                indices[i],
+                UsizeWrap {
+                    val: (i as usize) + 7,
+                },
+            );
         }
         let am = start.elapsed();
         print_cmp_row("blocking_swap", hw, am);
@@ -612,7 +647,6 @@ fn main() {
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             bench_usize.blocking_mul(indices[i], 3);
@@ -635,7 +669,6 @@ fn main() {
         .block();
 
     if my_pe == 0 {
-
         let start = Instant::now();
         for i in 0..iters {
             let _ = bench_usize.blocking_fetch_mul(indices[i], 3);
@@ -651,7 +684,10 @@ fn main() {
     }
 
     // blocking_bit_and
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xFFFF)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xFFFF))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xFFFF }))
@@ -673,7 +709,10 @@ fn main() {
     }
 
     // blocking_fetch_bit_and
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xFFFF)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xFFFF))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xFFFF }))
@@ -739,7 +778,10 @@ fn main() {
     }
 
     // blocking_bit_xor
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xAAAA)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xAAAA))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xAAAA }))
@@ -761,7 +803,10 @@ fn main() {
     }
 
     // blocking_fetch_bit_xor
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xAAAA)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xAAAA))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xAAAA }))
@@ -826,7 +871,12 @@ fn main() {
 
         let start = Instant::now();
         for i in 0..iters {
-            bench_wrap.store_unmanaged(indices[i], UsizeWrap { val: (i as usize) + 1 });
+            bench_wrap.store_unmanaged(
+                indices[i],
+                UsizeWrap {
+                    val: (i as usize) + 1,
+                },
+            );
         }
         bench_wrap.wait_all();
         let am = start.elapsed();
@@ -888,7 +938,10 @@ fn main() {
     }
 
     // bit_and_unmanaged
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xFFFF)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xFFFF))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xFFFF }))
@@ -936,7 +989,10 @@ fn main() {
     }
 
     // bit_xor_unmanaged
-    let _ = bench_usize.dist_iter_mut().for_each(|e| e.store(0xAAAA)).block();
+    let _ = bench_usize
+        .dist_iter_mut()
+        .for_each(|e| e.store(0xAAAA))
+        .block();
     let _ = bench_wrap
         .dist_iter_mut()
         .for_each(|e| e.store(UsizeWrap { val: 0xAAAA }))

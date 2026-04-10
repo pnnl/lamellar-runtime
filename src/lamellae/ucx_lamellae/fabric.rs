@@ -27,13 +27,16 @@ use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
 #[cfg(feature = "enable-on-node-shmem")]
 use std::ffi::c_void;
 
-use pmi::{pmi::Pmi, pmix::PmiX};
 use lamellar_ucx_sys::ucp_atomic_op_t;
+use pmi::{pmi::Pmi, pmix::PmiX};
 
-use std::{collections::HashMap, sync::{
-    atomic::{AtomicUsize, AtomicU32, Ordering},
-    Arc, Mutex,
-}};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU32, AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
+};
 use tracing::{debug, trace};
 
 pub(crate) struct UcxBarrier {
@@ -47,15 +50,18 @@ pub(crate) struct UcxBarrier {
 }
 
 impl UcxBarrier {
-    fn new(num_pes: usize, my_pe: usize, buffer: UcxAlloc,) -> Self {
-
+    fn new(num_pes: usize, my_pe: usize, buffer: UcxAlloc) -> Self {
         trace!(target: "ucx", "PE {} creating barrier with num_pes: {}", my_pe, num_pes);
         let sub_buffer_size = std::mem::size_of::<u32>() * num_pes * 2;
-       
+
         let full_buffer_size = buffer.data_num_bytes - sub_buffer_size;
         trace!(target: "ucx", "PE {} barrier buffer size: {} sub_buffer_size: {} full_buffer_size: {}", my_pe, buffer.data_num_bytes, sub_buffer_size, full_buffer_size);
-        let full_buffer = buffer.sub_alloc(0, full_buffer_size).expect("Failed to create full buffer for barrier");
-        let sub_buffer = buffer.sub_alloc(full_buffer_size, sub_buffer_size).expect("Failed to create sub buffer for barrier");
+        let full_buffer = buffer
+            .sub_alloc(0, full_buffer_size)
+            .expect("Failed to create full buffer for barrier");
+        let sub_buffer = buffer
+            .sub_alloc(full_buffer_size, sub_buffer_size)
+            .expect("Failed to create sub buffer for barrier");
         UcxBarrier {
             counter: AtomicUsize::new(1),
             sub_counter: AtomicU32::new(1),
@@ -67,26 +73,23 @@ impl UcxBarrier {
         }
     }
 
-
-    fn sub_barrier(&self, pes: &[usize])  {
-        
-        
+    fn sub_barrier(&self, pes: &[usize]) {
         let group_size = pes.len();
-        let num_rounds =  (group_size as f64).log2().ceil() as usize;
+        let num_rounds = (group_size as f64).log2().ceil() as usize;
         let my_group_pe = pes.iter().position(|p| *p == self.my_pe).unwrap();
         let my_barrier = self.sub_counter.fetch_add(1, Ordering::SeqCst);
         let phase_offset = (my_barrier as usize & 1) * self.num_pes;
         let barrier_alloc = &self.sub_buffer;
-        let barrier_vec =  barrier_alloc.as_mut_slice::<u32>() ;
+        let barrier_vec = barrier_alloc.as_mut_slice::<u32>();
         let mut last_seen_guard = self.sub_last_seen.lock().unwrap();
         let last_seen_vec = last_seen_guard.as_mut_slice();
         trace!(target: "ucx", "PE {} entering sub barrier id: {my_barrier} with pes: {:?} ", self.my_pe, pes);
 
-
         //just do dissemination instead of 2-way dissemination, as its simpler to implement and sub_barrier is a place holder until we get UCC up and working
         for round in 0..num_rounds as usize {
             let send_pe = pes[(my_group_pe + (1 << round)) % group_size];
-            let recv_pe  = pes[(my_group_pe as i64 - (1 << round) as i64).rem_euclid(group_size as i64) as usize];
+            let recv_pe = pes
+                [(my_group_pe as i64 - (1 << round) as i64).rem_euclid(group_size as i64) as usize];
             trace!(target: "ucx", "PE {} sending sub barrier to PE {} in round {} with barrier value {} {:?} {:?}", self.my_pe, send_pe, round, my_barrier, barrier_vec, last_seen_vec);
             unsafe {
                 barrier_alloc.put_inner(
@@ -101,12 +104,10 @@ impl UcxBarrier {
             let recv_idx_0 = recv_pe;
             let recv_idx_1 = self.num_pes + recv_pe;
             loop {
-                let cur_0 = unsafe {
-                    std::ptr::read_volatile(barrier_vec.as_ptr().add(recv_idx_0))
-                };
-                let cur_1 = unsafe {
-                    std::ptr::read_volatile(barrier_vec.as_ptr().add(recv_idx_1))
-                };
+                let cur_0 =
+                    unsafe { std::ptr::read_volatile(barrier_vec.as_ptr().add(recv_idx_0)) };
+                let cur_1 =
+                    unsafe { std::ptr::read_volatile(barrier_vec.as_ptr().add(recv_idx_1)) };
 
                 let ready_0 = cur_0 > last_seen_vec[recv_idx_0];
                 let ready_1 = cur_1 > last_seen_vec[recv_idx_1];
@@ -128,7 +129,6 @@ impl UcxBarrier {
         trace!(target: "ucx", "PE {} exiting sub barrier id: {my_barrier}  with pes: {:?}", self.my_pe, pes);
     }
 
-
     //n-way dissemnation barrier
     fn barrier(&self) {
         trace!(target: "ucx", "PE {} entering barrier", self.my_pe);
@@ -136,25 +136,27 @@ impl UcxBarrier {
         if num_pes <= 1 {
             return;
         }
-        let (n,num_rounds) = if num_pes == 2{
+        let (n, num_rounds) = if num_pes == 2 {
             (1usize, 1usize)
         } else {
-            (2usize, ((num_pes as f64).log2() / (2 as f64).log2()).ceil() as usize)
+            (
+                2usize,
+                ((num_pes as f64).log2() / (2 as f64).log2()).ceil() as usize,
+            )
         };
         let my_pe = self.my_pe;
-        let my_barrier =  self.counter.fetch_add(1, Ordering::SeqCst);
+        let my_barrier = self.counter.fetch_add(1, Ordering::SeqCst);
 
         let barrier_alloc = &self.buffer;
 
         for round in 0..num_rounds as usize {
             trace!(target: "ucx", "PE {} starting round {}/{} of barrier", self.my_pe, round, num_rounds);
             for i in 1..=n {
-
                 let send_pe = (my_pe + i * (n + 1).pow(round as u32)) % num_pes;
                 unsafe {
                     barrier_alloc.put_inner(
                         send_pe,
-                        round*n + i-1,
+                        round * n + i - 1,
                         std::slice::from_ref(&my_barrier),
                         false,
                         false,
@@ -166,15 +168,15 @@ impl UcxBarrier {
                 // let _recv_pe = (my_pe as i64
                 //     - i as i64 * (n as i64 + 1).pow(round as u32))
                 // .rem_euclid(num_pes as i64);
-                let barrier_vec =  barrier_alloc.as_mut_slice::<usize>() ;
+                let barrier_vec = barrier_alloc.as_mut_slice::<usize>();
 
-                while my_barrier > barrier_vec[round*n +i-1] {
+                while my_barrier > barrier_vec[round * n + i - 1] {
                     barrier_alloc.worker.progress();
                     std::thread::yield_now();
                 }
             }
-            
-             trace!(target: "ucx", "PE {} completed round {}/{} of barrier", self.my_pe, round, num_rounds);
+
+            trace!(target: "ucx", "PE {} completed round {}/{} of barrier", self.my_pe, round, num_rounds);
         }
         barrier_alloc.wait_all();
         trace!(target: "ucx","PE {} exiting barrier", self.my_pe);
@@ -195,7 +197,7 @@ pub(crate) struct UcxWorld {
     worker: Arc<Worker>,
     endpoints: Vec<Arc<Endpoint>>,
     mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
-    remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize,RemoteAddressInfo>)>>>,
+    remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
     exchange_buffer: Option<UcxAlloc>,
     barrier: Option<Arc<Mutex<UcxBarrier>>>,
 }
@@ -308,13 +310,16 @@ impl UcxWorld {
             mem_handles,
             remote_keys,
             exchange_buffer: Some(exchange_buffer),
-            barrier: Some(Arc::new(Mutex::new(UcxBarrier::new(num_pes, my_pe, barrier_buffer)))),
+            barrier: Some(Arc::new(Mutex::new(UcxBarrier::new(
+                num_pes,
+                my_pe,
+                barrier_buffer,
+            )))),
         }
     }
 
-
     // Found this was necessary in the offchance that the first call to a intranode PE
-    // happened simultaneously (in a MT environment) with other operations like progress or flush 
+    // happened simultaneously (in a MT environment) with other operations like progress or flush
     // if this becomes a bottleneck it may be sufficient to just do a put to each node instead of each PE, but for now we will do it to each PE to be safe
     fn warmup_peer_puts(
         pmi: &Arc<PmiX>,
@@ -399,14 +404,15 @@ impl UcxWorld {
         #[cfg(feature = "enable-on-node-shmem")] disable_on_node_shmem: bool,
         #[cfg(feature = "enable-on-node-shmem")] job_id: usize,
         mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
-        remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize,RemoteAddressInfo>)>>>,
+        remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
     ) -> AllocResult<UcxAlloc> {
         let data_size = if exchange_buffer {
             let mem_handle = MemoryHandleInner::alloc(context, 1024); //dummy allocation to get the size of the exchange buffer
             let mut data_size = mem_handle.addr.to_ne_bytes().len();
             data_size += mem_handle.pack().as_ref().len();
             data_size * num_pes
-        } else { //we are the barrier buffer
+        } else {
+            //we are the barrier buffer
             let mut n = 2;
             let num_rounds = if n > 1 && num_pes > 2 {
                 ((num_pes as f64).log2() / (2 as f64).log2()).ceil() as usize
@@ -414,7 +420,7 @@ impl UcxWorld {
                 n = 1;
                 1
             };
-            let full_barrier_size = std::mem::size_of::<usize>() * num_rounds * n ;
+            let full_barrier_size = std::mem::size_of::<usize>() * num_rounds * n;
             let sub_barrier_size = std::mem::size_of::<u32>() * num_pes * 2;
             trace!(target: "ucx", "PE {}: Calculated barrier buffer size: full_barrier_size: {} sub_barrier_size: {} num_rounds: {} n: {}", my_pe, full_barrier_size, sub_barrier_size, num_rounds, n);
             full_barrier_size + sub_barrier_size
@@ -484,7 +490,7 @@ impl UcxWorld {
     }
 
     pub(crate) fn alloc(
-            &self,
+        &self,
         data_size: usize,
         align: usize,
         alloc_type: AllocationType,
@@ -496,11 +502,7 @@ impl UcxWorld {
         }
     }
 
-    pub(crate) fn full_alloc(
-        &self,
-        data_size: usize,
-        align: usize,
-    ) -> UcxAlloc {
+    pub(crate) fn full_alloc(&self, data_size: usize, align: usize) -> UcxAlloc {
         //add space for ref count and padding to align it
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
         #[cfg(not(feature = "enable-on-node-shmem"))]
@@ -579,12 +581,7 @@ impl UcxWorld {
         alloc
     }
 
-    pub(crate) fn sub_alloc(
-        &self,
-        pes: &[usize],
-        data_size: usize,
-        align: usize,
-    ) -> UcxAlloc {
+    pub(crate) fn sub_alloc(&self, pes: &[usize], data_size: usize, align: usize) -> UcxAlloc {
         //add space for ref count and padding to align it
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
         let mem_handle = MemoryHandleInner::alloc(&self.context, size);
@@ -596,7 +593,6 @@ impl UcxWorld {
                 &self.exchange_buffer.as_ref().unwrap(),
             )
             .unwrap();
-
 
         let mem = MemoryHandle {
             addr: mem_handle.addr,
@@ -664,7 +660,8 @@ impl UcxWorld {
         for (alloc, remote_addrs) in allocs.iter() {
             if let Some(remote_info) = remote_addrs.get(&remote_pe) {
                 let remote_pe_addr = remote_info.addr;
-                if remote_pe_addr <= remote_addr && remote_addr < remote_pe_addr + alloc.data_num_bytes
+                if remote_pe_addr <= remote_addr
+                    && remote_addr < remote_pe_addr + alloc.data_num_bytes
                 {
                     let offset = remote_addr - remote_pe_addr;
                     return Some(alloc.mem.inner.addr + offset);
@@ -713,7 +710,8 @@ impl UcxWorld {
         for (alloc, remote_addrs) in allocs.iter() {
             if let Some(remote_info) = remote_addrs.get(&remote_pe) {
                 let remote_pe_addr = remote_info.addr;
-                if remote_pe_addr <= remote_addr && remote_addr < remote_pe_addr + alloc.data_num_bytes
+                if remote_pe_addr <= remote_addr
+                    && remote_addr < remote_pe_addr + alloc.data_num_bytes
                 {
                     let offset = remote_addr - remote_pe_addr;
                     return Some((alloc.clone().into(), offset));
@@ -764,8 +762,7 @@ impl UcxWorld {
                 let ref_cnt = Arc::strong_count(&remote_info.rkey);
                 debug!(
                     "Clearing rkey for addr {:x}, ref count: {}",
-                    remote_info.addr,
-                    ref_cnt
+                    remote_info.addr, ref_cnt
                 );
             }
         }
@@ -829,13 +826,13 @@ impl Drop for UcxWorld {
 enum AllocTable {
     Fabric(
         Arc<Mutex<Vec<UcxAlloc>>>,
-        Arc<Mutex<Vec<(UcxAlloc, HashMap<usize,RemoteAddressInfo>)>>>,
+        Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
     ),
     Runtime(
         BTreeAlloc,
         usize,
         Arc<Mutex<Vec<UcxAlloc>>>,
-        Arc<Mutex<Vec<(UcxAlloc, HashMap<usize,RemoteAddressInfo>)>>>,
+        Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
     ), //the usize is the offset of the rt_alloc so that we can free it properly if a sub_alloc is the last reference
 }
 
@@ -855,7 +852,7 @@ pub(crate) struct UcxAlloc {
     context: Arc<Context>,
     worker: Arc<Worker>,
     endpoints: Vec<Arc<Endpoint>>,
-    remote_keys: HashMap<usize,RemoteAddressInfo>,
+    remote_keys: HashMap<usize, RemoteAddressInfo>,
     alloc_table: AllocTable,
 }
 
@@ -955,11 +952,7 @@ impl UcxAlloc {
     unsafe fn negate_atomic_value<T>(value: *mut T) {
         let num_bytes = std::mem::size_of::<T>();
         let mut bytes = vec![0u8; num_bytes];
-        std::ptr::copy(
-            value.cast::<u8>(),
-            bytes.as_mut_ptr(),
-            num_bytes,
-        );
+        std::ptr::copy(value.cast::<u8>(), bytes.as_mut_ptr(), num_bytes);
         for byte in bytes.iter_mut() {
             *byte = !*byte;
         }
@@ -990,18 +983,26 @@ impl UcxAlloc {
     fn ucx_atomic_update<T: Copy>(op: &mut AtomicOp<T>) -> (ucp_atomic_op_t, *const T) {
         match op {
             AtomicOp::Write(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP, val.as_ref().get_ref()),
-            AtomicOp::Sum(val) | AtomicOp::FetchSum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, val.as_ref().get_ref()),
-            AtomicOp::Sub(val) => (
-                ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
-                unsafe { Self::negate_atomic_value(val.as_mut().get_unchecked_mut()); val.as_ref().get_ref() },
-            ),
-            AtomicOp::FetchSub(val) => (
-                ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
-                unsafe { Self::negate_atomic_value(val.as_mut().get_unchecked_mut()); val.as_ref().get_ref() },
-            ),
-            AtomicOp::BitAnd(val) | AtomicOp::FetchBitAnd(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, val.as_ref().get_ref()),
-            AtomicOp::BitOr(val) | AtomicOp::FetchBitOr(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, val.as_ref().get_ref()),
-            AtomicOp::BitXor(val) | AtomicOp::FetchBitXor(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, val.as_ref().get_ref()),
+            AtomicOp::Sum(val) | AtomicOp::FetchSum(val) => {
+                (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, val.as_ref().get_ref())
+            }
+            AtomicOp::Sub(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, unsafe {
+                Self::negate_atomic_value(val.as_mut().get_unchecked_mut());
+                val.as_ref().get_ref()
+            }),
+            AtomicOp::FetchSub(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, unsafe {
+                Self::negate_atomic_value(val.as_mut().get_unchecked_mut());
+                val.as_ref().get_ref()
+            }),
+            AtomicOp::BitAnd(val) | AtomicOp::FetchBitAnd(val) => {
+                (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, val.as_ref().get_ref())
+            }
+            AtomicOp::BitOr(val) | AtomicOp::FetchBitOr(val) => {
+                (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, val.as_ref().get_ref())
+            }
+            AtomicOp::BitXor(val) | AtomicOp::FetchBitXor(val) => {
+                (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, val.as_ref().get_ref())
+            }
             _ => panic!("Unsupported atomic operation"),
         }
     }
@@ -1020,9 +1021,9 @@ impl UcxAlloc {
         context: Arc<Context>,
         worker: Arc<Worker>,
         endpoints: Vec<Arc<Endpoint>>,
-        my_remote_keys: HashMap<usize,RemoteAddressInfo>,
+        my_remote_keys: HashMap<usize, RemoteAddressInfo>,
         mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
-        remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize,RemoteAddressInfo>)>>>,
+        remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
     ) -> AllocResult<Self> {
         let ref_cnt_offset = data_num_bytes + padding;
         let fabric_ref_cnt_offset = data_num_bytes + padding;
@@ -1081,13 +1082,15 @@ impl UcxAlloc {
         let remote_keys = self
             .remote_keys
             .iter()
-            .map(|(pe, remote)| (
-                *pe,
-                RemoteAddressInfo {
-                    addr: remote.addr + offset,
-                    rkey: remote.rkey.clone(),
-                },
-            ))
+            .map(|(pe, remote)| {
+                (
+                    *pe,
+                    RemoteAddressInfo {
+                        addr: remote.addr + offset,
+                        rkey: remote.rkey.clone(),
+                    },
+                )
+            })
             .collect::<HashMap<usize, RemoteAddressInfo>>();
         self.increment_fabric_ref_count();
         if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
@@ -1131,13 +1134,15 @@ impl UcxAlloc {
         let my_remote_keys = self
             .remote_keys
             .iter()
-            .map(|(pe, remote)| (
-                *pe,
-                RemoteAddressInfo {
-                    addr: remote.addr + offset,
-                    rkey: remote.rkey.clone(),
-                },
-            ))
+            .map(|(pe, remote)| {
+                (
+                    *pe,
+                    RemoteAddressInfo {
+                        addr: remote.addr + offset,
+                        rkey: remote.rkey.clone(),
+                    },
+                )
+            })
             .collect::<HashMap<usize, RemoteAddressInfo>>();
 
         self.increment_fabric_ref_count();
@@ -1416,15 +1421,13 @@ impl UcxAlloc {
             panic!("inner_atomic_op missing remote key for pe {}", pe);
         };
         let req = match op {
-            AtomicOp::Write(val) => {
-                self.endpoints[pe].atomic_swap(
-                    val.as_ref().get_ref(),
-                    &ATOMIC_PUT_TMP as *const _ as *mut T,
-                    remote_addr + offset,
-                    rkey,
-                    managed,
-                )
-            }
+            AtomicOp::Write(val) => self.endpoints[pe].atomic_swap(
+                val.as_ref().get_ref(),
+                &ATOMIC_PUT_TMP as *const _ as *mut T,
+                remote_addr + offset,
+                rkey,
+                managed,
+            ),
             AtomicOp::Sum(_)
             | AtomicOp::Sub(_)
             | AtomicOp::BitAnd(_)
@@ -1473,9 +1476,17 @@ impl UcxAlloc {
                 let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
                     (remote_info.addr, &remote_info.rkey)
                 } else {
-                    panic!("inner_atomic_fetch_op missing remote key for pe {} (read)", pe);
+                    panic!(
+                        "inner_atomic_fetch_op missing remote key for pe {} (read)",
+                        pe
+                    );
                 };
-                self.endpoints[pe].atomic_get(&**zero, result.as_mut_ptr(), remote_addr + offset, rkey)
+                self.endpoints[pe].atomic_get(
+                    &**zero,
+                    result.as_mut_ptr(),
+                    remote_addr + offset,
+                    rkey,
+                )
             }
             AtomicOp::Write(_)
             | AtomicOp::FetchSum(_)
@@ -1533,7 +1544,10 @@ impl UcxAlloc {
         let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
             (remote_info.addr, &remote_info.rkey)
         } else {
-            panic!("inner_atomic_compare_exchange_op missing remote key for pe {}", pe);
+            panic!(
+                "inner_atomic_compare_exchange_op missing remote key for pe {}",
+                pe
+            );
         };
         // result[0] must be pre-initialized to `new` (Z) before calling;
         // after completion it holds the original remote value (old Y).

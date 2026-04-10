@@ -2,8 +2,7 @@ use crate::{
     active_messaging::AMCounters,
     lamellae::comm::atomic::{
         AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
-        AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
-        CommAllocAtomic,
+        AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle, CommAllocAtomic,
     },
     warnings::RuntimeWarning,
     LamellarTask, Remote,
@@ -66,7 +65,7 @@ impl<T: Send + 'static> LibfabricAtomicFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                    self.alloc.ofi.wait_all().unwrap();
+                self.alloc.ofi.wait_all().unwrap();
             },
             counters,
         )
@@ -96,7 +95,7 @@ impl<T: Send + 'static> Future for LibfabricAtomicFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-            self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all().unwrap();
         Poll::Ready(())
     }
 }
@@ -135,7 +134,7 @@ impl<T: Remote> LibfabricAtomicFetchFuture<T> {
     }
     pub(crate) fn block(mut self) -> T {
         self.exec_op();
-            self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all().unwrap();
         *self.result
     }
 
@@ -209,7 +208,7 @@ impl<T: Remote + PartialEq> LibfabricAtomicCompareExchangeFuture<T> {
 
     pub(crate) fn block(mut self) -> Result<T, T> {
         self.exec_op();
-            self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all().unwrap();
         compare_exchange_result(*self.result, *self.current)
     }
 
@@ -245,8 +244,8 @@ impl<T: Remote + PartialEq> Future for LibfabricAtomicCompareExchangeFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-            self.alloc.ofi.wait_all().unwrap();
-        
+        self.alloc.ofi.wait_all().unwrap();
+
         Poll::Ready(compare_exchange_result(*self.result, *self.current))
     }
 }
@@ -271,10 +270,21 @@ impl CommAllocAtomic for LibfabricAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, mut op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        mut op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         LibfabricAlloc::atomic_op_inner(self, pe, offset, &mut op, true).unwrap();
     }
-    fn atomic_op_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_unmanaged<T: Remote + 'static>(
+        &self,
+        mut op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         LibfabricAlloc::atomic_op_inner(self, pe, offset, &mut op, false).unwrap();
     }
     fn atomic_op_all<T: Remote>(
@@ -320,7 +330,13 @@ impl CommAllocAtomic for LibfabricAlloc {
         }
         .into()
     }
-    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, mut op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        mut op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T {
         let mut result = T::default();
         let mut_result_slice = std::slice::from_mut(&mut result);
         LibfabricAlloc::atomic_fetch_op_inner(self, pe, offset, &mut op, mut_result_slice, true)
@@ -397,7 +413,13 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, mut op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        mut op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
@@ -406,7 +428,12 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
         LibfabricAlloc::atomic_op_inner(&self.alloc, pe, offset, &mut op, true).unwrap();
     }
 
-    fn atomic_op_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_unmanaged<T: Remote + 'static>(
+        &self,
+        mut op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
@@ -451,7 +478,13 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
         }
         .into()
     }
-    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, mut op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        mut op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T {
         assert_eq!(
             pe, self.remote_pe,
             "blocking atomic fetch op called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
@@ -459,8 +492,15 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
         );
         let mut result = T::default();
         let mut_result_slice = std::slice::from_mut(&mut result);
-        LibfabricAlloc::atomic_fetch_op_inner(&self.alloc, pe, offset, &mut op, mut_result_slice, true)
-            .unwrap();
+        LibfabricAlloc::atomic_fetch_op_inner(
+            &self.alloc,
+            pe,
+            offset,
+            &mut op,
+            mut_result_slice,
+            true,
+        )
+        .unwrap();
         result
     }
     fn atomic_compare_exchange<T: Remote + PartialEq>(

@@ -8,14 +8,12 @@ use crate::{
         rdma::private::{LamellarRdmaGet, LamellarRdmaPut, Sealed},
         *,
     },
-    lamellae::{ RdmaGetBufferHandle, RdmaGetIntoBufferHandle},
+    lamellae::{RdmaGetBufferHandle, RdmaGetIntoBufferHandle},
     memregion::{
         AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
     },
     RdmaHandle,
 };
-
-
 
 // //use tracing::*;
 

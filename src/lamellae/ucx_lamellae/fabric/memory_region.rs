@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc,UcxBarrier};
+use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc, UcxBarrier};
 use lamellar_ucx_sys::*;
 use pmi::{pmi::Pmi, pmix::PmiX};
 
@@ -182,7 +182,7 @@ impl MemoryHandleInner {
         &self,
         endpoints: &[Arc<Endpoint>],
         pmi: &Arc<PmiX>,
-    ) -> Result<HashMap<usize,RemoteAddressInfo>, Error> {
+    ) -> Result<HashMap<usize, RemoteAddressInfo>, Error> {
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();
         // println!("[exchange_key] address: {:x?}", address_and_key);
@@ -205,18 +205,24 @@ impl MemoryHandleInner {
             // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
             let remote_rkey = RKey::unpack(&endpoints[pe], &res[8..]);
             // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
-            all_rkeys.insert(pe, RemoteAddressInfo {
-                addr: remote_address,
-                rkey: Arc::new(remote_rkey),
-            });
+            all_rkeys.insert(
+                pe,
+                RemoteAddressInfo {
+                    addr: remote_address,
+                    rkey: Arc::new(remote_rkey),
+                },
+            );
         }
         Ok(all_rkeys)
     }
 
-    pub(crate) fn exchange_key_sub_alloc(&self, endpoints: &[Arc<Endpoint>],
+    pub(crate) fn exchange_key_sub_alloc(
+        &self,
+        endpoints: &[Arc<Endpoint>],
         pes: &[usize],
         barrier: &UcxBarrier,
-        exchange_buffer: &UcxAlloc,) -> Result<HashMap<usize, RemoteAddressInfo>, Error> {
+        exchange_buffer: &UcxAlloc,
+    ) -> Result<HashMap<usize, RemoteAddressInfo>, Error> {
         // println!("PE {}: Starting exchange_key_sub_alloc with pes: {:?}", exchange_buffer.my_pe, pes);
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();
@@ -224,12 +230,12 @@ impl MemoryHandleInner {
         // println!("[exchange_key] key: {:x?}", rkey.as_ref());
         address_and_key.extend_from_slice(rkey.as_ref());
         trace!(target: "ucx", "[exchange_key] address_and_key: {:x?}", address_and_key);
-        
+
         // println!("[exchange_key_alloc] ex_buff  {:?}", exchange_buffer.as_mut_slice::<u8>());
 
         barrier.sub_barrier(pes);
 
-        for pe in pes{
+        for pe in pes {
             // println!("PE {}: Putting to PE {} in exchange_key_sub_alloc", exchange_buffer.my_pe, pe);
             unsafe {
                 exchange_buffer.put_inner(
@@ -257,10 +263,13 @@ impl MemoryHandleInner {
             // println!("[exchange_sub_key] {pe}: remote_address: {:x}", remote_address);
             let remote_rkey = RKey::unpack(&endpoints[*pe], &res[8..]);
             // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
-            all_rkeys.insert(*pe, RemoteAddressInfo {
-                addr: remote_address,
-                rkey: Arc::new(remote_rkey),
-            });
+            all_rkeys.insert(
+                *pe,
+                RemoteAddressInfo {
+                    addr: remote_address,
+                    rkey: Arc::new(remote_rkey),
+                },
+            );
         }
         ex_buff_slice.fill(0);
         barrier.sub_barrier(pes);
@@ -273,7 +282,7 @@ impl MemoryHandleInner {
         // pmi: &Arc<PmiX>,
         barrier: &UcxBarrier,
         exchange_buffer: &UcxAlloc,
-    ) -> Result<HashMap<usize,RemoteAddressInfo>, Error> {
+    ) -> Result<HashMap<usize, RemoteAddressInfo>, Error> {
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();
         address_and_key.extend_from_slice(rkey.as_ref());
@@ -313,10 +322,13 @@ impl MemoryHandleInner {
                 panic!("PE {}: Received remote address 0 or null rkey handle, indicating an error in key exchange", pe);
             }
             // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
-            all_rkeys.insert(pe, RemoteAddressInfo {
-                addr: remote_address,
-                rkey: Arc::new(remote_rkey),
-            });
+            all_rkeys.insert(
+                pe,
+                RemoteAddressInfo {
+                    addr: remote_address,
+                    rkey: Arc::new(remote_rkey),
+                },
+            );
         }
         ex_buff_slice.fill(0);
         Ok(all_rkeys)

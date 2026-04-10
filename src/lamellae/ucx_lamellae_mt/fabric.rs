@@ -20,8 +20,8 @@ use crate::{
     LAMELLAR_THREAD_ID,
 };
 
-use pmi::{pmi::Pmi, pmix::PmiX};
 use lamellar_ucx_sys::ucp_atomic_op_t;
+use pmi::{pmi::Pmi, pmix::PmiX};
 
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -95,7 +95,13 @@ impl UcxWorld {
             remote_keys.clone(),
         )
         .unwrap();
-        Self::warmup_peer_puts(&my_pmi, &utility_comm_group.worker, &exchange_buffer, my_pe, num_pes);
+        Self::warmup_peer_puts(
+            &my_pmi,
+            &utility_comm_group.worker,
+            &exchange_buffer,
+            my_pe,
+            num_pes,
+        );
         UcxWorld {
             pmi: my_pmi,
             my_pe,
@@ -208,7 +214,7 @@ impl UcxWorld {
     }
 
     // Found this was necessary in the offchance that the first call to a intranode PE
-    // happened simultaneously (in a MT environment) with other operations like progress or flush 
+    // happened simultaneously (in a MT environment) with other operations like progress or flush
     fn warmup_peer_puts(
         pmi: &Arc<PmiX>,
         worker: &Arc<Worker>,
@@ -544,11 +550,7 @@ impl UcxMtAlloc {
     unsafe fn negate_atomic_value<T>(value: *mut T) {
         let num_bytes = std::mem::size_of::<T>();
         let mut bytes = vec![0u8; num_bytes];
-        std::ptr::copy(
-            value.cast::<u8>(),
-            bytes.as_mut_ptr(),
-            num_bytes,
-        );
+        std::ptr::copy(value.cast::<u8>(), bytes.as_mut_ptr(), num_bytes);
         for byte in bytes.iter_mut() {
             *byte = !*byte;
         }
@@ -578,18 +580,26 @@ impl UcxMtAlloc {
     fn ucx_atomic_update<T>(op: &mut AtomicOp<T>) -> (ucp_atomic_op_t, *const T) {
         match op {
             AtomicOp::Write(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP, val.as_ref().get_ref()),
-            AtomicOp::Sum(val) | AtomicOp::FetchSum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, val.as_ref().get_ref()),
-            AtomicOp::Sub(val) => (
-                ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
-                unsafe { Self::negate_atomic_value(val.as_mut().get_unchecked_mut()); val.as_ref().get_ref() },
-            ),
-            AtomicOp::FetchSub(val) => (
-                ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
-                unsafe { Self::negate_atomic_value(val.as_mut().get_unchecked_mut()); val.as_ref().get_ref() },
-            ),
-            AtomicOp::BitAnd(val) | AtomicOp::FetchBitAnd(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, val.as_ref().get_ref()),
-            AtomicOp::BitOr(val) | AtomicOp::FetchBitOr(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, val.as_ref().get_ref()),
-            AtomicOp::BitXor(val) | AtomicOp::FetchBitXor(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, val.as_ref().get_ref()),
+            AtomicOp::Sum(val) | AtomicOp::FetchSum(val) => {
+                (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, val.as_ref().get_ref())
+            }
+            AtomicOp::Sub(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, unsafe {
+                Self::negate_atomic_value(val.as_mut().get_unchecked_mut());
+                val.as_ref().get_ref()
+            }),
+            AtomicOp::FetchSub(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, unsafe {
+                Self::negate_atomic_value(val.as_mut().get_unchecked_mut());
+                val.as_ref().get_ref()
+            }),
+            AtomicOp::BitAnd(val) | AtomicOp::FetchBitAnd(val) => {
+                (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, val.as_ref().get_ref())
+            }
+            AtomicOp::BitOr(val) | AtomicOp::FetchBitOr(val) => {
+                (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, val.as_ref().get_ref())
+            }
+            AtomicOp::BitXor(val) | AtomicOp::FetchBitXor(val) => {
+                (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, val.as_ref().get_ref())
+            }
             _ => panic!("Unsupported atomic operation"),
         }
     }
@@ -888,7 +898,8 @@ impl UcxMtAlloc {
             return None;
         }
         let (remote_addr, rkey) = &self.remote_keys[pe];
-        let req = self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].endpoints[pe]
+        let req = self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+            .endpoints[pe]
             .get(
                 dst_addr.as_mut_ptr() as _,
                 dst_addr.len() * std::mem::size_of::<T>(),
@@ -915,17 +926,16 @@ impl UcxMtAlloc {
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
         let req = match op {
-            AtomicOp::Write(val) => {
-                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
-                    .endpoints[pe]
-                    .atomic_swap(
-                        val.as_ref().get_ref(),
-                        &ATOMIC_PUT_TMP as *const _ as *mut T,
-                        remote_addr + offset,
-                        &rkey,
-                        managed,
-                    )
-            }
+            AtomicOp::Write(val) => self.comm_groups
+                [LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+            .endpoints[pe]
+                .atomic_swap(
+                    val.as_ref().get_ref(),
+                    &ATOMIC_PUT_TMP as *const _ as *mut T,
+                    remote_addr + offset,
+                    &rkey,
+                    managed,
+                ),
             AtomicOp::Sum(_)
             | AtomicOp::Sub(_)
             | AtomicOp::BitAnd(_)
@@ -953,8 +963,7 @@ impl UcxMtAlloc {
         };
         if blocking {
             let comm_group_id = LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len();
-            self.comm_groups[comm_group_id]
-                .endpoints[pe]
+            self.comm_groups[comm_group_id].endpoints[pe]
                 .ep_wait_all()
                 .expect("blocking_atomic_op failed");
             None
@@ -978,7 +987,12 @@ impl UcxMtAlloc {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .atomic_get(zero.as_ref().get_ref(), result.as_mut_ptr(), remote_addr + offset, &rkey)
+                    .atomic_get(
+                        zero.as_ref().get_ref(),
+                        result.as_mut_ptr(),
+                        remote_addr + offset,
+                        &rkey,
+                    )
             }
             AtomicOp::Write(_)
             | AtomicOp::FetchSum(_)
@@ -990,7 +1004,13 @@ impl UcxMtAlloc {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .atomic_fetch_op(ucx_op, val, result.as_mut_ptr(), remote_addr + offset, &rkey)
+                    .atomic_fetch_op(
+                        ucx_op,
+                        val,
+                        result.as_mut_ptr(),
+                        remote_addr + offset,
+                        &rkey,
+                    )
             }
             AtomicOp::Min(_)
             | AtomicOp::Max(_)

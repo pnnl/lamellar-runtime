@@ -197,10 +197,10 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
-        let _ = self
-            .array
-            .mem_region
-            .atomic_op_unmanaged(pe, offset, AtomicOp::Write(Box::pin(data)));
+        let _ =
+            self.array
+                .mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::Write(Box::pin(data)));
     }
     unsafe fn put_pe_buffer<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
@@ -291,10 +291,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
 impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let req = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::Read(Box::pin(std::mem::zeroed())));
+            let req = self.array.mem_region.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::Read(Box::pin(std::mem::zeroed())),
+            );
             ArrayRdmaGetHandle {
                 array: self.as_lamellar_byte_array(),
                 state: ArrayRdmaGetState::AtomicGet(req),
@@ -306,9 +307,11 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     }
     unsafe fn blocking_get(&self, index: usize, _: Sealed) -> T {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .mem_region
-                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Read(Box::pin(std::mem::zeroed())))
+            self.array.mem_region.atomic_fetch_op_blocking(
+                pe,
+                offset,
+                AtomicOp::Read(Box::pin(std::mem::zeroed())),
+            )
         } else {
             panic!("index out of bounds in LamellarArray get");
         }
@@ -370,10 +373,11 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
-        let req = self
-            .array
-            .mem_region
-            .atomic_fetch_op(pe, offset, AtomicOp::Read(Box::pin(std::mem::zeroed())));
+        let req = self.array.mem_region.atomic_fetch_op(
+            pe,
+            offset,
+            AtomicOp::Read(Box::pin(std::mem::zeroed())),
+        );
         ArrayRdmaGetHandle {
             array: self.as_lamellar_byte_array(),
             state: ArrayRdmaGetState::AtomicGet(req),
@@ -735,7 +739,7 @@ impl<T: Dist + 'static> LamellarAm for NetworkAtomicInitPutBufferAm<T> {
                         ) {
                             // let u8_buf_len = len * std::mem::size_of::<T>();
                             // println!("pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",pe,self.index,len, self.buf.len(),&u8_buf.as_slice().unwrap()[cur_index..(cur_index+u8_buf_len)]);
-                                let remote_am = NativeAtomicRemotePutAm {
+                            let remote_am = NativeAtomicRemotePutAm {
                                 array: Into::<__NetworkAtomicByteArray>::into(self.array.clone())
                                     .into(),
                                 start_index: self.index,
@@ -790,7 +794,8 @@ impl<T: Dist + 'static> LamellarAm for NetworkAtomicInitPutBufferAm<T> {
                     for (pe, vec) in pe_u8_vecs.drain() {
                         // println!("pe {:?} vec {:?}",pe,vec);
                         let remote_am = NativeAtomicRemotePutAm {
-                            array: Into::<__NetworkAtomicByteArray>::into(self.array.clone()).into(), //inner of the indices we need to place data into
+                            array: Into::<__NetworkAtomicByteArray>::into(self.array.clone())
+                                .into(), //inner of the indices we need to place data into
                             start_index: self.index,
                             len: self.buf.len(),
                             data: vec,

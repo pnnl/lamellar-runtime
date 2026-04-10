@@ -25,10 +25,11 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
                 .into();
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) }));
+            let handle = self.array.mem_region.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) }),
+            );
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -52,9 +53,11 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
                 .block()[0];
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .mem_region
-                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) }))
+            self.array.mem_region.atomic_fetch_op_blocking(
+                pe,
+                offset,
+                AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) }),
+            )
         } else {
             panic!("invalid index");
         }
@@ -65,15 +68,18 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
 impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
     fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         if !self.op_support.store {
-            return self
-                .array
-                .initiate_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array());
+            return self.array.initiate_op(
+                val,
+                index,
+                ArrayOpCmd::Store,
+                self.as_lamellar_byte_array(),
+            );
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_op(pe, offset, AtomicOp::Write(Box::pin(val)));
+            let handle =
+                self.array
+                    .mem_region
+                    .atomic_op(pe, offset, AtomicOp::Write(Box::pin(val)));
             ArrayOpHandle {
                 array: self.clone().into(),
                 state: OpState::Network(handle),
@@ -129,10 +135,10 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
                 .into();
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::Write(Box::pin(val)));
+            let handle =
+                self.array
+                    .mem_region
+                    .atomic_fetch_op(pe, offset, AtomicOp::Write(Box::pin(val)));
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -154,9 +160,11 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
                 .block()[0];
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .mem_region
-                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(Box::pin(val)))
+            self.array.mem_region.atomic_fetch_op_blocking(
+                pe,
+                offset,
+                AtomicOp::Write(Box::pin(val)),
+            )
         } else {
             panic!("invalid index");
         }
@@ -166,9 +174,12 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
 impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<T> {
     fn add<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         if !self.op_support.add {
-            return self
-                .array
-                .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array());
+            return self.array.initiate_op(
+                val,
+                index,
+                ArrayOpCmd::Add,
+                self.as_lamellar_byte_array(),
+            );
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             let handle = self
@@ -203,9 +214,12 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
 
     fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         if !self.op_support.add {
-            return self
-                .array
-                .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array());
+            return self.array.initiate_op(
+                val,
+                index,
+                ArrayOpCmd::Sub,
+                self.as_lamellar_byte_array(),
+            );
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             let handle = self
@@ -299,10 +313,11 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
                 .into();
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::FetchSum(Box::pin(val)));
+            let handle = self.array.mem_region.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::FetchSum(Box::pin(val)),
+            );
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -313,9 +328,12 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
     }
     fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         if !self.op_support.prod {
-            return self
-                .array
-                .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array());
+            return self.array.initiate_op(
+                val,
+                index,
+                ArrayOpCmd::Mul,
+                self.as_lamellar_byte_array(),
+            );
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             let handle = self
@@ -360,10 +378,11 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
                 .into();
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::FetchProd(Box::pin(val)));
+            let handle = self.array.mem_region.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::FetchProd(Box::pin(val)),
+            );
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -386,9 +405,11 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
                 .block()[0];
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .mem_region
-                .atomic_fetch_op_blocking(pe, offset, AtomicOp::FetchProd(Box::pin(val)))
+            self.array.mem_region.atomic_fetch_op_blocking(
+                pe,
+                offset,
+                AtomicOp::FetchProd(Box::pin(val)),
+            )
         } else {
             panic!("invalid index");
         }
@@ -406,10 +427,11 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
                 .into();
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::FetchSub(Box::pin(val)));
+            let handle = self.array.mem_region.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::FetchSub(Box::pin(val)),
+            );
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -423,15 +445,18 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
 impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
     fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         if !self.op_support.bit_and {
-            return self
-                .array
-                .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array());
+            return self.array.initiate_op(
+                val,
+                index,
+                ArrayOpCmd::And,
+                self.as_lamellar_byte_array(),
+            );
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_op(pe, offset, AtomicOp::BitAnd(Box::pin(val)));
+            let handle =
+                self.array
+                    .mem_region
+                    .atomic_op(pe, offset, AtomicOp::BitAnd(Box::pin(val)));
             ArrayOpHandle {
                 array: self.clone().into(),
                 state: OpState::Network(handle),
@@ -487,9 +512,11 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
                 .block()[0];
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .mem_region
-                .atomic_fetch_op_blocking(pe, offset, AtomicOp::FetchBitAnd(Box::pin(val)))
+            self.array.mem_region.atomic_fetch_op_blocking(
+                pe,
+                offset,
+                AtomicOp::FetchBitAnd(Box::pin(val)),
+            )
         } else {
             panic!("invalid index");
         }
@@ -508,10 +535,11 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
                 .into();
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::FetchBitAnd(Box::pin(val)));
+            let handle = self.array.mem_region.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::FetchBitAnd(Box::pin(val)),
+            );
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -523,15 +551,18 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
 
     fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         if !self.op_support.bit_or {
-            return self
-                .array
-                .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array());
+            return self.array.initiate_op(
+                val,
+                index,
+                ArrayOpCmd::Or,
+                self.as_lamellar_byte_array(),
+            );
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_op(pe, offset, AtomicOp::BitOr(Box::pin(val)));
+            let handle =
+                self.array
+                    .mem_region
+                    .atomic_op(pe, offset, AtomicOp::BitOr(Box::pin(val)));
             ArrayOpHandle {
                 array: self.clone().into(),
                 state: OpState::Network(handle),
@@ -587,9 +618,11 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
                 .block()[0];
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .mem_region
-                .atomic_fetch_op_blocking(pe, offset, AtomicOp::FetchBitOr(Box::pin(val)))
+            self.array.mem_region.atomic_fetch_op_blocking(
+                pe,
+                offset,
+                AtomicOp::FetchBitOr(Box::pin(val)),
+            )
         } else {
             panic!("invalid index");
         }
@@ -608,10 +641,11 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
                 .into();
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::FetchBitOr(Box::pin(val)));
+            let handle = self.array.mem_region.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::FetchBitOr(Box::pin(val)),
+            );
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -623,15 +657,18 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
 
     fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         if !self.op_support.bit_xor {
-            return self
-                .array
-                .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array());
+            return self.array.initiate_op(
+                val,
+                index,
+                ArrayOpCmd::Xor,
+                self.as_lamellar_byte_array(),
+            );
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_op(pe, offset, AtomicOp::BitXor(Box::pin(val)));
+            let handle =
+                self.array
+                    .mem_region
+                    .atomic_op(pe, offset, AtomicOp::BitXor(Box::pin(val)));
             ArrayOpHandle {
                 array: self.clone().into(),
                 state: OpState::Network(handle),
@@ -687,10 +724,11 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
                 .into();
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self
-                .array
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::FetchBitXor(Box::pin(val)));
+            let handle = self.array.mem_region.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::FetchBitXor(Box::pin(val)),
+            );
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -713,9 +751,11 @@ impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
                 .block()[0];
         }
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .mem_region
-                .atomic_fetch_op_blocking(pe, offset, AtomicOp::FetchBitXor(Box::pin(val)))
+            self.array.mem_region.atomic_fetch_op_blocking(
+                pe,
+                offset,
+                AtomicOp::FetchBitXor(Box::pin(val)),
+            )
         } else {
             panic!("invalid index");
         }

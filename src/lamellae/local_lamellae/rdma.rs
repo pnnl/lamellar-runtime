@@ -307,7 +307,13 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, _pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        _pe: usize,
+        offset: usize,
+    ) {
         let dst = unsafe { self.as_mut_ptr::<T>().add(offset) };
         unsafe {
             dst.write(src);
@@ -450,7 +456,13 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, _pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        _pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         let alloc_slice = unsafe { self.as_mut_slice() };
         assert!(offset + len <= alloc_slice.len());
         alloc_slice[offset..(offset + len)].to_vec()

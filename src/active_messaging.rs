@@ -1335,7 +1335,10 @@ pub trait ActiveMessaging {
     /// The returned future is lazy and does nothing unless awaited. Use this when you are already
     /// inside an async context and want to await multiple Lamellar tasks without blocking the caller.
     #[must_use = "this function is lazy and does nothing unless awaited."]
-    fn join_all<I>(&self, iter: I) -> impl Future<Output = Vec<<<I as IntoIterator>::Item as Future>::Output>> + Send
+    fn join_all<I>(
+        &self,
+        iter: I,
+    ) -> impl Future<Output = Vec<<<I as IntoIterator>::Item as Future>::Output>> + Send
     where
         I: IntoIterator,
         <I as IntoIterator>::Item: Future + Send,

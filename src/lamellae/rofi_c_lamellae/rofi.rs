@@ -5,7 +5,7 @@ use crate::lamellae::{AllocError, AllocResult, AllocationType, RdmaError, RdmaRe
 
 use std::any::TypeId;
 use std::ffi::CString;
-use tracing::{trace,error};
+use tracing::{error, trace};
 
 pub(crate) fn rofi_c_init(provider: &str, domain: &str) -> Result<(), &'static str> {
     let prov_str = CString::new(provider).unwrap();
@@ -150,13 +150,27 @@ fn get_rofi_c_dt<T: 'static>() -> Option<rofisys::rofi_datatype_t> {
 
 fn rofi_c_op<T: 'static>(op: &AtomicOp<T>) -> Option<rofisys::rofi_atomic_op_t> {
     match op {
-        AtomicOp::Min(_) | AtomicOp::FetchMin(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_MIN),
-        AtomicOp::Max(_) | AtomicOp::FetchMax(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_MAX),
-        AtomicOp::Sum(_) | AtomicOp::Sub(_) | AtomicOp::FetchSum(_) | AtomicOp::FetchSub(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_SUM),
-        AtomicOp::Prod(_) | AtomicOp::FetchProd(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_PROD),
-        AtomicOp::BitOr(_) | AtomicOp::FetchBitOr(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BOR),
-        AtomicOp::BitXor(_) | AtomicOp::FetchBitXor(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BXOR),
-        AtomicOp::BitAnd(_) | AtomicOp::FetchBitAnd(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BAND),
+        AtomicOp::Min(_) | AtomicOp::FetchMin(_) => {
+            Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_MIN)
+        }
+        AtomicOp::Max(_) | AtomicOp::FetchMax(_) => {
+            Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_MAX)
+        }
+        AtomicOp::Sum(_) | AtomicOp::Sub(_) | AtomicOp::FetchSum(_) | AtomicOp::FetchSub(_) => {
+            Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_SUM)
+        }
+        AtomicOp::Prod(_) | AtomicOp::FetchProd(_) => {
+            Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_PROD)
+        }
+        AtomicOp::BitOr(_) | AtomicOp::FetchBitOr(_) => {
+            Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BOR)
+        }
+        AtomicOp::BitXor(_) | AtomicOp::FetchBitXor(_) => {
+            Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BXOR)
+        }
+        AtomicOp::BitAnd(_) | AtomicOp::FetchBitAnd(_) => {
+            Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BAND)
+        }
         AtomicOp::Read(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_READ),
         AtomicOp::Cas(_, _) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP),
         AtomicOp::Write(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_WRITE),
@@ -174,12 +188,8 @@ fn rofi_retry_status(ret: i32) -> RdmaResult {
 fn negate_atomic_value<T>(value: *mut T) {
     let num_bytes = std::mem::size_of::<T>();
     let mut bytes = vec![0u8; num_bytes];
-    unsafe{
-        std::ptr::copy(
-            value.cast::<u8>(),
-            bytes.as_mut_ptr(),
-            num_bytes,
-        );
+    unsafe {
+        std::ptr::copy(value.cast::<u8>(), bytes.as_mut_ptr(), num_bytes);
     }
     for byte in bytes.iter_mut() {
         *byte = !*byte;
@@ -230,7 +240,9 @@ fn operand_ptr<T: Copy + 'static>(op: &mut AtomicOp<T>) -> *const T {
         | AtomicOp::Read(val) => val.as_ref().get_ref(),
         AtomicOp::Cas(val, _) => val.as_ref().get_ref(),
         AtomicOp::Sub(val) | AtomicOp::FetchSub(val) => {
-            unsafe {negate_atomic_value(val.as_mut().get_unchecked_mut());}
+            unsafe {
+                negate_atomic_value(val.as_mut().get_unchecked_mut());
+            }
             val.as_ref().get_ref()
         }
     }
@@ -246,14 +258,27 @@ pub(crate) fn rofi_c_atomic_op_avail<T: 'static>(op: &AtomicOp<T>) -> bool {
     }
     if let Some(dt) = get_rofi_c_dt::<T>() {
         match op {
-            AtomicOp::Cas(_, _) => unsafe { rofisys::rofi_query_compare_atomic(dt, rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP) == 0 },
-            AtomicOp::Read(_) | AtomicOp::FetchMin(_) | AtomicOp::FetchMax(_) | AtomicOp::FetchSum(_) | AtomicOp::FetchSub(_) | AtomicOp::FetchProd(_) | AtomicOp::FetchBitOr(_) | AtomicOp::FetchBitXor(_) | AtomicOp::FetchBitAnd(_) => {
+            AtomicOp::Cas(_, _) => unsafe {
+                rofisys::rofi_query_compare_atomic(
+                    dt,
+                    rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP,
+                ) == 0
+            },
+            AtomicOp::Read(_)
+            | AtomicOp::FetchMin(_)
+            | AtomicOp::FetchMax(_)
+            | AtomicOp::FetchSum(_)
+            | AtomicOp::FetchSub(_)
+            | AtomicOp::FetchProd(_)
+            | AtomicOp::FetchBitOr(_)
+            | AtomicOp::FetchBitXor(_)
+            | AtomicOp::FetchBitAnd(_) => {
                 if let Some(rop) = rofi_c_op(op) {
                     unsafe { rofisys::rofi_query_fetch_atomic(dt, rop) == 0 }
                 } else {
                     false
                 }
-            },
+            }
             _ => {
                 if let Some(rop) = rofi_c_op(op) {
                     unsafe { rofisys::rofi_query_atomic(dt, rop) == 0 }
@@ -267,7 +292,11 @@ pub(crate) fn rofi_c_atomic_op_avail<T: 'static>(op: &AtomicOp<T>) -> bool {
     }
 }
 
-pub(crate) fn rofi_c_atomic_op<T: Copy + 'static>(addr: *mut T, op: &mut AtomicOp<T>, pe: usize) -> RdmaResult {
+pub(crate) fn rofi_c_atomic_op<T: Copy + 'static>(
+    addr: *mut T,
+    op: &mut AtomicOp<T>,
+    pe: usize,
+) -> RdmaResult {
     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
     let rop = rofi_c_op(op).expect("atomic op unsupported by rofi-c");
     let value = operand_ptr(op);

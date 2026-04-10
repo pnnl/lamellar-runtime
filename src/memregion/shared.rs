@@ -371,9 +371,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     }
 
     pub unsafe fn atomic_store(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-        self.mr
-            .as_base::<T>()
-            .atomic_op(pe, self.sub_region_offset + index, AtomicOp::Write(Box::pin(val)))
+        self.mr.as_base::<T>().atomic_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Write(Box::pin(val)),
+        )
     }
     pub unsafe fn atomic_store_unmanaged(&self, pe: usize, index: usize, val: T) {
         //we need to do the offsetting here since we are going directly through the inner alloc
@@ -386,9 +388,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     }
     pub unsafe fn atomic_load(&self, pe: usize, index: usize) -> AtomicFetchOpHandle<T> {
         // let res = MaybeUninit::uninit().assume_init();
-        self.mr
-            .as_base::<T>()
-            .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Read(Box::pin(std::mem::zeroed())))
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Read(Box::pin(std::mem::zeroed())),
+        )
     }
     pub unsafe fn atomic_swap(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
         // let res = MaybeUninit::uninit().assume_init();

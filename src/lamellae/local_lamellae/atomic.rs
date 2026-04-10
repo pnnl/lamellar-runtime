@@ -166,7 +166,9 @@ impl<T: Remote> LocalAtomicCompareExchangeFuture<T> {
 
     pub(crate) fn block(mut self) -> Result<T, T> {
         self.exec_op();
-        self.result.take().expect("compare_exchange result should be set")
+        self.result
+            .take()
+            .expect("compare_exchange result should be set")
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
@@ -174,7 +176,11 @@ impl<T: Remote> LocalAtomicCompareExchangeFuture<T> {
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
-            async move { self.result.take().expect("compare_exchange result should be set") },
+            async move {
+                self.result
+                    .take()
+                    .expect("compare_exchange result should be set")
+            },
             counters,
         )
     }
@@ -204,7 +210,11 @@ impl<T: Remote> Future for LocalAtomicCompareExchangeFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        Poll::Ready(self.result.take().expect("compare_exchange result should be set"))
+        Poll::Ready(
+            self.result
+                .take()
+                .expect("compare_exchange result should be set"),
+        )
     }
 }
 
@@ -227,7 +237,13 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, _pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        _pe: usize,
+        offset: usize,
+    ) {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
         net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
     }
@@ -275,7 +291,13 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         }
         .into()
     }
-    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, _pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        _pe: usize,
+        offset: usize,
+    ) -> T {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
         let mut result = T::default();
         net_atomic_fetch_op(&op, &CommAllocAddr(self.start() + offset), &mut result);

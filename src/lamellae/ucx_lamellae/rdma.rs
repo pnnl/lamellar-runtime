@@ -247,7 +247,7 @@ impl<T: Remote> Future for UcxGetFuture<T> {
         } else if !*this.local_op {
             this.alloc.wait_all();
         }
-    
+
         Poll::Ready(**this.result)
     }
 }
@@ -356,7 +356,13 @@ pub(crate) struct UcxGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxGetIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         self.request = unsafe {
-            UcxAlloc::inner_get(&self.alloc, self.pe, self.offset, false, self.dst.as_mut_slice())
+            UcxAlloc::inner_get(
+                &self.alloc,
+                self.pe,
+                self.offset,
+                false,
+                self.dst.as_mut_slice(),
+            )
         };
     }
     pub(crate) fn block(mut self) {
@@ -379,14 +385,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxGetIntoBufferFuture<T, B> {
         self.scheduler.clone().spawn_task(
             async move {
                 match request {
-                    Some(mut request) => {
-                        request.wait().expect("ucx get failed")
-                    }
+                    Some(mut request) => request.wait().expect("ucx get failed"),
                     None => {
                         if !local_op {
                             alloc.wait_all()
                         }
-                    },
+                    }
                 };
             },
             counters,
@@ -462,7 +466,13 @@ impl CommAllocRdma for UcxAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         let _ = unsafe {
             UcxAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), true, true)
         };
@@ -653,7 +663,13 @@ impl CommAllocRdma for UcxAlloc {
         .into()
     }
 
-    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         let mut buf = vec![T::default(); len];
         let _ = unsafe { self.inner_get(pe, offset, true, buf.as_mut_slice()) };
         buf
@@ -727,14 +743,27 @@ impl CommAllocRdma for OneSidedUcxAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         assert_eq!(
             pe, self.remote_pe,
             "put_blocking called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
         let _ = unsafe {
-            UcxAlloc::put_inner(&self.alloc, pe, offset, std::slice::from_ref(&src), true, true)
+            UcxAlloc::put_inner(
+                &self.alloc,
+                pe,
+                offset,
+                std::slice::from_ref(&src),
+                true,
+                true,
+            )
         };
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -746,7 +775,14 @@ impl CommAllocRdma for OneSidedUcxAlloc {
         // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
         // not that the operation has completed on the remote side
         let _ = unsafe {
-            UcxAlloc::put_inner(&self.alloc, pe, offset, std::slice::from_ref(&src), false, false)
+            UcxAlloc::put_inner(
+                &self.alloc,
+                pe,
+                offset,
+                std::slice::from_ref(&src),
+                false,
+                false,
+            )
         };
     }
     fn put_buffer<T: Remote>(
@@ -789,9 +825,8 @@ impl CommAllocRdma for OneSidedUcxAlloc {
         let src = src.into();
         // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
         // not that the operation has completed on the remote side
-        let _ = unsafe {
-            UcxAlloc::put_inner(&self.alloc, pe, offset, src.as_slice(), false, false)
-        };
+        let _ =
+            unsafe { UcxAlloc::put_inner(&self.alloc, pe, offset, src.as_slice(), false, false) };
     }
     fn put_all<T: Remote>(
         &self,
@@ -887,7 +922,13 @@ impl CommAllocRdma for OneSidedUcxAlloc {
         .into()
     }
 
-    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         assert_eq!(
             pe, self.remote_pe,
             "blocking_get_buffer called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",

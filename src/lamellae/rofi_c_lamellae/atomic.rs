@@ -5,7 +5,9 @@ use crate::lamellae::comm::atomic::{
     AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
     AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle, CommAllocAtomic,
 };
-use crate::lamellae::{net_atomic_compare_exchange, net_atomic_fetch_op, net_atomic_op, CommAllocAddr};
+use crate::lamellae::{
+    net_atomic_compare_exchange, net_atomic_fetch_op, net_atomic_op, CommAllocAddr,
+};
 use crate::warnings::RuntimeWarning;
 use crate::LamellarTask;
 use crate::Remote;
@@ -22,7 +24,12 @@ use std::{
     task::{Context, Poll},
 };
 
-fn exec_rofi_atomic_op<T: Remote + Copy + 'static>(alloc: &RofiCAlloc, pe: usize, offset: usize, op: &mut AtomicOp<T>) {
+fn exec_rofi_atomic_op<T: Remote + Copy + 'static>(
+    alloc: &RofiCAlloc,
+    pe: usize,
+    offset: usize,
+    op: &mut AtomicOp<T>,
+) {
     assert!(offset < alloc.num_bytes() / std::mem::size_of::<T>());
     let addr = (alloc.start() + offset * std::mem::size_of::<T>()) as *mut T;
     // if pe == alloc.my_pe {
@@ -32,17 +39,30 @@ fn exec_rofi_atomic_op<T: Remote + Copy + 'static>(alloc: &RofiCAlloc, pe: usize
     rofi_c_atomic_op(addr, op, pe).expect("rofi-c atomic op failed");
 }
 
-fn exec_rofi_atomic_fetch<T: Remote + Copy + 'static>(alloc: &RofiCAlloc, pe: usize, offset: usize, op: &mut AtomicOp<T>, result: &mut T) {
+fn exec_rofi_atomic_fetch<T: Remote + Copy + 'static>(
+    alloc: &RofiCAlloc,
+    pe: usize,
+    offset: usize,
+    op: &mut AtomicOp<T>,
+    result: &mut T,
+) {
     assert!(offset < alloc.num_bytes() / std::mem::size_of::<T>());
     let addr = (alloc.start() + offset * std::mem::size_of::<T>()) as *mut T;
     // if pe == alloc.my_pe {
     //     net_atomic_fetch_op(op, &CommAllocAddr(addr as usize), result);
     // } else {
-        rofi_c_atomic_fetch(addr, op, result, pe).expect("rofi-c atomic fetch failed");
+    rofi_c_atomic_fetch(addr, op, result, pe).expect("rofi-c atomic fetch failed");
     // }
 }
 
-fn exec_rofi_compare_atomic<T: Remote + Copy + PartialEq + 'static>(alloc: &RofiCAlloc, pe: usize, offset: usize, current: *const T, new: *const T, result: &mut T) {
+fn exec_rofi_compare_atomic<T: Remote + Copy + PartialEq + 'static>(
+    alloc: &RofiCAlloc,
+    pe: usize,
+    offset: usize,
+    current: *const T,
+    new: *const T,
+    result: &mut T,
+) {
     assert!(offset < alloc.num_bytes() / std::mem::size_of::<T>());
     let addr = (alloc.start() + offset * std::mem::size_of::<T>()) as *mut T;
     // if pe == alloc.my_pe {
@@ -51,7 +71,7 @@ fn exec_rofi_compare_atomic<T: Remote + Copy + PartialEq + 'static>(alloc: &Rofi
     //         .unwrap_or_else(|old| old);
     //     }
     // } else {
-        rofi_c_compare_atomic(addr, current, new, result, pe).expect("rofi-c compare atomic failed");
+    rofi_c_compare_atomic(addr, current, new, result, pe).expect("rofi-c compare atomic failed");
     // }
 }
 
@@ -136,7 +156,13 @@ pub(crate) struct RofiCAtomicFetchFuture<T> {
 
 impl<T: Remote + Copy + 'static> RofiCAtomicFetchFuture<T> {
     fn exec_op(&mut self) {
-        exec_rofi_atomic_fetch(&self.alloc, self.remote_pe, self.offset, &mut self.op, self.result.as_mut());
+        exec_rofi_atomic_fetch(
+            &self.alloc,
+            self.remote_pe,
+            self.offset,
+            &mut self.op,
+            self.result.as_mut(),
+        );
         self.spawned = true;
     }
 
@@ -206,7 +232,14 @@ pub(crate) struct RofiCAtomicCompareExchangeFuture<T> {
 
 impl<T: Remote + Copy + PartialEq + 'static> RofiCAtomicCompareExchangeFuture<T> {
     fn exec_op(&mut self) {
-        exec_rofi_compare_atomic(&self.alloc, self.remote_pe, self.offset, self.current.as_ref().get_ref(), self.new.as_ref().get_ref(), self.result.as_mut());
+        exec_rofi_compare_atomic(
+            &self.alloc,
+            self.remote_pe,
+            self.offset,
+            self.current.as_ref().get_ref(),
+            self.new.as_ref().get_ref(),
+            self.result.as_mut(),
+        );
         self.spawned = true;
     }
 
@@ -434,7 +467,8 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        self.alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+        self.alloc
+            .atomic_fetch_op(scheduler, counters, op, pe, offset)
     }
 
     fn atomic_fetch_op_blocking<T: Remote>(
@@ -444,7 +478,8 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
         pe: usize,
         offset: usize,
     ) -> T {
-        self.alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
+        self.alloc
+            .atomic_fetch_op_blocking(scheduler, op, pe, offset)
     }
 
     fn atomic_compare_exchange<T: Remote + PartialEq>(

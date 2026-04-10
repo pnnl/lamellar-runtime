@@ -48,9 +48,14 @@ fn main() {
         world.my_pe(),
         start.elapsed().as_secs_f64()
     );
-    if world.my_pe() == 0{
+    if world.my_pe() == 0 {
         let sum_time = Instant::now();
         let sum = array.sum().block().expect("array len > 0");
-        println!("PE{} sum: {} time: {:?}", world.my_pe(), sum, sum_time.elapsed().as_secs_f64());
+        println!(
+            "PE{} sum: {} time: {:?}",
+            world.my_pe(),
+            sum,
+            sum_time.elapsed().as_secs_f64()
+        );
     }
 }

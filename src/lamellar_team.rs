@@ -1339,7 +1339,6 @@ impl LamellarTeamRT {
             parent.check_hash_vals(hash as usize, &dropped, timeout);
             trace!("subteam passed check hash vals");
 
-          
             let num_pes = archrt.num_pes();
             parent.barrier();
             trace!("subteam passed barrier, creating RT team");

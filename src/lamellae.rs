@@ -9,7 +9,7 @@ pub(crate) mod shmem_utils;
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
 
-pub use comm::atomic::{AtomicFetchOpHandle, AtomicOpHandle, AtomicCompareExchangeOpHandle};
+pub use comm::atomic::{AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle};
 pub use comm::rdma::RdmaHandle;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};

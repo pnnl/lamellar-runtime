@@ -302,7 +302,6 @@ impl __GenericAtomicByteArray {
             .expect("invalid local index");
         self.locks[index].lock()
     }
-
 }
 
 #[derive(Clone, Debug)]
@@ -315,7 +314,6 @@ pub struct __GenericAtomicLocalData<T: Dist> {
     start_index: usize,
     end_index: usize,
 }
-
 
 /// Internal iterator for `__GenericAtomicLocalData`.
 /// Not intended for direct use by library users.
@@ -557,10 +555,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GenericAtomicArray<T> {
         }
         let locks = Darc::new(array.team_rt(), vec).await.expect("PE in team");
 
-        GenericAtomicArray {
-            locks,
-            array,
-        }
+        GenericAtomicArray { locks, array }
     }
 }
 

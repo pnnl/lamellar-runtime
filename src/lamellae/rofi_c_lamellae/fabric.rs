@@ -11,12 +11,12 @@ use crate::lamellar_alloc::BTreeAlloc;
 
 use crate::lamellar_alloc::LamellarAlloc;
 use std::any::type_name;
+use std::any::TypeId;
 use std::collections::HashSet;
 use std::ffi::CString;
 use std::os::raw::c_ulong;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::any::TypeId;
 use tracing::{debug, error, trace};
 
 #[derive(Debug)]
@@ -44,7 +44,7 @@ impl RofiC {
     }
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
         let t = TypeId::of::<T>();
-        if t == TypeId::of::<f32>() || t == TypeId::of::<f64>(){
+        if t == TypeId::of::<f32>() || t == TypeId::of::<f64>() {
             return false;
         }
         crate::lamellae::rofi_c_lamellae::rofi::rofi_c_atomic_avail::<T>()

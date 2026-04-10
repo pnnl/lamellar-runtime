@@ -667,7 +667,13 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         });
         result
     }
-    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         _scheduler.clone().block_on(async {
             unsafe {
                 LibfabricAsyncAlloc::inner_put(self, pe, offset, std::slice::from_ref(&src))
@@ -699,7 +705,13 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         let mut dst = vec![T::default(); len];
         _scheduler.clone().block_on(async {
             unsafe {
@@ -811,7 +823,13 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
             unsafe { self.alloc.as_mut_slice::<T>()[offset] = src };
         }
     }
-    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         assert_eq!(
             pe, self.remote_pe,
             "put_blocking called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}",
@@ -929,9 +947,14 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         let mut result = T::default();
         _scheduler.clone().block_on(async {
             unsafe {
-                LibfabricAsyncAlloc::inner_get(&self.alloc, pe, offset, std::slice::from_mut(&mut result))
-                    .await
-                    .expect("error in OneSided blocking_get");
+                LibfabricAsyncAlloc::inner_get(
+                    &self.alloc,
+                    pe,
+                    offset,
+                    std::slice::from_mut(&mut result),
+                )
+                .await
+                .expect("error in OneSided blocking_get");
             }
         });
         result
@@ -964,7 +987,13 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         let mut dst = vec![T::default(); len];
         _scheduler.clone().block_on(async {
             unsafe {

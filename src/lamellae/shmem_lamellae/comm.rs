@@ -1,15 +1,15 @@
 use crate::{
     config,
     lamellae::{
-        comm::{AtomicOp, CommInfo, CommProgress, CommShutdown},
         comm::atomic::atomic_type_supported,
+        comm::{AtomicOp, CommInfo, CommProgress, CommShutdown},
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
     Backend,
 };
 
 use super::{
-    fabric::{ ShmemAlloc,ShmemAllocator},
+    fabric::{ShmemAlloc, ShmemAllocator},
     CommandQueue,
 };
 

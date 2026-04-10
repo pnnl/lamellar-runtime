@@ -488,7 +488,7 @@ impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockGetPeAm {
     array: __LocalLockByteArray, //sub array specific to the elements we need to get
-                               // local_index: usize,        //local index
+                                 // local_index: usize,        //local index
 }
 
 #[lamellar_impl::rt_am]
@@ -651,8 +651,8 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm for LocalLockInitGetI
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemoteGetIntoBufferAm {
     array: __LocalLockByteArray, //sub array specific to the elements we need to get
-                               // start_index: usize,
-                               // len: usize,
+                                 // start_index: usize,
+                                 // len: usize,
 }
 
 #[lamellar_impl::rt_am]

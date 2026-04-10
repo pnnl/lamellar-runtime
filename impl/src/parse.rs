@@ -83,11 +83,7 @@ impl Parse for ReductionArgs {
                 ),
             })
         }
-        Ok(ReductionArgs {
-            name,
-            closure,
-            tys,
-        })
+        Ok(ReductionArgs { name, closure, tys })
     }
 }
 

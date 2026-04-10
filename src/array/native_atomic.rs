@@ -838,8 +838,7 @@ pub struct __NativeAtomicByteArray {
     pub(crate) array: __UnsafeByteArray,
     pub(crate) orig_t: NativeAtomicType,
 }
-impl __NativeAtomicByteArray {
-}
+impl __NativeAtomicByteArray {}
 
 /// Internal runtime local-data wrapper for NativeAtomic arrays.
 /// Not intended for direct use by library users.
@@ -852,7 +851,6 @@ pub struct __NativeAtomicLocalData<T: Remote> {
     start_index: usize,
     end_index: usize,
 }
-
 
 /// Internal iterator for `__NativeAtomicLocalData`.
 /// Not intended for direct use by library users.

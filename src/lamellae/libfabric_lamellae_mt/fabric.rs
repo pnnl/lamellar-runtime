@@ -3,7 +3,7 @@ use libfabric::{
     av_set::AddressVectorSetBuilder,
     cntr::{Counter, CounterBuilder, ReadCntr, WaitCntr},
     comm::{
-        atomic::{AtomicFetchEp, AtomicValidEp, AtomicWriteEp, AtomicCASEp},
+        atomic::{AtomicCASEp, AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp},
         rma::{ReadEp, WriteEp},
     },
@@ -539,7 +539,10 @@ impl Ofi {
                     cg.ep.atomicvalid::<T>(AtomicOp::Band).is_ok()
                         && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Band).is_ok()
                 }
-                AtomicOpKind::Read => cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::AtomicRead).is_ok(),
+                AtomicOpKind::Read => cg
+                    .ep
+                    .fetch_atomicvalid::<T>(FetchAtomicOp::AtomicRead)
+                    .is_ok(),
                 AtomicOpKind::Write => {
                     cg.ep.atomicvalid::<T>(AtomicOp::AtomicWrite).is_ok()
                         && cg
@@ -547,7 +550,10 @@ impl Ofi {
                             .fetch_atomicvalid::<T>(FetchAtomicOp::AtomicWrite)
                             .is_ok()
                 }
-                AtomicOpKind::Cas => cg.ep.compare_atomicvalid::<T>(CompareAtomicOp::Cswap).is_ok(),
+                AtomicOpKind::Cas => cg
+                    .ep
+                    .compare_atomicvalid::<T>(CompareAtomicOp::Cswap)
+                    .is_ok(),
             }
         }
     }
@@ -1378,11 +1384,7 @@ impl LibfabricMtAlloc {
     unsafe fn negate_atomic_value<OFI>(value: *mut OFI) {
         let num_bytes = std::mem::size_of::<OFI>();
         let mut bytes = vec![0u8; num_bytes];
-        std::ptr::copy(
-            value.cast::<u8>(),
-            bytes.as_mut_ptr(),
-            num_bytes,
-        );
+        std::ptr::copy(value.cast::<u8>(), bytes.as_mut_ptr(), num_bytes);
         for byte in bytes.iter_mut() {
             *byte = !*byte;
         }
@@ -1935,7 +1937,9 @@ impl LibfabricMtAlloc {
         let remote_key = remote_alloc_info.key();
 
         match op {
-            LamellarAtomicOp::Sub(src) => Self::negate_atomic_value(src.as_mut().get_unchecked_mut() as *mut T as *mut OFI),
+            LamellarAtomicOp::Sub(src) => {
+                Self::negate_atomic_value(src.as_mut().get_unchecked_mut() as *mut T as *mut OFI)
+            }
             LamellarAtomicOp::FetchMin(_)
             | LamellarAtomicOp::FetchMax(_)
             | LamellarAtomicOp::FetchSum(_)
@@ -2024,7 +2028,9 @@ impl LibfabricMtAlloc {
             &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
 
         match op {
-            LamellarAtomicOp::FetchSub(src) => Self::negate_atomic_value(src.as_mut().get_unchecked_mut() as *mut T as *mut OFI),
+            LamellarAtomicOp::FetchSub(src) => {
+                Self::negate_atomic_value(src.as_mut().get_unchecked_mut() as *mut T as *mut OFI)
+            }
             LamellarAtomicOp::Min(_)
             | LamellarAtomicOp::Max(_)
             | LamellarAtomicOp::Sum(_)
@@ -2038,7 +2044,7 @@ impl LibfabricMtAlloc {
             LamellarAtomicOp::Cas(_, _) => {
                 panic!("Compare atomic ops must use the compare path")
             }
-            _ => {},
+            _ => {}
         };
 
         let src = op.src() as *const OFI;
@@ -2068,28 +2074,47 @@ impl LibfabricMtAlloc {
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-       
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
-                self.typed_atomic_compare_exchange_op::<T, u8>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, u8>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-                self.typed_atomic_compare_exchange_op::<T, u16>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, u16>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-                self.typed_atomic_compare_exchange_op::<T, u32>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, u32>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-                self.typed_atomic_compare_exchange_op::<T, u64>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, u64>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-                self.typed_atomic_compare_exchange_op::<T, usize>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, usize>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
-                self.typed_atomic_compare_exchange_op::<T, i8>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, i8>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-                self.typed_atomic_compare_exchange_op::<T, i16>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, i16>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-                self.typed_atomic_compare_exchange_op::<T, i32>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, i32>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-                self.typed_atomic_compare_exchange_op::<T, i64>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, i64>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-                self.typed_atomic_compare_exchange_op::<T, isize>(pe, offset, current, new, result, blocking)
+                self.typed_atomic_compare_exchange_op::<T, isize>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else {
                 panic!("Unsupported atomic operation type");
             }

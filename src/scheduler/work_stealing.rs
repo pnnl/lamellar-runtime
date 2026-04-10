@@ -477,7 +477,8 @@ impl LamellarExecutor for WorkStealing {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_task(&self) {
         let mut rng = rand::rng();
-        let t = rand::distr::Uniform::try_from(0..self.work_stealers.len()).expect("error getting uniform distribution");
+        let t = rand::distr::Uniform::try_from(0..self.work_stealers.len())
+            .expect("error getting uniform distribution");
         let ret = if !self.imm_inj.is_empty() {
             self.imm_inj.steal().success()
         } else {

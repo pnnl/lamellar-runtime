@@ -950,7 +950,9 @@ impl<T: Remote> MemoryRegion<T> {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
         trace!("put blocking memregion {:?} index: {:?}", self.alloc, index);
-        self.alloc.inner_alloc.put_blocking(&self.scheduler, data, pe, index)
+        self.alloc
+            .inner_alloc
+            .put_blocking(&self.scheduler, data, pe, index)
     }
 
     pub(crate) unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
@@ -1089,7 +1091,9 @@ impl<T: Remote> MemoryRegion<T> {
         // }
         trace!("get blocking memregion {:?} index: {:?}", self.alloc, index);
 
-        self.alloc.inner_alloc.blocking_get(&self.scheduler, pe, index)
+        self.alloc
+            .inner_alloc
+            .blocking_get(&self.scheduler, pe, index)
     }
 
     //TODO: once we have a reliable asynchronos get wait mechanism, we return a request handle,
@@ -1130,7 +1134,9 @@ impl<T: Remote> MemoryRegion<T> {
             index
         );
 
-        self.alloc.inner_alloc.blocking_get_buffer(&self.scheduler, pe, index, len)
+        self.alloc
+            .inner_alloc
+            .blocking_get_buffer(&self.scheduler, pe, index, len)
     }
 
     pub(crate) unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
@@ -1197,7 +1203,7 @@ impl<T: Remote> MemoryRegion<T> {
             .inner_alloc
             .atomic_op(&self.scheduler, self.counters.clone(), op, pe, index)
     }
-    pub (crate) fn atomic_op_blocking(&self, pe: usize, index: usize, op: AtomicOp<T>) {
+    pub(crate) fn atomic_op_blocking(&self, pe: usize, index: usize, op: AtomicOp<T>) {
         trace!(
             "atomic_op blocking memregion {:?} index: {:?}",
             self.alloc,
@@ -1338,7 +1344,7 @@ impl<T: Remote> MemoryRegion<T> {
     }
 }
 impl<T: Remote + PartialEq> MemoryRegion<T> {
-     pub(crate) fn atomic_compare_exchange(
+    pub(crate) fn atomic_compare_exchange(
         &self,
         pe: usize,
         index: usize,
@@ -1372,9 +1378,13 @@ impl<T: Remote + PartialEq> MemoryRegion<T> {
             self.alloc,
             index
         );
-        self.alloc
-            .inner_alloc
-            .atomic_compare_exchange_blocking(&self.scheduler, current, new, pe, index)
+        self.alloc.inner_alloc.atomic_compare_exchange_blocking(
+            &self.scheduler,
+            current,
+            new,
+            pe,
+            index,
+        )
     }
 }
 

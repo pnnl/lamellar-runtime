@@ -67,8 +67,7 @@ pub struct __LocalLockByteArray {
     pub(crate) array: __UnsafeByteArray,
 }
 
-impl __LocalLockByteArray {
-}
+impl __LocalLockByteArray {}
 
 /// Provides mutable access to a PEs local data to provide "local" indexing while maintaining safety guarantees of the array type.
 ///
@@ -773,10 +772,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalLockArray<T> {
             .expect("PE in team");
         // println!("lock creation {:?}", timer.elapsed());
 
-        LocalLockArray {
-            lock,
-            array,
-        }
+        LocalLockArray { lock, array }
     }
 }
 

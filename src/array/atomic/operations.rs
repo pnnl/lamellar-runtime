@@ -391,9 +391,7 @@ impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for AtomicArray<T> 
         match self {
             AtomicArray::NativeAtomicArray(array) => array.compare_exchange(index, current, new),
             AtomicArray::GenericAtomicArray(array) => array.compare_exchange(index, current, new),
-            AtomicArray::NetworkAtomicArray(array) => {
-                array.compare_exchange(index, current, new)
-            }
+            AtomicArray::NetworkAtomicArray(array) => array.compare_exchange(index, current, new),
         }
     }
 

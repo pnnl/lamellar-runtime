@@ -728,9 +728,7 @@ impl __AtomicByteArray {
     pub(crate) fn num_elems_local(&self) -> usize {
         match self {
             __AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.num_elems_local(),
-            __AtomicByteArray::GenericAtomicByteArray(array) => {
-                array.array.inner.num_elems_local()
-            }
+            __AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.num_elems_local(),
             __AtomicByteArray::NetworkAtomicByteArray(array) => array.array.inner.num_elems_local(),
         }
     }

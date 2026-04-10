@@ -108,14 +108,12 @@ impl LamellarAm for SendAm {
                     buffer.idx_send_buffer.sub_region(start..end),
                 )
                 .await;
-            
+
             let sub_reg = buffer.res_recv_buffer.sub_region(start..end);
 
             let mut t_start = std::time::Instant::now();
 
-            while sub_reg.as_mut_slice()[0]
-                == usize::MAX
-            {
+            while sub_reg.as_mut_slice()[0] == usize::MAX {
                 if t_start.elapsed().as_secs() > 5 {
                     println!(
                         "[pe:{:?} send_am tid:{:?},{:?}] timeout waiting for response from: {} at {} {:?} len: {}",
@@ -131,9 +129,8 @@ impl LamellarAm for SendAm {
                 }
                 async_std::task::yield_now().await;
             }
-            buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[0] =
-                usize::MAX;
-            
+            buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[0] = usize::MAX;
+
             self.buffers[self.remote_pe].lock().await.push_back(buffer);
         }
     }
@@ -199,8 +196,9 @@ impl LamellarAm for MyAm {
             "[pe:{:?}] my_am finished at {} cnt: {} time:{:?} ",
             lamellar::current_pe,
             lamellar::current_pe * self.buffer_size / self.buffer_size,
-            cnt, timer.elapsed()
-         );
+            cnt,
+            timer.elapsed()
+        );
     }
 }
 

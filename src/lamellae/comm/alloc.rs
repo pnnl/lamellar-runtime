@@ -23,7 +23,8 @@ use crate::{
     },
     memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     scheduler::Scheduler,
-    AtomicFetchOpHandle, AtomicOpHandle, AtomicCompareExchangeOpHandle, Deserialize, RdmaHandle, Remote, Serialize,
+    AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, Deserialize, RdmaHandle,
+    Remote, Serialize,
 };
 
 use derive_more::{Add, Into, Sub};
@@ -498,7 +499,13 @@ impl CommAllocRdma for CommAllocInner {
             }
         }
     }
-    fn put_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         match self {
             CommAllocInner::Raw(_addr, _size) => {
                 panic!("Raw allocation not supported")
@@ -1247,7 +1254,13 @@ impl CommAllocRdma for CommAllocInner {
             }
         }
     }
-    fn blocking_get_buffer<T: Remote>(&self, scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         match self {
             CommAllocInner::Raw(_addr, _size) => {
                 panic!("Raw allocation not supported")
@@ -1595,7 +1608,13 @@ impl CommAllocAtomic for CommAllocInner {
             }
         }
     }
-    fn atomic_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         match self {
             CommAllocInner::Raw(_addr, _size) => {
                 panic!("Raw allocation not supported")
@@ -1654,7 +1673,7 @@ impl CommAllocAtomic for CommAllocInner {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
-            CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => { 
+            CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
         }
@@ -1928,7 +1947,13 @@ impl CommAllocAtomic for CommAllocInner {
             }
         }
     }
-    fn atomic_fetch_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T {
         match self {
             CommAllocInner::Raw(_addr, _size) => {
                 panic!("Raw allocation not supported")
@@ -2224,7 +2249,13 @@ impl CommAllocRdma for CommAlloc {
     ) -> RdmaHandle<T> {
         self.inner_alloc.put(scheduler, counters, src, pe, offset)
     }
-    fn put_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         self.inner_alloc.put_blocking(scheduler, src, pe, offset)
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -2301,8 +2332,15 @@ impl CommAllocRdma for CommAlloc {
         self.inner_alloc
             .get_buffer(scheduler, counters, pe, offset, len)
     }
-    fn blocking_get_buffer<T: Remote>(&self, scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
-        self.inner_alloc.blocking_get_buffer(scheduler, pe, offset, len)
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
+        self.inner_alloc
+            .blocking_get_buffer(scheduler, pe, offset, len)
     }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
@@ -2322,7 +2360,8 @@ impl CommAllocRdma for CommAlloc {
         offset: usize,
         dst: LamellarBuffer<T, B>,
     ) {
-        self.inner_alloc.blocking_get_into_buffer(scheduler, pe, offset, dst)
+        self.inner_alloc
+            .blocking_get_into_buffer(scheduler, pe, offset, dst)
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,

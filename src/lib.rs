@@ -287,7 +287,9 @@ pub mod env_var;
 pub use env_var::config;
 
 pub use crate::lamellae::Backend;
-pub use crate::lamellae::{AtomicFetchOpHandle, AtomicOpHandle, AtomicCompareExchangeOpHandle, RdmaHandle};
+pub use crate::lamellae::{
+    AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, RdmaHandle,
+};
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 // //#[doc(hidden)]
 pub use crate::lamellar_task_group::{
@@ -308,14 +310,11 @@ pub use crate::scheduler::LamellarTask;
 pub use lamellar_impl::Dist;
 // use lamellar_impl;
 
-
-#[cfg(feature="enable-lamellar-main")]
+#[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::main;
 
 #[cfg(feature = "enable-lamellar-main")]
 pub extern crate prrte_sys;
-
-
 
 //#[doc(hidden)]
 pub use inventory;
@@ -334,7 +333,11 @@ pub use custom_derive;
 pub use newtype_derive;
 
 lazy_static! {
-    pub(crate) static ref BINCODE: bincode::config::Configuration<bincode::config::LittleEndian, bincode::config::Fixint, bincode::config::NoLimit> = bincode::config::legacy();
+    pub(crate) static ref BINCODE: bincode::config::Configuration<
+        bincode::config::LittleEndian,
+        bincode::config::Fixint,
+        bincode::config::NoLimit,
+    > = bincode::config::legacy();
 }
 
 // use std::sync::atomic::AtomicUsize;
@@ -392,7 +395,7 @@ where
 /// Wrapper function for serializing an object into a buffer
 pub fn serialize_into<T>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
 where
-    T: serde::Serialize
+    T: serde::Serialize,
 {
     // let start = std::time::Instant::now();
     let mut cursor = Cursor::new(buf);

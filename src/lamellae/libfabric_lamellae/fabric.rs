@@ -3,7 +3,7 @@ use libfabric::{
     av_set::AddressVectorSetBuilder,
     cntr::{Counter, CounterBuilder, ReadCntr, WaitCntr},
     comm::{
-        atomic::{AtomicFetchEp, AtomicValidEp, AtomicWriteEp, AtomicCASEp},
+        atomic::{AtomicCASEp, AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp},
         rma::{ReadEp, WriteEp},
     },
@@ -52,7 +52,6 @@ use std::{
     },
 };
 use tracing::{debug, trace};
-
 
 type WaitableEq = libfabric::eq_caps_type!(EqCaps::WAIT);
 type WaitableCq = libfabric::cq_caps_type!(CqCaps::WAIT);
@@ -377,7 +376,6 @@ impl std::fmt::Debug for Ofi {
 
 impl Ofi {
     pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> FabricResult<Arc<Self>> {
-        
         let my_pmi = Arc::new(PmiX::new().map_err(|e| {
             eprintln!("Error initializing PMI: {:?}", e);
             FabricError::InitError(1)
@@ -392,7 +390,9 @@ impl Ofi {
             if let Some(total_bytes) = node_total_memory_bytes() {
                 env::set_var("FI_MR_CACHE_MAX_SIZE", total_bytes.to_string());
             } else {
-                eprintln!("Warning: unable to determine total system memory for FI_MR_CACHE_MAX_SIZE");
+                eprintln!(
+                    "Warning: unable to determine total system memory for FI_MR_CACHE_MAX_SIZE"
+                );
             }
         }
 
@@ -637,7 +637,10 @@ impl Ofi {
                     cg.ep.atomicvalid::<T>(AtomicOp::Band).is_ok()
                         && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Band).is_ok()
                 }
-                AtomicOpKind::Read => cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::AtomicRead).is_ok(),
+                AtomicOpKind::Read => cg
+                    .ep
+                    .fetch_atomicvalid::<T>(FetchAtomicOp::AtomicRead)
+                    .is_ok(),
                 AtomicOpKind::Write => {
                     cg.ep.atomicvalid::<T>(AtomicOp::AtomicWrite).is_ok()
                         && cg
@@ -645,7 +648,10 @@ impl Ofi {
                             .fetch_atomicvalid::<T>(FetchAtomicOp::AtomicWrite)
                             .is_ok()
                 }
-                AtomicOpKind::Cas => cg.ep.compare_atomicvalid::<T>(CompareAtomicOp::Cswap).is_ok(),
+                AtomicOpKind::Cas => cg
+                    .ep
+                    .compare_atomicvalid::<T>(CompareAtomicOp::Cswap)
+                    .is_ok(),
             }
         }
     }
@@ -866,7 +872,7 @@ impl Ofi {
         trace!(target: "libfabric", "Full Allocating aligned size: {} aligned", aligned_size);
         #[cfg(not(feature = "enable-on-node-shmem"))]
         let (mem, mem_base_ptr) = {
-            let  mmap = memmap::MmapOptions::new()
+            let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
                 .expect(&format!(
@@ -1004,7 +1010,7 @@ impl Ofi {
 
         #[cfg(not(feature = "enable-on-node-shmem"))]
         let (mem, mem_base_ptr) = {
-            let  mmap = memmap::MmapOptions::new()
+            let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
                 .expect("Error in allocating aligned memory");
@@ -1547,11 +1553,7 @@ impl LibfabricAlloc {
     unsafe fn negate_atomic_value<OFI>(value: *mut OFI) {
         let num_bytes = std::mem::size_of::<OFI>();
         let mut bytes = vec![0u8; num_bytes];
-        std::ptr::copy(
-            value.cast::<u8>(),
-            bytes.as_mut_ptr(),
-            num_bytes,
-        );
+        std::ptr::copy(value.cast::<u8>(), bytes.as_mut_ptr(), num_bytes);
         for byte in bytes.iter_mut() {
             *byte = !*byte;
         }
@@ -2165,9 +2167,10 @@ impl LibfabricAlloc {
         let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
-       
         match op {
-            LamellarAtomicOp::Sub(src) => Self::negate_atomic_value(src.as_mut().get_unchecked_mut()),
+            LamellarAtomicOp::Sub(src) => {
+                Self::negate_atomic_value(src.as_mut().get_unchecked_mut())
+            }
             LamellarAtomicOp::FetchMin(_)
             | LamellarAtomicOp::FetchMax(_)
             | LamellarAtomicOp::FetchSum(_)
@@ -2255,7 +2258,9 @@ impl LibfabricAlloc {
         let cg = &self.ofi.comm_group;
 
         match op {
-            LamellarAtomicOp::FetchSub(src) => Self::negate_atomic_value(src.as_mut().get_unchecked_mut()),
+            LamellarAtomicOp::FetchSub(src) => {
+                Self::negate_atomic_value(src.as_mut().get_unchecked_mut())
+            }
             LamellarAtomicOp::Min(_)
             | LamellarAtomicOp::Max(_)
             | LamellarAtomicOp::Sum(_)
@@ -2269,10 +2274,10 @@ impl LibfabricAlloc {
             LamellarAtomicOp::Cas(_, _) => {
                 panic!("Compare atomic ops must use the compare path")
             }
-            _ => {},
+            _ => {}
         };
         let src = op.src() as *const OFI;
-        let buf = std::slice::from_raw_parts(src , 1);
+        let buf = std::slice::from_raw_parts(src, 1);
         cg.post_get(blocking, || {
             cg.ep.fetch_atomic_from(
                 buf,
