@@ -170,10 +170,7 @@ impl<T: Remote> Future for LibfabricAtomicFetchFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        if !self.local_op {
-            self.alloc.ofi.wait_all().unwrap();
-        }
-
+        self.alloc.ofi.wait_all().unwrap();
         Poll::Ready(*self.result)
     }
 }
