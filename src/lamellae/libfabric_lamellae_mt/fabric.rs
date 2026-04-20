@@ -26,15 +26,14 @@ use libfabric::{
 };
 
 use crate::{
-    lamellae::{
-        comm::alloc::*,
-        comm::error::{AllocError, AllocResult, FabricError, FabricResult},
-        AllocationType, AtomicOp as LamellarAtomicOp,
-    },
-    lamellar_alloc::{BTreeAlloc, LamellarAlloc},
-    LAMELLAR_THREAD_ID,
+    LAMELLAR_THREAD_ID, lamellae::{
+        AllocationType, AtomicOp as LamellarAtomicOp, CollectiveOpKind, collective::{AllReduceOp, ReduceOp}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}
+    }, lamellar_alloc::{BTreeAlloc, LamellarAlloc}
 };
 
+use crate::{
+    lamellae::{
+        collective::{ReduceOp as LamellarReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}}};
 use parking_lot::{RwLock,Mutex};
 use pmi::{pmi::Pmi, pmi::PmiBuilder};
 use std::{
@@ -86,6 +85,8 @@ struct CommGroup{
     info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
+    coll_cnt_issued: AtomicU64,
+    coll_cnt_completed: AtomicU64,
 }
 
 pub(crate) struct Ofi {
@@ -128,10 +129,10 @@ impl CommGroup {
     }
 
     pub(crate) fn progress(&self) -> Result<(), libfabric::error::Error> {
-        let cq_res = self.cq.read(0);
+        let cq_res = self.cq.read(1);
 
         match cq_res {
-            Ok(_) => Ok(()),
+            Ok(_) => {self.coll_cnt_completed.fetch_add(1, Ordering::SeqCst); Ok(())},
             Err(err) => {
                 if !matches!(err.kind, libfabric::error::ErrorKind::TryAgain) {
                     Err(err)
@@ -183,6 +184,9 @@ impl CommGroup {
         trace!("wait_all put done");
         self.wait_for_rx_cntr()?;
         trace!("wait_all done");
+        self.wait_for_collectives()?;
+        trace!("wait_all collective done");
+
         Ok(())
     }
 
@@ -192,6 +196,20 @@ impl CommGroup {
 
     fn wait_for_rx_cntr(&self) -> Result<(), libfabric::error::Error> {
         self.wait_for_cntr(&self.get_cnt, &self.get_cntr, "rx")
+    }
+
+    fn wait_for_collectives(&self) -> Result<(), libfabric::error::Error> {
+
+        while self.coll_cnt_completed.load(Ordering::SeqCst) <  self.coll_cnt_issued.load(Ordering::SeqCst) {
+            if let Err(err) = self.progress() {
+                        match err.kind {
+                            libfabric::error::ErrorKind::TryAgain => {}
+                            _ => return Err(err),
+                        }
+                    }
+            std::thread::yield_now();
+        }
+        Ok(())
     }
 
     fn wait_for_cntr(
@@ -295,6 +313,36 @@ impl CommGroup {
             self.get_cntr.wait(new_cnt, -1)?;
         }
         Ok(new_cnt)
+    }
+    
+    fn post_collective(
+        &self,
+        blocking: bool,
+        mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
+    ) -> Result<(), libfabric::error::Error> {
+
+        let cnt = self.coll_cnt_issued.fetch_add(1, Ordering::SeqCst) + 1;
+        loop {
+            match fun() {
+                Ok(_) => break,
+                Err(error) => {
+                    if matches!(error.kind, libfabric::error::ErrorKind::TryAgain) {
+                        self.progress()?;
+                    } else {
+                        return Err(error);
+                    }
+                }
+            }
+        }
+        if blocking {
+            loop {
+                if self.coll_cnt_completed.load(Ordering::SeqCst) >= cnt {
+                    break;
+                }
+                self.progress()?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -466,6 +514,8 @@ impl Ofi {
                 cq,
                 put_cntr,
                 get_cntr,
+                coll_cnt_completed: AtomicU64::new(0),
+                coll_cnt_issued: AtomicU64::new(0),
                 av,
                 eq,
                 info_entry: info_entry.clone(),
@@ -632,6 +682,154 @@ impl Ofi {
         } else if id == std::any::TypeId::of::<isize>() {
             self.atomic_op_avail_inner::<isize>(op_kind)
         } else {
+            false
+        }
+    }
+
+
+    pub(crate) fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
+        match op {
+            CollectiveOpKind::Barrier => self.barrier_avail(),
+            CollectiveOpKind::AllToAll => self.collective_data_op_avail::<T>(CollectiveOp::AllToAll, None),
+            CollectiveOpKind::Broadcast => self.collective_data_op_avail::<T>(CollectiveOp::Broadcast, None),
+            CollectiveOpKind::AllGather => self.collective_data_op_avail::<T>(CollectiveOp::AllGather, None),
+            CollectiveOpKind::Gather => self.collective_data_op_avail::<T>(CollectiveOp::Gather, None),
+            CollectiveOpKind::AllReduce(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::AllReduce, Some(reduce_op)),
+            CollectiveOpKind::Reduce(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::Reduce, Some(reduce_op)),
+            CollectiveOpKind::ReduceScatter(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::ReduceScatter, Some(reduce_op)),
+            CollectiveOpKind::Scatter => self.collective_data_op_avail::<T>(CollectiveOp::Scatter, None),
+        }
+    }
+
+    pub(crate) fn barrier_avail(&self) -> bool {
+        self.domain
+            .query_collective(CollectiveOp::Barrier, &mut CollectiveAttr::<()>::new())
+            .is_ok()
+    }
+
+    fn collective_data_op_avail<T: 'static>(&self, data_op: CollectiveOp, reduce_op: Option<ReduceOp>) -> bool {
+        let id = std::any::TypeId::of::<T>();
+        if id == std::any::TypeId::of::<u8>() {
+            let mut attr = CollectiveAttr::<u8>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<u16>() {
+            let mut attr = CollectiveAttr::<u16>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<u32>() {
+            let mut attr = CollectiveAttr::<u32>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<u64>() {
+            let mut attr = CollectiveAttr::<u64>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<i8>() {
+            let mut attr = CollectiveAttr::<i8>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<i16>() {
+            let mut attr = CollectiveAttr::<i16>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<i32>() {
+            let mut attr = CollectiveAttr::<i32>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<i64>() {
+            let mut attr = CollectiveAttr::<i64>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<usize>() {
+            let mut attr = CollectiveAttr::<usize>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<isize>() {
+            let mut attr = CollectiveAttr::<isize>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else {
             false
         }
     }
@@ -824,6 +1022,10 @@ impl Ofi {
         let remote_alloc_infos = self
             .collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), &mem, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+        
+        let mcast_group = self.create_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+
         let alloc = LibfabricMtAlloc::new(
             self.clone(),
             Arc::new(mem),
@@ -832,6 +1034,7 @@ impl Ofi {
             data_size,
             padding,
             self.alloc_manager.clone(),
+            Some(mcast_group),
         )
         .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         self.alloc_manager.insert(alloc.clone());
@@ -895,6 +1098,9 @@ impl Ofi {
         let remote_alloc_infos = self
             .collective_exchange_mr_info(pes, &mem, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+        
+        let mcast_group = self.create_mc_group(pes)
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
         let alloc = LibfabricMtAlloc::new(
             self.clone(),
@@ -904,6 +1110,7 @@ impl Ofi {
             data_size,
             padding,
             self.alloc_manager.clone(),
+            Some(mcast_group),
         )
         .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         self.alloc_manager.insert(alloc.clone());
@@ -1290,6 +1497,7 @@ pub(crate) struct LibfabricMtAlloc {
     rt_ref_cnt_offset: usize,
     id: usize,
     alloc_table: AllocTable,
+    mcast_group: Option<MultiCastGroup>,
     pub(crate) print: bool,
 }
 
@@ -1366,6 +1574,7 @@ impl Clone for LibfabricMtAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
             id: self.id,
             alloc_table: self.alloc_table.clone(),
+            mcast_group: self.mcast_group.clone(),
             print: self.print,
         }
     }
@@ -1421,6 +1630,7 @@ impl LibfabricMtAlloc {
         num_bytes: usize,
         padding: usize,
         alloc_table: Arc<AllocInfoManager>,
+        mcast_group: Option<MultiCastGroup>,
     ) -> Result<Self, libfabric::error::Error> {
         let start = mem.as_ptr() as usize;
         let end = start + num_bytes; //mem.len();
@@ -1439,6 +1649,7 @@ impl LibfabricMtAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Fabric(alloc_table),
+            mcast_group: mcast_group,
             print: false,
         };
         //initialize ref count to 1
@@ -1480,6 +1691,7 @@ impl LibfabricMtAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             id,
             alloc_table: self.alloc_table.clone(),
+            mcast_group: self.mcast_group.clone(),
             print: self.print,
         };
         debug!(target: "libfabric", "Created Libfabric sub-allocation: {:?}", alloc);
@@ -1524,6 +1736,7 @@ impl LibfabricMtAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start + offset, alloc_manager),
+            mcast_group: self.mcast_group.clone(),
             print: self.print,
         };
 
@@ -1563,6 +1776,7 @@ impl LibfabricMtAlloc {
             remote_allocs: self.remote_allocs.clone(),
             id: self.id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start, alloc_manager),
+            mcast_group: self.mcast_group.clone(),
             print: true,
         };
         get_ref_count(unsafe {
@@ -1612,6 +1826,15 @@ impl LibfabricMtAlloc {
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.start() as *mut T,
+                self.num_bytes() / std::mem::size_of::<T>(),
+            )
+        }
+    }
+
+    pub(crate) unsafe fn as_slice<T: Copy>(&self) -> &[T] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.start() as *const T,
                 self.num_bytes() / std::mem::size_of::<T>(),
             )
         }
@@ -2159,6 +2382,533 @@ impl LibfabricMtAlloc {
                 &remote_key,
             )
         })?;
+
+        Ok(())
+    }
+
+    pub(crate) fn allreduce_inplace_inner<T: 'static>(        
+        &self,
+        op: &AllReduceOp,
+        src_and_result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let dst = unsafe {std::slice::from_raw_parts_mut(src_and_result.as_mut_ptr(), src_and_result.len())};
+        self.allreduce_inner(op, src_and_result, dst, blocking)
+    }
+
+    pub(crate) fn allreduce_inner<T: 'static>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_allreduce::<T, u8>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_allreduce::<T, u16>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_allreduce::<T, u32>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_allreduce::<T, u64>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_allreduce::<T, usize>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_allreduce::<T, i8>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_allreduce::<T, i16>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_allreduce::<T, i32>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_allreduce::<T, i64>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_allreduce::<T, isize>(op, src, result, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_allreduce<T, OFI: AsFiType>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+        let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+        cg.post_collective(blocking, || {
+                cg.ep.allreduce(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    op.into(),
+                    CollectiveOptions::default(),
+                )
+            }
+        )?;
+
+        Ok(())
+    }
+
+
+    pub(crate) fn allgather_inner<T: 'static>(
+        &self,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_allgather::<T, u8>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_allgather::<T, u16>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_allgather::<T, u32>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_allgather::<T, u64>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_allgather::<T, usize>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_allgather::<T, i8>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_allgather::<T, i16>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_allgather::<T, i32>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_allgather::<T, i64>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_allgather::<T, isize>(src, result, blocking)
+            } else {
+                panic!("Unsupported allgather operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_allgather<T, OFI: AsFiType>(
+        &self,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+        let mc = self.mcast_group.as_ref().expect("No multicast group for allgather");
+        cg.post_collective(blocking, || {
+                cg.ep.allgather(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    CollectiveOptions::default(),
+                )
+            }
+        )?;
+
+        Ok(())
+    }
+
+    pub(crate) fn alltoall_inner<T: 'static>(
+        &self,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_alltoall::<T, u8>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_alltoall::<T, u16>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_alltoall::<T, u32>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_alltoall::<T, u64>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_alltoall::<T, usize>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_alltoall::<T, i8>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_alltoall::<T, i16>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_alltoall::<T, i32>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_alltoall::<T, i64>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_alltoall::<T, isize>(src, result, blocking)
+            } else {
+                panic!("Unsupported alltoall operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_alltoall<T, OFI: AsFiType>(
+        &self,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+        let mc = self.mcast_group.as_ref().expect("No multicast group for alltoall");
+        cg.post_collective(blocking, || {
+                cg.ep.alltoall(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    CollectiveOptions::default(),
+                )
+            }
+        )?;
+
+        Ok(())
+    }
+
+    pub(crate) fn reduce_inner<T: 'static>(
+        &self,
+        op: &LamellarReduceOp,
+        src: &[T],
+        slice_or_pe: RootOrSliceMut<T>,
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_reduce::<T, u8>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_reduce::<T, u16>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_reduce::<T, u32>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_reduce::<T, u64>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_reduce::<T, usize>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_reduce::<T, i8>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_reduce::<T, i16>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_reduce::<T, i32>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_reduce::<T, i64>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_reduce::<T, isize>(op, src, slice_or_pe, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_reduce<T, OFI: AsFiType>(
+        &self,
+        op: &LamellarReduceOp,
+        src: &[T],
+        slice_or_pe: RootOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (result, root_pe) = match slice_or_pe {
+            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+            RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+        };
+        
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let res = match result {
+            Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+            None => {
+                let res_buf = unsafe {std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}; // if result is None, we are doing an in-place reduce or we reduce on a non-root PE, so we can reuse the source buffer as the destination buffer since it is either the destination or will be ignored by non-root PEs
+                unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
+            }
+        };
+        cg.post_collective(blocking, || {
+                cg.ep.reduce(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    &cg.mapped_addresses[root_pe],
+                    op.into(),
+                    CollectiveOptions::default(),
+                )
+            }
+        )?;
+
+        Ok(())
+    }
+
+    pub(crate) fn gather_inner<T: 'static>(
+        &self,
+        src: &[T],
+        slice_or_pe: RootOrSliceMut<T>,
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_gather::<T, u8>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_gather::<T, u16>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_gather::<T, u32>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_gather::<T, u64>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_gather::<T, usize>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_gather::<T, i8>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_gather::<T, i16>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_gather::<T, i32>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_gather::<T, i64>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_gather::<T, isize>(src, slice_or_pe, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_gather<T, OFI: AsFiType>(
+        &self,
+        src: &[T],
+        slice_or_pe: RootOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (result, root_pe) = match slice_or_pe {
+            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+            RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+        };
+        let res = match result {
+            Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+            None => {
+                let res_buf = unsafe {std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}; // if result is None, we are a non-root PE, so we can reuse the source buffer as the destination buffer since it will be ignored.
+                unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
+            }
+        };
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        cg.post_collective(blocking, || {
+                cg.ep.gather(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    &cg.mapped_addresses[root_pe],
+                    CollectiveOptions::default(),
+                )
+            }
+        )?;
+
+        Ok(())
+    }
+
+    pub(crate) fn broadcast_inner<T: 'static>(
+        &self,
+        root_src: RootSrcOrSliceMut<T>,
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_broadcast::<T, u8>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_broadcast::<T, u16>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_broadcast::<T, u32>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_broadcast::<T, u64>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_broadcast::<T, usize>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_broadcast::<T, i8>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_broadcast::<T, i16>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_broadcast::<T, i32>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_broadcast::<T, i64>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_broadcast::<T, isize>(root_src, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_broadcast<T, OFI: AsFiType>(
+        &self,
+        slice_or_pe: RootSrcOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (result, root_pe) = match slice_or_pe {
+            RootSrcOrSliceMut::Root(src) => (unsafe{std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}, self.ofi.my_pe) ,
+            RootSrcOrSliceMut::NotRoot(result, root_pe) => (result, root_pe),
+        };
+        let res = unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(result)};
+        cg.post_collective(blocking, || {
+                cg.ep.broadcast(
+                    res,
+                    None,
+                    mc,
+                    &cg.mapped_addresses[root_pe],
+                    CollectiveOptions::default(),
+                )
+            }
+        )?;
+
+        Ok(())
+    }
+
+    pub(crate) fn scatter_inner<T: 'static>(
+        &self,
+        res: &mut [T],
+        src_or_root_pe: RootSrcSliceOrNone<'_, T>,
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_scatter::<T, u8>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_scatter::<T, u16>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_scatter::<T, u32>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_scatter::<T, u64>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_scatter::<T, usize>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_scatter::<T, i8>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_scatter::<T, i16>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_scatter::<T, i32>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_scatter::<T, i64>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_scatter::<T, isize>(res, src_or_root_pe, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_scatter<T, OFI: AsFiType>(
+        &self,
+        res: &mut [T],
+        src_or_root_pe: RootSrcSliceOrNone<'_, T>,
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+
+        let res = unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)};
+        
+        let (src, root_pe) = match src_or_root_pe {
+            RootSrcSliceOrNone::Root(src) => (unsafe { std::mem::transmute::<&[T], &[OFI]>(src) }, self.ofi.my_pe),
+            RootSrcSliceOrNone::NotRoot(root_pe) => (unsafe {std::slice::from_raw_parts(res.as_ptr(), res.len())}, root_pe),
+        };
+
+
+        cg.post_collective(blocking, || {
+                cg.ep.scatter(
+                    src,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    &cg.mapped_addresses[root_pe],
+                    CollectiveOptions::default(),
+                )
+            }
+        )?;
+
+        Ok(())
+    }
+
+    pub(crate) fn reduce_scatter_inner<T: 'static>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_reduce_scatter::<T, u8>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_reduce_scatter::<T, u16>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_reduce_scatter::<T, u32>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_reduce_scatter::<T, u64>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_reduce_scatter::<T, usize>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_reduce_scatter::<T, i8>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_reduce_scatter::<T, i16>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_reduce_scatter::<T, i32>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_reduce_scatter::<T, i64>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_reduce_scatter::<T, isize>(op, src, result, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_reduce_scatter<T, OFI: AsFiType>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+        let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+        cg.post_collective(blocking, || {
+                cg.ep.reduce_scatter(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    op.into(),
+                    CollectiveOptions::default(),
+                )
+            }
+        )?;
 
         Ok(())
     }

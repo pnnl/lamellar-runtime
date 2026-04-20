@@ -12,12 +12,9 @@ use memory_region::{MemoryHandle, MemoryHandleInner, RKey};
 use worker::Worker;
 
 use crate::{
-    lamellae::{
-        comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
-        CommAllocAddr, CommAllocInner, CommAllocType, FabricError,
-    },
-    lamellar_alloc::{BTreeAlloc, LamellarAlloc},
-    LAMELLAR_THREAD_ID,
+    LAMELLAR_THREAD_ID, config, lamellae::{
+        AllocError, AllocResult, AllocationType, AtomicOp, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, FabricError, collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, comm::alloc::*, ucx_lamellae_mt::ucc::{self, Error, UccContext, UccLib, UccRequest, UccTeam}
+    }, lamellar_alloc::{BTreeAlloc, LamellarAlloc}
 };
 
 use pmi::{pmi::Pmi, PmiBuilder};
@@ -34,6 +31,9 @@ use tracing::{debug, trace};
 pub(crate) struct CommGroup {
     worker: Arc<Worker>,
     endpoints: Vec<Arc<Endpoint>>,
+    ucc_world_team: Option<Arc<UccTeam>>,
+    ucc_context: Option<Arc<UccContext>>,
+    ucc_world_buffer: Option<Arc<UcxMtAlloc>>,
 }
 
 pub(crate) struct UcxWorld {
@@ -77,7 +77,15 @@ impl UcxWorld {
                 .iter()
                 .map(|a| Endpoint::new(worker.clone(), a).unwrap())
                 .collect::<Vec<_>>();
-            comm_groups.push(CommGroup { worker, endpoints });
+                
+            let cg = CommGroup { 
+                worker, 
+                endpoints, 
+                ucc_context: None, 
+                ucc_world_team: None, 
+                ucc_world_buffer: None
+            };
+            comm_groups.push(cg);
         }
         let utility_comm_group = comm_groups.last().unwrap().clone();
 
@@ -103,7 +111,7 @@ impl UcxWorld {
             my_pe,
             num_pes,
         );
-        UcxWorld {
+        let mut world = UcxWorld {
             pmi: my_pmi,
             my_pe,
             num_pes,
@@ -113,7 +121,26 @@ impl UcxWorld {
             mem_handles,
             remote_keys,
             exchange_buffer: Some(exchange_buffer),
+        };
+        for tid in 0..num_threads {
+        
+            let alloc = Arc::new(world.alloc(config().ucc_oob_init_buffer_size * num_pes, 8, AllocationType::Global));
+            world.comm_groups[tid].ucc_world_buffer = Some(alloc.clone());
+
+            unsafe { alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX) };
+            world.barrier();
+            let ucc_lib = Arc::new(UccLib::new());
+            let ucc_context = Arc::new(UccContext::new(ucc_lib.clone(), alloc.clone()).unwrap());
+            world.barrier();
+            unsafe { alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX) };
+            world.barrier();
+            let ucc_world_team = UccTeam::new(my_pe, &(0..num_pes).collect::<Vec<_>>(), ucc_context.clone(), alloc.clone()).unwrap();
+            world.comm_groups[tid].ucc_world_team = Some(Arc::new(ucc_world_team));
+            world.comm_groups[tid].ucc_context = Some(ucc_context);
+
         }
+
+        world
     }
 
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
@@ -165,7 +192,16 @@ impl UcxWorld {
                 | AtomicOp::FetchBitAnd(_)
         )
     }
-
+    pub(crate) fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
+        if self.utility_comm_group.ucc_context.is_none() {
+            return false; // [TODO] Need to implement UCC
+        }
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<()>() {
+            assert!(matches!(op, CollectiveOpKind::Barrier));
+            return true;
+        }
+        self.atomic_avail::<T>()
+    }
     fn initial_alloc(
         context: &Arc<Context>,
         util_endpoints: &Vec<Arc<Endpoint>>,
@@ -419,6 +455,13 @@ impl UcxWorld {
 
 impl Drop for UcxWorld {
     fn drop(&mut self) {
+
+        for comm_group in self.comm_groups.iter_mut() {
+            comm_group.ucc_world_team.take();
+            comm_group.ucc_context.take();
+            comm_group.ucc_world_buffer.take();
+        }
+
         debug!("dropping ucx world");
         self.barrier();
         self.exchange_buffer.take();
@@ -1061,8 +1104,248 @@ impl UcxMtAlloc {
         }
     }
 
-    pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
+    pub(crate) fn allgather_inner<T: Copy + 'static>(
+        &self,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            let req = ucc_team
+                .allgather(src, result)?;
+
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for allgather");
+        }
+    }
+
+
+    pub(crate) fn allreduce_inner<T: Copy + 'static>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            let req = ucc_team
+                .allreduce(src, result, op.clone())?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for allreduce");
+        }
+    }
+
+    pub(crate) fn allreduce_inplace_inner<T: Copy + 'static>(
+        &self,
+        op: &AllReduceOp,
+        src_and_result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        let src = unsafe { std::slice::from_raw_parts(src_and_result.as_ptr(), src_and_result.len()) };
+        self.allreduce_inner(op, src, src_and_result, blocking)
+    }
+
+    pub(crate) fn alltoall_inner<T: Copy + 'static>(
+        &self,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            let req = ucc_team.alltoall(src, result)?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for alltoall");
+        }
+    }
+
+    pub(crate) fn reduce_inner<T: Copy + 'static>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        slice_or_pe: RootOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            let (result, root_pe) = match slice_or_pe {
+                RootOrSliceMut::Root(result) => (Some(result), self.my_pe),
+                RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+            };
+            let res = match result {
+                Some(res) => res,
+                None => unsafe {
+                    std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())
+                },
+            };
+
+            let req = ucc_team.reduce(src, res, root_pe, op.clone())?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for reduce");
+        }
+    }
+
+    pub(crate) fn gather_inner<T: Copy + 'static>(
+        &self,
+        src: &[T],
+        slice_or_pe: RootOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            let (result, root_pe) = match slice_or_pe {
+                RootOrSliceMut::Root(result) => (Some(result), self.my_pe),
+                RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+            };
+            let res = match result {
+                Some(res) => res,
+                None => unsafe {
+                    std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())
+                },
+            };
+
+            let req = ucc_team.gather(src, res, root_pe)?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for gather");
+        }
+    }
+
+    pub(crate) fn broadcast_inner<T: Copy + 'static>(
+        &self,
+        root_src: RootSrcOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            let (res, root_pe) = match root_src {
+                RootSrcOrSliceMut::Root(src) => {
+                    (unsafe { std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len()) }, self.my_pe)
+                }
+                RootSrcOrSliceMut::NotRoot(result, root_pe) => (result, root_pe),
+            };
+
+            let src = unsafe { std::slice::from_raw_parts(res.as_ptr(), res.len()) };
+            let req = ucc_team.broadcast(src, res, root_pe)?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for broadcast");
+        }
+    }
+
+    pub(crate) fn scatter_inner<T: Copy + 'static>(
+        &self,
+        res: &mut [T],
+        src_or_root_pe: RootSrcSliceOrNone<'_, T>,
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            let (src, root_pe) = match src_or_root_pe {
+                RootSrcSliceOrNone::Root(src) => (src, self.my_pe),
+                RootSrcSliceOrNone::NotRoot(root_pe) => {
+                    (unsafe { std::slice::from_raw_parts(res.as_ptr(), res.len()) }, root_pe)
+                }
+            };
+
+            let req = ucc_team.scatter(src, res, root_pe)?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for scatter");
+        }
+    }
+
+    pub(crate) fn reduce_scatter_inner<T: Copy + 'static>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            let req = ucc_team.reduce_scatter(src, result, op.clone())?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for reduce_scatter");
+        }
+    }
+
+    pub(crate) unsafe fn as_mut_slice<T>(&self) -> &mut [T] {
         self.mem.as_mut_slice()
+    }
+
+    pub(crate) unsafe fn as_slice<T>(&self) -> &[T] {
+        self.mem.as_slice()
+    }
+
+    pub(crate) fn wait_ucc_request(&self, req: &UccRequest) -> Result<(), ucc::Error> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            while let Err(err) = req.test() {
+                if !matches!(err, Error::Inprogress) {
+                    return Err(err);
+                } 
+                ucc_team.context.progress()?;
+            }
+            Ok(())
+        }
+        else {
+            panic!("UCC team not initialized for waiting on UCC request");
+        }
+    }
+
+    pub(crate) fn wait_ucc_all(&self) {
+        for comm_group in &self.comm_groups {
+            if let Some(ucc_team) = &comm_group.ucc_world_team {
+                loop {
+                    ucc_team.context.progress().unwrap();
+                    let completed = ucc_team.req_completed.load(std::sync::atomic::Ordering::SeqCst);
+                    let pending = ucc_team.req_pending.load(std::sync::atomic::Ordering::SeqCst);
+                    if completed == pending {
+                        break;
+                    }
+                    std::thread::yield_now();
+                }
+            }
+        }
     }
 
     pub(crate) fn wait_all(&self) {
@@ -1072,6 +1355,8 @@ impl UcxMtAlloc {
                 .wait_all()
                 .expect("UcxMtAlloc::wait_all failed waiting on UCX requests");
         }
+
+        self.wait_ucc_all();
     }
 
     pub(crate) fn thread_wait(&self) {
@@ -1079,6 +1364,18 @@ impl UcxMtAlloc {
             .worker
             .wait_all()
             .expect("UcxMtAlloc::thread_wait failed waiting on UCX requests");
+
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            loop {
+                ucc_team.context.progress().unwrap();
+                let completed = ucc_team.req_completed.load(std::sync::atomic::Ordering::SeqCst);
+                let pending = ucc_team.req_pending.load(std::sync::atomic::Ordering::SeqCst);
+                if completed == pending {
+                    break;
+                }
+                std::thread::yield_now();
+            }
+        }
     }
 
     pub(crate) fn wait(&self) {
@@ -1088,6 +1385,7 @@ impl UcxMtAlloc {
                 .wait_all()
                 .expect("UcxMtAlloc::wait_all failed waiting on UCX requests");
         }
+        self.wait_ucc_all();
     }
 }
 

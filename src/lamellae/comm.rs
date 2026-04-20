@@ -30,8 +30,7 @@ use crate::lamellae::ucx_lamellae::comm::UcxComm;
 #[cfg(feature = "enable-ucx-mt")]
 use crate::lamellae::ucx_lamellae_mt::comm::UcxMtComm;
 use crate::lamellae::{
-    local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType,
-    SerializedData,
+    collective::ReduceOp, local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType, SerializedData
 };
 
 use enum_dispatch::enum_dispatch;
@@ -44,6 +43,18 @@ pub(crate) enum CmdQStatus {
     Finished = 2,
     ShuttingDown = 3,
     Panic = 4,
+}
+
+pub(crate) enum CollectiveOpKind {
+    Barrier,
+    Broadcast,
+    AllToAll,
+    AllReduce(ReduceOp),
+    AllGather,
+    ReduceScatter(ReduceOp),
+    Reduce(ReduceOp),
+    Scatter,
+    Gather,
 }
 
 #[enum_dispatch(CommMem, CommShutdown, CommInfo, CommProgress)]
@@ -155,6 +166,8 @@ pub(crate) trait CommInfo {
     {
         self.atomic_avail::<T>()
     }
+    fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool;
+
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
 }

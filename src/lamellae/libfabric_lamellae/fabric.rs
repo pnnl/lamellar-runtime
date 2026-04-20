@@ -13,7 +13,7 @@ use libfabric::{
 
 use crate::{
     lamellae::{
-        collective::{AllReduceOp, ReduceOp as LamellarReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}, AllocationType, AtomicOp as LamellarAtomicOp
+        collective::{AllReduceOp, ReduceOp as LamellarReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}, AllocationType, AtomicOp as LamellarAtomicOp, CollectiveOpKind
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -304,16 +304,37 @@ impl CommGroup{
 
     fn wait_for_collectives(&self) -> Result<(), libfabric::error::Error> {
         let _lock = self.lock.lock();
+        let mut prev_expected_cnt = self.coll_cnt_issued.load(Ordering::SeqCst);
+        let mut old_cnt = self.coll_cnt_completed.load(Ordering::SeqCst);
+        let mut expected_cnt = self.coll_cnt_issued.load(Ordering::SeqCst);
+        let mut cur_cnt = self.coll_cnt_completed.load(Ordering::SeqCst);
+        // trace!(
+        //         "{dir} before.  expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
+        //         cntr.read(),
+        //     );
+        // let mut timer = std::time::Instant::now();
+        // drop(_guard);
 
-        while self.coll_cnt_completed.load(Ordering::SeqCst) <  self.coll_cnt_issued.load(Ordering::SeqCst) {
-            if let Err(err) = self.progress() {
-                        match err.kind {
-                            libfabric::error::ErrorKind::TryAgain => {}
-                            _ => return Err(err),
+        while cur_cnt < expected_cnt || prev_expected_cnt < expected_cnt || cur_cnt != old_cnt {
+            prev_expected_cnt = expected_cnt;
+            old_cnt = cur_cnt;
+            let _ = self.progress();
+            while self.coll_cnt_completed.load(Ordering::SeqCst) <  self.coll_cnt_issued.load(Ordering::SeqCst) {
+                if let Err(err) = self.progress() {
+                            match err.kind {
+                                libfabric::error::ErrorKind::TryAgain => {}
+                                _ => return Err(err),
+                            }
                         }
-                    }
+                std::thread::yield_now();
+            }
+            
+
+            cur_cnt = self.coll_cnt_completed.load(Ordering::SeqCst);
+            expected_cnt = self.coll_cnt_issued.load(Ordering::SeqCst);
             std::thread::yield_now();
         }
+
         Ok(())
     }
 
@@ -847,6 +868,153 @@ impl Ofi {
         }
     }
 
+    pub(crate) fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
+        match op {
+            CollectiveOpKind::Barrier => self.barrier_avail(),
+            CollectiveOpKind::AllToAll => self.collective_data_op_avail::<T>(CollectiveOp::AllToAll, None),
+            CollectiveOpKind::Broadcast => self.collective_data_op_avail::<T>(CollectiveOp::Broadcast, None),
+            CollectiveOpKind::AllGather => self.collective_data_op_avail::<T>(CollectiveOp::AllGather, None),
+            CollectiveOpKind::Gather => self.collective_data_op_avail::<T>(CollectiveOp::Gather, None),
+            CollectiveOpKind::AllReduce(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::AllReduce, Some(reduce_op)),
+            CollectiveOpKind::Reduce(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::Reduce, Some(reduce_op)),
+            CollectiveOpKind::ReduceScatter(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::ReduceScatter, Some(reduce_op)),
+            CollectiveOpKind::Scatter => self.collective_data_op_avail::<T>(CollectiveOp::Scatter, None),
+        }
+    }
+
+    pub(crate) fn barrier_avail(&self) -> bool {
+        self.domain
+            .query_collective(CollectiveOp::Barrier, &mut CollectiveAttr::<()>::new())
+            .is_ok()
+    }
+
+    fn collective_data_op_avail<T: 'static>(&self, data_op: CollectiveOp, reduce_op: Option<LamellarReduceOp>) -> bool {
+        let id = std::any::TypeId::of::<T>();
+        if id == std::any::TypeId::of::<u8>() {
+            let mut attr = CollectiveAttr::<u8>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<u16>() {
+            let mut attr = CollectiveAttr::<u16>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<u32>() {
+            let mut attr = CollectiveAttr::<u32>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<u64>() {
+            let mut attr = CollectiveAttr::<u64>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<i8>() {
+            let mut attr = CollectiveAttr::<i8>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<i16>() {
+            let mut attr = CollectiveAttr::<i16>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<i32>() {
+            let mut attr = CollectiveAttr::<i32>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<i64>() {
+            let mut attr = CollectiveAttr::<i64>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<usize>() {
+            let mut attr = CollectiveAttr::<usize>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<isize>() {
+            let mut attr = CollectiveAttr::<isize>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else {
+            false
+        }
+    }
+
     fn create_mc_group(&self, pes: &[usize]) -> Result<MultiCastGroup, libfabric::error::Error> {
         // trace!("Creating MC group of len: {}", pes.len());
         let cg = &self.comm_group;
@@ -865,7 +1033,7 @@ impl Ofi {
         }
 
         let mut cached_ctx = cg.allocate_context();
-        let mut ctx = cached_ctx.context.as_mut().unwrap();
+        let ctx = cached_ctx.context.as_mut().unwrap();
         let mc = MulticastGroupBuilder::from_av_set(&av_set)
             .build()
             .join_collective_with_context(&cg.ep, JoinOptions::new(), ctx)
@@ -2920,7 +3088,7 @@ impl LibfabricAlloc {
         let cg = &self.ofi.comm_group;
         let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
         let (result, root_pe) = match slice_or_pe {
-            RootSrcOrSliceMut::Root(src) => (unsafe{std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}, self.ofi.my_pe) ,
+            RootSrcOrSliceMut::Root(src) => (src, self.ofi.my_pe) ,
             RootSrcOrSliceMut::NotRoot(result, root_pe) => (result, root_pe),
         };
         let res = unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(result)};
@@ -3050,7 +3218,7 @@ impl LibfabricAlloc {
         let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
         let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
-        let ctx = cg.post_collective(blocking, || {
+        cg.post_collective(blocking, || {
                 cg.ep.reduce_scatter(
                     buf,
                     None,
@@ -3287,6 +3455,23 @@ impl From<&LamellarReduceOp> for ReduceOp {
             LamellarReduceOp::BitOr => ReduceOp::Bor,
             LamellarReduceOp::BitXor => ReduceOp::Bxor,
             LamellarReduceOp::BitAnd => ReduceOp::Band,
+        }
+    }
+}
+
+impl From<&LamellarReduceOp> for &ReduceOp {
+    fn from(op: &LamellarReduceOp) -> Self {
+        match op {
+            LamellarReduceOp::Min => &ReduceOp::Min,
+            LamellarReduceOp::Max => &ReduceOp::Max,
+            LamellarReduceOp::Sum => &ReduceOp::Sum,
+            LamellarReduceOp::Prod => &ReduceOp::Prod,
+            // CollectiveReduceOp::LogicalOr => &ReduceOp::Lor,
+            // CollectiveReduceOp::LogicalXor => &ReduceOp::Lxor,
+            // CollectiveReduceOp::LogicalAnd => &ReduceOp::Land,
+            LamellarReduceOp::BitOr => &ReduceOp::Bor,
+            LamellarReduceOp::BitXor => &ReduceOp::Bxor,
+            LamellarReduceOp::BitAnd => &ReduceOp::Band,
         }
     }
 }

@@ -1,6 +1,6 @@
 use lamellar_ucc_sys::*;
 use std::{mem::MaybeUninit, os::raw::c_void, sync::{atomic::AtomicUsize, Arc}};
-use crate::lamellae::{collective::AllReduceOp, ucx_lamellae::fabric::UcxAlloc};
+use crate::lamellae::{collective::AllReduceOp, ucx_lamellae_mt::fabric::UcxMtAlloc};
 
 #[derive(Debug)]
 pub(crate) struct LibConfig {
@@ -131,7 +131,7 @@ unsafe impl Send for UccContext {}
 unsafe impl Sync for UccContext {}
 
 impl UccContext {
-    pub(crate) fn new(ucc_lib: Arc<UccLib>, ucx_alloc: Arc<UcxAlloc>) -> Result<Self, Error> {
+    pub(crate) fn new(ucc_lib: Arc<UccLib>, ucx_alloc: Arc<UcxMtAlloc>) -> Result<Self, Error> {
         let config = CtxConfig::new(&ucc_lib);
         let mut params = Box::new(UccTeamParams {
             my_pe: ucx_alloc.my_pe,
@@ -196,11 +196,11 @@ pub(crate) struct UccTeam {
 pub(crate) struct UccTeamParams {
     pub(crate) my_pe: usize,
     pub(crate) pes: Vec<usize>,
-    pub(crate) ucx_alloc: Arc<UcxAlloc>,
+    pub(crate) ucx_alloc: Arc<UcxMtAlloc>,
 }
 
 impl UccTeam {
-    pub(crate) fn new(my_pe: usize, pes: &[usize], ctx: Arc<UccContext>, ucx_alloc: Arc<UcxAlloc>) -> Result<Self, Error> {
+    pub(crate) fn new(my_pe: usize, pes: &[usize], ctx: Arc<UccContext>, ucx_alloc: Arc<UcxMtAlloc>) -> Result<Self, Error> {
         let mut handle: MaybeUninit<ucc_team_h> = MaybeUninit::uninit();
         let team_rank = pes
             .iter()

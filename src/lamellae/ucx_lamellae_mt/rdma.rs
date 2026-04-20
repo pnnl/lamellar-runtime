@@ -79,7 +79,7 @@ impl<T: Remote> UcxMtPutFuture<T> {
                 UcxMtAlloc::put_inner(&self.alloc, pe, self.offset, src.as_slice(), false, true)
             };
         } else {
-            self.alloc.as_mut_slice()[self.offset..self.offset + src.len()]
+            (unsafe { self.alloc.as_mut_slice() })[self.offset..self.offset + src.len()]
                 .copy_from_slice(src.as_slice());
         }
     }
@@ -382,7 +382,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtGetIntoBufferFuture<T, B> {
             let len = self.dst.len();
             self.dst
                 .as_mut_slice()
-                .copy_from_slice(&self.alloc.as_mut_slice()[self.offset..(self.offset + len)])
+                .copy_from_slice(&unsafe { self.alloc.as_mut_slice() }[self.offset..(self.offset + len)])
         }
     }
     pub(crate) fn block(mut self) {
@@ -499,7 +499,7 @@ impl CommAllocRdma for UcxMtAlloc {
                 UcxMtAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), true, true)
             };
         } else {
-            self.as_mut_slice()[offset] = src;
+            (unsafe { self.as_mut_slice() })[offset] = src;
         }
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -517,7 +517,7 @@ impl CommAllocRdma for UcxMtAlloc {
                 UcxMtAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), false, false)
             };
         } else {
-            self.as_mut_slice()[offset] = src;
+            (unsafe { self.as_mut_slice() })[offset] = src;
             // let dst = (self.start() + offset) as *mut T;
             // unsafe { dst.write(src) };
         }
@@ -566,7 +566,7 @@ impl CommAllocRdma for UcxMtAlloc {
             let _ =
                 unsafe { UcxMtAlloc::put_inner(&self, pe, offset, src.as_slice(), false, false) };
         } else {
-            self.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
+            (unsafe { self.as_mut_slice() })[offset..offset + src.len()].copy_from_slice(src.as_slice());
             // let dst = self.start() + offset;
             // if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
             //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
@@ -615,7 +615,7 @@ impl CommAllocRdma for UcxMtAlloc {
                     )
                 };
             } else {
-                self.as_mut_slice()[offset] = src;
+                (unsafe { self.as_mut_slice() })[offset] = src;
                 // let dst = (self.start() + offset) as *mut T;
                 // unsafe { dst.write(src) };
             }
@@ -664,7 +664,7 @@ impl CommAllocRdma for UcxMtAlloc {
                     UcxMtAlloc::put_inner(&self, pe, offset, src.as_slice(), false, false)
                 };
             } else {
-                self.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
+                (unsafe { self.as_mut_slice() })[offset..offset + src.len()].copy_from_slice(src.as_slice());
                 // let dst = self.start() + offset;
                 // if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
                 //     unsafe {
@@ -786,7 +786,7 @@ impl CommAllocRdma for UcxMtAlloc {
         } else {
             let len = dst.len();
             dst.as_mut_slice()
-                .copy_from_slice(&self.as_mut_slice()[offset..(offset + len)]);
+                .copy_from_slice(&unsafe { self.as_mut_slice() }[offset..(offset + len)]);
         }
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
@@ -800,7 +800,7 @@ impl CommAllocRdma for UcxMtAlloc {
         } else {
             let len = dst.len();
             dst.as_mut_slice()
-                .copy_from_slice(&self.as_mut_slice()[offset..(offset + len)]);
+                .copy_from_slice(&unsafe { self.as_mut_slice() }[offset..(offset + len)]);
         }
     }
 }
@@ -857,7 +857,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
                 )
             };
         } else {
-            self.alloc.as_mut_slice()[offset] = src;
+            (unsafe { self.alloc.as_mut_slice() })[offset] = src;
         }
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -880,7 +880,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
                 )
             };
         } else {
-            self.alloc.as_mut_slice()[offset] = src;
+            (unsafe { self.alloc.as_mut_slice() })[offset] = src;
         }
     }
     fn put_buffer<T: Remote>(
@@ -929,7 +929,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
                 UcxMtAlloc::put_inner(&self.alloc, pe, offset, src.as_slice(), false, false)
             };
         } else {
-            self.alloc.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
+            (unsafe { self.alloc.as_mut_slice() })[offset..offset + src.len()].copy_from_slice(src.as_slice());
         }
     }
     fn put_all<T: Remote>(
@@ -1096,7 +1096,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         } else {
             let len = dst.len();
             dst.as_mut_slice()
-                .copy_from_slice(&self.alloc.as_mut_slice()[offset..(offset + len)]);
+                .copy_from_slice(&unsafe { self.alloc.as_mut_slice() }[offset..(offset + len)]);
         }
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
@@ -1117,7 +1117,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         } else {
             let len = dst.len();
             dst.as_mut_slice()
-                .copy_from_slice(&self.alloc.as_mut_slice()[offset..(offset + len)]);
+                .copy_from_slice(&unsafe { self.alloc.as_mut_slice() }[offset..(offset + len)]);
         }
     }
 }

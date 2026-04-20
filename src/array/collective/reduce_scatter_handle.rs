@@ -1,11 +1,10 @@
 use futures_util::Future;
 use pin_project::pin_project;
 use std::{
-    pin::Pin,
-    task::{Context, Poll},
+    pin::Pin, sync::Arc, task::{Context, Poll}
 };
 
-use crate::{lamellae::collective::{CollectiveReduceScatterIntoBufferOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle}, AsLamellarBuffer, Dist, LamellarTask};
+use crate::{AsLamellarBuffer, Dist, LamellarTask, active_messaging::AMCounters, lamellae::collective::{CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpHandle}, scheduler::Scheduler};
 use crate::array::LamellarByteArray;
 use crate::lamellae::comm::collective::CollectiveReduceScatterOpHandle;
 use crate::warnings::RuntimeWarning;
@@ -18,9 +17,40 @@ pub struct ArrayCollectiveReduceScatterHandle<T: Dist> {
     pub(crate) spawned: bool,
 }
 
+#[pin_project]
+pub(crate) struct CollectiveReduceScatterManualOpHandle<T: Dist> 
+{
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = Vec<T>> + Send>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+}
+
+impl<T: Dist> Future for CollectiveReduceScatterManualOpHandle<T> {
+    type Output = Vec<T>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        this.future.poll(cx)
+    }
+}
+
+impl<T: Dist> CollectiveReduceScatterManualOpHandle<T> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+    
+    pub(crate) fn block(self) -> Vec<T> {
+        self.scheduler.clone().block_on(self)
+    }
+}
+
+
 #[pin_project(project = ArrayCollectiveReduceScatterStateProj)]
 pub(crate) enum ArrayCollectiveReduceScatterState<T: Dist> {
     CollectiveReduceScatter(#[pin] CollectiveReduceScatterOpHandle<T>),
+    CollectiveReduceScatterManual(#[pin] CollectiveReduceScatterManualOpHandle<T>),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
     // // LoadOp(ArrayFetchOpHandle<T>),
@@ -37,6 +67,7 @@ impl<T: Dist> ArrayCollectiveReduceScatterHandle<T> {
     pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         let task = match self.state {
             ArrayCollectiveReduceScatterState::CollectiveReduceScatter(req) => req.spawn(),
+            ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(req) => req.spawn(),
         };
         self.spawned = true;
         task
@@ -50,6 +81,7 @@ impl<T: Dist> ArrayCollectiveReduceScatterHandle<T> {
         self.spawned = true;
         match self.state {
             ArrayCollectiveReduceScatterState::CollectiveReduceScatter(req) => req.block(),
+            ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(req) => req.block(),
         }
     }
 }
@@ -61,6 +93,9 @@ impl<T: Dist> Future for ArrayCollectiveReduceScatterHandle<T> {
         let this = self.project();
         match this.state.project() {
             ArrayCollectiveReduceScatterStateProj::CollectiveReduceScatter(req) => {
+                req.poll(cx)
+            },
+            ArrayCollectiveReduceScatterStateProj::CollectiveReduceScatterManual(req) => {
                 req.poll(cx)
             }
         }
@@ -75,9 +110,40 @@ pub struct ArrayCollectiveReduceScatterIntoBufferHandle<T: Dist, B: AsLamellarBu
     pub(crate) spawned: bool,
 }
 
+
+#[pin_project]
+pub(crate) struct CollectiveReduceScatterIntoBufferManualOpHandle 
+{
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+}
+
+impl Future for CollectiveReduceScatterIntoBufferManualOpHandle {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        this.future.poll(cx)
+    }
+}
+
+impl CollectiveReduceScatterIntoBufferManualOpHandle {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+    
+    pub(crate) fn block(self) {
+        self.scheduler.clone().block_on(self)
+    }
+}
+
 #[pin_project(project = ArrayCollectiveReduceScatterIntoBufferStateProj)]
 pub(crate) enum ArrayCollectiveReduceScatterIntoBufferState<T: Dist, B: AsLamellarBuffer<T>> {
     CollectiveReduceScatterIntoBuffer(#[pin] CollectiveReduceScatterIntoBufferOpHandle<T, B>),
+    CollectiveReduceScatterIntoBufferManual(#[pin] CollectiveReduceScatterIntoBufferManualOpHandle),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
     // // LoadOp(ArrayFetchOpHandle<T>),
@@ -94,6 +160,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceScatterIntoBufferHand
     pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBuffer(req) => req.spawn(),
+            ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(req) => req.spawn(),
         };
         self.spawned = true;
         task
@@ -107,6 +174,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceScatterIntoBufferHand
         self.spawned = true;
         match self.state {
             ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBuffer(req) => req.block(),
+            ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(req) => req.block(),
         }
     }
 }
@@ -118,6 +186,9 @@ impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveReduceScatterInt
         let this = self.project();
         match this.state.project() {
             ArrayCollectiveReduceScatterIntoBufferStateProj::CollectiveReduceScatterIntoBuffer(req) => {
+                req.poll(cx)
+            },
+            ArrayCollectiveReduceScatterIntoBufferStateProj::CollectiveReduceScatterIntoBufferManual(req) => {
                 req.poll(cx)
             }
         }

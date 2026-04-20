@@ -1,21 +1,52 @@
-use std::{future::Future, pin::Pin, task::{Context, Poll}};
+use std::{future::Future, pin::Pin, sync::Arc, task::{Context, Poll}};
 
 use pin_project::pin_project;
 
-use crate::{array::LamellarByteArray, lamellae::collective::{CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle}, warnings::RuntimeWarning, AsLamellarBuffer, Dist, LamellarTask};
+use crate::{AsLamellarBuffer, Dist, LamellarTask, active_messaging::AMCounters, array::LamellarByteArray, lamellae::collective::{CollectiveAllToAllIntoBufferOpHandle, CollectiveAllToAllOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle}, scheduler::Scheduler, warnings::RuntimeWarning};
 
 
 #[pin_project]
-pub struct ArrayCollectiveAllBroadcastHandle<T: Dist> {
+pub struct ArrayCollectiveAllToAllHandle<T: Dist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     #[pin]
-    pub(crate) state: ArrayCollectiveAllBroadcastState<T>,
+    pub(crate) state: ArrayCollectiveAllToAllState<T>,
     pub(crate) spawned: bool,
 }
 
-#[pin_project(project = ArrayCollectiveAllBroadcastStateProj)]
-pub(crate) enum ArrayCollectiveAllBroadcastState<T: Dist> {
-    CollectiveAllBroadcast(#[pin] CollectiveAllBroadcastOpHandle<T>),
+#[must_use = " CollectiveAllToAllManualOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project]
+pub(crate) struct CollectiveAllToAllManualOpHandle<T: Dist> {
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = Vec<T>> + Send>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+}
+
+impl<T: Dist> Future for CollectiveAllToAllManualOpHandle<T> {
+    type Output = Vec<T>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        this.future.poll(cx)
+    }
+}
+
+impl<T: Dist> CollectiveAllToAllManualOpHandle<T> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+    
+    pub(crate) fn block(self) -> Vec<T> {
+        self.scheduler.clone().block_on(self)
+    }
+}
+
+
+#[pin_project(project = ArrayCollectiveAllToAllStateProj)]
+pub(crate) enum ArrayCollectiveAllToAllState<T: Dist> {
+    CollectiveAllToAll(#[pin] CollectiveAllToAllOpHandle<T>),
+    CollectiveAllToAllManual(#[pin] CollectiveAllToAllManualOpHandle<T>),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
     // // LoadOp(ArrayFetchOpHandle<T>),
@@ -23,7 +54,7 @@ pub(crate) enum ArrayCollectiveAllBroadcastState<T: Dist> {
     // AtomicGet(AtomicFetchOpHandle<T>),
 }
 
-impl<T: Dist> ArrayCollectiveAllBroadcastHandle<T> {
+impl<T: Dist> ArrayCollectiveAllToAllHandle<T> {
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
@@ -31,31 +62,36 @@ impl<T: Dist> ArrayCollectiveAllBroadcastHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         let task = match self.state {
-            ArrayCollectiveAllBroadcastState::CollectiveAllBroadcast(req) => req.spawn(),
+            ArrayCollectiveAllToAllState::CollectiveAllToAll(req) => req.spawn(),
+            ArrayCollectiveAllToAllState::CollectiveAllToAllManual(req) => req.spawn(),
         };
         self.spawned = true;
         task
     }
     pub fn block(mut self) -> Vec<T> {
         RuntimeWarning::BlockingCall(
-            "ArrayCollectiveAllBroadcastHandle::block",
+            "ArrayCollectiveAllToAllHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
         self.spawned = true;
         match self.state {
-            ArrayCollectiveAllBroadcastState::CollectiveAllBroadcast(req) => req.block(),
+            ArrayCollectiveAllToAllState::CollectiveAllToAll(req) => req.block(),
+            ArrayCollectiveAllToAllState::CollectiveAllToAllManual(req) => req.block(),
         }
     }
 }
 
 
-impl<T: Dist> Future for ArrayCollectiveAllBroadcastHandle<T> {
+impl<T: Dist> Future for ArrayCollectiveAllToAllHandle<T> {
     type Output = Vec<T>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.state.project() {
-            ArrayCollectiveAllBroadcastStateProj::CollectiveAllBroadcast(req) => {
+            ArrayCollectiveAllToAllStateProj::CollectiveAllToAll(req) => {
+                req.poll(cx)
+            }
+            ArrayCollectiveAllToAllStateProj::CollectiveAllToAllManual(req) => {
                 req.poll(cx)
             }
         }
@@ -63,16 +99,46 @@ impl<T: Dist> Future for ArrayCollectiveAllBroadcastHandle<T> {
 }
 
 #[pin_project]
-pub struct ArrayCollectiveAllBroadcastIntoBufferHandle<T: Dist, B: AsLamellarBuffer<T>> {
+pub struct ArrayCollectiveAllToAllIntoBufferHandle<T: Dist, B: AsLamellarBuffer<T>> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     #[pin]
-    pub(crate) state: ArrayCollectiveAllBroadcastIntoBufferState<T, B>,
+    pub(crate) state: ArrayCollectiveAllToAllIntoBufferState<T, B>,
     pub(crate) spawned: bool,
 }
 
-#[pin_project(project = ArrayCollectiveAllBroadcastIntoBufferStateProj)]
-pub(crate) enum ArrayCollectiveAllBroadcastIntoBufferState<T: Dist, B: AsLamellarBuffer<T>> {
-    CollectiveAllBroadcastIntoBuffer(#[pin] CollectiveAllBroadcastIntoBufferOpHandle<T, B>),
+#[pin_project]
+pub(crate) struct CollectiveAllToAllIntoBufferManualOpHandle {
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+}
+
+impl Future for CollectiveAllToAllIntoBufferManualOpHandle {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        this.future.poll(cx)
+    }
+}
+
+impl CollectiveAllToAllIntoBufferManualOpHandle {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+    
+    pub(crate) fn block(self) -> () {
+        self.scheduler.clone().block_on(self)
+    }
+}
+
+
+#[pin_project(project = ArrayCollectiveAllToAllIntoBufferStateProj)]
+pub(crate) enum ArrayCollectiveAllToAllIntoBufferState<T: Dist, B: AsLamellarBuffer<T>> {
+    CollectiveAllToAllIntoBuffer(#[pin] CollectiveAllToAllIntoBufferOpHandle<T, B>),
+    CollectiveAllToAllIntoBufferManual(#[pin] CollectiveAllToAllIntoBufferManualOpHandle),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
     // // LoadOp(ArrayFetchOpHandle<T>),
@@ -80,7 +146,7 @@ pub(crate) enum ArrayCollectiveAllBroadcastIntoBufferState<T: Dist, B: AsLamella
     // AtomicGet(AtomicFetchOpHandle<T>),
 }
 
-impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllBroadcastIntoBufferHandle<T, B> {
+impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllToAllIntoBufferHandle<T, B> {
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
@@ -88,31 +154,36 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllBroadcastIntoBufferHandl
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
-            ArrayCollectiveAllBroadcastIntoBufferState::CollectiveAllBroadcastIntoBuffer(req) => req.spawn(),
+            ArrayCollectiveAllToAllIntoBufferState::CollectiveAllToAllIntoBuffer(req) => req.spawn(),
+            ArrayCollectiveAllToAllIntoBufferState::CollectiveAllToAllIntoBufferManual(req) => req.spawn(),
         };
         self.spawned = true;
         task
     }
     pub fn block(mut self)  {
         RuntimeWarning::BlockingCall(
-            "ArrayCollectiveAllBroadcastIntoBufferHandle::block",
+            "ArrayCollectiveAllToAllIntoBufferHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
         self.spawned = true;
         match self.state {
-            ArrayCollectiveAllBroadcastIntoBufferState::CollectiveAllBroadcastIntoBuffer(req) => req.block(),
+            ArrayCollectiveAllToAllIntoBufferState::CollectiveAllToAllIntoBuffer(req) => req.block(),
+            ArrayCollectiveAllToAllIntoBufferState::CollectiveAllToAllIntoBufferManual(req) => req.block(),
         }
     }
 }
 
 
-impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveAllBroadcastIntoBufferHandle<T, B> {
+impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveAllToAllIntoBufferHandle<T, B> {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.state.project() {
-            ArrayCollectiveAllBroadcastIntoBufferStateProj::CollectiveAllBroadcastIntoBuffer(req) => {
+            ArrayCollectiveAllToAllIntoBufferStateProj::CollectiveAllToAllIntoBuffer(req) => {
+                req.poll(cx)
+            },
+            ArrayCollectiveAllToAllIntoBufferStateProj::CollectiveAllToAllIntoBufferManual(req) => {
                 req.poll(cx)
             }
         }
@@ -128,9 +199,40 @@ pub struct ArrayCollectiveBroadcastHandle<T: Dist> {
     pub(crate) spawned: bool,
 }
 
+#[must_use = " CollectiveBroadcastManualOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project]
+pub(crate) struct CollectiveBroadcastManualOpHandle<T: Dist> {
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = Option<Vec<T>>> + Send>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+}
+
+impl<T: Dist> Future for CollectiveBroadcastManualOpHandle<T> {
+    type Output = Option<Vec<T>>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        this.future.poll(cx)
+    }
+}
+
+impl<T: Dist> CollectiveBroadcastManualOpHandle<T> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+    
+    pub(crate) fn block(self) -> Option<Vec<T>> {
+        self.scheduler.clone().block_on(self)
+    }
+}
+
+
 #[pin_project(project = ArrayCollectiveBroadcastStateProj)]
 pub(crate) enum ArrayCollectiveBroadcastState<T: Dist> {
     CollectiveBroadcast(#[pin] CollectiveBroadcastOpHandle<T>),
+    CollectiveBroadcastManual(#[pin] CollectiveBroadcastManualOpHandle<T>),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
     // // LoadOp(ArrayFetchOpHandle<T>),
@@ -147,6 +249,7 @@ impl<T: Dist> ArrayCollectiveBroadcastHandle<T> {
     pub fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         let task = match self.state {
             ArrayCollectiveBroadcastState::CollectiveBroadcast(req) => req.spawn(),
+            ArrayCollectiveBroadcastState::CollectiveBroadcastManual(req) => req.spawn(),
         };
         self.spawned = true;
         task
@@ -160,6 +263,7 @@ impl<T: Dist> ArrayCollectiveBroadcastHandle<T> {
         self.spawned = true;
         match self.state {
             ArrayCollectiveBroadcastState::CollectiveBroadcast(req) => req.block(),
+            ArrayCollectiveBroadcastState::CollectiveBroadcastManual(req) => req.block(),
         }
     }
 }
@@ -172,10 +276,43 @@ impl<T: Dist> Future for ArrayCollectiveBroadcastHandle<T> {
         match this.state.project() {
             ArrayCollectiveBroadcastStateProj::CollectiveBroadcast(req) => {
                 req.poll(cx)
+            },
+            ArrayCollectiveBroadcastStateProj::CollectiveBroadcastManual(req) => {
+                req.poll(cx)
             }
         }
     }
 }
+
+
+#[pin_project]
+pub(crate) struct CollectiveBroadcastIntoBufferManualOpHandle {
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+}
+
+impl Future for CollectiveBroadcastIntoBufferManualOpHandle {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        this.future.poll(cx)
+    }
+}
+
+impl CollectiveBroadcastIntoBufferManualOpHandle {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+    
+    pub(crate) fn block(self) -> () {
+        self.scheduler.clone().block_on(self)
+    }
+}
+
 
 #[pin_project]
 pub struct ArrayCollectiveBroadcastIntoBufferHandle<T: Dist, B: AsLamellarBuffer<T>> {
@@ -188,6 +325,7 @@ pub struct ArrayCollectiveBroadcastIntoBufferHandle<T: Dist, B: AsLamellarBuffer
 #[pin_project(project = ArrayCollectiveBroadcastIntoBufferStateProj)]
 pub(crate) enum ArrayCollectiveBroadcastIntoBufferState<T: Dist, B: AsLamellarBuffer<T>> {
     CollectiveBroadcastIntoBuffer(#[pin] CollectiveBroadcastIntoBufferOpHandle<T, B>),
+    CollectiveBroadcastIntoBufferManual(#[pin] CollectiveBroadcastIntoBufferManualOpHandle),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
     // // LoadOp(ArrayFetchOpHandle<T>),
@@ -204,6 +342,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveBroadcastIntoBufferHandle<T
     pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveBroadcastIntoBufferState::CollectiveBroadcastIntoBuffer(req) => req.spawn(),
+            ArrayCollectiveBroadcastIntoBufferState::CollectiveBroadcastIntoBufferManual(req) => req.spawn(),
         };
         self.spawned = true;
         task
@@ -217,6 +356,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveBroadcastIntoBufferHandle<T
         self.spawned = true;
         match self.state {
             ArrayCollectiveBroadcastIntoBufferState::CollectiveBroadcastIntoBuffer(req) => req.block(),
+            ArrayCollectiveBroadcastIntoBufferState::CollectiveBroadcastIntoBufferManual(req) => req.block(),
         }
     }
 }
@@ -229,10 +369,71 @@ impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveBroadcastIntoBuf
         match this.state.project() {
             ArrayCollectiveBroadcastIntoBufferStateProj::CollectiveBroadcastIntoBuffer(req) => {
                 req.poll(cx)
+            },
+            ArrayCollectiveBroadcastIntoBufferStateProj::CollectiveBroadcastIntoBufferManual(req) => {
+                req.poll(cx)
             }
         }
     }
 }
+
+#[pin_project]
+pub(crate) struct CollectiveScatterManualOpHandle<T: Dist> {
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = Vec<T>> + Send>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+}
+
+impl<T: Dist> Future for CollectiveScatterManualOpHandle<T> {
+    type Output = Vec<T>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        this.future.poll(cx)
+    }
+}
+
+impl<T: Dist> CollectiveScatterManualOpHandle<T> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+    
+    pub(crate) fn block(self) -> Vec<T> {
+        self.scheduler.clone().block_on(self)
+    }
+}
+
+#[pin_project]
+pub(crate) struct CollectiveScatterIntoBufferManualOpHandle {
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+}
+
+impl Future for CollectiveScatterIntoBufferManualOpHandle {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        this.future.poll(cx)
+    }
+}
+
+impl CollectiveScatterIntoBufferManualOpHandle {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+    
+    pub(crate) fn block(self) -> () {
+        self.scheduler.clone().block_on(self)
+    }
+}
+
+
 
 #[pin_project]
 pub struct ArrayCollectiveScatterHandle<T: Dist> {
@@ -245,6 +446,7 @@ pub struct ArrayCollectiveScatterHandle<T: Dist> {
 #[pin_project(project = ArrayCollectiveScatterStateProj)]
 pub(crate) enum ArrayCollectiveScatterState<T: Dist> {
     CollectiveScatter(#[pin] CollectiveScatterOpHandle<T>),
+    CollectiveScatterManual(#[pin] CollectiveScatterManualOpHandle<T>),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
     // // LoadOp(ArrayFetchOpHandle<T>),
@@ -261,6 +463,7 @@ impl<T: Dist> ArrayCollectiveScatterHandle<T> {
     pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         let task = match self.state {
             ArrayCollectiveScatterState::CollectiveScatter(req) => req.spawn(),
+            ArrayCollectiveScatterState::CollectiveScatterManual(req) => req.spawn(),
         };
         self.spawned = true;
         task
@@ -274,6 +477,7 @@ impl<T: Dist> ArrayCollectiveScatterHandle<T> {
         self.spawned = true;
         match self.state {
             ArrayCollectiveScatterState::CollectiveScatter(req) => req.block(),
+            ArrayCollectiveScatterState::CollectiveScatterManual(req) => req.block(),
         }
     }
 }
@@ -285,6 +489,9 @@ impl<T: Dist> Future for ArrayCollectiveScatterHandle<T> {
         let this = self.project();
         match this.state.project() {
             ArrayCollectiveScatterStateProj::CollectiveScatter(req) => {
+                req.poll(cx)
+            },
+            ArrayCollectiveScatterStateProj::CollectiveScatterManual(req) => {
                 req.poll(cx)
             }
         }
@@ -302,6 +509,7 @@ pub struct ArrayCollectiveScatterIntoBufferHandle<T: Dist, B: AsLamellarBuffer<T
 #[pin_project(project = ArrayCollectiveScatterIntoBufferStateProj)]
 pub(crate) enum ArrayCollectiveScatterIntoBufferState<T: Dist, B: AsLamellarBuffer<T>> {
     CollectiveScatterIntoBuffer(#[pin] CollectiveScatterIntoBufferOpHandle<T, B>),
+    CollectiveScatterIntoBufferManual(#[pin] CollectiveScatterIntoBufferManualOpHandle),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
     // // LoadOp(ArrayFetchOpHandle<T>),
@@ -318,6 +526,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveScatterIntoBufferHandle<T, 
     pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBuffer(req) => req.spawn(),
+            ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBufferManual(req) => req.spawn(),
         };
         self.spawned = true;
         task
@@ -331,6 +540,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveScatterIntoBufferHandle<T, 
         self.spawned = true;
         match self.state {
             ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBuffer(req) => req.block(),
+            ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBufferManual(req) => req.block(),
         }
     }
 }
@@ -342,6 +552,9 @@ impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveScatterIntoBuffe
         let this = self.project();
         match this.state.project() {
             ArrayCollectiveScatterIntoBufferStateProj::CollectiveScatterIntoBuffer(req) => {
+                req.poll(cx)
+            },
+            ArrayCollectiveScatterIntoBufferStateProj::CollectiveScatterIntoBufferManual(req) => {
                 req.poll(cx)
             }
         }

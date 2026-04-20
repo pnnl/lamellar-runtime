@@ -1,8 +1,8 @@
 use crate::{
     config,
     lamellae::{
-        comm::atomic::atomic_type_supported,
-        comm::{AtomicOp, CommInfo, CommProgress, CommShutdown},
+        comm::{atomic::atomic_type_supported, AtomicOp, CommInfo, CommProgress, CommShutdown},
+        CollectiveOpKind,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
     Backend,
@@ -119,6 +119,14 @@ impl CommInfo for ShmemComm {
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
             / 1_000_000.0
+    }
+    fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
+        // if std::any::TypeId::of::<T>() == std::any::TypeId::of::<()>() {
+        //     assert!(matches!(op, CollectiveOpKind::Barrier), "only barrier collective is available for unit type");
+        //     return true; // barrier is available
+        // }
+        // atomic_type_supported::<T>()
+        false // Always use fallback methods for collectives
     }
 }
 

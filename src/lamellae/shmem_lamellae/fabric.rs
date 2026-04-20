@@ -189,6 +189,27 @@ impl ShmemAlloc {
     pub(crate) fn num_pes(&self) -> usize {
         self.pe_map.len()
     }
+
+    #[allow(dead_code)]
+    pub(crate) unsafe fn as_mut_slice<T: Copy>(&self) -> &mut [T] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.start() as *mut T,
+                self.num_bytes() / std::mem::size_of::<T>(),
+            )
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) unsafe fn as_slice<T: Copy>(&self) -> &[T] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.start() as *const T,
+                self.num_bytes() / std::mem::size_of::<T>(),
+            )
+        }
+    }
+
     pub(crate) fn start(&self) -> usize {
         self.data as usize
     }

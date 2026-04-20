@@ -24,14 +24,13 @@ use crate::{
         CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrBuffer,
         RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer,
         RootSrcOrLamellarBufferInner, ScatterInput, ScatterInputInner,
-    }, ucx_lamellae::ucc::UccRequest},
-    memregion::MemregionRdmaInputInner,
+    }, ucx_lamellae_mt::ucc::UccRequest},
     scheduler::Scheduler,
     warnings::RuntimeWarning,
     AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote,
 };
 
-use super::fabric::UcxAlloc;
+use super::fabric::UcxMtAlloc;
 use pin_project::{pin_project, pinned_drop};
 use std::{
     future::Future,
@@ -41,8 +40,8 @@ use std::{
 };
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveAllReduceFuture<T: Remote> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveAllReduceFuture<T: Remote> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(super) op: ReduceOp,
     pub(crate) index: usize,
     pub(crate) len: usize,
@@ -53,7 +52,7 @@ pub(crate) struct UcxCollectiveAllReduceFuture<T: Remote> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> UcxCollectiveAllReduceFuture<T> {
+impl<T: Remote> UcxMtCollectiveAllReduceFuture<T> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self.alloc
@@ -84,15 +83,15 @@ impl<T: Remote> UcxCollectiveAllReduceFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxCollectiveAllReduceFuture<T> {
+impl<T: Remote> PinnedDrop for UcxMtCollectiveAllReduceFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveAllReduceFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveAllReduceFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveAllReduceFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveAllReduceFuture<T> {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -106,8 +105,8 @@ impl<T: Remote> Future for UcxCollectiveAllReduceFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveAllReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveAllReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(super) op: ReduceOp,
     pub(crate) index: usize,
     pub(crate) len: usize,
@@ -118,7 +117,7 @@ pub(crate) struct UcxCollectiveAllReduceIntoBufferFuture<T: Remote, B: AsLamella
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveAllReduceIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
@@ -148,15 +147,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceIntoBufferFuture<T
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveAllReduceIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveAllReduceIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveAllReduceIntoBufferFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveAllReduceIntoBufferFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllReduceIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveAllReduceIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -168,8 +167,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllReduceIntoBuf
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(super) op: ReduceOp,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -178,7 +177,7 @@ pub(crate) struct UcxCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLamellarBu
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceInPlaceFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveAllReduceInPlaceFuture<T, B> {
     fn exec_op(&mut self) {
         let req = self
             .alloc
@@ -202,15 +201,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceInPlaceFuture<T, B
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveAllReduceInPlaceFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveAllReduceInPlaceFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveAllReduceInPlaceFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveAllReduceInPlaceFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllReduceInPlaceFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveAllReduceInPlaceFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -222,8 +221,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllReduceInPlace
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveReduceFuture<T: Remote> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveReduceFuture<T: Remote> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) index: usize,
     pub(crate) len: usize,
     pub(super) op: ReduceOp,
@@ -234,7 +233,7 @@ pub(crate) struct UcxCollectiveReduceFuture<T: Remote> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> UcxCollectiveReduceFuture<T> {
+impl<T: Remote> UcxMtCollectiveReduceFuture<T> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self
@@ -267,15 +266,15 @@ impl<T: Remote> UcxCollectiveReduceFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxCollectiveReduceFuture<T> {
+impl<T: Remote> PinnedDrop for UcxMtCollectiveReduceFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveReduceFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveReduceFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveReduceFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveReduceFuture<T> {
     type Output = Option<Vec<T>>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -294,8 +293,8 @@ impl<T: Remote> Future for UcxCollectiveReduceFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) index: usize,
     pub(crate) len: usize,
     pub(super) op: ReduceOp,
@@ -306,7 +305,7 @@ pub(crate) struct UcxCollectiveReduceIntoBufferFuture<T: Remote, B: AsLamellarBu
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveReduceIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self
@@ -331,15 +330,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceIntoBufferFuture<T, B
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveReduceIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveReduceIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveReduceIntoBufferFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveReduceIntoBufferFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveReduceIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveReduceIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -351,8 +350,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveReduceIntoBuffer
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveReduceInPlaceFuture<T> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveReduceInPlaceFuture<T> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(super) op: ReduceOp,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -360,7 +359,7 @@ pub(crate) struct UcxCollectiveReduceInPlaceFuture<T> {
     phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Remote> UcxCollectiveReduceInPlaceFuture<T> {
+impl<T: Remote> UcxMtCollectiveReduceInPlaceFuture<T> {
     pub(crate) fn block(mut self) {
         self.spawned = true;
     }
@@ -374,15 +373,15 @@ impl<T: Remote> UcxCollectiveReduceInPlaceFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for UcxCollectiveReduceInPlaceFuture<T> {
+impl<T> PinnedDrop for UcxMtCollectiveReduceInPlaceFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveReduceInPlaceFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveReduceInPlaceFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveReduceInPlaceFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveReduceInPlaceFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.spawned = true;
@@ -391,8 +390,8 @@ impl<T: Remote> Future for UcxCollectiveReduceInPlaceFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveAllGatherFuture<T: Remote> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveAllGatherFuture<T: Remote> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) index: usize,
     pub(crate) len: usize,
     pub(crate) result: Vec<T>,
@@ -402,7 +401,7 @@ pub(crate) struct UcxCollectiveAllGatherFuture<T: Remote> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> UcxCollectiveAllGatherFuture<T> {
+impl<T: Remote> UcxMtCollectiveAllGatherFuture<T> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self
@@ -430,15 +429,15 @@ impl<T: Remote> UcxCollectiveAllGatherFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxCollectiveAllGatherFuture<T> {
+impl<T: Remote> PinnedDrop for UcxMtCollectiveAllGatherFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveAllGatherFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveAllGatherFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveAllGatherFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveAllGatherFuture<T> {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -452,8 +451,8 @@ impl<T: Remote> Future for UcxCollectiveAllGatherFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) index: usize,
     pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
@@ -463,7 +462,7 @@ pub(crate) struct UcxCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsLamella
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllGatherIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveAllGatherIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self
@@ -488,15 +487,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllGatherIntoBufferFuture<T
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveAllGatherIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveAllGatherIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveAllGatherIntoBufferFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveAllGatherIntoBufferFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllGatherIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveAllGatherIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -508,8 +507,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllGatherIntoBuf
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveGatherFuture<T: Remote> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveGatherFuture<T: Remote> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) index: usize,
     pub(crate) len: usize,
     pub(crate) target: RootOrBuffer<T>,
@@ -519,7 +518,7 @@ pub(crate) struct UcxCollectiveGatherFuture<T: Remote> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> UcxCollectiveGatherFuture<T> {
+impl<T: Remote> UcxMtCollectiveGatherFuture<T> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self
@@ -552,15 +551,15 @@ impl<T: Remote> UcxCollectiveGatherFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxCollectiveGatherFuture<T> {
+impl<T: Remote> PinnedDrop for UcxMtCollectiveGatherFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveGatherFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveGatherFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveGatherFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveGatherFuture<T> {
     type Output = Option<Vec<T>>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -579,8 +578,8 @@ impl<T: Remote> Future for UcxCollectiveGatherFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) index: usize,
     pub(crate) len: usize,
     pub(crate) target: RootOrLamellarBuffer<T, B>,
@@ -590,7 +589,7 @@ pub(crate) struct UcxCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellarBu
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveGatherIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveGatherIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self
@@ -615,15 +614,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveGatherIntoBufferFuture<T, B
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveGatherIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveGatherIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveGatherIntoBufferFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveGatherIntoBufferFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveGatherIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveGatherIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -635,8 +634,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveGatherIntoBuffer
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveAllToAllFuture<T: Remote> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveAllToAllFuture<T: Remote> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) index: usize,
     pub(crate) len: usize,
     pub(crate) result: Vec<T>,
@@ -646,7 +645,7 @@ pub(crate) struct UcxCollectiveAllToAllFuture<T: Remote> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> UcxCollectiveAllToAllFuture<T> {
+impl<T: Remote> UcxMtCollectiveAllToAllFuture<T> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self
@@ -674,15 +673,15 @@ impl<T: Remote> UcxCollectiveAllToAllFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxCollectiveAllToAllFuture<T> {
+impl<T: Remote> PinnedDrop for UcxMtCollectiveAllToAllFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveAlToAllFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveAllToAllFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveAllToAllFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveAllToAllFuture<T> {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -696,8 +695,8 @@ impl<T: Remote> Future for UcxCollectiveAllToAllFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveAllToAllIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveAllToAllIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) index: usize,
     pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
@@ -707,7 +706,7 @@ pub(crate) struct UcxCollectiveAllToAllIntoBufferFuture<T: Remote, B: AsLamellar
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllToAllIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveAllToAllIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len] };
         let req = self
@@ -732,15 +731,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllToAllIntoBufferFuture<T,
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveAllToAllIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveAllToAllIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveAllToAllIntoBufferFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveAllToAllIntoBufferFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllToAllIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveAllToAllIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -752,8 +751,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllToAllIntoBuff
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveBroadcastFuture<T: Remote> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveBroadcastFuture<T: Remote> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) target: RootSrcOrBuffer<T>,
     pub(crate) len: usize,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -762,7 +761,7 @@ pub(crate) struct UcxCollectiveBroadcastFuture<T: Remote> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> UcxCollectiveBroadcastFuture<T> {
+impl<T: Remote> UcxMtCollectiveBroadcastFuture<T> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let req = self.alloc.broadcast_inner(self.target.as_mut_slice(alloc_slice, self.len), false).unwrap();
@@ -792,15 +791,15 @@ impl<T: Remote> UcxCollectiveBroadcastFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxCollectiveBroadcastFuture<T> {
+impl<T: Remote> PinnedDrop for UcxMtCollectiveBroadcastFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveBroadcastFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveBroadcastFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveBroadcastFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveBroadcastFuture<T> {
     type Output = Option<Vec<T>>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -819,8 +818,8 @@ impl<T: Remote> Future for UcxCollectiveBroadcastFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) target: RootSrcOrLamellarBufferInner<T, B>,
     pub(crate) len: usize,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -829,7 +828,7 @@ pub(crate) struct UcxCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsLamella
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveBroadcastIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveBroadcastIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let req = self.alloc.broadcast_inner(self.target.as_mut_slice(alloc_slice, self.len), false).unwrap();
@@ -851,15 +850,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveBroadcastIntoBufferFuture<T
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveBroadcastIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveBroadcastIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveBroadcastIntoBufferFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveBroadcastIntoBufferFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveBroadcastIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveBroadcastIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -871,8 +870,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveBroadcastIntoBuf
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveScatterFuture<T: Remote> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveScatterFuture<T: Remote> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) len: usize,
     pub(crate) result: Vec<T>,
     src_or_root_pe: ScatterInputInner,
@@ -882,7 +881,7 @@ pub(crate) struct UcxCollectiveScatterFuture<T: Remote> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> UcxCollectiveScatterFuture<T> {
+impl<T: Remote> UcxMtCollectiveScatterFuture<T> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_slice() };
         let req = self
@@ -910,15 +909,15 @@ impl<T: Remote> UcxCollectiveScatterFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxCollectiveScatterFuture<T> {
+impl<T: Remote> PinnedDrop for UcxMtCollectiveScatterFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveScatterFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveScatterFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveScatterFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveScatterFuture<T> {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -932,8 +931,8 @@ impl<T: Remote> Future for UcxCollectiveScatterFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(crate) len: usize,
     src_or_root_pe: ScatterInputInner,
     pub(crate) result: LamellarBuffer<T, B>,
@@ -943,7 +942,7 @@ pub(crate) struct UcxCollectiveScatterIntoBufferFuture<T: Remote, B: AsLamellarB
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveScatterIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_slice() };
         let req = self
@@ -968,15 +967,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveScatterIntoBufferFuture<T, 
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveScatterIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveScatterIntoBufferFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveScatterIntoBufferFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveScatterIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -988,8 +987,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveScatterIntoBuffe
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveReduceScatterFuture<T: Remote> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveReduceScatterFuture<T: Remote> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(super) op: ReduceOp,
     pub(crate) index: usize,
     pub(crate) len: usize,
@@ -1000,7 +999,7 @@ pub(crate) struct UcxCollectiveReduceScatterFuture<T: Remote> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> UcxCollectiveReduceScatterFuture<T> {
+impl<T: Remote> UcxMtCollectiveReduceScatterFuture<T> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_slice() };
         let src_len = self.len * self.alloc.num_pes;
@@ -1030,15 +1029,15 @@ impl<T: Remote> UcxCollectiveReduceScatterFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxCollectiveReduceScatterFuture<T> {
+impl<T: Remote> PinnedDrop for UcxMtCollectiveReduceScatterFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveReduceScatterFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveReduceScatterFuture").print();
         }
     }
 }
 
-impl<T: Remote> Future for UcxCollectiveReduceScatterFuture<T> {
+impl<T: Remote> Future for UcxMtCollectiveReduceScatterFuture<T> {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -1052,8 +1051,8 @@ impl<T: Remote> Future for UcxCollectiveReduceScatterFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxCollectiveReduceScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
-    pub(crate) alloc: UcxAlloc,
+pub(crate) struct UcxMtCollectiveReduceScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: UcxMtAlloc,
     pub(super) op: ReduceOp,
     pub(crate) index: usize,
     pub(crate) len: usize,
@@ -1064,7 +1063,7 @@ pub(crate) struct UcxCollectiveReduceScatterIntoBufferFuture<T: Remote, B: AsLam
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtCollectiveReduceScatterIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_slice() };
         let src_len = self.len * self.alloc.num_pes;
@@ -1091,15 +1090,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceScatterIntoBufferFutu
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveReduceScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxMtCollectiveReduceScatterIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a UcxCollectiveReduceScatterIntoBufferFuture").print();
+            RuntimeWarning::DroppedHandle("a UcxMtCollectiveReduceScatterIntoBufferFuture").print();
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveReduceScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxMtCollectiveReduceScatterIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -1110,7 +1109,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveReduceScatterInt
     }
 }
 
-impl CommAllocCollectiveAllReduce for UcxAlloc {
+impl CommAllocCollectiveAllReduce for UcxMtAlloc {
     fn reduce_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1120,7 +1119,7 @@ impl CommAllocCollectiveAllReduce for UcxAlloc {
         op: ReduceOp,
     ) -> CollectiveAllReduceOpHandle<T> {
         CollectiveAllReduceOpHandle {
-            future: CollectiveAllReduceOpFuture::Ucx(UcxCollectiveAllReduceFuture {
+            future: CollectiveAllReduceOpFuture::UcxMt(UcxMtCollectiveAllReduceFuture {
                 alloc: self.clone(),
                 op,
                 index,
@@ -1144,8 +1143,8 @@ impl CommAllocCollectiveAllReduce for UcxAlloc {
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         CollectiveAllReduceIntoBufferOpHandle {
-            future: CollectiveAllReduceIntoBufferOpFuture::Ucx(
-                UcxCollectiveAllReduceIntoBufferFuture {
+            future: CollectiveAllReduceIntoBufferOpFuture::UcxMt(
+                UcxMtCollectiveAllReduceIntoBufferFuture {
                     alloc: self.clone(),
                     op,
                     index,
@@ -1168,7 +1167,7 @@ impl CommAllocCollectiveAllReduce for UcxAlloc {
         op: ReduceOp,
     ) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         CollectiveAllReduceInPlaceOpHandle {
-            future: CollectiveAllReduceInPlaceOpFuture::Ucx(UcxCollectiveAllReduceInPlaceFuture {
+            future: CollectiveAllReduceInPlaceOpFuture::UcxMt(UcxMtCollectiveAllReduceInPlaceFuture {
                 alloc: self.clone(),
                 op,
                 result: source_and_dst,
@@ -1181,7 +1180,7 @@ impl CommAllocCollectiveAllReduce for UcxAlloc {
     }
 }
 
-impl CommAllocCollectiveReduce for UcxAlloc {
+impl CommAllocCollectiveReduce for UcxMtAlloc {
     fn reduce<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1197,7 +1196,7 @@ impl CommAllocCollectiveReduce for UcxAlloc {
             RootOrBuffer::Root(vec![T::default(); len])
         };
         CollectiveReduceOpHandle {
-            future: CollectiveReduceOpFuture::Ucx(UcxCollectiveReduceFuture {
+            future: CollectiveReduceOpFuture::UcxMt(UcxMtCollectiveReduceFuture {
                 alloc: self.clone(),
                 index,
                 len,
@@ -1221,7 +1220,7 @@ impl CommAllocCollectiveReduce for UcxAlloc {
         root_or_buffer: RootOrLamellarBuffer<T, B>,
     ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         CollectiveReduceIntoBufferOpHandle {
-            future: CollectiveReduceIntoBufferOpFuture::Ucx(UcxCollectiveReduceIntoBufferFuture {
+            future: CollectiveReduceIntoBufferOpFuture::UcxMt(UcxMtCollectiveReduceIntoBufferFuture {
                 alloc: self.clone(),
                 index,
                 len,
@@ -1236,7 +1235,7 @@ impl CommAllocCollectiveReduce for UcxAlloc {
     }
 }
 
-impl CommAllocCollectiveAllGather for UcxAlloc {
+impl CommAllocCollectiveAllGather for UcxMtAlloc {
     fn gather_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1245,7 +1244,7 @@ impl CommAllocCollectiveAllGather for UcxAlloc {
         len: usize,
     ) -> CollectiveAllGatherOpHandle<T> {
         CollectiveAllGatherOpHandle {
-            future: CollectiveAllGatherOpFuture::Ucx(UcxCollectiveAllGatherFuture {
+            future: CollectiveAllGatherOpFuture::UcxMt(UcxMtCollectiveAllGatherFuture {
                 alloc: self.clone(),
                 index,
                 len,
@@ -1267,7 +1266,7 @@ impl CommAllocCollectiveAllGather for UcxAlloc {
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
         CollectiveAllGatherIntoBufferOpHandle {
-            future: CollectiveAllGatherIntoBufferOpFuture::Ucx(UcxCollectiveAllGatherIntoBufferFuture {
+            future: CollectiveAllGatherIntoBufferOpFuture::UcxMt(UcxMtCollectiveAllGatherIntoBufferFuture {
                 alloc: self.clone(),
                 index,
                 len,
@@ -1281,7 +1280,7 @@ impl CommAllocCollectiveAllGather for UcxAlloc {
     }
 }
 
-impl CommAllocCollectiveGather for UcxAlloc {
+impl CommAllocCollectiveGather for UcxMtAlloc {
     fn gather<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1297,7 +1296,7 @@ impl CommAllocCollectiveGather for UcxAlloc {
         };
 
         CollectiveGatherOpHandle {
-            future: CollectiveGatherOpFuture::Ucx(UcxCollectiveGatherFuture {
+            future: CollectiveGatherOpFuture::UcxMt(UcxMtCollectiveGatherFuture {
                 alloc: self.clone(),
                 index,
                 len,
@@ -1319,7 +1318,7 @@ impl CommAllocCollectiveGather for UcxAlloc {
         root_or_buffer: RootOrLamellarBuffer<T, B>,
     ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
         CollectiveGatherIntoBufferOpHandle {
-            future: CollectiveGatherIntoBufferOpFuture::Ucx(UcxCollectiveGatherIntoBufferFuture {
+            future: CollectiveGatherIntoBufferOpFuture::UcxMt(UcxMtCollectiveGatherIntoBufferFuture {
                 alloc: self.clone(),
                 index,
                 len,
@@ -1333,7 +1332,7 @@ impl CommAllocCollectiveGather for UcxAlloc {
     }
 }
 
-impl CommAllocCollectiveAllToAll for UcxAlloc {
+impl CommAllocCollectiveAllToAll for UcxMtAlloc {
     fn alltoall<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1342,7 +1341,7 @@ impl CommAllocCollectiveAllToAll for UcxAlloc {
         len: usize,
     ) -> CollectiveAllToAllOpHandle<T> {
         CollectiveAllToAllOpHandle {
-            future: CollectiveAllToAllOpFuture::Ucx(UcxCollectiveAllToAllFuture {
+            future: CollectiveAllToAllOpFuture::UcxMt(UcxMtCollectiveAllToAllFuture {
                 alloc: self.clone(),
                 index,
                 result: vec![T::default(); len * self.num_pes],
@@ -1364,8 +1363,8 @@ impl CommAllocCollectiveAllToAll for UcxAlloc {
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllToAllIntoBufferOpHandle<T, B> {
         CollectiveAllToAllIntoBufferOpHandle {
-            future: CollectiveAllToAllIntoBufferOpFuture::Ucx(
-                UcxCollectiveAllToAllIntoBufferFuture {
+            future: CollectiveAllToAllIntoBufferOpFuture::UcxMt(
+                UcxMtCollectiveAllToAllIntoBufferFuture {
                     alloc: self.clone(),
                     index,
                     len,
@@ -1380,7 +1379,7 @@ impl CommAllocCollectiveAllToAll for UcxAlloc {
     }
 }
 
-impl CommAllocCollectiveBroadcast for UcxAlloc {
+impl CommAllocCollectiveBroadcast for UcxMtAlloc {
     fn broadcast<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1398,7 +1397,7 @@ impl CommAllocCollectiveBroadcast for UcxAlloc {
         };
 
         CollectiveBroadcastOpHandle {
-            future: CollectiveBroadcastOpFuture::Ucx(UcxCollectiveBroadcastFuture {
+            future: CollectiveBroadcastOpFuture::UcxMt(UcxMtCollectiveBroadcastFuture {
                 alloc: self.clone(),
                 target,
                 len,
@@ -1418,7 +1417,7 @@ impl CommAllocCollectiveBroadcast for UcxAlloc {
         len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
         CollectiveBroadcastIntoBufferOpHandle {
-            future: CollectiveBroadcastIntoBufferOpFuture::Ucx(UcxCollectiveBroadcastIntoBufferFuture {
+            future: CollectiveBroadcastIntoBufferOpFuture::UcxMt(UcxMtCollectiveBroadcastIntoBufferFuture {
                 alloc: self.clone(),
                 target: root_or_buffer.into(),
                 len,
@@ -1431,7 +1430,7 @@ impl CommAllocCollectiveBroadcast for UcxAlloc {
     }
 }
 
-impl CommAllocCollectiveScatter for UcxAlloc {
+impl CommAllocCollectiveScatter for UcxMtAlloc {
     fn scatter<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1440,7 +1439,7 @@ impl CommAllocCollectiveScatter for UcxAlloc {
         len: usize,
     ) -> CollectiveScatterOpHandle<T> {
         CollectiveScatterOpHandle {
-            future: CollectiveScatterOpFuture::Ucx(UcxCollectiveScatterFuture {
+            future: CollectiveScatterOpFuture::UcxMt(UcxMtCollectiveScatterFuture {
                 alloc: self.clone(),
                 len,
                 result: vec![T::default(); len],
@@ -1462,7 +1461,7 @@ impl CommAllocCollectiveScatter for UcxAlloc {
         len: usize,
     ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
         CollectiveScatterIntoBufferOpHandle {
-            future: CollectiveScatterIntoBufferOpFuture::Ucx(UcxCollectiveScatterIntoBufferFuture {
+            future: CollectiveScatterIntoBufferOpFuture::UcxMt(UcxMtCollectiveScatterIntoBufferFuture {
                 alloc: self.clone(),
                 len,
                 src_or_root_pe: src_or_root_pe.into(),
@@ -1476,7 +1475,7 @@ impl CommAllocCollectiveScatter for UcxAlloc {
     }
 }
 
-impl CommAllocCollectiveReduceScatter for UcxAlloc {
+impl CommAllocCollectiveReduceScatter for UcxMtAlloc {
     fn reduce_scatter<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1486,7 +1485,7 @@ impl CommAllocCollectiveReduceScatter for UcxAlloc {
         len: usize,
     ) -> CollectiveReduceScatterOpHandle<T> {
         CollectiveReduceScatterOpHandle {
-            future: CollectiveReduceScatterOpFuture::Ucx(UcxCollectiveReduceScatterFuture {
+            future: CollectiveReduceScatterOpFuture::UcxMt(UcxMtCollectiveReduceScatterFuture {
                 alloc: self.clone(),
                 op,
                 index,
@@ -1510,8 +1509,8 @@ impl CommAllocCollectiveReduceScatter for UcxAlloc {
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         CollectiveReduceScatterIntoBufferOpHandle {
-            future: CollectiveReduceScatterIntoBufferOpFuture::Ucx(
-                UcxCollectiveReduceScatterIntoBufferFuture {
+            future: CollectiveReduceScatterIntoBufferOpFuture::UcxMt(
+                UcxMtCollectiveReduceScatterIntoBufferFuture {
                     alloc: self.clone(),
                     op,
                     index,

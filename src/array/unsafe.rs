@@ -17,7 +17,8 @@ use crate::array::{LamellarRead, LamellarWrite};
 use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
-use crate::lamellae::{AllocationType, AtomicOp, CommInfo, CommProgress};
+use crate::lamellae::collective::ReduceOp;
+use crate::lamellae::{AllocationType, AtomicOp, CollectiveOpKind, CommInfo, CommProgress};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
@@ -67,6 +68,7 @@ pub struct UnsafeArray<T: Remote> {
     pub(crate) inner: UnsafeArrayInner,
     pub(crate) mem_region: MemoryRegion<T>,
     pub(crate) atomic_support: UnsafeAtomicOpSupport,
+    pub(crate) collective_support: UnsafeCollectiveSupport,
     phantom: PhantomData<T>,
 }
 
@@ -88,12 +90,45 @@ pub(crate) struct UnsafeAtomicOpSupport {
     pub(crate) fetch_bit_and: bool,
 }
 
+#[derive(crate::Deserialize, crate::Serialize, Clone, Copy, Debug, Default)]
+pub(crate) struct UnsafeCollectiveSupport {
+    pub(crate) barrier: bool,
+    pub(crate) broadcast: bool,
+    pub(crate) alltoall: bool,
+    pub(crate) all_sum: bool,
+    pub(crate) all_prod: bool,
+    pub(crate) all_min: bool,
+    pub(crate) all_max: bool,
+    pub(crate) all_bit_or: bool,
+    pub(crate) all_bit_xor: bool,
+    pub(crate) all_bit_and: bool,
+    pub(crate) allgather: bool,
+    pub(crate) sum_scatter: bool,
+    pub(crate) prod_scatter: bool,
+    pub(crate) min_scatter: bool,
+    pub(crate) max_scatter: bool,
+    pub(crate) bit_or_scatter: bool,
+    pub(crate) bit_xor_scatter: bool,
+    pub(crate) bit_and_scatter: bool,
+    pub(crate) sum: bool,
+    pub(crate) prod: bool,
+    pub(crate) min: bool,
+    pub(crate) max: bool,
+    pub(crate) bit_or: bool,
+    pub(crate) bit_xor: bool,
+    pub(crate) bit_and: bool,
+    pub(crate) scatter: bool,
+    pub(crate) gather: bool,
+}
+
 impl<T: Remote> Clone for UnsafeArray<T> {
     fn clone(&self) -> Self {
         UnsafeArray {
             inner: self.inner.clone(),
             mem_region: unsafe { self.mem_region.as_base::<T>() },
             atomic_support: self.atomic_support,
+            collective_support: self.collective_support,
+
             phantom: PhantomData,
         }
     }
@@ -134,10 +169,16 @@ impl<'de, T: Dist + 'static> serde::Deserialize<'de> for UnsafeArray<T> {
         let sample = mem_region.as_slice()[0];
         let atomic_support =
             UnsafeArray::<T>::detect_atomic_support(inner.data.team.lamellae.comm(), sample);
+        let collective_support = UnsafeArray::<T>::detect_collective_support(
+            inner.data.team.lamellae.comm(),
+            sample,
+        );
+
         Ok(UnsafeArray {
             inner,
             mem_region,
             atomic_support,
+            collective_support,
             phantom: PhantomData,
         })
     }
@@ -329,6 +370,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             },
             mem_region,
             atomic_support: Self::detect_atomic_support(team.lamellae.comm(), T::default()),
+            collective_support: Self::detect_collective_support(team.lamellae.comm(), T::default()),
             phantom: PhantomData,
         };
 
@@ -346,8 +388,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         sample: T,
     ) -> UnsafeAtomicOpSupport {
         UnsafeAtomicOpSupport {
-            load: comm
-                .atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
+            load: comm.atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
             store: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(sample))),
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(sample))),
             cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(Box::pin(sample), Box::pin(sample))),
@@ -364,6 +405,40 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 
+    pub(crate) fn detect_collective_support(
+        comm: &crate::lamellae::Comm,
+        _sample: T,
+    ) -> UnsafeCollectiveSupport {
+        UnsafeCollectiveSupport {
+            barrier: comm.collective_avail::<()>(CollectiveOpKind::Barrier),
+            broadcast: comm.collective_avail::<T>(CollectiveOpKind::Broadcast),
+            alltoall: comm.collective_avail::<T>(CollectiveOpKind::AllToAll),
+            all_sum: comm.collective_avail::<T>(CollectiveOpKind::AllReduce(ReduceOp::Sum)),
+            all_prod: comm.collective_avail::<T>(CollectiveOpKind::AllReduce(ReduceOp::Prod)),
+            all_min: comm.collective_avail::<T>(CollectiveOpKind::AllReduce(ReduceOp::Min)),
+            all_max: comm.collective_avail::<T>(CollectiveOpKind::AllReduce(ReduceOp::Max)),
+            all_bit_or: comm.collective_avail::<T>(CollectiveOpKind::AllReduce(ReduceOp::BitOr)),
+            all_bit_xor: comm.collective_avail::<T>(CollectiveOpKind::AllReduce(ReduceOp::BitXor)),
+            all_bit_and: comm.collective_avail::<T>(CollectiveOpKind::AllReduce(ReduceOp::BitAnd)),
+            allgather: comm.collective_avail::<T>(CollectiveOpKind::AllGather),
+            sum_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Sum)),
+            prod_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Prod)),
+            min_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Min)),
+            max_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Max)),
+            bit_or_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitOr)),
+            bit_xor_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitXor)),
+            bit_and_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitAnd)),
+            sum: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::Sum)),
+            prod: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::Prod)),
+            min: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::Min)),
+            max: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::Max)),
+            bit_or: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::BitOr)),
+            bit_xor: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::BitXor)),
+            bit_and: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::BitAnd)),
+            scatter: comm.collective_avail::<T>(CollectiveOpKind::Scatter),
+            gather: comm.collective_avail::<T>(CollectiveOpKind::Gather),
+        }
+    }
     #[doc(alias("One-sided", "onesided"))]
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
@@ -1020,10 +1095,17 @@ impl<T: Dist + 'static> From<__UnsafeByteArray> for UnsafeArray<T> {
         let sample = mem_region.as_slice()[0];
         let atomic_support =
             UnsafeArray::<T>::detect_atomic_support(inner.data.team.lamellae.comm(), sample);
+
+        let collective_support =
+            UnsafeArray::<T>::detect_collective_support(
+                inner.data.team.lamellae.comm(), 
+                sample
+            );
         UnsafeArray {
             inner,
             mem_region,
             atomic_support,
+            collective_support,
             phantom: PhantomData,
         }
     }
@@ -1033,12 +1115,20 @@ impl<T: Dist + 'static> From<&__UnsafeByteArray> for UnsafeArray<T> {
     fn from(array: &__UnsafeByteArray) -> Self {
         let mem_region = unsafe { array.inner.data.mem_region.as_base::<T>() };
         let sample = mem_region.as_slice()[0];
-        let atomic_support =
-            UnsafeArray::<T>::detect_atomic_support(array.inner.data.team.lamellae.comm(), sample);
+        let atomic_support = UnsafeArray::<T>::detect_atomic_support(
+            array.inner.data.team.lamellae.comm(),
+            sample,
+        );
+        let collective_support =
+            UnsafeArray::<T>::detect_collective_support(
+                array.inner.data.team.lamellae.comm(), 
+                sample
+            );
         UnsafeArray {
             inner: array.inner.clone(),
             mem_region,
             atomic_support,
+            collective_support,
             phantom: PhantomData,
         }
     }
@@ -1330,6 +1420,7 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
             inner: inner,
             mem_region,
             atomic_support: self.atomic_support,
+            collective_support: self.collective_support,
             phantom: PhantomData,
         }
     }
