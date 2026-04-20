@@ -260,7 +260,7 @@ impl MemoryHandleInner {
         // println!("[exchange_key_alloc] ex_buff  {:?}", exchange_buffer.as_mut_slice::<u8>());
 
         barrier.sub_barrier(pes);
-        let ex_buff_slice = exchange_buffer.as_mut_slice::<u8>();
+        let ex_buff_slice = unsafe { exchange_buffer.as_mut_slice::<u8>() };
         // println!("[exchange_key_alloc] ex_buff size: {} {:?}", ex_buff_slice.len(), ex_buff_slice);
         let mut all_rkeys = HashMap::new();
         for pe in pes {
@@ -316,7 +316,7 @@ impl MemoryHandleInner {
 
         exchange_buffer.wait_all();
         barrier.barrier();
-        let ex_buff_slice = exchange_buffer.as_mut_slice::<u8>();
+        let ex_buff_slice = unsafe { exchange_buffer.as_mut_slice::<u8>() };
         // trace!(target: "ucx", "[exchange_key_alloc] ex_buff size: {}", ex_buff_slice.len());
         let mut all_rkeys = HashMap::new();
         for pe in 0..exchange_buffer.num_pes {

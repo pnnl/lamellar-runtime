@@ -10,11 +10,11 @@ use crate::{
         LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
         TeamTryFrom,
     }, darc::Darc, lamellae::{
-        collective::{BroadcastInput, CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpHandle, CollectiveReduceScatterOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
-    }, lamellar_team::{LamellarTeam, LamellarTeamRT}, memregion::one_sided::MemRegionHandleInner, scheduler::Scheduler, LamellarEnv
+        collective::{BroadcastInput, CollectiveAllToAllIntoBufferOpHandle, CollectiveAllToAllOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpHandle, CollectiveReduceScatterOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle, CommAllocCollectiveAllToAll, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
+    }, lamellar_team::{LamellarTeam, LamellarTeamRT}, scheduler::Scheduler, LamellarEnv
 };
 use core::marker::PhantomData;
-use std::hash::{Hash, Hasher};
+use std::{hash::{Hash, Hasher}, sync::atomic::AtomicUsize};
 use std::sync::Arc;
 
 //#[doc(hidden)]
@@ -794,10 +794,11 @@ pub(crate) enum Mode {
 // for local we would probably need to develop something like a one-sided initiated darc...
 pub(crate) struct MemoryRegion<T: Remote> {
     pub(crate) alloc: CommAlloc,
+    pub(crate) coll_sync_alloc: Option<Arc<CommAlloc>>,
     pe: usize,
     backend: Backend,
-    scheduler: Arc<Scheduler>,
-    counters: Option<Arc<[Arc<AMCounters>]>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) rdma: Arc<Lamellae>,
     mode: Mode,
     // freeable: bool, //indicates if this object is responsible for freeing the underlying data -- calling as_base creates a new object that shares the same underlying data but we don't want to free it twice
@@ -836,6 +837,7 @@ impl<T: Remote> MemoryRegion<T> {
             std::mem::align_of::<T>()
         );
         let mut mode = Mode::Shared;
+        let mut coll_sync_alloc = None;
         let alloc = if num_elems > 0 {
             if let AllocationType::Local = alloc {
                 mode = Mode::Local;
@@ -844,6 +846,16 @@ impl<T: Remote> MemoryRegion<T> {
                     std::mem::align_of::<T>(),
                 )?
             } else {
+                let bytes = match &alloc {
+                    AllocationType::Local => unreachable!(),
+                    AllocationType::Global => (lamellae.comm().num_pes() + 1)  * std::mem::size_of::<AtomicUsize>(),
+                    AllocationType::Sub(pes) => (pes.len() +1) * std::mem::size_of::<AtomicUsize>(),
+                };
+                coll_sync_alloc = Some(Arc::new(lamellae.comm().alloc(
+                    bytes,
+                    alloc.clone(),
+                    std::mem::align_of::<AtomicUsize>(),
+                )?));
                 lamellae.comm().alloc(
                     num_elems * std::mem::size_of::<T>(),
                     alloc,
@@ -860,6 +872,7 @@ impl<T: Remote> MemoryRegion<T> {
         };
         let temp = MemoryRegion {
             alloc,
+            coll_sync_alloc,
             pe: lamellae.comm().my_pe(),
             scheduler: scheduler.clone(),
             counters: counters,
@@ -897,6 +910,7 @@ impl<T: Remote> MemoryRegion<T> {
                 addr.into(),
                 num_bytes,
             ),
+            coll_sync_alloc: None,
             pe: pe,
             // num_elems,
             scheduler: team.scheduler.clone(),
@@ -922,6 +936,7 @@ impl<T: Remote> MemoryRegion<T> {
         );
         MemoryRegion {
             alloc: self.alloc.clone(),
+            coll_sync_alloc: self.coll_sync_alloc,
             pe: self.pe,
             scheduler: self.scheduler.clone(),
             counters: self.counters.clone(),
@@ -939,6 +954,7 @@ impl<T: Remote> MemoryRegion<T> {
         );
         MemoryRegion {
             alloc: self.alloc.clone(),
+            coll_sync_alloc: self.coll_sync_alloc.clone(),
             pe: self.pe,
             // num_elems: self.alloc.num_bytes() / std::mem::size_of::<B>(),
             scheduler: self.scheduler.clone(),
@@ -949,6 +965,10 @@ impl<T: Remote> MemoryRegion<T> {
             // freeable: false,
             phantom: PhantomData,
         }
+    }
+
+    pub(crate) fn get_collective_sync_alloc(&self) -> Option<Arc<CommAlloc>> {
+        self.coll_sync_alloc.clone()
     }
 
     pub(crate) unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
@@ -1497,38 +1517,42 @@ impl<T: Remote> MemoryRegion<T> {
             )
     }
 
-    pub(crate) fn broadcast_all(
+    pub(crate) fn alltoall(
         &self, 
-        src: impl Into<MemregionRdmaInputInner<T>>
-    ) -> CollectiveAllBroadcastOpHandle<T> {
+        index: usize,
+        len: usize,
+    ) -> CollectiveAllToAllOpHandle<T> {
         trace!(
-            "broadcast_all memregion {:?} ",
+            "alltoall memregion {:?} ",
             self.alloc,
         );
         self.alloc
             .inner_alloc
-            .broadcast_all(
+            .alltoall(
                 &self.scheduler, 
                 self.counters.clone(), 
-                src,
+                index,
+                len,
             )
     }
 
-    pub(crate) fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(
+    pub(crate) fn alltoall_into_buffer<B: AsLamellarBuffer<T>>(
         &self, 
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         buffer: LamellarBuffer<T, B>,
-    ) -> CollectiveAllBroadcastIntoBufferOpHandle<T, B> {
+    ) -> CollectiveAllToAllIntoBufferOpHandle<T, B> {
         trace!(
-            "broadcast_all into buffer memregion {:?} ",
+            "alltoall into buffer memregion {:?} ",
             self.alloc,
         );
         self.alloc
             .inner_alloc
-            .broadcast_all_into_buffer(
+            .alltoall_into_buffer(
                 &self.scheduler, 
                 self.counters.clone(), 
-                src,
+                index,
+                len,
                 buffer
             )
     }

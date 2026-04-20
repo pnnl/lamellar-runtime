@@ -1,10 +1,9 @@
-use crate::array::collective::broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveAllBroadcastIntoBufferState, ArrayCollectiveAllBroadcastState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle, ArrayCollectiveScatterIntoBufferState, ArrayCollectiveScatterState};
+use crate::array::collective::broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveAllToAllIntoBufferState, ArrayCollectiveAllToAllState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle, ArrayCollectiveScatterIntoBufferState, ArrayCollectiveScatterState};
 use crate::array::collective::gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState};
 use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState};
 use crate::array::collective::reduce_scatter_handle::{ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle, ArrayCollectiveReduceScatterIntoBufferState, ArrayCollectiveReduceScatterState};
 use crate::array::private::LamellarArrayPrivate;
 use crate::lamellae::collective::{BroadcastInput, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput};
-use crate::memregion::MemregionRdmaInput;
 use crate::{AsLamellarBuffer, LamellarBuffer, UnsafeArray};
 use crate::Dist;
 
@@ -719,34 +718,34 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn broadcast_all(&self,  src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllBroadcastHandle<T> {
+    pub unsafe fn alltoall(&self,  index: usize, len: usize) -> ArrayCollectiveAllToAllHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .broadcast_all(src.into());
+            .alltoall(index, len);
 
-        ArrayCollectiveAllBroadcastHandle {
+        ArrayCollectiveAllToAllHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayCollectiveAllBroadcastState::CollectiveAllBroadcast(req),
+            state: ArrayCollectiveAllToAllState::CollectiveAllToAll(req),
             spawned: false,
         }
     }
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(&self,  src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllBroadcastIntoBufferHandle<T, B> {
+    pub unsafe fn alltoall_into_buffer<B: AsLamellarBuffer<T>>(&self,  index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllToAllIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .broadcast_all_into_buffer(src.into(), buffer);
+            .alltoall_into_buffer(index, len, buffer);
 
-        ArrayCollectiveAllBroadcastIntoBufferHandle {
+        ArrayCollectiveAllToAllIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayCollectiveAllBroadcastIntoBufferState::CollectiveAllBroadcastIntoBuffer(req),
+            state: ArrayCollectiveAllToAllIntoBufferState::CollectiveAllToAllIntoBuffer(req),
             spawned: false,
         }
     }

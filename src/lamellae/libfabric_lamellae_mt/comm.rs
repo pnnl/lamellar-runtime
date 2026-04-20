@@ -2,7 +2,7 @@ use crate::{
     config,
     lamellae::{
         comm::{AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
-        AllocationType,
+        AllocationType, CollectiveOpKind,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
     Backend,
@@ -136,6 +136,9 @@ impl CommInfo for LibfabricMtComm {
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
             / 1_000_000.0
+    }
+    fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
+        self.ofi.collective_avail::<T>(op)
     }
 }
 

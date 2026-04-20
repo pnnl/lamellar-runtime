@@ -3,6 +3,7 @@ pub(crate) use handle::NetworkAtomicArrayHandle;
 
 pub(crate) mod iteration;
 pub(crate) mod operations;
+pub(crate) mod collective;
 mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::NativeAtomicType;
@@ -889,6 +890,7 @@ pub struct NetworkAtomicArray<T: Remote> {
     pub(crate) array: UnsafeArray<T>,
     pub(crate) orig_t: NetworkAtomicType,
     pub(crate) op_support: UnsafeAtomicOpSupport,
+    pub(crate) collective_support: UnsafeCollectiveSupport,
 }
 
 impl<T: Remote> crate::active_messaging::DarcSerde for NetworkAtomicArray<T> {
@@ -1148,6 +1150,12 @@ impl<T: Dist> NetworkAtomicArray<T> {
         }
     }
 
+    pub(crate) fn detect_collective_support(array: &UnsafeArray<T>) -> UnsafeCollectiveSupport {
+        let comm = array.inner.data.team.lamellae.comm();
+        let dummy_val = array.dummy_val();
+        UnsafeArray::detect_collective_support(comm, dummy_val)
+    }
+
     pub fn network_type(&self) -> NetworkAtomicType {
         self.orig_t
     }
@@ -1182,6 +1190,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
             array: self.array.use_distribution(distribution),
             orig_t: self.orig_t,
             op_support: self.op_support,
+            collective_support: self.collective_support,
         }
     }
 
@@ -1242,10 +1251,12 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NetworkAtomicArray<T> {
             .await_on_outstanding(DarcMode::NetworkAtomicArray)
             .await;
         let op_support = Self::detect_op_support(&array);
+        let collective_support = Self::detect_collective_support(&array);
         NetworkAtomicArray {
             array: array,
             orig_t: NetworkAtomicType::of::<T>(),
             op_support,
+            collective_support,
         }
     }
 }
@@ -1307,6 +1318,7 @@ impl<T: Dist> From<__NetworkAtomicByteArray> for NetworkAtomicArray<T> {
         NetworkAtomicArray {
             orig_t: NetworkAtomicType::of::<T>(),
             op_support: Self::detect_op_support(&array),
+            collective_support: Self::detect_collective_support(&array),
             array,
         }
     }
@@ -1330,6 +1342,7 @@ impl<T: Dist> From<__NetworkAtomicByteArray> for AtomicArray<T> {
         NetworkAtomicArray {
             orig_t: NetworkAtomicType::of::<T>(),
             op_support: NetworkAtomicArray::<T>::detect_op_support(&array),
+            collective_support: NetworkAtomicArray::<T>::detect_collective_support(&array),
             array,
         }
         .into()
@@ -1489,6 +1502,7 @@ impl<T: Dist> SubArray<T> for NetworkAtomicArray<T> {
             array: self.array.sub_array(range),
             orig_t: self.orig_t,
             op_support: self.op_support,
+            collective_support: self.collective_support,
         }
     }
     fn global_index(&self, sub_index: usize) -> usize {

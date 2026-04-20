@@ -5,15 +5,13 @@ mod memory_region;
 mod worker;
 
 use context::Context;
-use crossbeam::thread;
 use endpoint::Endpoint;
 pub(crate) use endpoint::UcxRequest;
 use endpoint::ATOMIC_PUT_TMP;
-use lamellar_ucc_sys::ucc_status_t_UCC_INPROGRESS;
 use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
 use worker::Worker;
 use crate::config;
-use crate::LAMELLAR_THREAD_ID;
+use crate::lamellae::CollectiveOpKind;
 use super::ucc::UccLib;
 
 #[cfg(feature = "enable-on-node-shmem")]
@@ -335,12 +333,12 @@ impl UcxWorld {
         let alloc = Arc::new(world.alloc(config().ucc_oob_init_buffer_size * world.num_pes, 8, AllocationType::Global));
         world.ucc_world_buffer = Some(alloc.clone());
 
-        alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX);
+        unsafe { alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX) };
         world.barrier();
         let ucc_lib = Arc::new(UccLib::new());
         let ucc_context = Arc::new(UccContext::new(ucc_lib.clone(), alloc.clone()).unwrap());
         world.barrier();
-        alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX);
+        unsafe { alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX) };
         world.barrier();
         let ucc_world_team = UccTeam::new(my_pe, &(0..num_pes).collect::<Vec<_>>(), ucc_context.clone(), alloc.clone()).unwrap();
 
@@ -422,6 +420,16 @@ impl UcxWorld {
         )
     }
 
+    pub(crate) fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
+        if self.ucc_context.is_none() {
+            return false;
+        }
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<()>() {
+            assert!(matches!(op, CollectiveOpKind::Barrier));
+            return true;
+        }
+        self.atomic_avail::<T>() // if it's one of the supported atomic types, we can do collectives with it, otherwise we can't
+    }
     fn initial_alloc(
         exchange_buffer: bool,
         context: &Arc<Context>,
@@ -1850,11 +1858,11 @@ impl UcxAlloc {
         }
     }
 
-    pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
+    pub(crate) unsafe fn as_mut_slice<T>(&self) -> &mut [T] {
         self.mem.as_mut_slice()
     }
 
-    pub(crate) fn as_slice<T>(&self) -> &[T] {
+    pub(crate) unsafe fn as_slice<T>(&self) -> &[T] {
         self.mem.as_slice()
     }
 

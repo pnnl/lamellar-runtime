@@ -756,16 +756,35 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
             }
         })
     }
+    
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
     ) {
+        async_std::task::block_on(async {
         unsafe {
-            LibfabricAsyncAlloc::inner_get_unmanaged(&self, pe, offset, dst.as_mut_slice(), false)
+            LibfabricAsyncAlloc::inner_get_unmanaged(&self, pe, offset, dst.as_mut_slice())
+                .await
                 .expect("error in get_into_buffer_unmanaged")
-        };
+        };});
+
+    }
+    
+    fn put_blocking<T:Remote>(&self,src:T,pe:usize,offset:usize) {
+        // assert_eq!(
+        //     pe, self.remote_pe,
+        //     "put_blocking called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}",
+        //     pe, self.remote_pe
+        // );
+        async_std::task::block_on(async {
+            unsafe {
+                LibfabricAsyncAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src))
+                    .await
+                    .expect("error in put_blocking")
+            };
+        });
     }
 }
 
@@ -778,11 +797,11 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
-        assert_eq!(
-            pe, self.remote_pe,
-            "put called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}",
-            pe, self.remote_pe
-        );
+        // assert_eq!(
+        //     pe, self.remote_pe,
+        //     "put called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}",
+        //     pe, self.remote_pe
+        // );
 
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
@@ -799,11 +818,11 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         .into()
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
-        assert_eq!(
-            pe, self.remote_pe,
-            "put_unmanaged called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}",
-            pe, self.remote_pe
-        );
+        // assert_eq!(
+        //     pe, self.remote_pe,
+        //     "put_unmanaged called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}",
+        //     pe, self.remote_pe
+        // );
         if pe != self.alloc.ofi.my_pe {
             unsafe {
                 LibfabricAsyncAlloc::inner_put_unmanaged(
@@ -1050,15 +1069,31 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         assert_eq!(pe, self.remote_pe, "get_into_buffer_unmanaged called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
+        async_std::task::block_on(async {
         unsafe {
             LibfabricAsyncAlloc::inner_get_unmanaged(
                 &self.alloc,
                 pe,
                 offset,
                 dst.as_mut_slice(),
-                false,
             )
+            .await
             .expect("error in get_into_buffer_unmanaged")
-        };
+        };});
+    }
+    
+    fn put_blocking<T:Remote>(&self,src:T,pe:usize,offset:usize) {
+        // assert_eq!(
+        //     pe, self.remote_pe,
+        //     "put_blocking called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+        //     pe, self.remote_pe
+        // );
+        async_std::task::block_on(async {
+            unsafe {
+                LibfabricAsyncAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src))
+                    .await
+                    .expect("error in put_blocking")
+            };
+        });
     }
 }

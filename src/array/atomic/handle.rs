@@ -125,6 +125,7 @@ impl<T: Dist + ArrayOps + 'static> Future for AtomicArrayHandle<T> {
                 let array = ready!(handle.creation_future.as_mut().poll(cx));
                 Poll::Ready(AtomicArray::NetworkAtomicArray(NetworkAtomicArray {
                     op_support: NetworkAtomicArray::detect_op_support(&array),
+                    collective_support: NetworkAtomicArray::detect_collective_support(&array),
                     array,
                     orig_t: NetworkAtomicType::of::<T>(),
                 }))

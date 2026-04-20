@@ -1206,17 +1206,17 @@ impl<T: Remote> SharedMemoryRegion<T> {
             .as_base::<T>()
             .gather_into_buffer(index, len, root_or_buffer)
     }
-    pub unsafe fn broadcast_all(&self,  src: impl Into<MemregionRdmaInput<T>>) -> CollectiveAllBroadcastOpHandle<T> {
+    pub unsafe fn broadcast_all(&self,  index:usize, len: usize) -> CollectiveAllToAllOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .broadcast_all(src.into())
+            .alltoall(index, len)
     }
-    pub unsafe fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(&self,  src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> CollectiveAllBroadcastIntoBufferOpHandle<T, B> {
+    pub unsafe fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(&self,  index:usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllToAllIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .broadcast_all_into_buffer(src.into(), buffer)
+            .alltoall_into_buffer(index, len, buffer)
     }
         pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput, len: usize) -> CollectiveBroadcastOpHandle<T> {
         // let slice = self.as_slice();

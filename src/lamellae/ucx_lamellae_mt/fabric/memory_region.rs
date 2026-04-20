@@ -32,6 +32,15 @@ impl MemoryHandle {
         }
     }
 
+    pub(crate) fn as_slice<T>(&self) -> &[T] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.addr as *const T,
+                self.size / std::mem::size_of::<T>(),
+            )
+        }
+    }
+
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> Self {
         assert!(offset + size <= self.size);
         MemoryHandle {
@@ -194,7 +203,7 @@ impl MemoryHandleInner {
 
         exchange_buffer.wait_all();
         pmi.barrier(false).expect("PMI Barrier failed");
-        let ex_buff_slice = exchange_buffer.as_mut_slice::<u8>();
+        let ex_buff_slice = unsafe{exchange_buffer.as_mut_slice::<u8>()};
         // println!("[exchange_key_alloc] ex_buff size: {}", ex_buff_slice.len());
         let mut all_rkeys = Vec::new();
         for pe in 0..exchange_buffer.num_pes {
