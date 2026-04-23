@@ -165,28 +165,26 @@ impl LamellarAm for MyAm {
                 let mut indices = vec![];
                 std::mem::swap(&mut indices, &mut pe_bufs[pe]);
                 let _ = task_group
-                    .exec_am_local(SendAm {
+                    .spawn_am_local(SendAm {
                         indices,
                         buffers: self.buffers.clone(),
                         remote_pe: pe,
                         buffer_size: self.buffer_size,
                         comm_lock: self.comm_lock.clone(),
-                    })
-                    .spawn();
+                    });
                 cnt += 1;
             }
         }
         for (pe, indices) in pe_bufs.drain(..).enumerate() {
             if indices.len() > 0 {
                 let _ = task_group
-                    .exec_am_local(SendAm {
+                    .spawn_am_local(SendAm {
                         indices,
                         buffers: self.buffers.clone(),
                         remote_pe: pe,
                         buffer_size: self.buffer_size,
                         comm_lock: self.comm_lock.clone(),
-                    })
-                    .spawn();
+                    });
                 cnt += 1;
             }
         }
@@ -285,13 +283,12 @@ fn main() {
     let timer = std::time::Instant::now();
     for (pe, buffer) in res_am_buffers.iter().enumerate() {
         let _ = world
-            .exec_am_local(RecvAm {
+            .spawn_am_local(RecvAm {
                 buffer: buffer.clone(),
                 remote_pe: pe,
                 finished: finished.clone(),
                 buffer_size,
-            })
-            .spawn();
+            });
     }
     let mut reqs = vec![];
     // if my_pe == 0 {
@@ -299,14 +296,13 @@ fn main() {
         //world.num_threads_per_pe() {
         reqs.push(
             world
-                .exec_am_local(MyAm {
+                .spawn_am_local(MyAm {
                     indices: indices.clone(),
                     buffers: buffers.clone(),
                     buffer_size,
                     table_size_per_pe: table_size_per_pe,
                     comm_lock: comm_lock.clone(),
-                })
-                .spawn(),
+                }),
         );
     }
     world.block_on_all(reqs);

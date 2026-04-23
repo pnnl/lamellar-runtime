@@ -99,10 +99,9 @@ fn main() {
                 let sub_timer = Instant::now();
                 reqs.push(
                     world
-                        .exec_am_all(FlopAM {
+                        .spawn_am_all(FlopAM {
                             iterations: num_iterations,
-                        })
-                        .spawn(),
+                        }),
                 );
 
                 sub_time += sub_timer.elapsed().as_secs_f64();

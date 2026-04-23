@@ -124,15 +124,13 @@ fn main() {
     // while index < ARRAY_LEN / num_pes {
     if my_pe == 0 {
         let _ = world
-            .exec_am_pe(
-                num_pes - 1,
+            .spawn_am_pe(num_pes - 1,
                 RdmaAM {
                     array: array.clone(),
                     orig_pe: my_pe,
                     index: index,
                 },
-            )
-            .spawn();
+            );
         index += 1;
     }
 

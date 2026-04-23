@@ -40,16 +40,14 @@ impl LamellarAM for DataAM {
                     lamellar::world.num_pes()
                 );
                 let _ = lamellar::team
-                    .exec_am_pe(
-                        pe,
+                    .spawn_am_pe(pe,
                         DataAM {
                             array: self.array.clone(),
                             depth: self.depth - 1,
                             width: self.width,
                             path: path.clone(),
                         },
-                    )
-                    .spawn();
+                    );
             }
         }
     }
@@ -79,8 +77,7 @@ fn main() {
     let s = Instant::now();
     // for _i in 0..width {
     //     let pe = pes.sample(&mut rng);
-    //     world.exec_am_pe(
-    //         pe,
+    //     world.spawn_am_pe(//         pe,
     //         DataAM {
     //             array: array.clone(),
     //             depth: 5,
@@ -127,8 +124,7 @@ fn main() {
                         width: width,
                         path: vec![(my_pe, first_half_team.team_pe_id().ok())],
                     },
-                )
-                .spawn();
+                );
 
             println!(
                 "sending {:?} to {:?} of {} ({})",
@@ -138,16 +134,14 @@ fn main() {
                 world.num_pes()
             );
             let _ = odd_team
-                .exec_am_pe(
-                    pe,
+                .spawn_am_pe(pe,
                     DataAM {
                         array: array.clone(),
                         depth: 5,
                         width: width,
                         path: vec![(my_pe, odd_team.team_pe_id().ok())],
                     },
-                )
-                .spawn();
+                );
         }
     }
     world.wait_all();

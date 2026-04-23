@@ -59,8 +59,7 @@ fn main() {
                 let d = _data.clone();
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 let _ = task_group
-                    .exec_am_pe(num_pes - 1, DataAM { data: d })
-                    .spawn(); //we explicity  captured _data and transfer it even though we do nothing with it
+                    .spawn_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
 
                 sum += num_bytes * 1 as u64;
                 cnt += 1;

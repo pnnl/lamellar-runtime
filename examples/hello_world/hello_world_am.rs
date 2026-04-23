@@ -32,10 +32,9 @@ fn main() {
 
     //Send a Hello World Active Message to all pes
     let request = world
-        .exec_am_all(HelloWorld {
+        .spawn_am_all(HelloWorld {
             originial_pe: my_pe,
-        })
-        .spawn();
+        });
 
     //wait for the request to complete
     request.block();

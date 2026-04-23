@@ -108,8 +108,8 @@ fn main() {
                 darc_tuple: (darc1.clone(), darc2.clone()),
                 my_arc: Darc::new(team.clone(), Arc::new(0)).block().unwrap(),
             };
-            let _ = team.exec_am_pe(0, darc_am.clone()).spawn();
-            let _ = team.exec_am_all(darc_am.clone()).spawn();
+            let _ = team.spawn_am_pe(0, darc_am.clone());
+            let _ = team.spawn_am_all(darc_am.clone());
             tg.add_am_pe(0, darc_am.clone());
             tg.add_am_all(darc_am);
             team.block_on(tg.exec());

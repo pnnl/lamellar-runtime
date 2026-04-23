@@ -119,7 +119,7 @@ fn main() {
     world.barrier();
     // let mut index = 0;
     // while index * num_pes < ARRAY_LEN {
-    //     world.exec_am_all(RdmaAM {
+    //     world.spawn_am_all(RdmaAM {
     //         array: array.clone(),
     //         orig_pe: my_pe,
     //         index: index,
@@ -138,8 +138,7 @@ fn main() {
                 array: local_array.clone(),
                 orig_pe: my_pe,
                 index: index,
-            })
-            .spawn();
+            });
         index += 1;
     }
 

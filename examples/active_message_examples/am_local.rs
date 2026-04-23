@@ -90,12 +90,11 @@ fn main() {
         println!("Testing local am no return");
         for i in 0..map.len() {
             let _ = world
-                .exec_am_local(AmNoReturn {
+                .spawn_am_local(AmNoReturn {
                     my_id: i,
                     data: map.clone(),
                     index: index.clone(),
-                })
-                .spawn();
+                });
         }
         world.wait_all();
         println!("-----------------------------------");
@@ -103,12 +102,11 @@ fn main() {
         println!("Testing local am no return");
         for i in 0..map.len() {
             let _ = world
-                .exec_am_local(AmReturnUsize {
+                .spawn_am_local(AmReturnUsize {
                     my_id: i,
                     data: map.clone(),
                     index: index.clone(),
-                })
-                .spawn();
+                });
         }
         world.wait_all();
         println!("-----------------------------------");

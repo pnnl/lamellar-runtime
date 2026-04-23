@@ -73,10 +73,10 @@
 //             // let _ = array.batch_add(&mut pe_indices as &mut dyn Iterator<Item=usize>, sum).spawn();
 
 //             //alteratively we can do this with an AM with much less overhead
-//             let _ = world.exec_am_pe(pe,ApplyPePrefix {
+//             let _ = world.spawn_am_pe(pe,ApplyPePrefix {
 //                 array: array.clone(),
 //                 sum,
-//             }).spawn();
+//             });
 //         }
 //     }
 //     world.wait_all();
