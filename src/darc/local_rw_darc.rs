@@ -233,7 +233,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
-    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+    /// let _ = world.spawn_am_all(DarcAm {counter: counter.clone()});
     /// let guard = counter.read().block(); //we can also explicitly block on the lock in a non async context
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
@@ -275,7 +275,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
-    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+    /// let _ = world.spawn_am_all(DarcAm {counter: counter.clone()});
     /// let mut  guard = counter.write().block(); //we can also explicitly block on the lock in a non async context
     /// *guard += my_pe;
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);

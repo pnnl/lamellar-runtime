@@ -1147,7 +1147,7 @@ pub trait ActiveMessaging {
     /// # }
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
-    /// let _ = world.exec_am_all(MyAm{val: world.my_pe()}).spawn();
+    /// let _ = world.spawn_am_all(MyAm{val: world.my_pe()});
     /// world.wait_all(); //block until the previous am has finished
     ///```
     fn wait_all(&self);
@@ -1183,7 +1183,7 @@ pub trait ActiveMessaging {
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// let world_clone = world.clone();
     /// world.block_on(async move {
-    ///     let _ = world_clone.exec_am_all(MyAm{val: world_clone.my_pe()}).spawn();
+    ///     let _ = world_clone.spawn_am_all(MyAm{val: world_clone.my_pe()});
     ///     world_clone.await_all().await; //block until the previous am has finished
     /// });
     ///```
@@ -1260,7 +1260,7 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}).spawn(); //launch am locally
+    /// let request = world.spawn_am_all(MyAm{val: world.my_pe()}); //launch am locally
     /// let _result = request.block(); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();
@@ -1269,9 +1269,9 @@ pub trait ActiveMessaging {
     ///     let mut buf = vec![0u8;1000];
     ///     for pe in 0..num_pes{
     ///         let data = file.read(&mut buf).await.unwrap();
-    ///         let _ = world_clone.exec_am_pe(pe,MyAm{val: data}).spawn();
+    ///         let _ = world_clone.spawn_am_pe(pe,MyAm{val: data});
     ///     }
-    ///     let _ = world_clone.exec_am_all(MyAm{val: buf[0] as usize}).spawn();
+    ///     let _ = world_clone.spawn_am_all(MyAm{val: buf[0] as usize});
     ///     world_clone.await_all().await;
     /// });
     /// // we can then await the result of the future at some other point
@@ -1313,7 +1313,7 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}).spawn(); //launch am locally
+    /// let request = world.spawn_am_all(MyAm{val: world.my_pe()}); //launch am locally
     /// let _result = request.block(); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();
@@ -1379,7 +1379,7 @@ pub trait ActiveMessaging {
     /// # let num_pes = world.num_pes();
     ///
     /// let futures = (0..num_pes).map(|(pe)|{
-    ///     world.exec_am_pe(pe, MyAm{val: world.my_pe()}).spawn()
+    ///     world.spawn_am_pe(pe, MyAm{val: world.my_pe()})
     /// }).collect::<Vec<_>>();
     /// let results = world.block_on_all(futures);
     ///```

@@ -119,7 +119,7 @@
 //!     let num_pes = world.num_pes();
 //!     let am = HelloWorld { my_pe: my_pe };
 //!     for pe in 0..num_pes{
-//!         let _ = world.exec_am_pe(pe,am.clone()).spawn(); // explicitly launch on each PE
+//!         let _ = world.spawn_am_pe(pe,am.clone()); // explicitly launch on each PE
 //!     }
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other PEs
@@ -172,9 +172,9 @@
 //!     let num_pes = world.num_pes();
 //!     let cnt = Darc::new(&world, AtomicUsize::new(0)).block().expect("Current PE is in world team");
 //!     for pe in 0..num_pes{
-//!         let _ = world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}).spawn(); // explicitly launch on each PE
+//!         let _ = world.spawn_am_pe(pe,DarcAm{cnt: cnt.clone()}); // explicitly launch on each PE
 //!     }
-//!     let _ = world.exec_am_all(DarcAm{cnt: cnt.clone()}).spawn(); //also possible to execute on every PE with a single call
+//!     let _ = world.spawn_am_all(DarcAm{cnt: cnt.clone()}); //also possible to execute on every PE with a single call
 //!     cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other PEs

@@ -606,7 +606,7 @@ impl<T> GlobalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
-    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+    /// let _ = world.spawn_am_all(DarcAm {counter: counter.clone()});
     /// let guard = counter.read().block();
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     /// drop(guard); //release the lock
@@ -672,7 +672,7 @@ impl<T> GlobalRwDarc<T> {
     /// let my_pe = world.my_pe();
     ///
     /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
-    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+    /// let _ = world.spawn_am_all(DarcAm {counter: counter.clone()});
     /// let mut guard = counter.write().block();  //block until we get the write lock
     /// *guard += my_pe;
     /// drop(guard); //release the

@@ -62,7 +62,7 @@ enum State<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
-/// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+/// let _ = world.spawn_am_all(DarcAm {counter: counter.clone()});
 /// let handle = counter.read();
 /// let guard = handle.block(); //block until we get the read lock
 /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
@@ -221,7 +221,7 @@ impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
-/// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+/// let _ = world.spawn_am_all(DarcAm {counter: counter.clone()});
 /// let handle = counter.write();
 /// let mut guard = handle.block(); //block until we get the write lock
 /// *guard += my_pe;
@@ -377,7 +377,7 @@ impl<T: Sync + Send> Future for LocalRwDarcWriteHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
-/// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+/// let _ = world.spawn_am_all(DarcAm {counter: counter.clone()});
 /// let handle = counter.read();
 /// let guard = handle.block(); //block until we get the write lock
 /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
@@ -493,7 +493,7 @@ impl<T: Sync + Send> Future for GlobalRwDarcReadHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
-/// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+/// let _ = world.spawn_am_all(DarcAm {counter: counter.clone()});
 /// let handle = counter.write();
 /// let mut guard = handle.block(); //block until we get the write lock
 /// *guard += my_pe;

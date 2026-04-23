@@ -1443,7 +1443,7 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
+    ///     let _ = array_clone.add(index,1); //randomly at one to an element in the array.
     /// }).block();
     /// world.wait_all();
     /// world.barrier();
@@ -1493,7 +1493,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     let _ = array_clone.add(index,1).spawn(); //randomly add one to an element in the array.
+    ///     let _ = array_clone.add(index,1); //randomly add one to an element in the array.
     /// }).block();
     /// world.wait_all();
     /// world.barrier();
@@ -1539,7 +1539,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
     ///     elem.store(i+1);
-    /// }).spawn();
+    /// });
     /// array.wait_all();
     /// array.barrier();
     /// let prod =  array.prod().block().expect("array has length > 0");
