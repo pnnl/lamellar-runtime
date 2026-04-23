@@ -851,8 +851,8 @@ pub(crate) struct UcxAlloc {
     rt_ref_cnt_offset: usize,
     context: Arc<Context>,
     worker: Arc<Worker>,
-    endpoints: Vec<Arc<Endpoint>>,
-    remote_keys: HashMap<usize, RemoteAddressInfo>,
+    endpoints: Arc<Vec<Arc<Endpoint>>>,
+    remote_keys: Arc<HashMap<usize, RemoteAddressInfo>>,
     alloc_table: AllocTable,
 }
 
@@ -1043,8 +1043,8 @@ impl UcxAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             context,
             worker,
-            endpoints,
-            remote_keys: my_remote_keys,
+            endpoints: Arc::new(endpoints),
+            remote_keys: Arc::new(my_remote_keys),
             alloc_table: AllocTable::Fabric(mem_handles.clone(), remote_keys.clone()),
         };
         unsafe {
@@ -1112,7 +1112,7 @@ impl UcxAlloc {
             context: self.context.clone(),
             worker: self.worker.clone(),
             endpoints: self.endpoints.clone(),
-            remote_keys,
+            remote_keys: Arc::new(remote_keys),
             alloc_table: self.alloc_table.clone(),
         };
         debug!(target: "ucx", "Created UCX sub-allocation: {:?}", alloc);
@@ -1177,7 +1177,7 @@ impl UcxAlloc {
             context: self.context.clone(),
             worker: self.worker.clone(),
             endpoints: self.endpoints.clone(),
-            remote_keys: my_remote_keys,
+            remote_keys: Arc::new(my_remote_keys),
             alloc_table: AllocTable::Runtime(
                 alloc_table,
                 addr,

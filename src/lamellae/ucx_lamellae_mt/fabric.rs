@@ -456,8 +456,8 @@ pub(crate) struct UcxMtAlloc {
     fabric_ref_cnt_offset: usize,
     rt_ref_cnt_offset: usize,
     context: Arc<Context>,
-    comm_groups: Vec<CommGroup>,
-    remote_keys: Vec<(usize, Arc<RKey>)>,
+    comm_groups: Arc<Vec<CommGroup>>,
+    remote_keys: Arc<Vec<(usize, Arc<RKey>)>>,
     alloc_table: AllocTable,
 }
 
@@ -627,8 +627,8 @@ impl UcxMtAlloc {
             fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             context,
-            comm_groups,
-            remote_keys: my_remote_keys,
+            comm_groups: Arc::new(comm_groups),
+            remote_keys: Arc::new(my_remote_keys),
             alloc_table: AllocTable::Fabric(mem_handles.clone(), remote_keys.clone()),
         };
         unsafe {
@@ -666,7 +666,7 @@ impl UcxMtAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             context: self.context.clone(),
             comm_groups: self.comm_groups.clone(),
-            remote_keys,
+            remote_keys: Arc::new(remote_keys),
             alloc_table: self.alloc_table.clone(),
         };
         debug!(target: "ucx", "Created UCX sub-allocation: {:?}", alloc);
@@ -716,7 +716,7 @@ impl UcxMtAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             context: self.context.clone(),
             comm_groups: self.comm_groups.clone(),
-            remote_keys: my_remote_keys,
+            remote_keys: Arc::new(my_remote_keys),
             alloc_table: AllocTable::Runtime(
                 alloc_table,
                 addr,
@@ -1065,7 +1065,7 @@ impl UcxMtAlloc {
     }
 
     pub(crate) fn wait_all(&self) {
-        for comm_group in &self.comm_groups {
+        for comm_group in self.comm_groups.iter() {
             comm_group
                 .worker
                 .wait_all()
@@ -1081,7 +1081,7 @@ impl UcxMtAlloc {
     }
 
     pub(crate) fn wait(&self) {
-        for comm_group in &self.comm_groups {
+        for comm_group in self.comm_groups.iter() {
             comm_group
                 .worker
                 .wait_all()
