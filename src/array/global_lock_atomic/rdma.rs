@@ -177,12 +177,11 @@ impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
         _: Sealed,
     ) {
         let _ = self
-            .exec_am_local(InitPutBufferAm {
+            .spawn_am_local_tg(InitPutBufferAm {
                 array: self.clone(),
                 index: index,
                 buf: buf.into(),
-            })
-            .spawn();
+            });
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
         let req = self.exec_am_local_tg(InitPePutAm {
@@ -198,7 +197,7 @@ impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
         }
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
-        let _ = self.exec_am_local_tg(InitPePutAm {
+        let _ = self.spawn_am_local_tg(InitPePutAm {
             array: self.clone(),
             offset,
             pe,
@@ -231,7 +230,7 @@ impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self.exec_am_local_tg(InitPePutBufferAm {
+        let _ = self.spawn_am_local_tg(InitPePutBufferAm {
             array: self.clone(),
             offset,
             pe: pe,
@@ -251,7 +250,7 @@ impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
         }
     }
     unsafe fn put_all_unmanaged(&self, offset: usize, data: T, _: Sealed) {
-        let _ = self.exec_am_local_tg(InitPutAllAm {
+        let _ = self.spawn_am_local_tg(InitPutAllAm {
             array: self.clone(),
             offset,
             val: data,
@@ -280,7 +279,7 @@ impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self.exec_am_local_tg(InitPutAllBufferAm {
+        let _ = self.spawn_am_local_tg(InitPutAllBufferAm {
             array: self.clone(),
             offset,
             buf: buf.into(),
@@ -361,7 +360,7 @@ impl<T: Dist> LamellarRdmaGet<T> for GlobalLockArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).spawn();
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed);
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {

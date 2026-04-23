@@ -559,7 +559,7 @@ impl<T: Dist> UnsafeArray<T> {
 //                 Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::GetAm, index, buf),
 //             }
 //         } else {
-//             let req = self.exec_am_local(InitSmallGetAm {
+//             let req = self.spawn_am_local(InitSmallGetAm {
 //                 array: self.clone(),
 //                 index: index,
 //                 buf: buf,
@@ -918,7 +918,7 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).spawn();
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed);
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {

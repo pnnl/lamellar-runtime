@@ -172,12 +172,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
         _: Sealed,
     ) {
         let _ = self
-            .exec_am_local(NativeAtomicInitPutBufferAm {
+            .spawn_am_local_tg(NativeAtomicInitPutBufferAm {
                 array: self.clone(),
                 index: index,
                 buf: buf.into(),
-            })
-            .spawn();
+            });
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
         let req = self.exec_am_pe_tg(
@@ -202,7 +201,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
         let _ = self
-            .exec_am_pe_tg(
+            .spawn_am_pe_tg(
                 pe,
                 NativeAtomicRemotePePutAm {
                     array: self.clone().into(), //inner of the indices we need to place data into
@@ -215,8 +214,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
                         .to_vec()
                     },
                 },
-            )
-            .spawn();
+            );
     }
     unsafe fn put_pe_buffer<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
@@ -246,7 +244,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self.exec_am_pe_tg(
+        let _ = self.spawn_am_pe_tg(
             pe,
             NativeAtomicRemotePePutAm {
                 array: self.clone().into(),
@@ -271,7 +269,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
         }
     }
     unsafe fn put_all_unmanaged(&self, offset: usize, data: T, _: Sealed) {
-        let _ = self.exec_am_all_tg(NativeAtomicRemotePePutAm {
+        let _ = self.spawn_am_all_tg(NativeAtomicRemotePePutAm {
             array: self.clone().into(), //inner of the indices we need to place data into
             start_index: offset,
             data: unsafe {
@@ -303,7 +301,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self.exec_am_all_tg(NativeAtomicRemotePePutAm {
+        let _ = self.spawn_am_all_tg(NativeAtomicRemotePePutAm {
             array: self.clone().into(),
             start_index: offset,
             data: buf.into().to_bytes(),
@@ -386,7 +384,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NativeAtomicArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).spawn();
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed);
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {

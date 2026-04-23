@@ -178,12 +178,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         _: Sealed,
     ) {
         let _ = self
-            .exec_am_local(NetworkAtomicInitPutBufferAm {
+            .spawn_am_local_tg(NetworkAtomicInitPutBufferAm {
                 array: self.clone(),
                 index: index,
                 buf: buf.into(),
-            })
-            .spawn();
+            });
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
         let req = self
@@ -230,7 +229,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self.exec_am_pe_tg(
+        let _ = self.spawn_am_pe_tg(
             pe,
             NativeAtomicRemotePePutAm {
                 array: Into::<__NetworkAtomicByteArray>::into(self.clone()).into(),
@@ -279,12 +278,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         _: Sealed,
     ) {
         let _ = self
-            .exec_am_all_tg(NativeAtomicRemotePePutAm {
+            .spawn_am_all_tg(NativeAtomicRemotePePutAm {
                 array: Into::<__NetworkAtomicByteArray>::into(self.clone()).into(),
                 start_index: offset,
                 data: buf.into().to_bytes(),
-            })
-            .spawn();
+            });
     }
 }
 
@@ -369,7 +367,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = self.get_into_buffer(index, data).spawn();
+        let _ = self.get_into_buffer(index, data);
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {

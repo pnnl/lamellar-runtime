@@ -1274,6 +1274,15 @@ pub(crate) mod private {
             self.team_rt()
                 .exec_am_local_tg(am, Some(self.team_counters()), None)
         }
+
+        fn spawn_am_local_tg<F>(&self, am: F) -> LocalAmHandle<F::Output>
+        where
+            F: LamellarActiveMessage + LocalAM + 'static,
+        {
+            self.team_rt()
+                .spawn_am_local_tg(am, Some(self.team_counters()), None)
+        }
+
         fn exec_am_pe_tg<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
         where
             F: RemoteActiveMessage + LamellarAM + AmDist,
@@ -1302,6 +1311,16 @@ pub(crate) mod private {
             self.team_rt()
                 .exec_am_all_tg(am, Some(self.team_counters()))
         }
+
+        fn spawn_am_all_tg<F>(&self, am: F) -> MultiAmHandle<F::Output>
+        where
+            F: RemoteActiveMessage + LamellarAM + AmDist,
+        {
+            self.team_rt()
+                .spawn_am_all_tg(am, Some(self.team_counters()))
+        }
+
+
     }
 }
 
@@ -1569,7 +1588,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 //     /// let my_pe = world.my_pe();
 //     /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
 //     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-//     /// let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
+//     /// let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
 //     /// unsafe { // we just created buf and have not shared it so free to mutate safely
 //     ///     for elem in buf.as_mut_slice()
 //     ///                          .expect("we just created it so we know its local") { //initialize mem_region
@@ -1635,7 +1654,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 //     /// array.barrier();
 //     /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
 //     /// let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
-//     /// let at_req = array.at(index).spawn();
+//     /// let at_req = array.at(index);
 //     /// //do some other work
 //     /// let val = at_req.block();
 //     /// println!("PE{my_pe} array[{index}] = {val}");
@@ -1710,7 +1729,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 //     /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
 //     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
 //     /// let len = buf.len();
-//     /// let _ = array.dist_iter_mut().for_each(move |elem| *elem = len).spawn(); //we will used this val as completion detection
+//     /// let _ = array.dist_iter_mut().for_each(move |elem| *elem = len); //we will used this val as completion detection
 //     ///
 //     /// //Safe as we are this is the only reference to buf
 //     /// unsafe {

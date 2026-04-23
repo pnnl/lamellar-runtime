@@ -242,8 +242,8 @@ impl Drop for MemRegionHandle {
                         let _ = self
                             .inner
                             .team
-                            .exec_am_pe(self.inner.parent_id.1, temp)
-                            .spawn();
+                            .spawn_am_pe_tg(self.inner.parent_id.1, temp, None);
+                            
                     }
                 }
             } else {
@@ -251,10 +251,9 @@ impl Drop for MemRegionHandle {
                 let _ = self
                     .inner
                     .team
-                    .exec_am_local(MemRegionDropWaitAm {
+                    .spawn_am_local_tg(MemRegionDropWaitAm {
                         inner: self.inner.clone(),
-                    })
-                    .spawn();
+                    }, None,None);
             }
         }
     }
@@ -318,8 +317,7 @@ impl LamellarAM for MemRegionDropWaitAm {
                             let _ = self
                                 .inner
                                 .team
-                                .exec_am_pe(self.inner.parent_id.1, temp)
-                                .spawn();
+                                .spawn_am_pe_tg(self.inner.parent_id.1, temp, None);
                         }
                     }
                     break;
@@ -481,7 +479,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).spawn();
+    /// let _ = world.spawn_am_all(MemRegionAm{mem_region: mem_region.clone()});
     ///
     /// unsafe {
     ///     for (i,elem) in mem_region.iter().enumerate(){
