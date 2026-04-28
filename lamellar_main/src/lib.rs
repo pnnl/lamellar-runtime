@@ -1,12 +1,151 @@
-
 use proc_macro::TokenStream;
 // use proc_macro2::TokenStream;
-use syn::{parse_macro_input, parse_quote, Attribute, ItemFn};
 use quote::quote;
 #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
 use quote::ToTokens;
+use syn::{parse_macro_input, parse_quote, Attribute, ItemFn};
 
+#[cfg(any(feature = "use-prterun", feature = "use-srun"))]
+fn create_binary_update_block() -> impl ToTokens {
+    quote! {
+        {
+            let ld_library_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_else(|_| String::new());
+            let mut shared_libs_dirs = Vec::new();
+            for p in ld_library_path.split(':') {
+                // Collect all build output library directories matching the pattern .../target/<profile>/build/.../out/lib
+                if p.contains("/target/") && p.contains("/build/") && p.contains("/out/lib") {
+                    shared_libs_dirs.push(p.to_string());
+                }
+            }
+            let shared_libs_dir = shared_libs_dirs.join(":");
+            // println!("shared_libs_dir: {}", shared_libs_dir);
+            if !shared_libs_dir.is_empty() {
+                if let Ok(exe_path) = std::env::current_exe() {
+                    let readelf_out = std::process::Command::new("readelf")
+                        .arg("-d")
+                        .arg(&exe_path)
+                        .output();
+                    // println!("readelf output: {:?}", readelf_out);
+                    match readelf_out {
+                        Ok(readelf_out) if readelf_out.status.success() => {
+                            let readelf_stdout = String::from_utf8_lossy(&readelf_out.stdout);
+                            let mut has_shared_libs_dir = false;
+                            let mut existing_rpath = String::new();
 
+                            for line in readelf_stdout.lines() {
+                                if line.contains("(RPATH)") || line.contains("(RUNPATH)") {
+                                    if let (Some(start), Some(end)) = (line.find('['), line.rfind(']')) {
+                                        let cur = line[start + 1..end].trim();
+                                        if !cur.is_empty() {
+                                            existing_rpath = cur.to_string();
+                                            // Check if all required libs are already in RPATH
+                                            has_shared_libs_dir = shared_libs_dir
+                                                .split(':')
+                                                .all(|lib_dir| existing_rpath.contains(lib_dir));
+                                        }
+                                    }
+                                }
+                            }
+
+                            if !has_shared_libs_dir {
+                                let new_rpath = if existing_rpath.is_empty() {
+                                    shared_libs_dir.to_string()
+                                } else {
+                                    // Combine existing RPATH with new library directories
+                                    format!("{}:{}", existing_rpath, shared_libs_dir)
+                                };
+
+                                // Copy binary to temporary location since we can't patchelf a running binary
+                                // Create temp file in same directory as the binary to avoid cross-filesystem rename issues
+                                let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
+                                let temp_exe = exe_dir.join(format!("lamellar_exe_{}.tmp", std::process::id()));
+                                let temp_exe_str = temp_exe.to_string_lossy().to_string();
+
+                                if let Err(err) = std::fs::copy(&exe_path, &temp_exe) {
+                                    eprintln!(
+                                        "lamellar_main: failed to copy binary from {:?} to {}: {}",
+                                        exe_path,
+                                        temp_exe_str,
+                                        err
+                                    );
+                                } else {
+                                    // Make the copy executable
+                                    let _ = std::process::Command::new("chmod")
+                                        .arg("+x")
+                                        .arg(&temp_exe_str)
+                                        .status();
+
+                                    let patch_status = std::process::Command::new("patchelf")
+                                        // .arg("--force-runpath")
+                                        .arg("--set-rpath")
+                                        .arg(&new_rpath)
+                                        .arg(&temp_exe_str)
+                                        .status();
+
+                                    match patch_status {
+                                        Ok(status) if status.success() => {
+                                            // println!(
+                                            //     "updated RPATH for {:?} to {}",
+                                            //     temp_exe_str,
+                                            //     new_rpath
+                                            // );
+                                            // Replace the original binary with the patched copy
+                                            if let Err(err) = std::fs::rename(&temp_exe, &exe_path) {
+                                                eprintln!(
+                                                    "lamellar_main: failed to replace original binary {:?} with patched copy: {}",
+                                                    exe_path,
+                                                    err
+                                                );
+                                                // Clean up temp file on failure
+                                                let _ = std::fs::remove_file(&temp_exe);
+                                            } else {
+                                                // println!(
+                                                //     "successfully replaced original binary with patched version"
+                                                // );
+                                            }
+                                        }
+                                        Ok(status) => {
+                                            eprintln!(
+                                                "lamellar_main: patchelf failed with status {} for {:?}",
+                                                status,
+                                                temp_exe_str
+                                            );
+                                            // Clean up temp file on failure
+                                            let _ = std::fs::remove_file(&temp_exe);
+                                        }
+                                        Err(err) => {
+                                            eprintln!(
+                                                "lamellar_main: failed to run patchelf for {:?}: {}",
+                                                temp_exe_str,
+                                                err
+                                            );
+                                            // Clean up temp file on error
+                                            let _ = std::fs::remove_file(&temp_exe);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Ok(status_out) => {
+                            eprintln!(
+                                "lamellar_main: readelf -d failed for {:?} with status {}",
+                                exe_path,
+                                status_out.status
+                            );
+                        }
+                        Err(err) => {
+                            eprintln!(
+                                "lamellar_main: failed to run readelf for {:?}: {}",
+                                exe_path,
+                                err
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
 fn create_launch_block(
@@ -48,15 +187,20 @@ fn create_launch_block(
             }
         }
     };
+    // dbg!("env var: {:?}", std::env::vars());
 
+    let binary_update_block = create_binary_update_block();
     quote! {
         let prte_launched = std::env::var(#env_var).is_ok();
         if !prte_launched {
             // Collect command line arguments
             let mut args: Vec<String> = std::env::args().collect();
 
+            // println!("args: {:?}", args);
+
             // Remove first argument (executable name) and maintain it for later
             let exec = args.remove(0);
+            // println!("exec: {}", exec);
 
             // Prepare arguments for prterun
             let mut prterun_args = Vec::<String>::new();
@@ -67,6 +211,7 @@ fn create_launch_block(
 
             // Collect any additional arguments after "--" to pass to prterun
             let pos = args.iter().position(|x| x == "--");
+            // println!("-- position: {:?}", pos);
             if let Some(pos) = pos {
                 let mut extra = args.split_off(pos).into_iter().skip(1).peekable();
                 while let Some(x) = extra.next() {
@@ -103,19 +248,22 @@ fn create_launch_block(
                 prterun_args.push("--args".to_string());
             }
 
-            // After the prterun arguments, add the executable name
+            let mut ld_library_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_else(|_| String::new());
+
+
+            // println!("initial LD_LIBRARY_PATH: {}", ld_library_path);
+            #binary_update_block
+
+            // After the prterun arguments, add the executable name (which may have been updated in place)
             prterun_args.push(exec);
 
             // Add the arguments targeting the application
             prterun_args.extend(args.into_iter());
 
-            let mut ld_library_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_else(|_| String::new());
-            if let Ok(origin) = std::env::var("ORIGIN"){
-                if !ld_library_path.is_empty() {
-                    ld_library_path.push_str(":");
-                }
-                ld_library_path.push_str(&origin);
-            }
+            // if !ld_library_path.is_empty() {
+            //     ld_library_path.push_str(":");
+            // }
+            // ld_library_path.push_str(&#shared_libs_dir);
             let mut launcher_cmd = std::process::Command::new(#launcher_path);
             if time {
                 launcher_cmd.env("LAMELLAR_MAIN_TIME", "1");
@@ -123,7 +271,7 @@ fn create_launch_block(
             #output_dir_block
             println!("Launching with {:?}: {:?} {:?}", #env_var, #launcher_path, prterun_args.join(" "));
             launcher_cmd
-                .env("LD_LIBRARY_PATH", ld_library_path)
+                // .env("LD_LIBRARY_PATH", ld_library_path)
                 .args(prterun_args)
                 .status()
                 .expect("failed to launch process");
@@ -143,21 +291,34 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     assert!(func.sig.asyncness.is_none(), "async not supported");
     assert!(func.sig.constness.is_none(), "const not supported");
     assert!(func.sig.unsafety.is_none(), "unsafety not supported");
-    assert!(func.sig.generics.lt_token.is_none(), "generics not supported");
+    assert!(
+        func.sig.generics.lt_token.is_none(),
+        "generics not supported"
+    );
     assert!(func.sig.variadic.is_none(), "variadics not supported");
     assert!(func.sig.inputs.is_empty(), "inputs not supported");
-    
+
     #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
     let ret_result = match func.sig.output {
         syn::ReturnType::Default => false,
         syn::ReturnType::Type(_rarrow, ref t) => match t.as_ref() {
-            syn::Type::Path(ref type_path) => {assert!(type_path.path.segments.first().unwrap().ident.to_string() == "Result", "Only Result<(),...> is supported as return type"); true},
+            syn::Type::Path(ref type_path) => {
+                assert!(
+                    type_path.path.segments.first().unwrap().ident.to_string() == "Result",
+                    "Only Result<(),...> is supported as return type"
+                );
+                true
+            }
             _other => panic!("Only Result<(),..> is supported as return type"),
         },
     };
 
     #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
-    let ret = if ret_result {Some(quote! {Ok(())})} else {None};
+    let ret = if ret_result {
+        Some(quote! {Ok(())})
+    } else {
+        None
+    };
     let _output = &func.sig.output;
     let ret_type = func.sig.output;
     let _block = &func.block;
@@ -165,9 +326,11 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     // Find the LamellarWorldBuilder::new()...build() statement and split the
     // block around it so we can emit a separate timer for world construction
     // and one for the application code that follows.
-    let world_build_idx = func.block.stmts.iter().position(|stmt| {
-        quote!(#stmt).to_string().contains("LamellarWorldBuilder")
-    });
+    let world_build_idx = func
+        .block
+        .stmts
+        .iter()
+        .position(|stmt| quote!(#stmt).to_string().contains("LamellarWorldBuilder"));
     let timed_body = if let Some(idx) = world_build_idx {
         let pre = &func.block.stmts[..idx];
         let world_stmt = &func.block.stmts[idx];
@@ -199,13 +362,18 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
             panic!("No launch method selected");
         }
     };
-    
+
     #[cfg(feature = "use-prterun")]
-    let launch_block = create_launch_block((quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}), ret, "prterun");
+    let launch_block = create_launch_block(
+        (quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}),
+        ret,
+        "prterun",
+    );
 
     #[cfg(feature = "use-srun")]
-    let launch_block = create_launch_block((quote! {"SLURM_LOCALID"}, quote! {"srun"}), ret, "srun");
-    
+    let launch_block =
+        create_launch_block((quote! {"SLURM_LOCALID"}, quote! {"srun"}), ret, "srun");
+
     let import = if cfg!(feature = "use-prterun") {
         quote! {
             use ::lamellar::prrte_sys::prterun_path;
@@ -247,13 +415,20 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
                 let result = (|| { #timed_body })();
                 result
             }
-        } 
+        }
     };
     TokenStream::from(res)
 }
 
 #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
-fn create_launch_test_block(launcher_info: (impl ToTokens, impl ToTokens), test_attr: Attribute, vis: &syn::Visibility, sig: &syn::Signature, name: &syn::Ident, imports: impl ToTokens) -> impl ToTokens {
+fn create_launch_test_block(
+    launcher_info: (impl ToTokens, impl ToTokens),
+    test_attr: Attribute,
+    vis: &syn::Visibility,
+    sig: &syn::Signature,
+    name: &syn::Ident,
+    imports: impl ToTokens,
+) -> impl ToTokens {
     let (env_var, launcher_path) = launcher_info;
     quote! {
         #test_attr #vis #sig {
@@ -293,7 +468,7 @@ fn create_launch_test_block(launcher_info: (impl ToTokens, impl ToTokens), test_
             // After the prterun arguments, add the executable name
             prterun_args.push(exec);
             prterun_args.push(func_name);
-            
+
             // Add the arguments targeting the application
             prterun_args.extend(args.into_iter());
             prterun_args.push("--ignored".to_string());
@@ -321,21 +496,26 @@ pub fn test(_args: TokenStream, item: TokenStream) -> TokenStream {
     assert!(func.sig.asyncness.is_none(), "async not supported");
     assert!(func.sig.constness.is_none(), "const not supported");
     assert!(func.sig.unsafety.is_none(), "unsafety not supported");
-    assert!(func.sig.generics.lt_token.is_none(), "generics not supported");
+    assert!(
+        func.sig.generics.lt_token.is_none(),
+        "generics not supported"
+    );
     assert!(func.sig.variadic.is_none(), "variadics not supported");
     assert!(func.sig.inputs.is_empty(), "inputs not supported");
 
     #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
-    let test_attr: Attribute = parse_quote!{
+    let test_attr: Attribute = parse_quote! {
         #[test]
     };
 
-    let name = syn::Ident::new(format!("{}_launched", &func.sig.ident.to_string()).as_str(), func.sig.ident.span());
+    let name = syn::Ident::new(
+        format!("{}_launched", &func.sig.ident.to_string()).as_str(),
+        func.sig.ident.span(),
+    );
     #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
     let vis = &func.vis;
     #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
     let sig = &func.sig;
-
 
     #[cfg(not(any(feature = "use-prterun", feature = "use-srun")))]
     let res = quote! {
@@ -346,13 +526,26 @@ pub fn test(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     // let name = format!("{}_launched", name.to_string());
     #[cfg(feature = "use-prterun")]
-    let res = create_launch_test_block((quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}), test_attr, vis, sig, &name, quote! {use ::lamellar::prrte_sys::prterun_path;});
+    let res = create_launch_test_block(
+        (quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}),
+        test_attr,
+        vis,
+        sig,
+        &name,
+        quote! {use ::lamellar::prrte_sys::prterun_path;},
+    );
 
     #[cfg(feature = "use-srun")]
-    let res = create_launch_test_block((quote! {"SRUN_LAUNCHED"}, quote! {"srun"}), test_attr, vis, sig, &name, quote! {});
+    let res = create_launch_test_block(
+        (quote! {"SRUN_LAUNCHED"}, quote! {"srun"}),
+        test_attr,
+        vis,
+        sig,
+        &name,
+        quote! {},
+    );
 
-        
-    let launched_attrs: Vec<Attribute> = parse_quote!{
+    let launched_attrs: Vec<Attribute> = parse_quote! {
         #[test]
         #[ignore]
     };
@@ -369,4 +562,3 @@ pub fn test(_args: TokenStream, item: TokenStream) -> TokenStream {
     };
     TokenStream::from(res)
 }
-
