@@ -15,7 +15,7 @@ use std::any::TypeId;
 use std::collections::HashSet;
 use std::ffi::CString;
 use std::os::raw::c_ulong;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tracing::{debug, error, trace};
 
@@ -24,6 +24,9 @@ pub(crate) struct RofiC {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     mem_regions: Arc<Mutex<Vec<RofiCAlloc>>>,
+    wait_flag: Arc<AtomicBool>,
+    wait_cnt_cur: Arc<AtomicUsize>,
+    wait_cnt_fin: Arc<AtomicUsize>,
 }
 
 impl RofiC {
@@ -39,6 +42,9 @@ impl RofiC {
             num_pes,
             my_pe,
             mem_regions: Arc::new(Mutex::new(Vec::new())),
+            wait_flag: Arc::new(AtomicBool::new(false)),
+            wait_cnt_cur: Arc::new(AtomicUsize::new(0)),
+            wait_cnt_fin: Arc::new(AtomicUsize::new(0)),
         });
         Ok(world)
     }
@@ -75,6 +81,9 @@ impl RofiC {
             self.my_pe,
             self.num_pes,
             AllocTable::Fabric(self.mem_regions.clone()),
+            self.wait_flag.clone(),
+            self.wait_cnt_cur.clone(),
+            self.wait_cnt_fin.clone(),
         )?;
 
         // register in mem_regions
@@ -156,12 +165,28 @@ impl RofiC {
     }
 
     pub(crate) fn wait_all(&self) -> Result<(), ()> {
-        let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+        let my_cnt = self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst);
+        while let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+        if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
+            let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+            self.wait_cnt_fin.fetch_max(my_cnt, Ordering::SeqCst);
+        }
+        self.wait_flag.store(false, Ordering::SeqCst);
         Ok(())
     }
 
     pub(crate) fn thread_wait(&self) -> Result<(), ()> {
-        let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+        let my_cnt = self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst);
+        while let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+        if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
+            let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+            self.wait_cnt_fin.fetch_max(my_cnt, Ordering::SeqCst);
+        }
+        self.wait_flag.store(false, Ordering::SeqCst);
         Ok(())
     }
 
@@ -192,6 +217,9 @@ pub(crate) struct RofiCAlloc {
     fabric_ref_cnt_offset: usize,
     rt_ref_cnt_offset: usize,
     alloc_table: AllocTable,
+    wait_flag: Arc<AtomicBool>,
+    wait_cnt_cur: Arc<AtomicUsize>,
+    wait_cnt_fin: Arc<AtomicUsize>,
 }
 
 impl std::fmt::Debug for RofiCAlloc {
@@ -276,6 +304,9 @@ impl Clone for RofiCAlloc {
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
             alloc_table: self.alloc_table.clone(),
+            wait_flag: self.wait_flag.clone(),
+            wait_cnt_cur: self.wait_cnt_cur.clone(),
+            wait_cnt_fin: self.wait_cnt_fin.clone(),
         }
     }
 }
@@ -295,6 +326,9 @@ impl RofiCAlloc {
         my_pe: usize,
         num_pes: usize,
         alloc_table: AllocTable,
+        wait_flag: Arc<AtomicBool>,
+        wait_cnt_cur: Arc<AtomicUsize>,
+        wait_cnt_fin: Arc<AtomicUsize>,
     ) -> AllocResult<RofiCAlloc> {
         // data_num_bytes here is the user-requested data size (without refcount/padding)
         let fabric_ref_cnt_offset = data_num_bytes + padding; // offset within base where refcount stored
@@ -314,6 +348,9 @@ impl RofiCAlloc {
             fabric_ref_cnt_offset,
             rt_ref_cnt_offset,
             alloc_table,
+            wait_flag,
+            wait_cnt_cur,
+            wait_cnt_fin,
         };
 
         // initialize ref count: 1 with padding
@@ -359,6 +396,9 @@ impl RofiCAlloc {
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
             alloc_table: self.alloc_table.clone(),
+            wait_flag: self.wait_flag.clone(),
+            wait_cnt_cur: self.wait_cnt_cur.clone(),
+            wait_cnt_fin: self.wait_cnt_fin.clone(),
         };
         trace!(target: "rofi", "RofiCAlloc::sub_alloc created sub base={:p} sub={:p} bytes={}", alloc.base_data, alloc.sub_data, alloc.sub_data_num_bytes);
         Ok(alloc)
@@ -405,6 +445,9 @@ impl RofiCAlloc {
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             alloc_table: AllocTable::Runtime(alloc_table, new_data as usize, allocs),
+            wait_flag: self.wait_flag.clone(),
+            wait_cnt_cur: self.wait_cnt_cur.clone(),
+            wait_cnt_fin: self.wait_cnt_fin.clone(),
         };
         unsafe {
             (&*(alloc.base_data.add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize))
@@ -438,6 +481,9 @@ impl RofiCAlloc {
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             alloc_table: AllocTable::Runtime(alloc_table, self.sub_data as usize, allocs),
+            wait_flag: self.wait_flag.clone(),
+            wait_cnt_cur: self.wait_cnt_cur.clone(),
+            wait_cnt_fin: self.wait_cnt_fin.clone(),
         };
 
         trace!(target: "rofi", "RofiCAlloc::as_rt_alloc base={:p} sub={:p} new_sub_bytes={} rt_ref_offset={}", alloc.base_data, alloc.sub_data, alloc.sub_data_num_bytes, alloc.rt_ref_cnt_offset);
@@ -480,12 +526,41 @@ impl RofiCAlloc {
         decrement_ref_count(ref_count)
     }
 
-    pub(crate) fn wait(&self) -> RdmaResult {
-        let ret = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
-        if ret == 0 {
-            Ok(())
-        } else {
-            Err(RdmaError::FabricWaitError(ret))
+    pub(crate) fn wait(&self) -> RdmaResult{
+        let my_cnt = self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst);
+        while let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+        if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
+            let ret = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+            if ret != 0 {
+                panic!("rofi_c_wait failed with error code: {}", ret);
+            }
+            self.wait_cnt_fin.fetch_max(my_cnt, Ordering::SeqCst);
+        }
+        self.wait_flag.store(false, Ordering::SeqCst);
+        Ok(())
+    }
+
+    pub(crate) fn try_wait(&self, my_cnt_val:&mut  Option<usize>) {
+        let my_cnt = match my_cnt_val {
+            Some(cnt) => *cnt,
+            None => self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst),
+        };
+        if let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+            *my_cnt_val = Some(my_cnt);
+        }
+        else {
+            if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
+                // println!("RofiCAlloc::try_wait calling rofi_c_wait for alloc {:p}-{:p} bytes={}", self.sub_data, self.sub_data.wrapping_add(self.sub_data_num_bytes), self.sub_data_num_bytes);
+                let ret = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+                if ret != 0 {
+                    panic!("rofi_c_wait failed with error code: {}", ret);
+                }
+                self.wait_cnt_fin.fetch_max(my_cnt, Ordering::SeqCst);
+            }
+            *my_cnt_val = None;
+            self.wait_flag.store(false, Ordering::SeqCst);
         }
     }
 
@@ -589,9 +664,10 @@ impl OneSidedRofiCAlloc {
             .map(|a| OneSidedRofiCAlloc { alloc: a })
     }
     pub(crate) fn wait(&self) {
-        self.alloc
-            .wait()
-            .expect("error waiting on onesided rofi-c alloc");
+        self.alloc.wait().expect("rofi-c wait failed");
+    }
+    pub(crate) fn try_wait(&self, my_cnt: &mut Option<usize>) {
+        self.alloc.try_wait(my_cnt);
     }
 }
 

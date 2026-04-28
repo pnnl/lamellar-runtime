@@ -84,6 +84,7 @@ pub(crate) struct RofiCAtomicFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    wait_cnt: Option<usize>,
 }
 
 impl<T: Remote + Copy + 'static> RofiCAtomicFuture<T> {
@@ -101,15 +102,9 @@ impl<T: Remote + Copy + 'static> RofiCAtomicFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let alloc = self.alloc.clone();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.spawn_task(
-            async move {
-                alloc.wait().expect("rofi-c atomic wait failed");
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -133,11 +128,17 @@ impl<T> From<RofiCAtomicFuture<T>> for AtomicOpHandle<T> {
 impl<T: Remote + Copy + 'static> Future for RofiCAtomicFuture<T> {
     type Output = ();
 
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.wait().expect("rofi-c atomic wait failed");
+        let mut wait_cnt = self.wait_cnt;
+        self.alloc.try_wait(&mut wait_cnt);
+        self.wait_cnt = wait_cnt;
+        if let Some(my_cnt) = self.wait_cnt {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
         Poll::Ready(())
     }
 }
@@ -152,6 +153,7 @@ pub(crate) struct RofiCAtomicFetchFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    wait_cnt: Option<usize>,
 }
 
 impl<T: Remote + Copy + 'static> RofiCAtomicFetchFuture<T> {
@@ -200,11 +202,17 @@ impl<T> From<RofiCAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
 impl<T: Remote + Copy + 'static> Future for RofiCAtomicFetchFuture<T> {
     type Output = T;
 
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.wait().expect("rofi-c atomic wait failed");
+        let mut wait_cnt = self.wait_cnt;
+        self.alloc.try_wait(&mut wait_cnt);
+        self.wait_cnt = wait_cnt;
+        if let Some(my_cnt) = self.wait_cnt {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
         Poll::Ready(*self.result)
     }
 }
@@ -228,6 +236,7 @@ pub(crate) struct RofiCAtomicCompareExchangeFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    wait_cnt: Option<usize>,
 }
 
 impl<T: Remote + Copy + PartialEq + 'static> RofiCAtomicCompareExchangeFuture<T> {
@@ -277,11 +286,17 @@ impl<T> From<RofiCAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeOpHan
 impl<T: Remote + Copy + PartialEq + 'static> Future for RofiCAtomicCompareExchangeFuture<T> {
     type Output = Result<T, T>;
 
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.wait().expect("rofi-c atomic wait failed");
+        let mut wait_cnt = self.wait_cnt;
+        self.alloc.try_wait(&mut wait_cnt);
+        self.wait_cnt = wait_cnt;
+        if let Some(my_cnt) = self.wait_cnt {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
         Poll::Ready(compare_exchange_result(*self.result, *self.current))
     }
 }
@@ -303,6 +318,7 @@ impl CommAllocAtomic for RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            wait_cnt: None,
         }
         .into()
     }
@@ -337,6 +353,7 @@ impl CommAllocAtomic for RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            wait_cnt: None,
         }
         .into()
     }
@@ -364,6 +381,7 @@ impl CommAllocAtomic for RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            wait_cnt: None,
         }
         .into()
     }
@@ -400,6 +418,7 @@ impl CommAllocAtomic for RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            wait_cnt: None,
         }
         .into()
     }

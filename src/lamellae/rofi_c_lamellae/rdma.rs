@@ -42,6 +42,8 @@ pub(crate) struct RofiCPutFuture<T: Remote> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
+    alloc: RofiCAlloc,
+    wait_cnt: Option<usize>,
 }
 
 impl<T: Remote> RofiCPutFuture<T> {
@@ -95,19 +97,14 @@ impl<T: Remote> RofiCPutFuture<T> {
 
     pub(crate) fn block(mut self) {
         self.exec_op();
-        rofi_c_wait();
+        self.alloc.wait().expect("rofi_c_wait failed");
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.spawn_task(
-            async move {
-                rofi_c_wait();
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -130,11 +127,18 @@ impl<T: Remote> From<RofiCPutFuture<T>> for RdmaHandle<T> {
 
 impl<T: Remote> Future for RofiCPutFuture<T> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        rofi_c_wait();
+
+        let mut wait_cnt = self.wait_cnt;
+        self.alloc.try_wait(&mut wait_cnt);
+        self.wait_cnt = wait_cnt;
+        if let Some(my_cnt) = self.wait_cnt {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
         Poll::Ready(())
     }
 }
@@ -150,6 +154,8 @@ pub(crate) struct RofiCGetFuture<T: Remote> {
     spawned: bool,
     issued_network: bool,
     result: Box<T>,
+    alloc: RofiCAlloc,
+    wait_cnt: Option<usize>,
 }
 
 impl<T: Remote> RofiCGetFuture<T> {
@@ -172,7 +178,7 @@ impl<T: Remote> RofiCGetFuture<T> {
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
         if self.issued_network {
-            rofi_c_wait();
+            self.alloc.wait().expect("rofi_c_wait failed");
         }
         *self.result
     }
@@ -204,12 +210,18 @@ impl<T: Remote> From<RofiCGetFuture<T>> for RdmaGetHandle<T> {
 
 impl<T: Remote> Future for RofiCGetFuture<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_at();
         }
         if self.issued_network {
-            rofi_c_wait();
+            let mut wait_cnt = self.wait_cnt;
+            self.alloc.try_wait(&mut wait_cnt);
+            self.wait_cnt = wait_cnt;
+            if let Some(my_cnt) = self.wait_cnt {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
         }
         Poll::Ready(*self.result)
     }
@@ -227,6 +239,8 @@ pub(crate) struct RofiCGetBufferFuture<T: Remote> {
     spawned: bool,
     issued_network: bool,
     result: Vec<T>,
+    alloc: RofiCAlloc,
+    wait_cnt: Option<usize>,
 }
 
 impl<T: Remote> RofiCGetBufferFuture<T> {
@@ -246,7 +260,7 @@ impl<T: Remote> RofiCGetBufferFuture<T> {
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_at();
         if self.issued_network {
-            rofi_c_wait();
+            self.alloc.wait().expect("rofi_c_wait failed");
         }
         std::mem::take(&mut self.result)
     }
@@ -278,12 +292,18 @@ impl<T: Remote> From<RofiCGetBufferFuture<T>> for RdmaGetBufferHandle<T> {
 
 impl<T: Remote> Future for RofiCGetBufferFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_at();
         }
         if self.issued_network {
-            rofi_c_wait();
+            let mut wait_cnt = self.wait_cnt;
+            self.alloc.try_wait(&mut wait_cnt);
+            self.wait_cnt = wait_cnt;
+            if let Some(my_cnt) = self.wait_cnt {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
         }
         Poll::Ready(std::mem::take(&mut self.result))
     }
@@ -300,6 +320,8 @@ pub(crate) struct RofiCGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
     issued_network: bool,
+    alloc: RofiCAlloc,
+    wait_cnt: Option<usize>,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> RofiCGetIntoBufferFuture<T, B> {
@@ -326,24 +348,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RofiCGetIntoBufferFuture<T, B> {
     pub(crate) fn block(mut self) {
         self.exec_op();
         if self.issued_network {
-            rofi_c_wait();
+            self.alloc.wait().expect("rofi_c_wait failed");
         }
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let issued_network = self.issued_network;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        let scheduler = self.scheduler.clone();
-        scheduler.spawn_task(
-            async move {
-                if issued_network {
-                    rofi_c_wait();
-                }
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -368,12 +381,18 @@ impl<T: Remote, B: AsLamellarBuffer<T>> From<RofiCGetIntoBufferFuture<T, B>>
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for RofiCGetIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
         if self.issued_network {
-            rofi_c_wait();
+            let mut wait_cnt = self.wait_cnt;
+            self.alloc.try_wait(&mut wait_cnt);
+            self.wait_cnt = wait_cnt;
+            if let Some(my_cnt) = self.wait_cnt {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
         }
         Poll::Ready(())
     }
@@ -401,6 +420,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            alloc: self.clone(),
+            wait_cnt: None,
         }
         .into()
     }
@@ -435,7 +456,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
                 self.start()
             );
             unsafe { rofi_c_put(std::slice::from_ref(&src), dst, pe).expect("rofi_c_put failed") }
-            rofi_c_wait();
+            self.wait().expect("rofi_c_wait failed");
         } else {
             trace!("rofi_c put blocking val locally addr: {:x?}", self.start());
             unsafe { std::ptr::copy(&src as *const T, dst as *mut T, 1) }
@@ -458,6 +479,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            alloc: self.clone(),
+            wait_cnt: None,
         }
         .into()
     }
@@ -492,6 +515,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            alloc: self.clone(),
+            wait_cnt: None,
         }
         .into()
     }
@@ -524,6 +549,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            alloc: self.clone(),
+            wait_cnt: None,
         }
         .into()
     }
@@ -561,6 +588,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             spawned: false,
             issued_network: false,
             result: Box::new(T::default()),
+            alloc: self.clone(),
+            wait_cnt: None,
         }
         .into()
     }
@@ -573,7 +602,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             unsafe { std::ptr::copy(src as *const T, &mut val as *mut T, 1) }
         } else {
             unsafe { rofi_c_get(src, val_slice, pe).expect("rofi_c_get failed") };
-            rofi_c_wait();
+            self.wait().expect("rofi_c_wait failed");
         }
         val
     }
@@ -597,6 +626,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             spawned: false,
             issued_network: false,
             result: vec![T::default(); len],
+            alloc: self.clone(),
+            wait_cnt: None,
         }
         .into()
     }
@@ -614,7 +645,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             unsafe { std::ptr::copy(src as *const T, dst.as_mut_ptr(), len) }
         } else {
             unsafe { rofi_c_get(src, &mut dst, pe).expect("rofi_c_get failed") };
-            rofi_c_wait();
+            self.wait().expect("rofi_c_wait failed");
         }
         dst
     }
@@ -637,6 +668,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             counters,
             spawned: false,
             issued_network: false,
+            alloc: self.clone(),
+            wait_cnt: None,
         }
         .into()
     }
@@ -654,7 +687,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             unsafe {
                 rofi_c_get(src, dst.as_mut_slice(), pe).expect("rofi_c_get failed");
             }
-            rofi_c_wait();
+            self.wait().expect("rofi_c_wait failed");
         }
     }
 
