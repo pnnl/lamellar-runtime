@@ -53,6 +53,10 @@ fn main() {
     println!("cargo:rerun-if-env-changed=DEP_PMINATIVE_ROOT");
     if let Ok(pmi_native_lib_dir) = env::var("DEP_PMINATIVE_ROOT") {
         let lib_path = PathBuf::from(pmi_native_lib_dir).join("lib");
+        println!(
+            "cargo:warning=Adding PMI native lib path: {}",
+            lib_path.display()
+        );
         println!("cargo:rustc-link-search=native={}", lib_path.display());
         println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_path.display());
         lib_paths.push(lib_path.display().to_string());
@@ -62,25 +66,28 @@ fn main() {
     // println!("cargo:warning={:?}", env::vars());
 
     let out_dir = env::var("OUT_DIR").unwrap_or_else(|_| ".".to_string());
+    // println!("cargo:warning=outdir: {out_dir:?}");
     let out_path = PathBuf::from(&out_dir);
     let profile_output_dir = determine_profile_output_dir(&out_path);
     copy_dependency_libs(&lib_paths, &profile_output_dir);
-    
-    if let Ok(origin) = env::var("ORIGIN"){
+
+    if let Ok(origin) = env::var("ORIGIN") {
         println!("cargo:warning=rpath for sharedlibs: {}/shared_libs", origin);
     }
     println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/shared_libs");
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}/shared_libs",profile_output_dir.display());
 
     // Link system libraries required by libfabric/ROFI providers
     // Some providers reference libnuma and libuuid symbols (e.g. uuid_unparse, numa_*).
     // Ensure the linker includes those libraries when building with these features.
-    #[cfg(any(feature = "enable-rofi-c", feature = "enable-rofi-c-shared", feature = "enable-libfabric"))]
+    #[cfg(any(
+        feature = "enable-rofi-c",
+        feature = "enable-rofi-c-shared",
+        feature = "enable-libfabric"
+    ))]
     {
         println!("cargo:rustc-link-lib=dylib=numa");
         println!("cargo:rustc-link-lib=dylib=uuid");
     }
-    
 
     // Generate bash script with library paths
     // Navigate from OUT_DIR to the workspace root (where cargo was invoked)
@@ -133,31 +140,19 @@ fn main() {
 }
 
 fn determine_profile_output_dir(out_dir: &Path) -> PathBuf {
-    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
-    if let Some(dir) = find_profile_dir(out_dir, &profile) {
-        return dir;
-    }
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
-    let mut target_dir = env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| manifest_dir.join("target"));
-    target_dir.push(profile);
-    target_dir
-}
-
-fn find_profile_dir(out_dir: &Path, profile: &str) -> Option<PathBuf> {
     let mut cursor = out_dir;
-    while let Some(parent) = cursor.parent() {
-        if parent
-            .file_name()
-            .and_then(|name| name.to_str())
-            == Some(profile)
-        {
-            return Some(parent.to_path_buf());
+    loop {
+        if cursor.file_name().and_then(|name| name.to_str()) == Some("build") {
+            return cursor
+                .parent()
+                .expect("build directory should have a parent")
+                .to_path_buf();
         }
-        cursor = parent;
+
+        cursor = cursor
+            .parent()
+            .expect("OUT_DIR should contain a build directory");
     }
-    None
 }
 
 fn copy_dependency_libs(lib_paths: &[String], output_dir: &Path) {
@@ -165,14 +160,27 @@ fn copy_dependency_libs(lib_paths: &[String], output_dir: &Path) {
         return;
     }
 
-    let shared_libs_dir = output_dir.join("shared_libs");
+    let shared_libs_dir = output_dir.join("deps");
     if let Err(err) = fs::create_dir_all(&shared_libs_dir) {
         println!(
             "cargo:warning=Unable to create shared libs directory {}: {}",
-            shared_libs_dir.display(), err
+            shared_libs_dir.display(),
+            err
         );
         return;
     }
+
+    println!(
+        "cargo:rustc-env=LAMELLAR_SHARED_LIBS_DIR={}",
+        shared_libs_dir.display()
+    );
+    println!(
+        "cargo:rustc-link-arg=-Wl,-rpath,{}",
+        shared_libs_dir.display()
+    );
+
+    std::env::set_var("LAMELLAR_SHARED_LIBS_DIR", &shared_libs_dir);
+    // std::env::set_var("LD_LIBRARY_PATH", format!("{}:{}", shared_libs_dir.display(), std::env::var("LD_LIBRARY_PATH").unwrap_or_default()));
 
     let mut candidates = HashMap::<String, Candidate>::new();
     for lib_path in lib_paths {
@@ -186,7 +194,8 @@ fn copy_dependency_libs(lib_paths: &[String], output_dir: &Path) {
             Err(err) => {
                 println!(
                     "cargo:warning=Unable to read library directory {}: {}",
-                    lib_dir.display(), err
+                    lib_dir.display(),
+                    err
                 );
                 continue;
             }
@@ -240,7 +249,9 @@ fn copy_dependency_libs(lib_paths: &[String], output_dir: &Path) {
         if let Err(err) = symlink(&candidate.path, &dest) {
             println!(
                 "cargo:warning=Failed to link {} into {}: {}",
-                candidate.path.display(), dest.display(), err
+                candidate.path.display(),
+                dest.display(),
+                err
             );
             continue;
         }
@@ -250,7 +261,8 @@ fn copy_dependency_libs(lib_paths: &[String], output_dir: &Path) {
     if !linked.is_empty() {
         println!(
             "cargo:warning=Linked {} shared libs into {}",
-            linked.len(), shared_libs_dir.display()
+            linked.len(),
+            shared_libs_dir.display()
         );
     }
 }
