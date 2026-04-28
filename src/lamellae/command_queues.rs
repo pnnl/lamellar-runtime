@@ -1110,35 +1110,35 @@ impl InnerCQ {
                     data.as_comm_slice(),
                 )
             };
-            let _ = remote_cmd_buffer.get_into_buffer_unmanaged(src, 0, buffer.split_off(0));
-            let mut timer = std::time::Instant::now();
-            while calc_hash(
-                unsafe { buffer.orig_as_ptr() } as usize,
-                buffer.orig_num_bytes(),
-            ) != cmd.msg_hash
-            {
-                if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                    trace!(
-                        "msg_id: {msg_id} data hash mismatch from {:?}!!! {:?} {:?} {:?} -- calced hash {:x} expected {:x}",
-                        src,
-                        cmd,
-                        buffer.orig_num_bytes(),
-                        unsafe{ buffer.orig_as_casted_slice::<u8>() },
-                        calc_hash(
-                        unsafe{buffer.orig_as_ptr() } as usize,
-                            buffer.orig_num_bytes()
-                        ),
-                        cmd.msg_hash,
+            remote_cmd_buffer
+                .get_into_buffer(&self.scheduler, vec![],src, 0, buffer.split_off(0)).await;
+            // let _ = remote_cmd_buffer.get_into_buffer_unmanaged(src, 0, buffer.split_off(0));
+            // let mut timer = std::time::Instant::now();
+            // while calc_hash(
+            //     unsafe { buffer.orig_as_ptr() } as usize,
+            //     buffer.orig_num_bytes(),
+            // ) != cmd.msg_hash
+            // {
+            //     if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+            //         trace!(
+            //             "msg_id: {msg_id} data hash mismatch from {:?}!!! {:?} {:?} {:?} -- calced hash {:x} expected {:x}",
+            //             src,
+            //             cmd,
+            //             buffer.orig_num_bytes(),
+            //             unsafe{ buffer.orig_as_casted_slice::<u8>() },
+            //             calc_hash(
+            //             unsafe{buffer.orig_as_ptr() } as usize,
+            //                 buffer.orig_num_bytes()
+            //             ),
+            //             cmd.msg_hash,
 
-                    );
-                    timer = std::time::Instant::now();
-                }
-                self.comm.thread_flush();
-                async_std::task::yield_now().await;
-            }
-            let data_temp = buffer
-                .try_unwrap()
-                .expect("Multiple copies of data still exist");
+            //         );
+            //         timer = std::time::Instant::now();
+            //     }
+            //     self.comm.thread_flush();
+            //     async_std::task::yield_now().await;
+            // }
+            let data_temp = buffer.async_unwrap().await;
             let data_vec = data_temp.to_vec();
             stats!(PE_RECVS[1][src].fetch_add(1, Ordering::SeqCst));
             debug!("got data from {src} -- {:?} cmds", data_vec.len());
@@ -1147,40 +1147,39 @@ impl InnerCQ {
             let data = vec![CmdMsg::default(); num_cmds];
             let mut buffer = LamellarBuffer::<CmdMsg, Vec<CmdMsg>>::from_vec(data);
 
-            // let task = remote_cmd_buffer
-            //     .get_into_buffer(&self.scheduler, vec![], src, 0, buffer.split_off(0))
-            //     .spawn(); //maybe we do a block here?
             remote_cmd_buffer
-                .get_into_buffer_unmanaged(src, 0, buffer.split_off(0));
-            let mut timer = std::time::Instant::now();
-            while calc_hash(
-                unsafe { buffer.orig_as_ptr() } as usize,
-                buffer.orig_num_bytes(),
-            ) != cmd.msg_hash
-            {
-                if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                    trace!(
-                        "msg_id: {msg_id} data hash mismatch from {:?}!!! {:?} {:?} {:?} -- calced hash {:x} expected {:x}",
-                        src,
-                        cmd,
-                        buffer.orig_num_bytes(),
-                        unsafe{ buffer.orig_as_casted_slice::<u8>() },
-                        calc_hash(
-                        unsafe{buffer.orig_as_ptr() } as usize,
-                            buffer.orig_num_bytes()
-                        ),
-                        cmd.msg_hash,
+                .get_into_buffer(&self.scheduler, vec![], src, 0, buffer.split_off(0)).await;
+            // remote_cmd_buffer
+            //     .get_into_buffer_unmanaged(src, 0, buffer.split_off(0));
+            // let mut timer = std::time::Instant::now();
+            // while calc_hash(
+            //     unsafe { buffer.orig_as_ptr() } as usize,
+            //     buffer.orig_num_bytes(),
+            // ) != cmd.msg_hash
+            // {
+            //     if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+            //         trace!(
+            //             "msg_id: {msg_id} data hash mismatch from {:?}!!! {:?} {:?} {:?} -- calced hash {:x} expected {:x}",
+            //             src,
+            //             cmd,
+            //             buffer.orig_num_bytes(),
+            //             unsafe{ buffer.orig_as_casted_slice::<u8>() },
+            //             calc_hash(
+            //             unsafe{buffer.orig_as_ptr() } as usize,
+            //                 buffer.orig_num_bytes()
+            //             ),
+            //             cmd.msg_hash,
 
-                    );
-                    timer = std::time::Instant::now();
-                }
-                self.comm.thread_flush();
-                async_std::task::yield_now().await;
-            }
+            //         );
+            //         timer = std::time::Instant::now();
+            //     }
+            //     self.comm.thread_flush();
+            //     async_std::task::yield_now().await;
+            // }
             // task.await;
             let data = buffer
-                .try_unwrap()
-                .expect("Multiple copies of data still exist");
+                .async_unwrap().await;
+                // .expect("Multiple copies of data still exist");
 
             stats!(PE_RECVS[1][src].fetch_add(1, Ordering::SeqCst));
             debug!("got data from {src} -- {:?} cmds", data.len());
