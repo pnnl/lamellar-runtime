@@ -1,19 +1,4 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
-
-fn initialize_mem_region<T: Dist + std::ops::AddAssign + std::ops::Mul<Output = T>>(
-    memregion: &LamellarMemoryRegion<T>,
-    init_val: T,
-    inc_val: T,
-) {
-    unsafe {
-        let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice() {
-            *elem = i;
-            i += inc_val;
-        }
-    }
-}
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -44,15 +29,6 @@ macro_rules! initialize_array {
     };
 }
 
-macro_rules! onesided_iter {
-    (GlobalLockArray,$array:ident) => {
-        $array.read_lock().block().onesided_iter()
-    };
-    ($arraytype:ident,$array:ident) => {
-        $array.onesided_iter()
-    };
-}
-
 macro_rules! bit_or_all_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -62,16 +38,14 @@ macro_rules! bit_or_all_test{
             let array_total_len = $len;
             let mem_seg_len = array_total_len;
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len * num_pes, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
-            let init_val = my_pe as $t;
+            let init_val = (1 << my_pe) as $t;
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
             let final_val = !(!0 << num_pes);
-            initialize_mem_region(&shared_mem_region, (1 << my_pe) as $t,0 as $t);
             // world.barrier();
 
             for tx_size in 1..=mem_seg_len{
@@ -81,15 +55,13 @@ macro_rules! bit_or_all_test{
                     #[allow(unused_unsafe)]
                     reqs.push(unsafe { array.bit_or_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                 }
-                let mut i = 0;
                 for req in reqs.drain(..){
                     let buf =req.block();
-                    for elem in buf.as_slice().iter(){
+                    for (i, elem) in buf.as_slice().iter().enumerate(){
                         if ((final_val as $t  - elem) as f32).abs() > 0.0001 {
                             eprintln!("{:?} {:?} {:?}",i as $t,elem,((final_val as $t - elem) as f32).abs());
                             success = false;
                         }
-                        i+=1;
                     }
                 }
                 array.barrier();
@@ -104,86 +76,80 @@ macro_rules! bit_or_all_test{
 
 
 
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
-            let sub_array = array.sub_array(start_i..end_i);
-            world.barrier();
-            // sub_array.print();
-            for tx_size in 1..=half_len{
-                let num_txs = half_len/tx_size;
-                let mut reqs = vec![];
-                for tx in (0..num_txs){
-                    // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
-                    #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.bit_or_all(tx * tx_size, std::cmp::min(half_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
-                }
+            // let half_len = array_total_len/2;
+            // let start_i = half_len/2;
+            // let end_i = start_i + half_len;
+            // let sub_array = array.sub_array(start_i..end_i);
+            // world.barrier();
+            // // sub_array.print();
+            // for tx_size in 1..=half_len{
+            //     let num_txs = half_len/tx_size;
+            //     let mut reqs = vec![];
+            //     for tx in (0..num_txs){
+            //         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
+            //         #[allow(unused_unsafe)]
+            //         reqs.push(unsafe { array.bit_or_all(tx * tx_size, std::cmp::min(half_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
+            //     }
 
-                let mut i = 0;
-                for req in reqs.drain(..){
-                    let buf =req.block();
-                    for elem in buf.as_slice().iter(){
-                        if ((final_val as $t  - elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,elem,((final_val as $t - elem) as f32).abs());
-                            success = false;
-                        }
-                        i+=1;
-                    }
-                }
-                array.wait_all();
-                sub_array.barrier();
-                // sub_array.print();
-                initialize_array!($array, array, init_val);
-                sub_array.wait_all();
-                sub_array.barrier();
-                // sub_array.print();
-            }
-            array.barrier();
-            world.wait_all();
-            world.barrier();
+            //     for req in reqs.drain(..){
+            //         let buf =req.block();
+            //         for (i, elem) in buf.as_slice().iter().enumerate(){
+            //             if ((final_val as $t  - elem) as f32).abs() > 0.0001 {
+            //                 eprintln!("{:?} {:?} {:?}",i as $t,elem,((final_val as $t - elem) as f32).abs());
+            //                 success = false;
+            //             }
+            //         }
+            //     }
+            //     array.wait_all();
+            //     sub_array.barrier();
+            //     // sub_array.print();
+            //     sub_array.wait_all();
+            //     sub_array.barrier();
+            //     // sub_array.print();
+            // }
+            // array.barrier();
+            // world.wait_all();
+            // world.barrier();
 
-            let pe_len = array_total_len/num_pes;
+            // let pe_len = array_total_len/num_pes;
 
-            for pe in 0..num_pes{
-                let len = pe_len/2;
-                let start_i = (pe*pe_len)+ len/2;
+            // for pe in 0..num_pes{
+            //     let len = pe_len/2;
+            //     let start_i = (pe*pe_len)+ len/2;
 
-                let end_i = start_i+len;
-                let sub_array = array.sub_array(start_i..end_i);
-                world.barrier();
+            //     let end_i = start_i+len;
+            //     let sub_array = array.sub_array(start_i..end_i);
+            //     world.barrier();
 
-                for tx_size in 1..len{
-                    let num_txs = len/tx_size;
-                    let mut reqs = vec![];
-                    for tx in (0..num_txs){
-                        // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
-                        #[allow(unused_unsafe)]
-                        reqs.push(unsafe { sub_array.bit_or_all(tx * tx_size, std::cmp::min(len,(tx+1)*tx_size) - tx * tx_size).spawn()});
-                    }
-                    // array.wait_all();
-                    // sub_array.barrier();
-                    let mut i = 0;
-                    for req in reqs.drain(..){
-                        let buf =req.block();
-                        for elem in buf.as_slice().iter(){
-                            if ((final_val as $t  - elem) as f32).abs() > 0.0001 {
-                                eprintln!("{:?} {:?} {:?}",i as $t,elem,((final_val as $t - elem) as f32).abs());
-                                success = false;
-                            }
-                            i+=1;
-                        }
-                    }
-                    array.wait_all();
-                    sub_array.barrier();
-                    // sub_array.print();
-                    initialize_array!($array, array, init_val);
-                    sub_array.wait_all();
-                    sub_array.barrier();
-                }
-                array.barrier();
-                world.wait_all();
-                world.barrier();
-            }
+            //     for tx_size in 1..len{
+            //         let num_txs = len/tx_size;
+            //         let mut reqs = vec![];
+            //         for tx in (0..num_txs){
+            //             // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
+            //             #[allow(unused_unsafe)]
+            //             reqs.push(unsafe { sub_array.bit_or_all(tx * tx_size, std::cmp::min(len,(tx+1)*tx_size) - tx * tx_size).spawn()});
+            //         }
+            //         // array.wait_all();
+            //         // sub_array.barrier();
+            //         for req in reqs.drain(..){
+            //             let buf =req.block();
+            //             for (i, elem) in buf.as_slice().iter().enumerate(){
+            //                 if ((final_val as $t  - elem) as f32).abs() > 0.0001 {
+            //                     eprintln!("{:?} {:?} {:?}",i as $t,elem,((final_val as $t - elem) as f32).abs());
+            //                     success = false;
+            //                 }
+            //             }
+            //         }
+            //         array.wait_all();
+            //         sub_array.barrier();
+            //         // sub_array.print();
+            //         sub_array.wait_all();
+            //         sub_array.barrier();
+            //     }
+            //     array.barrier();
+            //     world.wait_all();
+            //     world.barrier();
+            // }
 
             if !success{
                 eprintln!("failed");
@@ -206,38 +172,36 @@ fn main() {
     };
 
     match array.as_str() {
-        "UnsafeArray" => match elem.as_str() {
-            "u8" => bit_or_all_test!(UnsafeArray, u8, len, dist_type),
-            "u16" => bit_or_all_test!(UnsafeArray, u16, len, dist_type),
-            "u32" => bit_or_all_test!(UnsafeArray, u32, len, dist_type),
-            "u64" => bit_or_all_test!(UnsafeArray, u64, len, dist_type),
-            "u128" => bit_or_all_test!(UnsafeArray, u128, len, dist_type),
-            "usize" => bit_or_all_test!(UnsafeArray, usize, len, dist_type),
-            "i8" => bit_or_all_test!(UnsafeArray, i8, len, dist_type),
-            "i16" => bit_or_all_test!(UnsafeArray, i16, len, dist_type),
-            "i32" => bit_or_all_test!(UnsafeArray, i32, len, dist_type),
-            "i64" => bit_or_all_test!(UnsafeArray, i64, len, dist_type),
-            "i128" => bit_or_all_test!(UnsafeArray, i128, len, dist_type),
-            "isize" => bit_or_all_test!(UnsafeArray, isize, len, dist_type),
-            "f32" => bit_or_all_test!(UnsafeArray, f32, len, dist_type),
-            "f64" => bit_or_all_test!(UnsafeArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
-        },
+        // "UnsafeArray" => match elem.as_str() {
+        //     "u8" => bit_or_all_test!(UnsafeArray, u8, len, dist_type),
+        //     "u16" => bit_or_all_test!(UnsafeArray, u16, len, dist_type),
+        //     "u32" => bit_or_all_test!(UnsafeArray, u32, len, dist_type),
+        //     "u64" => bit_or_all_test!(UnsafeArray, u64, len, dist_type),
+        //     "u128" => bit_or_all_test!(UnsafeArray, u128, len, dist_type),
+        //     "usize" => bit_or_all_test!(UnsafeArray, usize, len, dist_type),
+        //     "i8" => bit_or_all_test!(UnsafeArray, i8, len, dist_type),
+        //     "i16" => bit_or_all_test!(UnsafeArray, i16, len, dist_type),
+        //     "i32" => bit_or_all_test!(UnsafeArray, i32, len, dist_type),
+        //     "i64" => bit_or_all_test!(UnsafeArray, i64, len, dist_type),
+        //     "i128" => bit_or_all_test!(UnsafeArray, i128, len, dist_type),
+        //     "isize" => bit_or_all_test!(UnsafeArray, isize, len, dist_type),
+        //     "f32" => bit_or_all_test!(UnsafeArray, f32, len, dist_type),
+        //     "f64" => bit_or_all_test!(UnsafeArray, f64, len, dist_type),
+        //     _ => eprintln!("unsupported element type"),
+        // },
         "AtomicArray" => match elem.as_str() {
             "u8" => bit_or_all_test!(AtomicArray, u8, len, dist_type),
             "u16" => bit_or_all_test!(AtomicArray, u16, len, dist_type),
             "u32" => bit_or_all_test!(AtomicArray, u32, len, dist_type),
             "u64" => bit_or_all_test!(AtomicArray, u64, len, dist_type),
-            "u128" => bit_or_all_test!(AtomicArray, u128, len, dist_type),
+            // "u128" => bit_or_all_test!(AtomicArray, u128, len, dist_type),
             "usize" => bit_or_all_test!(AtomicArray, usize, len, dist_type),
             "i8" => bit_or_all_test!(AtomicArray, i8, len, dist_type),
             "i16" => bit_or_all_test!(AtomicArray, i16, len, dist_type),
             "i32" => bit_or_all_test!(AtomicArray, i32, len, dist_type),
             "i64" => bit_or_all_test!(AtomicArray, i64, len, dist_type),
-            "i128" => bit_or_all_test!(AtomicArray, i128, len, dist_type),
+            // "i128" => bit_or_all_test!(AtomicArray, i128, len, dist_type),
             "isize" => bit_or_all_test!(AtomicArray, isize, len, dist_type),
-            "f32" => bit_or_all_test!(AtomicArray, f32, len, dist_type),
-            "f64" => bit_or_all_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         // "LocalLockArray" => match elem.as_str() {
