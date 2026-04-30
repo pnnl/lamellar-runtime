@@ -330,6 +330,10 @@ fn rust_type_to_ucc_dtype<T: 'static>() -> ucc_datatype_t {
         UCC_DT_INT64
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
         UCC_DT_UINT64
+    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+        UCC_DT_INT128
+    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+        UCC_DT_UINT128
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
         if cfg!(target_pointer_width = "64") {
             UCC_DT_INT64

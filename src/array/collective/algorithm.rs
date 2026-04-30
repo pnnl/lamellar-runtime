@@ -1,14 +1,14 @@
 use std::sync::{Arc, atomic::AtomicUsize};
 
 use async_std::task::yield_now;
-
+use crate::Distribution;
 use crate::{ActiveMessaging, AsLamellarBuffer, BroadcastInput, Dist, ElementArithmeticOps, ElementBitWiseOps, GenericAtomicArray, GlobalLockArray, LamellarArray, LamellarBuffer, NativeAtomicArray, ReadOnlyOps, array::NetworkAtomicArray, lamellae::{CommAlloc, CommAllocRdma, collective::{ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer}}};
 
 pub(crate) trait AtomicArrayOpsForCollectiveOps<T: Dist>: LamellarArray<T> + ActiveMessaging + ReadOnlyOps<T> {
     fn copy_local_data(&self, index: usize, count: usize, buffer: &mut [T]);
     fn store_to_local_data(&self, index: usize, count: usize, data: &[T]);
+    fn get_global_indices(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<usize>;
 }
-
 
 pub(crate) trait AtomicArrayOpsForCollectiveOpsUpdate<T: ElementArithmeticOps>: AtomicArrayOpsForCollectiveOps<T> {
     fn update_local_data(&self, index: usize, count: usize, data: &[T], op: ReduceOp);
@@ -36,6 +36,21 @@ impl<T: Dist> AtomicArrayOpsForCollectiveOps<T> for GlobalLockArray<T> {
             .for_each(|(elem, val)| {
                 *elem = *val;
         });
+    }
+
+    fn get_global_indices(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<usize> {
+        let first_global_index = self.array.first_global_index_for_pe(pe).unwrap();
+        match self.array.inner.distribution {
+            Distribution::Block => {
+                ((start + first_global_index)..(start + first_global_index + count)).collect::<Vec<_>>()
+            },
+            Distribution::Cyclic => {
+                (0..count).map(|i| {
+                    first_global_index + (i + start) * num_pes
+                }).collect::<Vec<_>>()
+            },
+            
+        }
     }
 }
 
@@ -96,6 +111,21 @@ impl<T: Dist> AtomicArrayOpsForCollectiveOps<T> for NetworkAtomicArray<T> {
             .for_each(|(elem, val)| {
                 elem.store(*val);
             });
+    }
+        
+    fn get_global_indices(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<usize> {
+        let first_global_index = self.array.first_global_index_for_pe(pe).unwrap();
+        match self.array.inner.distribution {
+            Distribution::Block => {
+                ((start + first_global_index)..(start + first_global_index + count)).collect::<Vec<_>>()
+            },
+            Distribution::Cyclic => {
+                (0..count).map(|i| {
+                    first_global_index + (i + start) * num_pes
+                }).collect::<Vec<_>>()
+            },
+            
+        }        
     }
 }
 
@@ -191,6 +221,21 @@ impl<T: Dist > AtomicArrayOpsForCollectiveOps<T> for NativeAtomicArray<T> {
                 elem.store(*val);
             });
     }
+       
+    fn get_global_indices(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<usize> {
+        let first_global_index = self.array.first_global_index_for_pe(pe).unwrap();
+        match self.array.inner.distribution {
+            Distribution::Block => {
+                ((start + first_global_index)..(start + first_global_index + count)).collect::<Vec<_>>()
+            },
+            Distribution::Cyclic => {
+                (0..count).map(|i| {
+                    first_global_index + (i + start) * num_pes
+                }).collect::<Vec<_>>()
+            },
+            
+        }        
+    }
 }
 
 
@@ -231,6 +276,21 @@ impl<T: Dist> AtomicArrayOpsForCollectiveOps<T> for GenericAtomicArray<T> {
             .for_each(|(elem, val)| {
                 elem.store(*val);
             });
+    }
+       
+    fn get_global_indices(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<usize> {
+        let first_global_index = self.array.first_global_index_for_pe(pe).unwrap();
+        match self.array.inner.distribution {
+            Distribution::Block => {
+                ((start + first_global_index)..(start + first_global_index + count)).collect::<Vec<_>>()
+            },
+            Distribution::Cyclic => {
+                (0..count).map(|i| {
+                    first_global_index + (i + start) * num_pes
+                }).collect::<Vec<_>>()
+            },
+            
+        }        
     }
 }
 
@@ -297,10 +357,13 @@ where
     unsafe{sync_alloc.as_comm_slice::<AtomicUsize>().as_mut_slice()}.iter_mut().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     let mut comm_slice = sync_alloc.as_comm_slice::<AtomicUsize>();
     let sync_slice = unsafe { comm_slice.as_mut_slice() };
+    while sync_slice[1].compare_exchange(0, 1, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        yield_now().await; // wait for root PE to signal that we are ready to start the gather
+    }
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the scatter
+    sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have initialized their sync array
 
-    let first_global_index = array.first_global_index_for_pe(root).unwrap();
     let local_offset = (local + root) % num_pes * count;
     let start = if local == root {
         index + local_offset
@@ -308,9 +371,10 @@ where
         let remote_index: usize = sync_alloc.blocking_get(root, 0);
         remote_index + local_offset
     };
-    let indices = ((start + first_global_index)..(start + first_global_index + count)).collect::<Vec<_>>();
+    let indices = array.get_global_indices(root, num_pes, start, count);
     let res = array.batch_load(indices).await;
     array.async_barrier().await; // ensure all PEs have received their data before returning
+    sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
     res
 }
 
@@ -379,17 +443,18 @@ where
     let count = local_length; // number of elements in the array each PE is responsible for
     let mut comm_slice = sync_alloc.as_comm_slice::<AtomicUsize>();
     let sync_slice = unsafe { comm_slice.as_mut_slice() };
-    sync_slice.iter().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
+    while sync_slice[1].compare_exchange(0, 1, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        yield_now().await; // wait for root PE to signal that we are ready to start the gather
+    }
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the gather
+    sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have initialized their sync array
     // let mut result = vec![T::default(); num_pes*count]; 
-    array.async_barrier().await; // ensure all PEs have published their offsets before starting the gather
 
     if local == root {
         for i in 0..num_pes{
             let remote_index: usize = sync_alloc.blocking_get(i, 0);
-            let first_global_index = array.first_global_index_for_pe(i).unwrap();
-            let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+            let indices = array.get_global_indices(i, num_pes, remote_index, count);
             let tmp = array.batch_load(indices).await;
             res[i*count..i*count + count].iter_mut().zip(tmp.iter()).for_each(|(dst, src)| {
                 *dst = *src; 
@@ -397,6 +462,7 @@ where
         }
     }
     array.async_barrier().await; // ensure all PEs have received their data before returning
+    sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
 }
 
 pub(crate) async fn do_all_to_all_impl<A, T>(
@@ -414,20 +480,23 @@ where
     let count = local_length; // number of elements in the array each PE is responsible for
     let mut comm_slice = sync_alloc.as_comm_slice::<AtomicUsize>();
     let sync_slice = unsafe { comm_slice.as_mut_slice() };
-    sync_slice.iter_mut().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
+    while sync_slice[1].compare_exchange(0, 1, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        yield_now().await; // wait for root PE to signal that we are ready to start the gather
+    }
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the all-to-all
+    sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have initialized their sync array
 
     for i in 0..num_pes {
         let remote_index: usize = sync_alloc.blocking_get(i, 0);
-        let first_global_index = array.first_global_index_for_pe(i).unwrap();
-        let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+        let indices = array.get_global_indices(i, num_pes, remote_index, count);
         let tmp = array.batch_load(indices).await;
         res[i*count..i*count + count].iter_mut().zip(tmp.iter()).for_each(|(dst, src)| {
             *dst = *src; 
         }); // copy data from neighbor into correct location in res array
     }
     array.async_barrier().await; // ensure all PEs have received their data before returning
+    sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
 }
 
 
@@ -472,17 +541,23 @@ where
     let count = local_length; // number of elements in the array each PE is responsible for
     let mut comm_slice = sync_alloc.as_comm_slice::<AtomicUsize>();
     let sync_slice = unsafe { comm_slice.as_mut_slice() };
-    sync_slice.iter().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
+    while sync_slice[1].compare_exchange(0, 1, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        yield_now().await; // wait for root PE to signal that we are ready to start the gather
+    }
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the broadcast
+    sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have initialized their sync array
 
     if local != root {
         let remote_index: usize = sync_alloc.blocking_get(root, 0);
-        let first_global_index = array.first_global_index_for_pe(root).unwrap();
-        let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
-        Some(array.batch_load(indices).await)
+        let indices = array.get_global_indices(root, array.num_pes(), remote_index, count);
+
+        let res = Some(array.batch_load(indices).await);
+        array.async_barrier().await; // ensure all PEs have received their data before returning
+        res
     }
     else {
+        sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
         None
     }
 }
@@ -570,7 +645,11 @@ where
     unsafe{sync_alloc.as_comm_slice::<AtomicUsize>().as_mut_slice()}.iter_mut().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     let mut comm_slice = sync_alloc.as_comm_slice::<AtomicUsize>();
     let sync_slice = unsafe { comm_slice.as_mut_slice() };
+    while sync_slice[1].compare_exchange(0, 1, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        yield_now().await; // wait for root PE to signal that we are ready to start the gather
+    }
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the gather
+    sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have written the index before starting the gather
 
     // let mut result = vec![T::default(); num_pes*count]; 
@@ -578,14 +657,17 @@ where
     
     for i in 0..num_pes{
         let remote_index: usize = sync_alloc.blocking_get(i, 0);
-        let first_global_index = array.first_global_index_for_pe(i).unwrap();
-        let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+        // let first_global_index = array.first_global_index_for_pe(i).unwrap();
+        // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+        let indices = array.get_global_indices(i, num_pes, remote_index, count);
         let tmp = array.batch_load(indices).await; 
 
         res[i*count..i*count + count].iter_mut().zip(tmp.iter()).for_each(|(dst, src)| {
             *dst = *src; 
         }); // copy data from neighbor into correct location in result array
     }
+    sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
+
     array.async_barrier().await; // ensure all PEs have received their data before returning
 }
 
@@ -661,9 +743,13 @@ where
     unsafe{sync_alloc.as_comm_slice::<AtomicUsize>().as_mut_slice()}.iter_mut().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     let mut comm_slice = sync_alloc.as_comm_slice::<AtomicUsize>();
     let sync_slice = unsafe { comm_slice.as_mut_slice() };
+    while sync_slice[1].compare_exchange(0, 1, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        yield_now().await; // wait for root PE to signal that we are ready to start the gather
+    }
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the gather
+    sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have written the index before starting the gather
-    let mut my_new_id = 0usize;
+    let mut my_new_id ;
 
     let mut replace = vec![T::default(); count];
     array.copy_local_data(index, count, &mut replace);
@@ -673,19 +759,20 @@ where
     if local < 2 * rem {
         if local % 2 == 0 {
 
-            sync_alloc.put_unmanaged(round, local + 1, 1 + my_pe); 
-            while sync_slice[1 + local + 1].load(std::sync::atomic::Ordering::SeqCst) != round {
+            sync_alloc.put_unmanaged(round, local + 1, 2 + my_pe); 
+            while sync_slice[2 + local + 1].load(std::sync::atomic::Ordering::SeqCst) != round {
                 yield_now().await; // wait for remote PE to signal that data is ready to move on to the next round
             }
             my_new_id = usize::MAX; // this PE is out of the all reduce
         } else {
             // receive data from local - 1 and reduce into local data
-            while sync_slice[1 + local - 1].load(std::sync::atomic::Ordering::SeqCst) != round {
+            while sync_slice[2 + local - 1].load(std::sync::atomic::Ordering::SeqCst) != round {
                 yield_now().await; // wait for data to arrive
             }
             let remote_index: usize = sync_alloc.blocking_get(local - 1, 0);
-            let first_global_index = array.first_global_index_for_pe(local - 1).unwrap();
-            let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+            // let first_global_index = array.first_global_index_for_pe(local - 1).unwrap();
+            // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+            let indices = array.get_global_indices(local - 1, num_pes, remote_index, count);
             let tmp = array.batch_load(indices).await; // copy data from local - 1 into result
             // println!("PE {} received: {:?} data from PE {}", local, tmp, local-1);
             
@@ -694,7 +781,7 @@ where
             // for i in 0..count {
             //     result.fetch_add(i, tmp[i]).await; // reduce data from local - 1 with local data
             // }
-            sync_alloc.put_unmanaged(round, local - 1, 1 + my_pe); // signal local - 1 that reduction is complete and they can move on to the next round
+            sync_alloc.put_unmanaged(round, local - 1, 2 + my_pe); // signal local - 1 that reduction is complete and they can move on to the next round
             my_new_id = local / 2;
         }
         round += 1;
@@ -713,21 +800,22 @@ where
                 partner + rem
             };
 
-            sync_alloc.put_unmanaged(round, partner_pe, 1 + my_pe); // signal partner PE that data is ready
-            while sync_slice[1 + partner_pe].load(std::sync::atomic::Ordering::SeqCst) != round {
+            sync_alloc.put_unmanaged(round, partner_pe, 2 + my_pe); // signal partner PE that data is ready
+            while sync_slice[2 + partner_pe].load(std::sync::atomic::Ordering::SeqCst) != round {
                 yield_now().await; // wait for partner PE to signal that their data is ready
             }
             round += 1;
             
             // receive data from partner
             let remote_index: usize = sync_alloc.blocking_get(partner, 0);
-            let first_global_index = array.first_global_index_for_pe(partner).unwrap();
-            let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+            // let first_global_index = array.first_global_index_for_pe(partner).unwrap();
+            // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+            let indices = array.get_global_indices(partner, num_pes, remote_index, count);
             let tmp = array.batch_load(indices).await; // copy data from partner into result
             // println!("PE {} received: {:?} data from PE {}", local, tmp, partner_pe);
-            sync_alloc.put_unmanaged(round, partner_pe, 1 + my_pe); // signal partner PE that I'm done processing their data
+            sync_alloc.put_unmanaged(round, partner_pe, 2 + my_pe); // signal partner PE that I'm done processing their data
             
-            while sync_slice[1 + partner_pe].load(std::sync::atomic::Ordering::SeqCst) != round {
+            while sync_slice[2 + partner_pe].load(std::sync::atomic::Ordering::SeqCst) != round {
                 yield_now().await; // wait for partner PE to signal that they are done processing my data
             }
             
@@ -746,15 +834,16 @@ where
     if local < 2 * rem {
         if local % 2 != 0 {
             // send reduced data to local - 1
-            sync_alloc.put_unmanaged(round, local - 1, 1 + my_pe); // signal local - 1 that reduction is complete and they can move on to the next round
+            sync_alloc.put_unmanaged(round, local - 1, 2 + my_pe); // signal local - 1 that reduction is complete and they can move on to the next round
         }
         else {
-            while sync_slice[1 + local + 1].load(std::sync::atomic::Ordering::SeqCst) != round {
+            while sync_slice[2 + local + 1].load(std::sync::atomic::Ordering::SeqCst) != round {
                 yield_now().await; // wait for reduced data to arrive
             }
             let remote_index: usize = sync_alloc.blocking_get(local + 1, 0);
-            let first_global_index = array.first_global_index_for_pe(local + 1).unwrap();
-            let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+            // let first_global_index = array.first_global_index_for_pe(local + 1).unwrap();
+            // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+            let indices = array.get_global_indices(local + 1, array.num_pes(), remote_index, count);
             let tmp = array.batch_load(indices).await;
 
             apply_op(&array, tmp.as_slice());
@@ -764,6 +853,7 @@ where
     array.async_barrier().await; // ensure all PEs have finished reduction before returning
     array.copy_local_data(index, count, res);
     array.store_to_local_data(index, count, &replace); // restore original data in case this PE needs to be used for another operation after the reduce
+    sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
 }
 
 pub(crate) async fn do_all_reduce<A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, T: Dist + ElementArithmeticOps>(
@@ -858,8 +948,11 @@ where
 
     let mut comm_slice = sync_alloc.as_comm_slice::<AtomicUsize>();
     let sync_slice = unsafe { comm_slice.as_mut_slice() };
-    sync_slice.iter_mut().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
+    while sync_slice[1].compare_exchange(0, 1, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        yield_now().await; // wait for root PE to signal that we are ready to start the gather
+    }
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the gather
+    sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have written the index before starting the gather
 
     let mut step = 1;
@@ -872,12 +965,12 @@ where
             let virtual_partner = virtual_id + step;
             if virtual_partner < num_pes {
                 let partner = (virtual_partner + root) % num_pes;
-                while sync_slice[1 + partner].load(std::sync::atomic::Ordering::SeqCst) != step {
+                while sync_slice[2 + partner].load(std::sync::atomic::Ordering::SeqCst) != step {
                     yield_now().await; // wait for remote PE to signal that data is ready to move on to the next round
                 }
                 let remote_index: usize = sync_alloc.blocking_get(partner, 0);
-                let first_global_index = array.first_global_index_for_pe(partner).unwrap();
-                let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+                // let indices = array.get_global_indices(partner, remote_index, count);
+                let indices = array.get_global_indices(partner, num_pes, remote_index, count);
                 let tmp = array.batch_load(indices).await; // copy data from partner into result
                 
                 apply_op(&array, tmp.as_slice());
@@ -889,7 +982,7 @@ where
         else {
             let virtual_parent = virtual_id - step;
             let partner = (virtual_parent + root) % num_pes;
-            sync_alloc.put_unmanaged(step, partner, 1 + my_pe); // signal partner PE that data is ready
+            sync_alloc.put_unmanaged(step, partner, 2 + my_pe); // signal partner PE that data is ready
             break; // this PE is done after sending its data to the partner
         }
         step *= 2;
@@ -901,6 +994,8 @@ where
         None
     };
     array.store_to_local_data(index, count, &replace); // restore original data in case this PE needs to be used for another operation after the reduce
+    sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
+
     // src.iter().zip(replace.iter()).for_each(|(dst, src)| {
     //     dst.store(*src); 
     // }); // restore original data in case this PE needs to be used for another operation after the reduce
@@ -1032,8 +1127,11 @@ where
     let virtual_id = (local + num_pes - root) % num_pes;
     let mut comm_slice = sync_alloc.as_comm_slice::<AtomicUsize>();
     let sync_slice = unsafe { comm_slice.as_mut_slice() };
-    sync_slice.iter().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
+    while sync_slice[1].compare_exchange(0, 1, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        yield_now().await; // wait for root PE to signal that we are ready to start the gather
+    }
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the reduction
+    sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have initialized their sync array
 
 
@@ -1042,12 +1140,14 @@ where
             let virtual_partner = virtual_id + step;
             if virtual_partner < num_pes {
                 let partner = (virtual_partner + root) % num_pes;
-                while sync_slice[1 + partner].load(std::sync::atomic::Ordering::SeqCst) != step {
+                while sync_slice[2 + partner].load(std::sync::atomic::Ordering::SeqCst) != step {
                     yield_now().await; // wait for remote PE to signal that data is ready to move on to the next round
                 }
                 let remote_index: usize = sync_alloc.blocking_get(partner, 0);
-                let first_global_index = array.first_global_index_for_pe(partner).unwrap();
-                let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+                // let first_global_index = array.first_global_index_for_pe(partner).unwrap();
+                // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
+                let indices = array.get_global_indices(partner, num_pes, remote_index, count);
+
                 let tmp = array.batch_load(indices).await; // copy data from partner into result
 
                 // println!("PE {} received: {:?} data from PE {}", local, tmp, partner);
@@ -1057,7 +1157,7 @@ where
         else {
             let virtual_parent = virtual_id - step;
             let partner = (virtual_parent + root) % num_pes;
-            sync_alloc.put_unmanaged(step, partner, 1 + local); // signal partner PE that data is ready
+            sync_alloc.put_unmanaged(step, partner, 2 + local); // signal partner PE that data is ready
             break; // this PE is done after sending its data to the partner
         }
         step *= 2;
@@ -1073,7 +1173,7 @@ where
     // };
     
     array.store_to_local_data(index, count, &replace); // restore original data in case this PE needs to be used for another operation after the reduce
-    
+    sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
     res
 }
 

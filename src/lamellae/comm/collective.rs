@@ -1752,7 +1752,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> From<RootSrcOrLamellarBuffer<T, B>> for 
     }
 }
 
-pub enum RootSrcOrLamellarBufferInner<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) enum RootSrcOrLamellarBufferInner<T: Remote, B: AsLamellarBuffer<T>> {
     Root(usize), 
     NotRoot(LamellarBuffer<T, B>, usize) 
 }

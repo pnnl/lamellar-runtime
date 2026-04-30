@@ -826,14 +826,18 @@ impl<T: Remote> MemoryRegion<T> {
             } else {
                 let bytes = match &alloc {
                     AllocationType::Local => unreachable!(),
-                    AllocationType::Global => (lamellae.comm().num_pes() + 1)  * std::mem::size_of::<AtomicUsize>(),
-                    AllocationType::Sub(pes) => (pes.len() +1) * std::mem::size_of::<AtomicUsize>(),
+                    AllocationType::Global => (lamellae.comm().num_pes() + 2)  * std::mem::size_of::<AtomicUsize>(),
+                    AllocationType::Sub(pes) => (pes.len() +2) * std::mem::size_of::<AtomicUsize>(),
                 };
-                coll_sync_alloc = Some(Arc::new(lamellae.comm().alloc(
+                let sync_alloc  = lamellae.comm().alloc(
                     bytes,
                     alloc.clone(),
                     std::mem::align_of::<AtomicUsize>(),
-                )?));
+                )?;
+                let sync_slice = unsafe { sync_alloc.as_comm_slice::<AtomicUsize>() };
+                sync_slice.iter().for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
+
+                coll_sync_alloc = Some(Arc::new(sync_alloc));
                 lamellae.comm().alloc(
                     num_elems * std::mem::size_of::<T>(),
                     alloc,

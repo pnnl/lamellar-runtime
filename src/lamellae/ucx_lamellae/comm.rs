@@ -115,7 +115,8 @@ impl CommInfo for UcxComm {
             / 1_000_000.0
     }
     fn collective_avail<T: 'static>(&self,op: CollectiveOpKind) -> bool {
-        self.ucx.collective_avail::<T>(op)
+        let avail = self.ucx.collective_avail::<T>(op);
+        avail
     }
 }
 

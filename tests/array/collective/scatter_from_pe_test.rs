@@ -63,16 +63,14 @@ macro_rules! scatter_from_pe_test{
             let array_total_len = $len;
             let mem_seg_len = array_total_len;
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
-
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len * num_pes, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
+            let root = 1;
             //initialize array
             let init_val = my_pe as $t;
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            let final_val = (!0 << num_pes);
-            initialize_mem_region(&shared_mem_region, 0 as $t, 1 as $t);
+            let final_val = root;
             // world.barrier();
 
             for tx_size in (num_pes..=mem_seg_len).step_by(num_pes){
@@ -80,10 +78,10 @@ macro_rules! scatter_from_pe_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    let scatter_in = if my_pe == 0 {
+                    let scatter_in = if my_pe == root {
                         ScatterInput::root(tx * tx_size)
                     } else {
-                        ScatterInput::not_root(0)
+                        ScatterInput::not_root(root)
                     };
                     reqs.push((unsafe { array.scatter_from_pe(scatter_in, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
                 }
@@ -91,8 +89,8 @@ macro_rules! scatter_from_pe_test{
                 for req in reqs.drain(..){
                     let buf =req.0.block();
                     for elem in buf.as_slice().iter(){
-                        if ( (( (i/ req.1 * num_pes + my_pe) *  req.1 + i % req.1) as $t  - elem) as f32).abs() > 0.0001 {
-                            eprintln!("[{:?}] {:?} {:?} {:?} {:?} {:?}",my_pe, i as $t, ( (i/ req.1 * num_pes + my_pe) *  req.1 + i % req.1) as $t, elem,( (( (i/ req.1 * num_pes + my_pe) *  req.1 + i % req.1) as $t  - elem) as f32).abs(), req.1);
+                        if ( (final_val as $t  - elem) as f32).abs() > 0.0001 {
+                            eprintln!("[{:?}] {:?} {:?} {:?} {:?} {:?}",my_pe, i as $t, final_val as $t, elem,( (final_val as $t  - elem) as f32).abs(), req.1);
                             success = false;
                         }
                         i+=1;
@@ -110,96 +108,96 @@ macro_rules! scatter_from_pe_test{
 
 
 
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
-            let sub_array = array.sub_array(start_i..end_i);
-            world.barrier();
-            // sub_array.print();
-            for tx_size in (num_pes..=half_len).step_by(num_pes){
-                let num_txs = half_len/tx_size;
-                let mut reqs = vec![];
-                for tx in (0..num_txs){
-                    let scatter_in = if my_pe == 0 {
-                        ScatterInput::root(tx * tx_size)
-                    } else {
-                        ScatterInput::not_root(0)
-                    };
-                    // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
-                    #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.scatter_from_pe(scatter_in, (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
-                }
+            // let half_len = array_total_len/2;
+            // let start_i = half_len/2;
+            // let end_i = start_i + half_len;
+            // let sub_array = array.sub_array(start_i..end_i);
+            // world.barrier();
+            // // sub_array.print();
+            // for tx_size in (num_pes..=half_len).step_by(num_pes){
+            //     let num_txs = half_len/tx_size;
+            //     let mut reqs = vec![];
+            //     for tx in (0..num_txs){
+            //         let scatter_in = if my_pe == root {
+            //             ScatterInput::root(tx * tx_size)
+            //         } else {
+            //             ScatterInput::not_root(root)
+            //         };
+            //         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
+            //         #[allow(unused_unsafe)]
+            //         reqs.push((unsafe { array.scatter_from_pe(scatter_in, (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
+            //     }
 
-                let mut i = 0;
-                for req in reqs.drain(..){
-                    let buf =req.0.block();
-                    for elem in buf.as_slice().iter(){
-                        if ( (( (i/ req.1 * num_pes + my_pe) *  req.1 + i % req.1) as $t  - elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,elem,( (( (i/ req.1 * num_pes + my_pe) *  req.1 + i % req.1) as $t  - elem) as f32).abs());
-                            success = false;
-                        }
-                        i+=1;
-                    }
-                }
-                array.wait_all();
-                sub_array.barrier();
-                // sub_array.print();
-                initialize_array!($array, array, init_val);
-                sub_array.wait_all();
-                sub_array.barrier();
-                // sub_array.print();
-            }
-            array.barrier();
-            world.wait_all();
-            world.barrier();
+            //     let mut i = 0;
+            //     for req in reqs.drain(..){
+            //         let buf =req.0.block();
+            //         for elem in buf.as_slice().iter(){
+            //             if ( final_val as f32).abs() > 0.0001 {
+            //                 eprintln!("{:?} {:?} {:?}",i as $t,elem,( final_val as f32).abs());
+            //                 success = false;
+            //             }
+            //             i+=1;
+            //         }
+            //     }
+            //     array.wait_all();
+            //     sub_array.barrier();
+            //     // sub_array.print();
+            //     initialize_array!($array, array, init_val);
+            //     sub_array.wait_all();
+            //     sub_array.barrier();
+            //     // sub_array.print();
+            // }
+            // array.barrier();
+            // world.wait_all();
+            // world.barrier();
 
-            let pe_len = array_total_len/num_pes;
+            // let pe_len = array_total_len/num_pes;
 
-            for pe in 0..num_pes{
-                let len = pe_len/2;
-                let start_i = (pe*pe_len)+ len/2;
+            // for pe in 0..num_pes{
+            //     let len = pe_len/2;
+            //     let start_i = (pe*pe_len)+ len/2;
 
-                let end_i = start_i+len;
-                let sub_array = array.sub_array(start_i..end_i);
-                world.barrier();
+            //     let end_i = start_i+len;
+            //     let sub_array = array.sub_array(start_i..end_i);
+            //     world.barrier();
 
-                for tx_size in (num_pes..len).step_by(num_pes){
-                    let num_txs = len/tx_size;
-                    let mut reqs = vec![];
-                    for tx in (0..num_txs){
-                        let scatter_in = if my_pe == 0 {
-                            ScatterInput::root(tx * tx_size)
-                        } else {
-                            ScatterInput::not_root(0)
-                        };
-                        // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
-                        #[allow(unused_unsafe)]
-                        reqs.push((unsafe { sub_array.scatter_from_pe(scatter_in, (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
-                    }
-                    // array.wait_all();
-                    // sub_array.barrier();
-                    let mut i = 0;
-                    for req in reqs.drain(..){
-                        let buf =req.0.block();
-                        for elem in buf.as_slice().iter(){
-                            if ( (( (i/ req.1 * num_pes + my_pe) *  req.1 + i % req.1) as $t  - elem) as f32).abs() > 0.0001 {
-                                eprintln!("{:?} {:?} {:?}",i as $t,elem,( (( (i/ req.1 * num_pes + my_pe) *  req.1 + i % req.1) as $t  - elem) as f32).abs());
-                                success = false;
-                            }
-                            i+=1;
-                        }
-                    }
-                    array.wait_all();
-                    sub_array.barrier();
-                    // sub_array.print();
-                    initialize_array!($array, array, init_val);
-                    sub_array.wait_all();
-                    sub_array.barrier();
-                }
-                array.barrier();
-                world.wait_all();
-                world.barrier();
-            }
+            //     for tx_size in (num_pes..len).step_by(num_pes){
+            //         let num_txs = len/tx_size;
+            //         let mut reqs = vec![];
+            //         for tx in (0..num_txs){
+            //             let scatter_in = if my_pe == root {
+            //                 ScatterInput::root(tx * tx_size)
+            //             } else {
+            //                 ScatterInput::not_root(root)
+            //             };
+            //             // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
+            //             #[allow(unused_unsafe)]
+            //             reqs.push((unsafe { sub_array.scatter_from_pe(scatter_in, (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
+            //         }
+            //         // array.wait_all();
+            //         // sub_array.barrier();
+            //         let mut i = 0;
+            //         for req in reqs.drain(..){
+            //             let buf =req.0.block();
+            //             for elem in buf.as_slice().iter(){
+            //                 if ( final_val as f32).abs() > 0.0001 {
+            //                     eprintln!("{:?} {:?} {:?}",i as $t,elem,( final_val as f32).abs());
+            //                     success = false;
+            //                 }
+            //                 i+=1;
+            //             }
+            //         }
+            //         array.wait_all();
+            //         sub_array.barrier();
+            //         // sub_array.print();
+            //         initialize_array!($array, array, init_val);
+            //         sub_array.wait_all();
+            //         sub_array.barrier();
+            //     }
+            //     array.barrier();
+            //     world.wait_all();
+            //     world.barrier();
+            // }
 
             if !success{
                 eprintln!("failed");
@@ -241,19 +239,19 @@ fn main() {
         },
         "AtomicArray" => match elem.as_str() {
             "u8" => scatter_from_pe_test!(AtomicArray, u8, len, dist_type),
-            // "u16" => scatter_from_pe_test!(AtomicArray, u16, len, dist_type),
-            // "u32" => scatter_from_pe_test!(AtomicArray, u32, len, dist_type),
-            // "u64" => scatter_from_pe_test!(AtomicArray, u64, len, dist_type),
-            // "u128" => scatter_from_pe_test!(AtomicArray, u128, len, dist_type),
-            // "usize" => scatter_from_pe_test!(AtomicArray, usize, len, dist_type),
-            // "i8" => scatter_from_pe_test!(AtomicArray, i8, len, dist_type),
-            // "i16" => scatter_from_pe_test!(AtomicArray, i16, len, dist_type),
-            // "i32" => scatter_from_pe_test!(AtomicArray, i32, len, dist_type),
-            // "i64" => scatter_from_pe_test!(AtomicArray, i64, len, dist_type),
-            // "i128" => scatter_from_pe_test!(AtomicArray, i128, len, dist_type),
-            // "isize" => scatter_from_pe_test!(AtomicArray, isize, len, dist_type),
-            // "f32" => scatter_from_pe_test!(AtomicArray, f32, len, dist_type),
-            // "f64" => scatter_from_pe_test!(AtomicArray, f64, len, dist_type),
+            "u16" => scatter_from_pe_test!(AtomicArray, u16, len, dist_type),
+            "u32" => scatter_from_pe_test!(AtomicArray, u32, len, dist_type),
+            "u64" => scatter_from_pe_test!(AtomicArray, u64, len, dist_type),
+            "u128" => scatter_from_pe_test!(AtomicArray, u128, len, dist_type),
+            "usize" => scatter_from_pe_test!(AtomicArray, usize, len, dist_type),
+            "i8" => scatter_from_pe_test!(AtomicArray, i8, len, dist_type),
+            "i16" => scatter_from_pe_test!(AtomicArray, i16, len, dist_type),
+            "i32" => scatter_from_pe_test!(AtomicArray, i32, len, dist_type),
+            "i64" => scatter_from_pe_test!(AtomicArray, i64, len, dist_type),
+            "i128" => scatter_from_pe_test!(AtomicArray, i128, len, dist_type),
+            "isize" => scatter_from_pe_test!(AtomicArray, isize, len, dist_type),
+            "f32" => scatter_from_pe_test!(AtomicArray, f32, len, dist_type),
+            "f64" => scatter_from_pe_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         // "LocalLockArray" => match elem.as_str() {

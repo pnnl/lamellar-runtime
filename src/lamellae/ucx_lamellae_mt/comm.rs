@@ -122,7 +122,7 @@ impl CommInfo for UcxMtComm {
     }
     
     fn collective_avail<T: 'static>(&self,op: CollectiveOpKind) -> bool {
-        false // [TODO] Need to implement UCC
+        self.ucx.collective_avail::<T>(op)
     }
 }
 

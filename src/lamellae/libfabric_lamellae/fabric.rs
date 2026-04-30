@@ -938,6 +938,18 @@ impl Ofi {
                 .domain.query_collective(data_op, &mut attr)
                 .is_ok()
         }
+        else if id == std::any::TypeId::of::<u128>() {
+            let mut attr = CollectiveAttr::<u128>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
         else if id == std::any::TypeId::of::<i8>() {
             let mut attr = CollectiveAttr::<i8>::new();
             attr = if let Some(reduce_op) = reduce_op {
@@ -986,6 +998,18 @@ impl Ofi {
                 .domain.query_collective(data_op, &mut attr)
                 .is_ok()
         }
+        else if id == std::any::TypeId::of::<i128>() {
+            let mut attr = CollectiveAttr::<i128>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
         else if id == std::any::TypeId::of::<usize>() {
             let mut attr = CollectiveAttr::<usize>::new();
             attr = if let Some(reduce_op) = reduce_op {
@@ -1000,6 +1024,30 @@ impl Ofi {
         }
         else if id == std::any::TypeId::of::<isize>() {
             let mut attr = CollectiveAttr::<isize>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<f32>() {
+            let mut attr = CollectiveAttr::<f32>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<f64>() {
+            let mut attr = CollectiveAttr::<f64>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
             }
@@ -2528,6 +2576,8 @@ impl LibfabricAlloc {
                 self.typed_atomic_fetch_op::<T, u32>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
                 self.typed_atomic_fetch_op::<T, u64>(pe, offset, op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_atomic_fetch_op::<T, u128>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
                 self.typed_atomic_fetch_op::<T, usize>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
@@ -2538,8 +2588,14 @@ impl LibfabricAlloc {
                 self.typed_atomic_fetch_op::<T, i32>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
                 self.typed_atomic_fetch_op::<T, i64>(pe, offset, op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_atomic_fetch_op::<T, i128>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_atomic_fetch_op::<T, isize>(pe, offset, op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_atomic_fetch_op::<T, f32>(pe, offset, op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_atomic_fetch_op::<T, f64>(pe, offset, op, result, blocking)
             } else {
                 panic!("Unsupported atomic operation type");
             }
@@ -2627,9 +2683,9 @@ impl LibfabricAlloc {
                     pe, offset, current, new, result, blocking,
                 )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-                self.typed_atomic_compare_exchange_op::<T, u64>(
-                    pe, offset, current, new, result, blocking,
-                )
+                self.typed_atomic_compare_exchange_op::<T, u64>(pe, offset, current, new, result, blocking,)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_atomic_compare_exchange_op::<T, u128>(pe, offset, current, new, result, blocking,)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
                 self.typed_atomic_compare_exchange_op::<T, usize>(
                     pe, offset, current, new, result, blocking,
@@ -2650,8 +2706,20 @@ impl LibfabricAlloc {
                 self.typed_atomic_compare_exchange_op::<T, i64>(
                     pe, offset, current, new, result, blocking,
                 )
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_atomic_compare_exchange_op::<T, i128>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_atomic_compare_exchange_op::<T, isize>(
+                    pe, offset, current, new, result, blocking,
+                )
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_atomic_compare_exchange_op::<T, f32>(
+                    pe, offset, current, new, result, blocking,
+                )
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_atomic_compare_exchange_op::<T, f64>(
                     pe, offset, current, new, result, blocking,
                 )
             } else {
@@ -2725,6 +2793,8 @@ impl LibfabricAlloc {
                 self.typed_allreduce::<T, u32>(op, src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
                 self.typed_allreduce::<T, u64>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_allreduce::<T, u128>(op, src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
                 self.typed_allreduce::<T, usize>(op, src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
@@ -2735,8 +2805,14 @@ impl LibfabricAlloc {
                 self.typed_allreduce::<T, i32>(op, src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
                 self.typed_allreduce::<T, i64>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_allreduce::<T, i128>(op, src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_allreduce::<T, isize>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_allreduce::<T, f32>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_allreduce::<T, f64>(op, src, result, blocking)
             } else {
                 panic!("Unsupported allreduce operation type");
             }
@@ -2802,6 +2878,8 @@ impl LibfabricAlloc {
                 self.typed_allgather::<T, u32>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
                 self.typed_allgather::<T, u64>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_allgather::<T, u128>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
                 self.typed_allgather::<T, usize>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
@@ -2812,8 +2890,14 @@ impl LibfabricAlloc {
                 self.typed_allgather::<T, i32>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
                 self.typed_allgather::<T, i64>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_allgather::<T, i128>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_allgather::<T, isize>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_allgather::<T, f32>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_allgather::<T, f64>(src, result, blocking)
             } else {
                 panic!("Unsupported allgather operation type");
             }
@@ -2860,6 +2944,8 @@ impl LibfabricAlloc {
                 self.typed_alltoall::<T, u32>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
                 self.typed_alltoall::<T, u64>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_alltoall::<T, u128>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
                 self.typed_alltoall::<T, usize>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
@@ -2870,8 +2956,14 @@ impl LibfabricAlloc {
                 self.typed_alltoall::<T, i32>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
                 self.typed_alltoall::<T, i64>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_alltoall::<T, i128>(src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_alltoall::<T, isize>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_alltoall::<T, f32>(src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_alltoall::<T, f64>(src, result, blocking)
             } else {
                 panic!("Unsupported alltoall operation type");
             }
@@ -2920,6 +3012,8 @@ impl LibfabricAlloc {
                 self.typed_reduce::<T, u32>(op, src, slice_or_pe, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
                 self.typed_reduce::<T, u64>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_reduce::<T, u128>(op, src, slice_or_pe, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
                 self.typed_reduce::<T, usize>(op, src, slice_or_pe, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
@@ -2930,8 +3024,14 @@ impl LibfabricAlloc {
                 self.typed_reduce::<T, i32>(op, src, slice_or_pe, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
                 self.typed_reduce::<T, i64>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_reduce::<T, i128>(op, src, slice_or_pe, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_reduce::<T, isize>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_reduce::<T, f32>(op, src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_reduce::<T, f64>(op, src, slice_or_pe, blocking)
             } else {
                 panic!("Unsupported allreduce operation type");
             }
@@ -3005,6 +3105,14 @@ impl LibfabricAlloc {
                 self.typed_gather::<T, i64>(src, slice_or_pe, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_gather::<T, isize>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_gather::<T, u128>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_gather::<T, i128>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_gather::<T, f32>(src, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_gather::<T, f64>(src, slice_or_pe, blocking)
             } else {
                 panic!("Unsupported allreduce operation type");
             }
@@ -3074,8 +3182,16 @@ impl LibfabricAlloc {
                 self.typed_broadcast::<T, i64>(root_src, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_broadcast::<T, isize>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_broadcast::<T, u128>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_broadcast::<T, i128>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_broadcast::<T, f32>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_broadcast::<T, f64>(root_src, blocking)
             } else {
-                panic!("Unsupported allreduce operation type");
+                panic!("Unsupported broadcast operation type");
             }
         }
     }
@@ -3134,8 +3250,16 @@ impl LibfabricAlloc {
                 self.typed_scatter::<T, i64>(res, src_or_root_pe, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_scatter::<T, isize>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_scatter::<T, u128>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_scatter::<T, i128>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_scatter::<T, f32>(res, src_or_root_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_scatter::<T, f64>(res, src_or_root_pe, blocking)
             } else {
-                panic!("Unsupported allreduce operation type");
+                panic!("Unsupported scatter operation type");
             }
         }
     }
@@ -3201,8 +3325,16 @@ impl LibfabricAlloc {
                 self.typed_reduce_scatter::<T, i64>(op, src, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
                 self.typed_reduce_scatter::<T, isize>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+                self.typed_reduce_scatter::<T, u128>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+                self.typed_reduce_scatter::<T, i128>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+                self.typed_reduce_scatter::<T, f32>(op, src, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+                self.typed_reduce_scatter::<T, f64>(op, src, result, blocking)
             } else {
-                panic!("Unsupported allreduce operation type");
+                panic!("Unsupported reduce operation type");
             }
         }
     }

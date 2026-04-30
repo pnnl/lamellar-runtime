@@ -537,6 +537,18 @@ impl OfiAsync {
                 .domain.query_collective(data_op, &mut attr)
                 .is_ok()
         }
+        else if id == std::any::TypeId::of::<u128>() {
+            let mut attr = CollectiveAttr::<u128>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
         else if id == std::any::TypeId::of::<i8>() {
             let mut attr = CollectiveAttr::<i8>::new();
             attr = if let Some(reduce_op) = reduce_op {
@@ -585,6 +597,18 @@ impl OfiAsync {
                 .domain.query_collective(data_op, &mut attr)
                 .is_ok()
         }
+        else if id == std::any::TypeId::of::<i128>() {
+            let mut attr = CollectiveAttr::<i128>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
         else if id == std::any::TypeId::of::<usize>() {
             let mut attr = CollectiveAttr::<usize>::new();
             attr = if let Some(reduce_op) = reduce_op {
@@ -599,6 +623,30 @@ impl OfiAsync {
         }
         else if id == std::any::TypeId::of::<isize>() {
             let mut attr = CollectiveAttr::<isize>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<f32>() {
+            let mut attr = CollectiveAttr::<f32>::new();
+            attr = if let Some(reduce_op) = reduce_op {
+                attr.op((&reduce_op).into())
+            }
+            else {
+                attr
+            };
+            self
+                .domain.query_collective(data_op, &mut attr)
+                .is_ok()
+        }
+        else if id == std::any::TypeId::of::<f64>() {
+            let mut attr = CollectiveAttr::<f64>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
             }

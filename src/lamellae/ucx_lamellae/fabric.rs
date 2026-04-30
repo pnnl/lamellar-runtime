@@ -421,13 +421,42 @@ impl UcxWorld {
 
     pub(crate) fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
         if self.ucc_context.is_none() {
+            print!("UCC context not initialized, collective operations are not available");
             return false;
         }
         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<()>() {
             assert!(matches!(op, CollectiveOpKind::Barrier));
             return true;
         }
-        self.atomic_avail::<T>() // if it's one of the supported atomic types, we can do collectives with it, otherwise we can't
+        let id = std::any::TypeId::of::<T>();
+
+        if id == std::any::TypeId::of::<u8>() {
+            true
+        } else if id == std::any::TypeId::of::<u16>() {
+            true
+        } else if id == std::any::TypeId::of::<u32>() {
+            true
+        } else if id == std::any::TypeId::of::<u64>() {
+            true
+        } else if id == std::any::TypeId::of::<u128>() {
+            true
+        } else if id == std::any::TypeId::of::<i8>() {
+            true
+        } else if id == std::any::TypeId::of::<i16>() {
+            true
+        } else if id == std::any::TypeId::of::<i32>() {
+            true
+        } else if id == std::any::TypeId::of::<i64>() {
+            true
+        } else if id == std::any::TypeId::of::<i128>() {
+            true
+        } else if id == std::any::TypeId::of::<usize>() {
+            true
+        } else if id == std::any::TypeId::of::<isize>() {
+            true
+        } else {
+            false
+        }
     }
     fn initial_alloc(
         exchange_buffer: bool,
