@@ -1,7 +1,6 @@
-use crate::{AsLamellarBuffer, Dist, ElementArithmeticOps, ElementBitWiseOps, LamellarBuffer, LamellarEnv, array::{GlobalLockWriteGuard, collective::{algorithm::{do_all_gather, do_all_gather_in_buffer, do_all_reduce, do_all_reduce_bitwise, do_all_reduce_bitwise_in_buffer, do_all_reduce_in_buffer, do_all_to_all, do_all_to_all_in_buffer, do_broadcast, do_broadcast_in_buffer, do_gather, do_gather_in_buffer, do_reduce, do_reduce_bitwise, do_reduce_bitwise_in_buffer, do_reduce_in_buffer, do_reduce_scatter, do_reduce_scatter_bitwise, do_reduce_scatter_bitwise_in_buffer, do_reduce_scatter_in_buffer, do_scatter, do_scatter_in_buffer}, broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveAllToAllIntoBufferState, ArrayCollectiveAllToAllState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle, ArrayCollectiveScatterIntoBufferState, ArrayCollectiveScatterState, CollectiveAllToAllIntoBufferManualOpHandle, CollectiveAllToAllManualOpHandle, CollectiveBroadcastIntoBufferManualOpHandle, CollectiveBroadcastManualOpHandle, CollectiveScatterIntoBufferManualOpHandle, CollectiveScatterManualOpHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState, CollectiveAllGatherIntoBufferManualOpHandle, CollectiveAllGatherManualOpHandle, CollectiveGatherIntoBufferManualOpHandle, CollectiveGatherManualOpHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState, CollectiveAllReduceIntoBufferManualOpHandle, CollectiveAllReduceManualOpHandle, CollectiveReduceIntoBufferManualOpHandle, CollectiveReduceManualOpHandle}, reduce_scatter_handle::{ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle, ArrayCollectiveReduceScatterIntoBufferState, ArrayCollectiveReduceScatterState, CollectiveReduceScatterIntoBufferManualOpHandle, CollectiveReduceScatterManualOpHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData, private::LamellarArrayPrivate}, lamellae::collective::{BroadcastInput, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}, memregion::MemregionRdmaInput};
+use crate::{AsLamellarBuffer, Dist, ElementArithmeticOps, ElementBitWiseOps, LamellarBuffer, LamellarEnv, array::{collective::{algorithm::{do_all_gather, do_all_gather_in_buffer, do_all_reduce, do_all_reduce_bitwise, do_all_reduce_bitwise_in_buffer, do_all_reduce_in_buffer, do_all_to_all, do_all_to_all_in_buffer, do_broadcast, do_broadcast_in_buffer, do_gather, do_gather_in_buffer, do_reduce, do_reduce_bitwise, do_reduce_bitwise_in_buffer, do_reduce_in_buffer, do_reduce_scatter, do_reduce_scatter_bitwise, do_reduce_scatter_bitwise_in_buffer, do_reduce_scatter_in_buffer, do_scatter, do_scatter_in_buffer}, broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveAllToAllIntoBufferState, ArrayCollectiveAllToAllState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle, ArrayCollectiveScatterIntoBufferState, ArrayCollectiveScatterState, CollectiveAllToAllIntoBufferManualOpHandle, CollectiveAllToAllManualOpHandle, CollectiveBroadcastIntoBufferManualOpHandle, CollectiveBroadcastManualOpHandle, CollectiveScatterIntoBufferManualOpHandle, CollectiveScatterManualOpHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState, CollectiveAllGatherIntoBufferManualOpHandle, CollectiveAllGatherManualOpHandle, CollectiveGatherIntoBufferManualOpHandle, CollectiveGatherManualOpHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState, CollectiveAllReduceIntoBufferManualOpHandle, CollectiveAllReduceManualOpHandle, CollectiveReduceIntoBufferManualOpHandle, CollectiveReduceManualOpHandle}, reduce_scatter_handle::{ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle, ArrayCollectiveReduceScatterIntoBufferState, ArrayCollectiveReduceScatterState, CollectiveReduceScatterIntoBufferManualOpHandle, CollectiveReduceScatterManualOpHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData, private::LamellarArrayPrivate}, lamellae::collective::{BroadcastInput, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}, memregion::MemregionRdmaInput};
 
-
-impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
+impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn sum_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         if ! self.array.array.collective_support.all_sum {
             let alloc = self.array
@@ -120,7 +119,7 @@ impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
+impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn bit_and_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         if ! self.array.array.collective_support.all_bit_and {
             let alloc = self.array
@@ -212,7 +211,7 @@ impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
 }
 
 
-impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
+impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn sum_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         if ! self.array.array.collective_support.all_sum {
             let alloc = self.array
@@ -331,7 +330,7 @@ impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
+impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn bit_and_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         if ! self.array.array.collective_support.all_bit_and {
             let alloc = self.array
@@ -422,7 +421,7 @@ impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
 
 }
 
-impl<T: Dist> GlobalLockWriteGuard<T> {
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     pub fn sum_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
         unsafe {
             self
@@ -483,7 +482,7 @@ impl<T: Dist> GlobalLockWriteGuard<T> {
 }
 
 
-impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
+impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn sum_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         if !self.array.array.collective_support.sum {
             let alloc = self.array
@@ -598,7 +597,7 @@ impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
+impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn bit_and_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         if !self.array.array.collective_support.bit_and {
             let alloc = self.array
@@ -685,7 +684,7 @@ impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
+impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         if !self.array.array.collective_support.sum {
             let alloc = self.array
@@ -800,7 +799,7 @@ impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
+impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         if !self.array.array.collective_support.bit_and {
             let alloc = self.array
@@ -887,7 +886,7 @@ impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
     }
 }
 
-// impl<T: Dist> GlobalLockWriteGuard<T> {
+// impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
 //     pub fn sum_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
 //         unsafe {
 //             self
@@ -946,7 +945,7 @@ impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
 //     }
 // }
 
-impl<T: Dist> GlobalLockWriteGuard<T> {
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     pub fn gather_all(&self, index: usize, len: usize) -> ArrayCollectiveAllGatherHandle<T> {
         if !self.array.array.collective_support.allgather {
             let alloc = self.array
@@ -1006,7 +1005,7 @@ impl<T: Dist> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: Dist> GlobalLockWriteGuard<T> {
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     pub fn gather_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveGatherHandle<T> {
         if !self.array.array.collective_support.gather {
             let alloc = self.array
@@ -1066,7 +1065,7 @@ impl<T: Dist> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: Dist> GlobalLockWriteGuard<T> {
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     pub fn broadcast_all(&self,  index: usize, len: usize) -> ArrayCollectiveAllToAllHandle<T> {
         if !self.array.array.collective_support.alltoall {
             let alloc = self.array
@@ -1128,7 +1127,7 @@ impl<T: Dist> GlobalLockWriteGuard<T> {
 }
 
 
-impl<T: Dist> GlobalLockWriteGuard<T> {
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     pub fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput, len: usize) -> ArrayCollectiveBroadcastHandle<T> {
         let alloc = self.array
             .array
@@ -1191,7 +1190,7 @@ impl<T: Dist> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: Dist> GlobalLockWriteGuard<T> {
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     pub fn scatter_from_pe(&self, src_or_root_pe: ScatterInput, len: usize) -> ArrayCollectiveScatterHandle<T> {
         if !self.array.array.collective_support.scatter {
             let alloc = self.array
@@ -1277,7 +1276,7 @@ impl<T: Dist> GlobalLockWriteGuard<T> {
 
 
 
-impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
+impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn sum_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         if !self.array.array.collective_support.sum_scatter {
             let alloc = self.array
@@ -1392,7 +1391,7 @@ impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
+impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn bit_and_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         if !self.array.array.collective_support.bit_and_scatter {
             let alloc = self.array
@@ -1481,7 +1480,7 @@ impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
 }
 
 
-impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
+impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         if !self.array.array.collective_support.sum_scatter {
             let alloc = self.array
@@ -1596,7 +1595,7 @@ impl<T: ElementArithmeticOps> GlobalLockWriteGuard<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockWriteGuard<T> {
+impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
     pub fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         if !self.array.array.collective_support.bit_and_scatter {
             let alloc = self.array

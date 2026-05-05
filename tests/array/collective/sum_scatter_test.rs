@@ -53,6 +53,24 @@ macro_rules! onesided_iter {
     };
 }
 
+macro_rules! array_or_lock {
+    (GlobalLockArray, $array: ident, $lock:ident) => {
+        $lock
+    };
+    ($arraytype:ident,$array:ident, $lock:ident) => {
+        $array
+    };
+}
+
+macro_rules! lock_if_needed {
+    (GlobalLockArray, $array: ident) => {
+        $array.collective_write_local_data().block()
+    };
+    ($arraytype:ident,$array:ident) => {
+        0usize
+    };
+}
+
 macro_rules! sum_scatter_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -70,6 +88,7 @@ macro_rules! sum_scatter_test{
             array.wait_all();
             array.barrier();
             let final_val = (0..num_pes).map(|pe| (pe as $t)).sum::<$t>();
+            let _lock = lock_if_needed!($array, array);
 
             // world.barrier();
 
@@ -79,7 +98,7 @@ macro_rules! sum_scatter_test{
                 for tx in (0..num_txs){
                     let chunk_size = (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.sum_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
+                    reqs.push((unsafe { array_or_lock!($array, array, _lock).sum_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
                 }
                 for req in reqs.drain(..){
                     let buf =req.0.block();
@@ -263,23 +282,23 @@ fn main() {
         //     "f64" => sum_scatter_test!(LocalLockArray, f64, len, dist_type),
         //     _ => eprintln!("unsupported element type"),
         // },
-        // "GlobalLockArray" => match elem.as_str() {
-        //     "u8" => sum_scatter_test!(GlobalLockArray, u8, len, dist_type),
-        //     "u16" => sum_scatter_test!(GlobalLockArray, u16, len, dist_type),
-        //     "u32" => sum_scatter_test!(GlobalLockArray, u32, len, dist_type),
-        //     "u64" => sum_scatter_test!(GlobalLockArray, u64, len, dist_type),
-        //     "u128" => sum_scatter_test!(GlobalLockArray, u128, len, dist_type),
-        //     "usize" => sum_scatter_test!(GlobalLockArray, usize, len, dist_type),
-        //     "i8" => sum_scatter_test!(GlobalLockArray, i8, len, dist_type),
-        //     "i16" => sum_scatter_test!(GlobalLockArray, i16, len, dist_type),
-        //     "i32" => sum_scatter_test!(GlobalLockArray, i32, len, dist_type),
-        //     "i64" => sum_scatter_test!(GlobalLockArray, i64, len, dist_type),
-        //     "i128" => sum_scatter_test!(GlobalLockArray, i128, len, dist_type),
-        //     "isize" => sum_scatter_test!(GlobalLockArray, isize, len, dist_type),
-        //     "f32" => sum_scatter_test!(GlobalLockArray, f32, len, dist_type),
-        //     "f64" => sum_scatter_test!(GlobalLockArray, f64, len, dist_type),
-        //     _ => {} //eprintln!("unsupported element type"),
-        // },
+        "GlobalLockArray" => match elem.as_str() {
+            "u8" => sum_scatter_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => sum_scatter_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => sum_scatter_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => sum_scatter_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => sum_scatter_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => sum_scatter_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => sum_scatter_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => sum_scatter_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => sum_scatter_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => sum_scatter_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => sum_scatter_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => sum_scatter_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => sum_scatter_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => sum_scatter_test!(GlobalLockArray, f64, len, dist_type),
+            _ => {} //eprintln!("unsupported element type"),
+        },
         _ => eprintln!("unsupported array type"),
     }
 }

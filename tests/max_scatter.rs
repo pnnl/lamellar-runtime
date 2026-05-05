@@ -66,7 +66,7 @@ macro_rules! create_max_scatter_tests {
 }
 
 create_max_scatter_tests!(
-    (UnsafeArray, AtomicArray),
+    (AtomicArray, GlobalLockArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
     (2, 3, 4),
