@@ -68,18 +68,9 @@ macro_rules! create_sum_all_tests {
 }
 
 create_sum_all_tests!(
-    (UnsafeArray, AtomicArray),
+    (AtomicArray, GlobalLockArray),
     ("Block", "Cyclic"),
     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
     (2, 3, 4),
     (4, 19, 128)
 );
-
-// create_sum_all_tests!(
-//     (GlobalLockArray),
-//     ("Block", "Cyclic"),
-//     (u8, f64),
-//     (4),
-//     (4, 9)
-// );
-// create_iput_tests!((UnsafeArray,AtomicArray,LocalLockArray),("Block"),(u8,u16,f64),(2),(4));

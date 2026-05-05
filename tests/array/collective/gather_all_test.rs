@@ -53,6 +53,25 @@ macro_rules! onesided_iter {
     };
 }
 
+
+macro_rules! array_or_lock {
+    (GlobalLockArray, $array: ident, $lock:ident) => {
+        $lock
+    };
+    ($arraytype:ident,$array:ident, $lock:ident) => {
+        $array
+    };
+}
+
+macro_rules! lock_if_needed {
+    (GlobalLockArray, $array: ident) => {
+        $array.collective_write_local_data().block()
+    };
+    ($arraytype:ident,$array:ident) => {
+        0usize
+    };
+}
+
 macro_rules! gather_all_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -69,6 +88,8 @@ macro_rules! gather_all_test{
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
+            let _lock = lock_if_needed!($array, array);
+
             // world.barrier();
 
             for tx_size in 1..=mem_seg_len{
@@ -76,7 +97,7 @@ macro_rules! gather_all_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.gather_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()}, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
+                    reqs.push((unsafe { array_or_lock!($array, array, _lock).gather_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()}, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
                 }
                 for req in reqs.drain(..){
                     let buf =req.0.block();
@@ -244,23 +265,23 @@ fn main() {
         //     "f64" => gather_all_test!(LocalLockArray, f64, len, dist_type),
         //     _ => eprintln!("unsupported element type"),
         // },
-        // "GlobalLockArray" => match elem.as_str() {
-        //     "u8" => gather_all_test!(GlobalLockArray, u8, len, dist_type),
-        //     "u16" => gather_all_test!(GlobalLockArray, u16, len, dist_type),
-        //     "u32" => gather_all_test!(GlobalLockArray, u32, len, dist_type),
-        //     "u64" => gather_all_test!(GlobalLockArray, u64, len, dist_type),
-        //     "u128" => gather_all_test!(GlobalLockArray, u128, len, dist_type),
-        //     "usize" => gather_all_test!(GlobalLockArray, usize, len, dist_type),
-        //     "i8" => gather_all_test!(GlobalLockArray, i8, len, dist_type),
-        //     "i16" => gather_all_test!(GlobalLockArray, i16, len, dist_type),
-        //     "i32" => gather_all_test!(GlobalLockArray, i32, len, dist_type),
-        //     "i64" => gather_all_test!(GlobalLockArray, i64, len, dist_type),
-        //     "i128" => gather_all_test!(GlobalLockArray, i128, len, dist_type),
-        //     "isize" => gather_all_test!(GlobalLockArray, isize, len, dist_type),
-        //     "f32" => gather_all_test!(GlobalLockArray, f32, len, dist_type),
-        //     "f64" => gather_all_test!(GlobalLockArray, f64, len, dist_type),
-        //     _ => {} //eprintln!("unsupported element type"),
-        // },
+        "GlobalLockArray" => match elem.as_str() {
+            "u8" => gather_all_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => gather_all_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => gather_all_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => gather_all_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => gather_all_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => gather_all_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => gather_all_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => gather_all_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => gather_all_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => gather_all_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => gather_all_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => gather_all_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => gather_all_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => gather_all_test!(GlobalLockArray, f64, len, dist_type),
+            _ => {} //eprintln!("unsupported element type"),
+        },
         _ => eprintln!("unsupported array type"),
     }
 }

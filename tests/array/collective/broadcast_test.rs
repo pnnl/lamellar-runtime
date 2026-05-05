@@ -55,24 +55,44 @@ macro_rules! onesided_iter {
     };
 }
 
+macro_rules! array_or_lock {
+    (GlobalLockArray, $array: ident, $lock:ident) => {
+        $lock
+    };
+    ($arraytype:ident,$array:ident, $lock:ident) => {
+        $array
+    };
+}
+
+macro_rules! lock_if_needed {
+    (GlobalLockArray, $array: ident) => {
+        $array.collective_write_local_data().block()
+    };
+    ($arraytype:ident,$array:ident) => {
+        0usize
+    };
+}
 macro_rules! broadcast_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
+            let root = 1;
             let num_pes = world.num_pes();
             let my_pe = world.my_pe();
             let array_total_len = $len;
             let mem_seg_len = array_total_len;
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len * num_pes, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
+            // let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
             let init_val = my_pe as $t;
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            initialize_mem_region(&shared_mem_region,0 as $t,1 as $t, my_pe as $t);
+            let _lock = lock_if_needed!($array, array);
+
+            // initialize_mem_region(&shared_mem_region,0 as $t,1 as $t, my_pe as $t);
             // world.barrier();
 
             for tx_size in 1..=mem_seg_len{
@@ -80,30 +100,28 @@ macro_rules! broadcast_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     let chunk_len = std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size;
-                    let broadcast_input = if my_pe == 1 { 
+                    let broadcast_input = if my_pe == root { 
                         BroadcastInput::root(tx * tx_size)
                     } else {
-                        BroadcastInput::not_root(1)
+                        BroadcastInput::not_root(root)
                     };
                     #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.broadcast_from_pe(broadcast_input, chunk_len).spawn()});
+                    reqs.push(unsafe { array_or_lock!($array, array, _lock).broadcast_from_pe(broadcast_input, chunk_len).spawn()});
                 }
-                let mut i = 0;
                 for req in reqs.drain(..){
                     let buf =req.block();
-                    if my_pe != 1 {
+                    if my_pe != root {
                         for elem in buf.unwrap().as_slice().iter(){
-                            if ((i as $t  - elem) as f32).abs() > 0.0001 {
-                                eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                            if ((root as $t  - elem) as f32).abs() > 0.0001 {
+                                eprintln!("{:?} {:?} {:?}",root as $t,elem,((root as $t - elem) as f32).abs());
                                 success = false;
                             }
-                            i+=1;
                         }
                     }
                 }
                 array.barrier();
                 // array.print();
-                initialize_array!($array, array, init_val);
+                // initialize_array!($array, array, init_val);
                 array.wait_all();
                 array.barrier();
             }
@@ -113,102 +131,99 @@ macro_rules! broadcast_test{
 
 
 
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
-            let sub_array = array.sub_array(start_i..end_i);
-            world.barrier();
-            // sub_array.print();
-            for tx_size in 1..=half_len{
-                let num_txs = half_len/tx_size;
-                let mut reqs = vec![];
-                for tx in (0..num_txs){
-                    // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
-                    let chunk_len = std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size;
-                    let broadcast_input = if my_pe == 1 { 
-                        BroadcastInput::root(tx * tx_size)
-                    } else {
-                        BroadcastInput::not_root(1)
-                    };
-                    #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.broadcast_from_pe(broadcast_input, chunk_len).spawn()});
-                }
+            // let half_len = array_total_len/2;
+            // let start_i = half_len/2;
+            // let end_i = start_i + half_len;
+            // let sub_array = array.sub_array(start_i..end_i);
+            // world.barrier();
+            // // sub_array.print();
+            // for tx_size in 1..=half_len{
+            //     let num_txs = half_len/tx_size;
+            //     let mut reqs = vec![];
+            //     for tx in (0..num_txs){
+            //         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
+            //         let chunk_len = std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size;
+            //         let broadcast_input = if my_pe == root { 
+            //             BroadcastInput::root(tx * tx_size)
+            //         } else {
+            //             BroadcastInput::not_root(root)
+            //         };
+            //         #[allow(unused_unsafe)]
+            //         reqs.push(unsafe { array.broadcast_from_pe(broadcast_input, chunk_len).spawn()});
+            //     }
 
-                let mut i = 0;
-                for req in reqs.drain(..){
-                    let buf =req.block();
-                    if my_pe != 1 {
-                        for elem in buf.unwrap().as_slice().iter(){
-                            if ((i as $t  - elem) as f32).abs() > 0.0001 {
-                                eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
-                                success = false;
-                            }
-                            i+=1;
-                        }
-                    }
-                }
-                array.wait_all();
-                sub_array.barrier();
-                // sub_array.print();
-                initialize_array!($array, array, init_val);
-                sub_array.wait_all();
-                sub_array.barrier();
-                // sub_array.print();
-            }
-            array.barrier();
-            world.wait_all();
-            world.barrier();
+            //     for req in reqs.drain(..){
+            //         let buf =req.block();
+            //         if my_pe != root {
+            //             for elem in buf.unwrap().as_slice().iter(){
+            //                 if ((root as $t  - elem) as f32).abs() > 0.0001 {
+            //                     eprintln!("{:?} {:?} {:?}",root as $t,elem,((root as $t - elem) as f32).abs());
+            //                     success = false;
+            //                 }
+            //             }
+            //         }
+            //     }
+            //     array.wait_all();
+            //     sub_array.barrier();
+            //     // sub_array.print();
+            //     initialize_array!($array, array, init_val);
+            //     sub_array.wait_all();
+            //     sub_array.barrier();
+            //     // sub_array.print();
+            // }
+            // array.barrier();
+            // world.wait_all();
+            // world.barrier();
 
-            let pe_len = array_total_len/num_pes;
+            // let pe_len = array_total_len/num_pes;
 
-            for pe in 0..num_pes{
-                let len = pe_len/2;
-                let start_i = (pe*pe_len)+ len/2;
+            // for pe in 0..num_pes{
+            //     let len = pe_len/2;
+            //     let start_i = (pe*pe_len)+ len/2;
 
-                let end_i = start_i+len;
-                let sub_array = array.sub_array(start_i..end_i);
-                world.barrier();
+            //     let end_i = start_i+len;
+            //     let sub_array = array.sub_array(start_i..end_i);
+            //     world.barrier();
 
-                for tx_size in 1..len{
-                    let num_txs = len/tx_size;
-                    let mut reqs = vec![];
-                    for tx in (0..num_txs){
-                        // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
-                        let chunk_len = std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size;
-                        let broadcast_input = if my_pe == 1 { 
-                            BroadcastInput::root(tx * tx_size)
-                        } else {
-                            BroadcastInput::not_root(1)
-                        };
-                        #[allow(unused_unsafe)]
-                        reqs.push(unsafe { sub_array.broadcast_from_pe(broadcast_input, chunk_len).spawn()});
-                    }
-                    // array.wait_all();
-                    // sub_array.barrier();
-                    let mut i = 0;
-                    for req in reqs.drain(..){
-                        let buf =req.block();
-                        if my_pe != 1 {
-                            for elem in buf.unwrap().as_slice().iter(){
-                                if ((i as $t  - elem) as f32).abs() > 0.0001 {
-                                    eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
-                                    success = false;
-                                }
-                                i+=1;
-                            }
-                        }
-                    }
-                    array.wait_all();
-                    sub_array.barrier();
-                    // sub_array.print();
-                    initialize_array!($array, array, init_val);
-                    sub_array.wait_all();
-                    sub_array.barrier();
-                }
-                array.barrier();
-                world.wait_all();
-                world.barrier();
-            }
+            //     for tx_size in 1..len{
+            //         let num_txs = len/tx_size;
+            //         let mut reqs = vec![];
+            //         for tx in (0..num_txs){
+            //             // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
+            //             let chunk_len = std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size;
+            //             let broadcast_input = if my_pe == root { 
+            //                 BroadcastInput::root(tx * tx_size)
+            //             } else {
+            //                 BroadcastInput::not_root(root)
+            //             };
+            //             #[allow(unused_unsafe)]
+            //             reqs.push(unsafe { sub_array.broadcast_from_pe(broadcast_input, chunk_len).spawn()});
+            //         }
+            //         // array.wait_all();
+            //         // sub_array.barrier();
+
+            //         for req in reqs.drain(..){
+            //             let buf =req.block();
+            //             if my_pe != root {
+            //                 for elem in buf.unwrap().as_slice().iter(){
+            //                     if ((root as $t  - elem) as f32).abs() > 0.0001 {
+            //                         eprintln!("{:?} {:?} {:?}",root as $t,elem,((root as $t - elem) as f32).abs());
+            //                         success = false;
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //         array.wait_all();
+            //         sub_array.barrier();
+            //         // sub_array.print();
+            //         initialize_array!($array, array, init_val);
+            //         sub_array.wait_all();
+            //         sub_array.barrier();
+            //     }
+            //     array.barrier();
+            //     world.wait_all();
+            //     world.barrier();
+            // }
 
             if !success{
                 eprintln!("failed");
@@ -231,38 +246,38 @@ fn main() {
     };
 
     match array.as_str() {
-        "UnsafeArray" => match elem.as_str() {
-            "u8" => broadcast_test!(UnsafeArray, u8, len, dist_type),
-            // "u16" => broadcast_test!(UnsafeArray, u16, len, dist_type),
-            // "u32" => broadcast_test!(UnsafeArray, u32, len, dist_type),
-            // "u64" => broadcast_test!(UnsafeArray, u64, len, dist_type),
-            // "u128" => broadcast_test!(UnsafeArray, u128, len, dist_type),
-            // "usize" => broadcast_test!(UnsafeArray, usize, len, dist_type),
-            // "i8" => broadcast_test!(UnsafeArray, i8, len, dist_type),
-            // "i16" => broadcast_test!(UnsafeArray, i16, len, dist_type),
-            // "i32" => broadcast_test!(UnsafeArray, i32, len, dist_type),
-            // "i64" => broadcast_test!(UnsafeArray, i64, len, dist_type),
-            // "i128" => broadcast_test!(UnsafeArray, i128, len, dist_type),
-            // "isize" => broadcast_test!(UnsafeArray, isize, len, dist_type),
-            // "f32" => broadcast_test!(UnsafeArray, f32, len, dist_type),
-            // "f64" => broadcast_test!(UnsafeArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
-        },
+        // "UnsafeArray" => match elem.as_str() {
+        //     "u8" => broadcast_test!(UnsafeArray, u8, len, dist_type),
+        //     // "u16" => broadcast_test!(UnsafeArray, u16, len, dist_type),
+        //     // "u32" => broadcast_test!(UnsafeArray, u32, len, dist_type),
+        //     // "u64" => broadcast_test!(UnsafeArray, u64, len, dist_type),
+        //     // "u128" => broadcast_test!(UnsafeArray, u128, len, dist_type),
+        //     // "usize" => broadcast_test!(UnsafeArray, usize, len, dist_type),
+        //     // "i8" => broadcast_test!(UnsafeArray, i8, len, dist_type),
+        //     // "i16" => broadcast_test!(UnsafeArray, i16, len, dist_type),
+        //     // "i32" => broadcast_test!(UnsafeArray, i32, len, dist_type),
+        //     // "i64" => broadcast_test!(UnsafeArray, i64, len, dist_type),
+        //     // "i128" => broadcast_test!(UnsafeArray, i128, len, dist_type),
+        //     // "isize" => broadcast_test!(UnsafeArray, isize, len, dist_type),
+        //     // "f32" => broadcast_test!(UnsafeArray, f32, len, dist_type),
+        //     // "f64" => broadcast_test!(UnsafeArray, f64, len, dist_type),
+        //     _ => eprintln!("unsupported element type"),
+        // },
         "AtomicArray" => match elem.as_str() {
             "u8" => broadcast_test!(AtomicArray, u8, len, dist_type),
-            // "u16" => broadcast_test!(AtomicArray, u16, len, dist_type),
-            // "u32" => broadcast_test!(AtomicArray, u32, len, dist_type),
-            // "u64" => broadcast_test!(AtomicArray, u64, len, dist_type),
-            // "u128" => broadcast_test!(AtomicArray, u128, len, dist_type),
-            // "usize" => broadcast_test!(AtomicArray, usize, len, dist_type),
-            // "i8" => broadcast_test!(AtomicArray, i8, len, dist_type),
-            // "i16" => broadcast_test!(AtomicArray, i16, len, dist_type),
-            // "i32" => broadcast_test!(AtomicArray, i32, len, dist_type),
-            // "i64" => broadcast_test!(AtomicArray, i64, len, dist_type),
-            // "i128" => broadcast_test!(AtomicArray, i128, len, dist_type),
-            // "isize" => broadcast_test!(AtomicArray, isize, len, dist_type),
-            // "f32" => broadcast_test!(AtomicArray, f32, len, dist_type),
-            // "f64" => broadcast_test!(AtomicArray, f64, len, dist_type),
+            "u16" => broadcast_test!(AtomicArray, u16, len, dist_type),
+            "u32" => broadcast_test!(AtomicArray, u32, len, dist_type),
+            "u64" => broadcast_test!(AtomicArray, u64, len, dist_type),
+            "u128" => broadcast_test!(AtomicArray, u128, len, dist_type),
+            "usize" => broadcast_test!(AtomicArray, usize, len, dist_type),
+            "i8" => broadcast_test!(AtomicArray, i8, len, dist_type),
+            "i16" => broadcast_test!(AtomicArray, i16, len, dist_type),
+            "i32" => broadcast_test!(AtomicArray, i32, len, dist_type),
+            "i64" => broadcast_test!(AtomicArray, i64, len, dist_type),
+            "i128" => broadcast_test!(AtomicArray, i128, len, dist_type),
+            "isize" => broadcast_test!(AtomicArray, isize, len, dist_type),
+            "f32" => broadcast_test!(AtomicArray, f32, len, dist_type),
+            "f64" => broadcast_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         // "LocalLockArray" => match elem.as_str() {

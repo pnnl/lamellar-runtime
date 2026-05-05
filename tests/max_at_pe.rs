@@ -61,19 +61,19 @@ macro_rules! iter_dist_types {
     }
 }
 
-macro_rules! create_sum_all_tests {
+macro_rules! create_max_at_pe_tests {
     ( ($($array:ty),*), $dist:tt, $elem:tt, $num_pes:tt, $len:tt) =>{
         $(iter_dist_types!($array,$dist,$elem,$num_pes,$len);)*
     }
 }
 
-// create_sum_all_tests!(
-//     (UnsafeArray, AtomicArray),
-//     ("Block", "Cyclic"),
-//     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
-//     (2, 3, 4),
-//     (4, 19, 128)
-// );
+create_max_at_pe_tests!(
+    (AtomicArray, GlobalLockArray),
+    ("Block", "Cyclic"),
+    (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
+    (2, 3, 4),
+    (4, 19, 128)
+);
 
 // create_sum_all_tests!(
 //     (GlobalLockArray),

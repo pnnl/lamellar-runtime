@@ -53,6 +53,25 @@ macro_rules! onesided_iter {
     };
 }
 
+
+macro_rules! array_or_lock {
+    (GlobalLockArray, $array: ident, $lock:ident) => {
+        $lock
+    };
+    ($arraytype:ident,$array:ident, $lock:ident) => {
+        $array
+    };
+}
+
+macro_rules! lock_if_needed {
+    (GlobalLockArray, $array: ident) => {
+        $array.collective_write_local_data().block()
+    };
+    ($arraytype:ident,$array:ident) => {
+        0usize
+    };
+}
+
 macro_rules! prod_all_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -71,6 +90,8 @@ macro_rules! prod_all_test{
             array.wait_all();
             array.barrier();
             let final_val = (1..=(num_pes as u32)).fold(1 as $t, |acc, x| acc * (x as $t));
+            let _lock = lock_if_needed!($array, array);
+
             // initialize_mem_region(&shared_mem_region,0 as $t,1 as $t);
             // world.barrier();
 
@@ -79,7 +100,7 @@ macro_rules! prod_all_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.prod_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
+                    reqs.push(unsafe { array_or_lock!($array, array, _lock).prod_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                 }
                 for req in reqs.drain(..){
                     let buf =req.block();
@@ -222,13 +243,13 @@ fn main() {
             "u16" => prod_all_test!(AtomicArray, u16, len, dist_type),
             "u32" => prod_all_test!(AtomicArray, u32, len, dist_type),
             "u64" => prod_all_test!(AtomicArray, u64, len, dist_type),
-            // "u128" => prod_all_test!(AtomicArray, u128, len, dist_type),
+            "u128" => prod_all_test!(AtomicArray, u128, len, dist_type),
             "usize" => prod_all_test!(AtomicArray, usize, len, dist_type),
             "i8" => prod_all_test!(AtomicArray, i8, len, dist_type),
             "i16" => prod_all_test!(AtomicArray, i16, len, dist_type),
             "i32" => prod_all_test!(AtomicArray, i32, len, dist_type),
             "i64" => prod_all_test!(AtomicArray, i64, len, dist_type),
-            // "i128" => prod_all_test!(AtomicArray, i128, len, dist_type),
+            "i128" => prod_all_test!(AtomicArray, i128, len, dist_type),
             "isize" => prod_all_test!(AtomicArray, isize, len, dist_type),
             "f32" => prod_all_test!(AtomicArray, f32, len, dist_type),
             "f64" => prod_all_test!(AtomicArray, f64, len, dist_type),
@@ -251,23 +272,23 @@ fn main() {
         //     "f64" => prod_all_test!(LocalLockArray, f64, len, dist_type),
         //     _ => eprintln!("unsupported element type"),
         // },
-        // "GlobalLockArray" => match elem.as_str() {
-        //     "u8" => prod_all_test!(GlobalLockArray, u8, len, dist_type),
-        //     "u16" => prod_all_test!(GlobalLockArray, u16, len, dist_type),
-        //     "u32" => prod_all_test!(GlobalLockArray, u32, len, dist_type),
-        //     "u64" => prod_all_test!(GlobalLockArray, u64, len, dist_type),
-        //     "u128" => prod_all_test!(GlobalLockArray, u128, len, dist_type),
-        //     "usize" => prod_all_test!(GlobalLockArray, usize, len, dist_type),
-        //     "i8" => prod_all_test!(GlobalLockArray, i8, len, dist_type),
-        //     "i16" => prod_all_test!(GlobalLockArray, i16, len, dist_type),
-        //     "i32" => prod_all_test!(GlobalLockArray, i32, len, dist_type),
-        //     "i64" => prod_all_test!(GlobalLockArray, i64, len, dist_type),
-        //     "i128" => prod_all_test!(GlobalLockArray, i128, len, dist_type),
-        //     "isize" => prod_all_test!(GlobalLockArray, isize, len, dist_type),
-        //     "f32" => prod_all_test!(GlobalLockArray, f32, len, dist_type),
-        //     "f64" => prod_all_test!(GlobalLockArray, f64, len, dist_type),
-        //     _ => {} //eprintln!("unsupported element type"),
-        // },
+        "GlobalLockArray" => match elem.as_str() {
+            "u8" => prod_all_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => prod_all_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => prod_all_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => prod_all_test!(GlobalLockArray, u64, len, dist_type),
+            // "u128" => prod_all_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => prod_all_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => prod_all_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => prod_all_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => prod_all_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => prod_all_test!(GlobalLockArray, i64, len, dist_type),
+            // "i128" => prod_all_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => prod_all_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => prod_all_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => prod_all_test!(GlobalLockArray, f64, len, dist_type),
+            _ => {} //eprintln!("unsupported element type"),
+        },
         _ => eprintln!("unsupported array type"),
     }
 }

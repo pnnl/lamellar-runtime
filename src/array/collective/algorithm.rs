@@ -8,6 +8,7 @@ pub(crate) trait AtomicArrayOpsForCollectiveOps<T: Dist>: LamellarArray<T> + Act
     fn copy_local_data(&self, index: usize, count: usize, buffer: &mut [T]);
     fn store_to_local_data(&self, index: usize, count: usize, data: &[T]);
     fn get_global_indices(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<usize>;
+    async fn batch_load(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<T>;
 }
 
 pub(crate) trait AtomicArrayOpsForCollectiveOpsUpdate<T: ElementArithmeticOps>: AtomicArrayOpsForCollectiveOps<T> {
@@ -52,6 +53,12 @@ impl<T: Dist> AtomicArrayOpsForCollectiveOps<T> for GlobalLockArray<T> {
             
         }
     }
+    
+    async fn batch_load(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<T> {
+        unsafe {self.array.get_buffer_pe(pe, start, count).await}
+    }
+
+    
 }
 
 impl<T: ElementArithmeticOps> AtomicArrayOpsForCollectiveOpsUpdate<T> for GlobalLockArray<T> {
@@ -127,6 +134,13 @@ impl<T: Dist> AtomicArrayOpsForCollectiveOps<T> for NetworkAtomicArray<T> {
             
         }        
     }
+    
+    async fn batch_load(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<T> {
+        let indices = self.get_global_indices(pe, num_pes, start, count);
+        ReadOnlyOps::batch_load(self, indices).await
+    }
+
+    
 }
 
 impl<T: ElementArithmeticOps> AtomicArrayOpsForCollectiveOpsUpdate<T> for NetworkAtomicArray<T> {
@@ -236,6 +250,13 @@ impl<T: Dist > AtomicArrayOpsForCollectiveOps<T> for NativeAtomicArray<T> {
             
         }        
     }
+    
+    async fn batch_load(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<T> {
+        let indices = self.get_global_indices(pe, num_pes, start, count);
+        ReadOnlyOps::batch_load(self, indices).await
+    }
+
+    
 }
 
 
@@ -292,6 +313,12 @@ impl<T: Dist> AtomicArrayOpsForCollectiveOps<T> for GenericAtomicArray<T> {
             
         }        
     }
+    
+    async fn batch_load(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<T> {
+        let indices = self.get_global_indices(pe, num_pes, start, count);
+        ReadOnlyOps::batch_load(self, indices).await
+    }
+    
 }
 
 
@@ -371,8 +398,8 @@ where
         let remote_index: usize = sync_alloc.blocking_get(root, 0);
         remote_index + local_offset
     };
-    let indices = array.get_global_indices(root, num_pes, start, count);
-    let res = array.batch_load(indices).await;
+    // let indices = array.get_global_indices(root, num_pes, start, count);
+    let res = AtomicArrayOpsForCollectiveOps::batch_load(&array, root, num_pes, start, count).await;
     array.async_barrier().await; // ensure all PEs have received their data before returning
     sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
     res
@@ -454,8 +481,9 @@ where
     if local == root {
         for i in 0..num_pes{
             let remote_index: usize = sync_alloc.blocking_get(i, 0);
-            let indices = array.get_global_indices(i, num_pes, remote_index, count);
-            let tmp = array.batch_load(indices).await;
+            // let indices = array.get_global_indices(i, num_pes, remote_index, count);
+            let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, i, num_pes, remote_index, count).await;
+            // let tmp = array.batch_load(indices).await;
             res[i*count..i*count + count].iter_mut().zip(tmp.iter()).for_each(|(dst, src)| {
                 *dst = *src; 
             }); // copy data from neighbor into correct location in res array
@@ -489,8 +517,10 @@ where
 
     for i in 0..num_pes {
         let remote_index: usize = sync_alloc.blocking_get(i, 0);
-        let indices = array.get_global_indices(i, num_pes, remote_index, count);
-        let tmp = array.batch_load(indices).await;
+        // let indices = array.get_global_indices(i, num_pes, remote_index, count);
+        let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, i, num_pes, remote_index, count).await;
+
+        // let tmp = array.batch_load(indices).await;
         res[i*count..i*count + count].iter_mut().zip(tmp.iter()).for_each(|(dst, src)| {
             *dst = *src; 
         }); // copy data from neighbor into correct location in res array
@@ -550,9 +580,8 @@ where
 
     if local != root {
         let remote_index: usize = sync_alloc.blocking_get(root, 0);
-        let indices = array.get_global_indices(root, array.num_pes(), remote_index, count);
-
-        let res = Some(array.batch_load(indices).await);
+        // let indices = array.get_global_indices(root, array.num_pes(), remote_index, count);
+        let res = Some(AtomicArrayOpsForCollectiveOps::batch_load(&array, root, array.num_pes(), remote_index, count).await);
         array.async_barrier().await; // ensure all PEs have received their data before returning
         res
     }
@@ -657,10 +686,7 @@ where
     
     for i in 0..num_pes{
         let remote_index: usize = sync_alloc.blocking_get(i, 0);
-        // let first_global_index = array.first_global_index_for_pe(i).unwrap();
-        // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
-        let indices = array.get_global_indices(i, num_pes, remote_index, count);
-        let tmp = array.batch_load(indices).await; 
+        let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, i, num_pes, remote_index, count).await;
 
         res[i*count..i*count + count].iter_mut().zip(tmp.iter()).for_each(|(dst, src)| {
             *dst = *src; 
@@ -696,28 +722,6 @@ fn round_down_power_of_two(val: usize) -> usize {
     }
     pof2
 }
-
-
-// impl<T: Dist> AtomicCollectiveOps<T> for NetworkAtomicArray<T> {
-//     fn copy_local_data(&self, index: usize, count: usize) -> Vec<T> {
-//         self.local_data()
-//             .sub_data(index, index + count)
-//             .iter()
-//             .map(|elem| elem.load())
-//             .collect()
-//     }
-
-//     fn update_local_data(&self, index: usize, count: usize, data: &[T]) {
-//         self.local_data()
-//             .sub_data(index, index + count)
-//             .iter()
-//             .zip(data.iter())
-//             .for_each(|(elem, val)| {
-//                 elem.store(*val);
-//             });
-//     }
-// }
-
 
 async fn do_all_reduce_impl<A, T, F>(
     array: A,
@@ -772,8 +776,10 @@ where
             let remote_index: usize = sync_alloc.blocking_get(local - 1, 0);
             // let first_global_index = array.first_global_index_for_pe(local - 1).unwrap();
             // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
-            let indices = array.get_global_indices(local - 1, num_pes, remote_index, count);
-            let tmp = array.batch_load(indices).await; // copy data from local - 1 into result
+            // let indices = array.get_global_indices(local - 1, num_pes, remote_index, count);
+            let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, local - 1, num_pes, remote_index, count).await;
+
+            // let tmp = array.batch_load(indices).await; // copy data from local - 1 into result
             // println!("PE {} received: {:?} data from PE {}", local, tmp, local-1);
             
             // array.update_local_data(index, count, tmp.as_slice(), apply_op);
@@ -808,11 +814,8 @@ where
             
             // receive data from partner
             let remote_index: usize = sync_alloc.blocking_get(partner, 0);
-            // let first_global_index = array.first_global_index_for_pe(partner).unwrap();
-            // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
-            let indices = array.get_global_indices(partner, num_pes, remote_index, count);
-            let tmp = array.batch_load(indices).await; // copy data from partner into result
-            // println!("PE {} received: {:?} data from PE {}", local, tmp, partner_pe);
+            let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, partner, num_pes, remote_index, count).await;
+
             sync_alloc.put_unmanaged(round, partner_pe, 2 + my_pe); // signal partner PE that I'm done processing their data
             
             while sync_slice[2 + partner_pe].load(std::sync::atomic::Ordering::SeqCst) != round {
@@ -843,8 +846,10 @@ where
             let remote_index: usize = sync_alloc.blocking_get(local + 1, 0);
             // let first_global_index = array.first_global_index_for_pe(local + 1).unwrap();
             // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
-            let indices = array.get_global_indices(local + 1, array.num_pes(), remote_index, count);
-            let tmp = array.batch_load(indices).await;
+            // let indices = array.get_global_indices(local + 1, array.num_pes(), remote_index, count);
+            // let tmp = array.batch_load(indices).await;
+            let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, local + 1, array.num_pes(), remote_index, count).await;
+
 
             apply_op(&array, tmp.as_slice());
         }
@@ -969,14 +974,9 @@ where
                     yield_now().await; // wait for remote PE to signal that data is ready to move on to the next round
                 }
                 let remote_index: usize = sync_alloc.blocking_get(partner, 0);
-                // let indices = array.get_global_indices(partner, remote_index, count);
-                let indices = array.get_global_indices(partner, num_pes, remote_index, count);
-                let tmp = array.batch_load(indices).await; // copy data from partner into result
-                
+                let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, partner, num_pes, remote_index, count).await;
+
                 apply_op(&array, tmp.as_slice());
-                // src.iter().zip(tmp.iter()).for_each(|(dst, val)| {
-                //     apply_op(dst, *val);
-                // }); // reduce data from partner into local data
             }
         }
         else {
@@ -1146,9 +1146,10 @@ where
                 let remote_index: usize = sync_alloc.blocking_get(partner, 0);
                 // let first_global_index = array.first_global_index_for_pe(partner).unwrap();
                 // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
-                let indices = array.get_global_indices(partner, num_pes, remote_index, count);
+                // let indices = array.get_global_indices(partner, num_pes, remote_index, count);
 
-                let tmp = array.batch_load(indices).await; // copy data from partner into result
+                // let tmp = array.batch_load(indices).await; // copy data from partner into result
+                let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, partner, num_pes, remote_index, count).await;
 
                 // println!("PE {} received: {:?} data from PE {}", local, tmp, partner);
                 apply_op(&array, &tmp[..]);

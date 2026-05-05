@@ -54,6 +54,24 @@ macro_rules! onesided_iter {
     };
 }
 
+macro_rules! array_or_lock {
+    (GlobalLockArray, $array: ident, $lock:ident) => {
+        $lock
+    };
+    ($arraytype:ident,$array:ident, $lock:ident) => {
+        $array
+    };
+}
+
+macro_rules! lock_if_needed {
+    (GlobalLockArray, $array: ident) => {
+        $array.collective_write_local_data().block()
+    };
+    ($arraytype:ident,$array:ident) => {
+        0usize
+    };
+}
+
 macro_rules! scatter_from_pe_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -71,6 +89,8 @@ macro_rules! scatter_from_pe_test{
             array.wait_all();
             array.barrier();
             let final_val = root;
+            let _lock = lock_if_needed!($array, array);
+
             // world.barrier();
 
             for tx_size in (num_pes..=mem_seg_len).step_by(num_pes){
@@ -83,7 +103,7 @@ macro_rules! scatter_from_pe_test{
                     } else {
                         ScatterInput::not_root(root)
                     };
-                    reqs.push((unsafe { array.scatter_from_pe(scatter_in, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
+                    reqs.push((unsafe { array_or_lock!($array, array, _lock).scatter_from_pe(scatter_in, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
                 }
                 let mut i = 0;
                 for req in reqs.drain(..){
@@ -98,7 +118,7 @@ macro_rules! scatter_from_pe_test{
                 }
                 array.barrier();
                 // array.print();
-                initialize_array!($array, array, init_val);
+                // initialize_array!($array, array, init_val);
                 array.wait_all();
                 array.barrier();
             }
@@ -271,23 +291,23 @@ fn main() {
         //     "f64" => scatter_from_pe_test!(LocalLockArray, f64, len, dist_type),
         //     _ => eprintln!("unsupported element type"),
         // },
-        // "GlobalLockArray" => match elem.as_str() {
-        //     "u8" => scatter_from_pe_test!(GlobalLockArray, u8, len, dist_type),
-        //     "u16" => scatter_from_pe_test!(GlobalLockArray, u16, len, dist_type),
-        //     "u32" => scatter_from_pe_test!(GlobalLockArray, u32, len, dist_type),
-        //     "u64" => scatter_from_pe_test!(GlobalLockArray, u64, len, dist_type),
-        //     "u128" => scatter_from_pe_test!(GlobalLockArray, u128, len, dist_type),
-        //     "usize" => scatter_from_pe_test!(GlobalLockArray, usize, len, dist_type),
-        //     "i8" => scatter_from_pe_test!(GlobalLockArray, i8, len, dist_type),
-        //     "i16" => scatter_from_pe_test!(GlobalLockArray, i16, len, dist_type),
-        //     "i32" => scatter_from_pe_test!(GlobalLockArray, i32, len, dist_type),
-        //     "i64" => scatter_from_pe_test!(GlobalLockArray, i64, len, dist_type),
-        //     "i128" => scatter_from_pe_test!(GlobalLockArray, i128, len, dist_type),
-        //     "isize" => scatter_from_pe_test!(GlobalLockArray, isize, len, dist_type),
-        //     "f32" => scatter_from_pe_test!(GlobalLockArray, f32, len, dist_type),
-        //     "f64" => scatter_from_pe_test!(GlobalLockArray, f64, len, dist_type),
-        //     _ => {} //eprintln!("unsupported element type"),
-        // },
+        "GlobalLockArray" => match elem.as_str() {
+            "u8" => scatter_from_pe_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => scatter_from_pe_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => scatter_from_pe_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => scatter_from_pe_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => scatter_from_pe_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => scatter_from_pe_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => scatter_from_pe_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => scatter_from_pe_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => scatter_from_pe_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => scatter_from_pe_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => scatter_from_pe_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => scatter_from_pe_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => scatter_from_pe_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => scatter_from_pe_test!(GlobalLockArray, f64, len, dist_type),
+            _ => {} //eprintln!("unsupported element type"),
+        },
         _ => eprintln!("unsupported array type"),
     }
 }

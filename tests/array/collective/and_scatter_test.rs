@@ -53,6 +53,24 @@ macro_rules! onesided_iter {
     };
 }
 
+macro_rules! array_or_lock {
+    (GlobalLockArray, $array: ident, $lock:ident) => {
+        $lock
+    };
+    ($arraytype:ident,$array:ident, $lock:ident) => {
+        $array
+    };
+}
+
+macro_rules! lock_if_needed {
+    (GlobalLockArray, $array: ident) => {
+        $array.collective_write_local_data().block()
+    };
+    ($arraytype:ident,$array:ident) => {
+        0usize
+    };
+}
+
 macro_rules! bit_and_scatter_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -71,6 +89,8 @@ macro_rules! bit_and_scatter_test{
             array.wait_all();
             array.barrier();
             let final_val = (!0 << num_pes);
+            let _lock = lock_if_needed!($array, array);
+
             // initialize_mem_region(&shared_mem_region, !(1 as $t << my_pe),0 as $t);
             // world.barrier();
 
@@ -80,7 +100,7 @@ macro_rules! bit_and_scatter_test{
                 for tx in (0..num_txs){
                     let chunk_size = (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.bit_and_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
+                    reqs.push((unsafe { array_or_lock!($array, array, _lock).bit_and_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
                 }
                 for req in reqs.drain(..){
                     let buf =req.0.block();

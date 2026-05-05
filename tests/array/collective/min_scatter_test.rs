@@ -54,6 +54,24 @@ macro_rules! onesided_iter {
     };
 }
 
+macro_rules! array_or_lock {
+    (GlobalLockArray, $array: ident, $lock:ident) => {
+        $lock
+    };
+    ($arraytype:ident,$array:ident, $lock:ident) => {
+        $array
+    };
+}
+
+macro_rules! lock_if_needed {
+    (GlobalLockArray, $array: ident) => {
+        $array.collective_write_local_data().block()
+    };
+    ($arraytype:ident,$array:ident) => {
+        0usize
+    };
+}
+
 macro_rules! min_scatter_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -65,12 +83,13 @@ macro_rules! min_scatter_test{
             let mut success = true;
             let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
+            // let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
             let init_val = my_pe as $t;
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
+            let _lock = lock_if_needed!($array, array);
             // initialize_mem_region(&shared_mem_region,0 as $t,1 as $t, my_pe as $t + 1);
             // world.barrier();
 
@@ -80,7 +99,7 @@ macro_rules! min_scatter_test{
                 for tx in (0..num_txs){
                     let chunk_size = (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.min_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
+                    reqs.push((unsafe { array_or_lock!($array, array, _lock).min_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
                 }
                 for req in reqs.drain(..){
                     let buf =req.0.block();
@@ -233,6 +252,23 @@ fn main() {
             "isize" => min_scatter_test!(AtomicArray, isize, len, dist_type),
             "f32" => min_scatter_test!(AtomicArray, f32, len, dist_type),
             "f64" => min_scatter_test!(AtomicArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "GlobalLockArray" => match elem.as_str() {
+            "u8" => min_scatter_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => min_scatter_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => min_scatter_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => min_scatter_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => min_scatter_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => min_scatter_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => min_scatter_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => min_scatter_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => min_scatter_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => min_scatter_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => min_scatter_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => min_scatter_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => min_scatter_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => min_scatter_test!(GlobalLockArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),
