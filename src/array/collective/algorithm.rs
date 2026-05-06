@@ -55,7 +55,7 @@ impl<T: Dist> AtomicArrayOpsForCollectiveOps<T> for GlobalLockArray<T> {
         }
     }
     
-    async fn batch_load(&self, pe: usize, num_pes: usize, start: usize, count: usize) -> Vec<T> {
+    async fn batch_load(&self, pe: usize, _num_pes: usize, start: usize, count: usize) -> Vec<T> {
         unsafe {self.array.get_buffer_pe(pe, start, count).await}
     }
 
