@@ -33,6 +33,8 @@ pub(crate) mod libfabric_lamellae_mt;
 #[cfg(feature = "enable-ucx-mt")]
 pub(crate) mod ucx_lamellae_mt;
 
+#[cfg(feature = "enable-libfabric-sys")]
+pub(crate) mod libfabric_sys_lamellae;
 #[cfg(feature = "enable-libfabric-async")]
 pub(crate) mod libfabric_async_lamellae;
 #[cfg(feature = "enable-ucx")]
