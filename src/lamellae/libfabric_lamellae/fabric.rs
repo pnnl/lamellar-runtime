@@ -161,7 +161,7 @@ pub(crate) struct Ofi {
     domain: Domain,
     _fabric: Fabric,
     _my_pmi: Arc<dyn Pmi>,
-     alloc_manager: Arc<AllocInfoManager>,
+    alloc_manager: Arc<AllocInfoManager>,
     pub(crate)comm_group: CommGroup,
 }
 
