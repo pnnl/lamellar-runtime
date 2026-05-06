@@ -1525,7 +1525,7 @@ impl Clone for LibfabricSysAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
             id: self.id,
             alloc_table: self.alloc_table.clone(),
-            // mcast_group: self.mcast_group.clone(),
+            mcast_group: self.mcast_group.clone(),
             print: self.print,
         }
     }
@@ -1581,7 +1581,7 @@ impl LibfabricSysAlloc {
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
         result.assume_init()
     }
-    
+
     pub(crate) fn new(
         ofi: Arc<Ofi>,
         mem: LibfabricSysMem,
@@ -2146,7 +2146,7 @@ impl LibfabricSysAlloc {
 
         let src = op.src().expect("Atomic operation has no source");
         let src = match op {
-            LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+            LamellarAtomicOp::Sub(_) => unsafe { Self::negate_atomic_value(src) },
             _ => src,
         };
         let buf = std::slice::from_ref(&src);
@@ -2203,7 +2203,7 @@ impl LibfabricSysAlloc {
         match op.src() {
             Some(src) => {
                 let src = match op {
-                    LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+                    LamellarAtomicOp::Sub(_) => unsafe { Self::negate_atomic_value(src) },
                     _ => src,
                 };
                 let buf = std::slice::from_ref(&src);

@@ -11,6 +11,8 @@ use crate::lamellae::libfabric_lamellae::atomic::{
 use crate::lamellae::libfabric_lamellae_mt::atomic::{
     LibfabricMtAtomicCompareExchangeFuture, LibfabricMtAtomicFetchFuture, LibfabricMtAtomicFuture,
 };
+#[cfg(feature="enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::atomic::{LibfabricSysAtomicCompareExchangeFuture, LibfabricSysAtomicFetchFuture, LibfabricSysAtomicFuture};
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::atomic::RofiCAtomicFuture;
 #[cfg(feature = "enable-rofi-c")]
@@ -132,6 +134,8 @@ pub struct AtomicOpHandle<T> {
 
 #[pin_project(project = AtomicOpFutureProj)]
 pub(crate) enum AtomicOpFuture<T> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysAtomicFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -152,6 +156,8 @@ impl<T: Remote> AtomicOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicOp Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -176,6 +182,8 @@ impl<T: Remote> AtomicOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -200,6 +208,8 @@ impl<T: Remote> Future for AtomicOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -232,6 +242,8 @@ pub struct AtomicFetchOpHandle<T> {
 
 #[pin_project(project = AtomicFetchOpFutureProj)]
 pub(crate) enum AtomicFetchOpFuture<T> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysAtomicFetchFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicFetchFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -252,6 +264,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> T {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicFetchOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -276,6 +290,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicFetchOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -300,6 +316,8 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicFetchOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -334,6 +352,8 @@ pub struct AtomicCompareExchangeOpHandle<T> {
 
 #[pin_project(project = AtomicCompareExchangeFutureProj)]
 pub(crate) enum AtomicCompareExchangeFuture<T> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -356,6 +376,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
     /// Returns `Ok(previous_value)` if the exchange succeeded, or `Err(current_value)` if it failed.
     pub fn block(self) -> Result<T, T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicCompareExchangeFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -381,6 +403,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Result<T, T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicCompareExchangeFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -405,6 +429,8 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            AtomicCompareExchangeFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]

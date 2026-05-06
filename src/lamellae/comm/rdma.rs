@@ -12,6 +12,8 @@ use crate::lamellae::libfabric_lamellae_mt::rdma::{
     LibfabricMtGetBufferFuture, LibfabricMtGetFuture, LibfabricMtGetIntoBufferFuture,
     LibfabricMtPutFuture,
 };
+#[cfg(feature="enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::rdma::{LibfabricSysGetBufferFuture, LibfabricSysGetFuture, LibfabricSysGetIntoBufferFuture, LibfabricSysPutFuture};
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::rdma::{
     RofiCGetBufferFuture, RofiCGetFuture, RofiCGetIntoBufferFuture, RofiCPutFuture,
@@ -66,6 +68,8 @@ pub struct RdmaHandle<T: Remote> {
 
 #[pin_project(project = RdmaPutFutureProj)]
 pub(crate) enum RdmaPutFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysPutFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricPutFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -87,6 +91,8 @@ impl<T: Remote> RdmaHandle<T> {
     /// This method will block the calling thread until the associated Array RDMA Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaPutFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             RdmaPutFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -111,6 +117,8 @@ impl<T: Remote> RdmaHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaPutFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaPutFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -135,6 +143,8 @@ impl<T: Remote> Future for RdmaHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaPutFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             RdmaPutFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -166,6 +176,8 @@ pub struct RdmaGetHandle<T: Remote> {
 
 #[pin_project(project = RdmaGetFutureProj)]
 pub(crate) enum RdmaGetFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysGetFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricGetFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -186,6 +198,8 @@ impl<T: Remote> RdmaGetHandle<T> {
     /// This method will block the calling thread until the associated Array RDMA Operation completes
     pub fn block(self) -> T {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -210,6 +224,8 @@ impl<T: Remote> RdmaGetHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -234,6 +250,8 @@ impl<T: Remote> Future for RdmaGetHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -265,6 +283,8 @@ pub struct RdmaGetBufferHandle<T: Remote> {
 
 #[pin_project(project = RdmaGetBufFutureProj)]
 pub(crate) enum RdmaGetBufferFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysGetBufferFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricGetBufferFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -285,6 +305,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
     /// This method will block the calling thread until the associated Array RDMA Operation completes
     pub fn block(self) -> Vec<T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetBufferFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetBufferFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -309,6 +331,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetBufferFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetBufferFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -333,6 +357,8 @@ impl<T: Remote> Future for RdmaGetBufferHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetBufFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetBufFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -364,6 +390,8 @@ pub struct RdmaGetIntoBufferHandle<T: Remote, B: AsLamellarBuffer<T>> {
 
 #[pin_project(project = RdmaGetIntoBufferFutureProj)]
 pub(crate) enum RdmaGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysGetIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricGetIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -385,6 +413,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
     /// This method will block the calling thread until the associated Array RDMA Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetIntoBufferFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetIntoBufferFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -409,6 +439,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetIntoBufferFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetIntoBufferFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -433,6 +465,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for RdmaGetIntoBufferHandle<T, B>
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            RdmaGetIntoBufferFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetIntoBufferFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
