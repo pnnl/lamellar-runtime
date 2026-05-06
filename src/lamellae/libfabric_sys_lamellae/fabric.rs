@@ -5,7 +5,7 @@ use parking_lot::{Mutex, RwLock};
 use pmi::{Pmi, PmiBuilder};
 use tracing::{debug, trace};
 
-use crate::{lamellae::{AllocError, AllocResult, AtomicOp, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, FabricError, FabricResult, decode_padding, decode_ref_count, decrement_ref_count, get_ref_count, increment_ref_count}, lamellar_alloc::BTreeAlloc};
+use crate::{lamellae::{AllocError, AllocResult, AtomicOp, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, FabricError, FabricResult, calc_alloc_padding_size_align, decode_padding, decode_ref_count, decrement_ref_count, get_ref_count, increment_ref_count}, lamellar_alloc::BTreeAlloc};
 
 #[derive(Clone, Copy)]
 enum AtomicOpKind {
@@ -676,6 +676,505 @@ impl Ofi {
 
         self.atomic_op_avail_inner::<T>(op_kind)
     }
+
+    pub(crate) fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
+        let (fi_op, reduce_op) = match op {
+            CollectiveOpKind::Barrier => (libfabric_sys::fi_collective_op_FI_BARRIER, None),
+            CollectiveOpKind::Broadcast => (libfabric_sys::fi_collective_op_FI_BROADCAST, None),
+            CollectiveOpKind::AllToAll => (libfabric_sys::fi_collective_op_FI_ALLTOALL, None),
+            CollectiveOpKind::AllReduce(reduce_op) => (libfabric_sys::fi_collective_op_FI_ALLREDUCE, Some(reduce_op)),
+            CollectiveOpKind::AllGather => (libfabric_sys::fi_collective_op_FI_ALLGATHER, None),
+            CollectiveOpKind::ReduceScatter(reduce_op) => (libfabric_sys::fi_collective_op_FI_REDUCE_SCATTER, Some(reduce_op)),
+            CollectiveOpKind::Reduce(reduce_op) => (libfabric_sys::fi_collective_op_FI_REDUCE, Some(reduce_op)),
+            CollectiveOpKind::Scatter => (libfabric_sys::fi_collective_op_FI_SCATTER, None),
+            CollectiveOpKind::Gather => (libfabric_sys::fi_collective_op_FI_GATHER, None),
+        };
+
+        let data_type = if let Some(dt) = rust_type_to_fi_type::<T>() {
+            dt
+        } else {
+            return false;
+        };
+        let mut attr = libfabric_sys::fi_collective_attr {
+            op: 0,
+            datatype: data_type,
+            datatype_attr: libfabric_sys::fi_atomic_attr { count: 0, size: 0 },
+            max_members: 0,
+            mode: 0,
+        };
+
+        if let Some(reduce_op) = reduce_op {
+            let reduce_fi_op = match reduce_op {
+                ReduceOp::Min => libfabric_sys::fi_op_FI_MIN,
+                ReduceOp::Max => libfabric_sys::fi_op_FI_MAX,
+                ReduceOp::Sum => libfabric_sys::fi_op_FI_SUM,
+                ReduceOp::Prod => libfabric_sys::fi_op_FI_PROD,
+                ReduceOp::BitAnd => libfabric_sys::fi_op_FI_BAND,
+                ReduceOp::BitOr => libfabric_sys::fi_op_FI_BOR,
+                ReduceOp::BitXor => libfabric_sys::fi_op_FI_BXOR,
+            };
+            attr.op = reduce_fi_op;
+            
+        }
+        return unsafe {
+            libfabric_sys::inlined_fi_query_collective(
+                self.domain, 
+                fi_op, 
+                &mut attr, 
+                0
+            )
+        } == 0;
+    }
+
+    fn create_mc_group(&self, pes: &[usize]) -> *mut libfabric_sys::fid_mc {
+        let cg = &self.comm_group;
+        let mut av_set_attr = libfabric_sys::fi_av_set_attr {
+            flags: 0,
+            count: pes.len(),
+            start_addr: cg.mapped_addresses[pes[0]],
+            end_addr: cg.mapped_addresses[pes[0]],
+            stride: 1,
+            comm_key_size: 0,
+            comm_key: std::ptr::null_mut(),
+        };
+        let av_set = unsafe {
+            let mut av_set = MaybeUninit::<*mut libfabric_sys::fid_av_set>::uninit();
+            let res = libfabric_sys::inlined_fi_av_set(cg.av, &mut av_set_attr, av_set.as_mut_ptr(), std::ptr::null_mut());
+            if res != 0 {
+                panic!("Error creating AV set: {}", res);
+            }
+            av_set.assume_init()
+        };
+
+        for pe in pes.iter().skip(1) {
+            let ret = unsafe {libfabric_sys::inlined_fi_av_set_insert(av_set, cg.mapped_addresses[*pe])};
+            if ret < 0 {
+                panic!("Error inserting address into AV set: {}", ret);
+            }
+        }
+
+        let mut ctx = libfabric_sys::fi_context2 {
+            internal: [std::ptr::null_mut(); 8],
+        };
+
+        let av_set_addr = unsafe {
+            let mut addr: u64 = 0;
+            let ret = libfabric_sys::inlined_fi_av_set_addr(av_set, &mut addr);
+            if ret != 0 {
+                panic!("Error getting AV set address: {}", ret);
+            }
+            addr
+        };
+        let mc = unsafe {
+            let mut mc = MaybeUninit::<*mut libfabric_sys::fid_mc>::uninit();
+            let ret = libfabric_sys::inlined_fi_join_collective(
+                cg.ep, 
+                av_set_addr, 
+                av_set, 
+                0, 
+                mc.as_mut_ptr(), 
+                (&mut ctx) as *mut libfabric_sys::fi_context2 as *mut libc::c_void
+            );
+            if ret != 0 {
+                panic!("Error registering memory for MC group: {}", ret);
+            }
+            cg.wait_for_join_event((&mut ctx) as *mut libfabric_sys::fi_context2 as *mut libc::c_void);
+            mc.assume_init()
+        };
+        mc
+    }
+
+    fn collective_exchange_mr_info(
+        &self,
+        pes: &[usize],
+        mem: &[u8],
+        mr: *mut libfabric_sys::fid_mr,
+    ) -> HashMap<usize, RemoteMemAddressInfo> {
+        let mc = self.create_mc_group(pes);
+        let cg = &self.comm_group;
+
+        unimplemented!("Collective exchange of MR info is not implemented yet");
+    }
+
+
+    fn full_alloc(self: &Arc<Ofi>, data_size: usize, align: usize) -> AllocResult<LibfabricAlloc> {
+        //add space for ref count and padding to align it
+        let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
+
+        // Align to page boundaries
+        let aligned_size = if (self.alloc_manager.page_size() - 1) & size != 0 {
+            (size + self.alloc_manager.page_size()) & !(self.alloc_manager.page_size() - 1)
+        } else {
+            size
+        };
+
+        trace!(target: "libfabric-sys", "Full Allocating aligned size: {} aligned", aligned_size);
+        #[cfg(not(feature = "enable-on-node-shmem"))]
+        let (mem, mem_base_ptr) = {
+            let  mmap = memmap::MmapOptions::new()
+                .len(aligned_size)
+                .map_anon()
+                .expect(&format!(
+                    "Error in allocating aligned memory of size: {} {}",
+                    aligned_size, size,
+                ));
+            unsafe {
+                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
+            }
+            let mem_base_ptr = mmap.as_ptr() as *mut u8;
+            (LibfabricSysMem::Mmap(Arc::new(mmap)), mem_base_ptr)
+        };
+
+        #[cfg(feature = "enable-on-node-shmem")]
+        let (mem, mem_base_ptr, same_node_bases, same_node_segments) = if self.disable_on_node_shmem
+        {
+            let mut mmap = memmap::MmapOptions::new()
+                .len(aligned_size)
+                .map_anon()
+                .expect(&format!(
+                    "Error in allocating aligned memory of size: {} {}",
+                    aligned_size, size,
+                ));
+            unsafe {
+                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
+            }
+            let mem_base_ptr = mmap.as_ptr() as *mut u8;
+            (
+                LibfabricSysMem::Mmap(Arc::new(mmap)),
+                mem_base_ptr,
+                vec![None; self.num_pes],
+                vec![None; self.num_pes],
+            )
+        } else {
+            let alloc_id = LIBFABRIC_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+            let shmem_id = format!("libfabric_alloc_{}_pe_{}", alloc_id, self.my_pe);
+            let local_segment = Arc::new(attach_shmem_segment(
+                self.job_id,
+                aligned_size,
+                align,
+                &shmem_id,
+                alloc_id,
+                true,
+            ));
+            let mem_base_ptr = local_segment.base_ptr();
+            let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
+            mem_slice.fill(0);
+            let (mut same_node_bases, same_node_segments) = build_same_node_segments(
+                &(0..self.num_pes).collect::<Vec<_>>(),
+                &self.same_node_pes,
+                self.job_id,
+                aligned_size,
+                align,
+                alloc_id,
+                self.my_pe,
+            );
+            let mut same_node_segments = same_node_segments;
+            same_node_bases[self.my_pe] = Some(mem_base_ptr as usize);
+            same_node_segments[self.my_pe] = Some(local_segment.clone());
+            (
+                LibfabricSysMem::Shmem(local_segment),
+                mem_base_ptr,
+                same_node_bases,
+                same_node_segments,
+            )
+        };
+        let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
+
+        let mr = unsafe{
+            let mut mr = MaybeUninit::<*mut libfabric_sys::fid_mr>::uninit();
+            let ret = libfabric_sys::inlined_fi_mr_reg(
+                self.domain,
+                mem_base_ptr as *mut libc::c_void,
+                aligned_size,
+                (libfabric_sys::FI_READ | libfabric_sys::FI_WRITE | libfabric_sys::FI_REMOTE_READ | libfabric_sys::FI_REMOTE_WRITE) as u64,
+                0,
+                self.alloc_manager.next_key() as u64,
+                0,
+                mr.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
+            if ret != 0 {
+                eprintln!("Error registering memory region: {}", ret);
+                Err(AllocError::FabricAllocationError(-ret as i32))?;
+            }
+            mr.assume_init()
+        };
+
+        // let mr = match mr {
+        //     MaybeDisabledMemoryRegion::Disabled(mr) => {
+        //         match mr {
+        //             DisabledMemoryRegion::EpBind(mr) => {
+        //                 // trace!("Binding memory region to endpoint");
+        //                 mr.enable(&self.comm_group.ep)
+        //                     .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
+        //             }
+        //             DisabledMemoryRegion::RmaEvent(mr) => {
+        //                 // trace!("Binding memory region to domain");
+        //                 mr.enable()
+        //                     .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
+        //                 // This will bind the memory region to the domain
+        //             }
+        //         }
+        //     }
+        //     MaybeDisabledMemoryRegion::Enabled(mr) => mr,
+        // };
+
+        // let remote_alloc_infos = self.pmi_exchange_mr_info(&mem, &mr);
+        let remote_alloc_infos = self
+            .collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), mem_slice, mr)
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+
+        let mcast_group = self.create_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+        
+        let alloc = LibfabricSysAlloc::new(
+            self.clone(),
+            mem,
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_bases),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_segments),
+            mr,
+            remote_alloc_infos,
+            data_size,
+            padding,
+            self.alloc_manager.clone(),
+            Some(mcast_group),
+        )
+        .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+        self.alloc_manager.insert(alloc.clone());
+        Ok(alloc)
+    }
+
+    fn sub_alloc(
+        self: &Arc<Ofi>,
+        pes: &[usize],
+        data_size: usize,
+        align: usize,
+    ) -> AllocResult<LibfabricAlloc> {
+        //add space for ref count and padding to align it
+        let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
+        // Align to page boundaries
+        let aligned_size = if (self.alloc_manager.page_size() - 1) & size != 0 {
+            (size + self.alloc_manager.page_size()) & !(self.alloc_manager.page_size() - 1)
+        } else {
+            size
+        };
+
+        trace!(target: "libfabric", "Sub Allocating aligned size: {} aligned pes: {:?}", aligned_size, pes);
+
+        #[cfg(not(feature = "enable-on-node-shmem"))]
+        let (mem, mem_base_ptr) = {
+            let  mmap = memmap::MmapOptions::new()
+                .len(aligned_size)
+                .map_anon()
+                .expect("Error in allocating aligned memory");
+            unsafe {
+                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
+            }
+            let mem_base_ptr = mmap.as_ptr() as *mut u8;
+            (LibfabricSysMem::Mmap(Arc::new(mmap)), mem_base_ptr)
+        };
+        #[cfg(feature = "enable-on-node-shmem")]
+        let (mem, mem_base_ptr, same_node_bases, same_node_segments) = if self.disable_on_node_shmem
+        {
+            let mut mmap = memmap::MmapOptions::new()
+                .len(aligned_size)
+                .map_anon()
+                .expect("Error in allocating aligned memory");
+            unsafe {
+                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
+            }
+            let mem_base_ptr = mmap.as_ptr() as *mut u8;
+            (
+                LibfabricMem::Mmap(Arc::new(mmap)),
+                mem_base_ptr,
+                vec![None; self.num_pes],
+                vec![None; self.num_pes],
+            )
+        } else {
+            let alloc_id = LIBFABRIC_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+            let shmem_id = format!("libfabric_sys_alloc_{}_pe_{}", alloc_id, self.my_pe);
+            let local_segment = Arc::new(attach_shmem_segment(
+                self.job_id,
+                aligned_size,
+                align,
+                &shmem_id,
+                alloc_id,
+                true,
+            ));
+            let mem_base_ptr = local_segment.base_ptr();
+            let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
+            mem_slice.fill(0);
+            let (mut same_node_bases, same_node_segments) = build_same_node_segments(
+                pes,
+                &self.same_node_pes,
+                self.job_id,
+                aligned_size,
+                align,
+                alloc_id,
+                self.my_pe,
+            );
+            let mut same_node_segments = same_node_segments;
+            same_node_bases[self.my_pe] = Some(mem_base_ptr as usize);
+            same_node_segments[self.my_pe] = Some(local_segment.clone());
+            (
+                LibfabricMem::Shmem(local_segment),
+                mem_base_ptr,
+                same_node_bases,
+                same_node_segments,
+            )
+        };
+        let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
+
+        let mr = unsafe{
+            let mut mr = MaybeUninit::<*mut libfabric_sys::fid_mr>::uninit();
+            let ret = libfabric_sys::inlined_fi_mr_reg(
+                self.domain,
+                mem_base_ptr as *mut libc::c_void,
+                aligned_size,
+                (libfabric_sys::FI_READ | libfabric_sys::FI_WRITE | libfabric_sys::FI_REMOTE_READ | libfabric_sys::FI_REMOTE_WRITE) as u64,
+                0,
+                self.alloc_manager.next_key() as u64,
+                0,
+                mr.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
+            if ret != 0 {
+                eprintln!("Error registering memory region: {}", ret);
+                Err(AllocError::FabricAllocationError(-ret as i32))?;
+            }
+            mr.assume_init()
+        };
+
+        // let mr = match mr {
+        //     MaybeDisabledMemoryRegion::Disabled(mr) => {
+        //         match mr {
+        //             DisabledMemoryRegion::EpBind(mr) => {
+        //                 // trace!("Binding memory region to endpoint");
+        //                 mr.enable(&self.comm_group.ep)
+        //                     .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
+        //             }
+        //             DisabledMemoryRegion::RmaEvent(mr) => {
+        //                 // trace!("Binding memory region to domain");
+        //                 mr.enable()
+        //                     .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
+        //                 // This will bind the memory region to the domain
+        //             }
+        //         }
+        //     }
+        //     MaybeDisabledMemoryRegion::Enabled(mr) => mr,
+        // };
+
+        let remote_alloc_infos = self
+            .collective_exchange_mr_info(pes, mem_slice, mr)
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+
+        
+        let mcast_group = self.create_mc_group(pes)
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+
+        
+        let alloc = LibfabricAlloc::new(
+            self.clone(),
+            mem,
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_bases),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_segments),
+            mr,
+            remote_alloc_infos,
+            data_size,
+            padding,
+            self.alloc_manager.clone(),
+            Some(mcast_group),
+        )
+        .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+        self.alloc_manager.insert(alloc.clone());
+        Ok(alloc)
+    }
+
+    pub(crate) fn get_alloc_from_start_addr(
+        &self,
+        addr: CommAllocAddr,
+    ) -> AllocResult<LibfabricAlloc> {
+        self.alloc_manager.get_alloc_from_start_addr(addr)
+    }
+
+    pub(crate) fn clear_allocs(&self) -> Result<(), libfabric::error::Error> {
+        self.alloc_manager.clear();
+        Ok(())
+    }
+
+    pub(crate) fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+        self.alloc_manager
+            .local_addr(remote_pe, remote_addr)
+            .expect(&format!(
+                "Local address not found from remote PE {}, remote addr: {:x}",
+                remote_pe, remote_addr
+            ))
+    }
+
+    pub(crate) fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        self.alloc_manager.one_sided_alloc_from_remote_pe_and_addr(
+            remote_pe,
+            remote_addr,
+            num_bytes,
+        )
+    }
+
+    pub(crate) fn local_alloc_and_offset_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+    ) -> Option<(CommAlloc, usize)> {
+        self.alloc_manager
+            .local_alloc_and_offset_from_remote_pe_and_addr(remote_pe, remote_addr)
+    }
+
+    pub(crate) fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
+        self.alloc_manager
+            .remote_addr(pe, local_addr)
+            .expect(&format!("Remote address not found for PE {}", pe))
+    }
+
+    pub(crate) fn wait_all(&self) {
+        self.comm_group.wait_all()
+    }
+
+    pub(crate) fn thread_wait(&self) {
+        self.comm_group.wait_all()
+    }
+
+    pub(crate) fn progress_all(&self) {
+        let _lock = self.comm_group.lock.lock();
+        self.comm_group.progress()
+    }
+
+    pub(crate) fn thread_progress(&self) {
+        let _lock = self.comm_group.lock.lock();
+        self.comm_group.progress()
+    }
+}
+
+fn atomic_op_to_fi_atomic_op<T: 'static>(op: &AtomicOp<T>) -> u32 {
+    match op {
+        AtomicOp::Min(_) => libfabric_sys::fi_op_FI_MIN,
+        AtomicOp::Max(_) => libfabric_sys::fi_op_FI_MAX,
+        AtomicOp::Sum(_) | AtomicOp::Sub(_) => libfabric_sys::fi_op_FI_SUM, // Sub can be implemented as Add with negative value
+        AtomicOp::Prod(_) => libfabric_sys::fi_op_FI_PROD,
+        AtomicOp::BitOr(_) => libfabric_sys::fi_op_FI_BOR,
+        AtomicOp::BitXor(_) => libfabric_sys::fi_op_FI_BXOR,
+        AtomicOp::BitAnd(_) => libfabric_sys::fi_op_FI_BAND,
+        AtomicOp::Read => libfabric_sys::fi_op_FI_ATOMIC_READ,
+        AtomicOp::Write(_) => libfabric_sys::fi_op_FI_ATOMIC_WRITE,
+        AtomicOp::Cas(_, _) => libfabric_sys::fi_op_FI_CSWAP,
+    }
 }
 
 fn rust_type_to_fi_type<T: 'static>() -> Option<u32> {
@@ -940,7 +1439,7 @@ pub(crate) struct LibfabricSysAlloc {
     rt_ref_cnt_offset: usize,
     id: usize,
     alloc_table: AllocTable,
-    // mcast_group: Option<MultiCastGroup>,
+    mcast_group: Option<*mut libfabric_sys::fid_mc>,
     pub(crate) print: bool,
 }
 
@@ -1046,7 +1545,97 @@ static ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
 
 
 impl LibfabricSysAlloc {
-        // we call this function to create a sub-allocation that is tracked as part of a runtime allocation
+    unsafe fn negate_atomic_value<OFI: Copy>(value: OFI) -> OFI {
+        let num_bytes = std::mem::size_of::<OFI>();
+        let mut bytes = vec![0u8; num_bytes];
+        std::ptr::copy_nonoverlapping(
+            (&value as *const OFI).cast::<u8>(),
+            bytes.as_mut_ptr(),
+            num_bytes,
+        );
+        for byte in bytes.iter_mut() {
+            *byte = !*byte;
+        }
+
+        let mut carry: u16 = 1;
+        #[cfg(target_endian = "little")]
+        for byte in bytes.iter_mut() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+        #[cfg(target_endian = "big")]
+        for byte in bytes.iter_mut().rev() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+
+        let mut result = std::mem::MaybeUninit::<OFI>::uninit();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
+        result.assume_init()
+    }
+    
+    pub(crate) fn new(
+        ofi: Arc<Ofi>,
+        mem: LibfabricSysMem,
+        #[cfg(feature = "enable-on-node-shmem")] same_node_bases: Arc<Vec<Option<usize>>>,
+        #[cfg(feature = "enable-on-node-shmem")] same_node_segments: Arc<
+            Vec<Option<Arc<ShmemSegment>>>,
+        >,
+        mr: *mut libfabric_sys::fid_mr,
+        remote_allocs: HashMap<usize, RemoteMemAddressInfo>,
+        num_bytes: usize,
+        padding: usize,
+        alloc_table: Arc<AllocInfoManager>,
+        mcast_group: Option<*mut libfabric_sys::fid_mc>,
+    ) -> Result<Self, i32> {
+        let start = mem.as_ptr() as usize;
+        let end = start + num_bytes;
+        let id = ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+        let ref_cnt_offset = num_bytes + padding;
+        let fabric_ref_cnt_offset = num_bytes + padding;
+        let encoded = encode_ref_count_and_padding(1, padding);
+
+        let alloc = Self {
+            ofi: ofi.clone(),
+            mem: mem.clone(),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_bases,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_segments,
+            mr,
+            mr_desc: unsafe { libfabric_sys::inlined_fi_mr_desc(mr) },
+            range: std::ops::Range { start, end },
+            remote_allocs: remote_allocs.clone(),
+            fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset,
+            id,
+            alloc_table: AllocTable::Fabric(alloc_table),
+            mcast_group: mcast_group,
+            print: false,
+        };
+
+        unsafe {
+            (&*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *mut AtomicUsize))
+                .store(encoded, Ordering::SeqCst);
+        }
+        debug!(target: "libfabric-sys", "Created LibfabricSys allocation: {:?}", alloc);
+
+        Ok(alloc)
+    }
+
+    pub(crate) fn num_pes(&self) -> usize {
+        self.remote_allocs.len()
+    }
+
+    // we call this function to create a sub-allocation that is tracked as part of a runtime allocation
     // 'len' should already contain the approriate padding and space for the ref count
     pub(crate) fn rt_alloc(
         &self,
@@ -1089,7 +1678,7 @@ impl LibfabricSysAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start + offset, alloc_manager),
-            // mcast_group: self.mcast_group.clone(),
+            mcast_group: self.mcast_group,
             print: self.print,
         };
 
@@ -1134,7 +1723,7 @@ impl LibfabricSysAlloc {
             remote_allocs: self.remote_allocs.clone(),
             id: self.id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start, alloc_manager),
-            // mcast_group: self.mcast_group.clone(),
+            mcast_group: self.mcast_group,
             print: true,
         };
         get_ref_count(unsafe {
@@ -1175,7 +1764,7 @@ impl LibfabricSysAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             id,
             alloc_table: self.alloc_table.clone(),
-            // mcast_group: self.mcast_group.clone(),
+            mcast_group: self.mcast_group,
             print: self.print,
         };
         debug!(target: "libfabric-sys", "Created LibfabricSys sub-allocation: {:?}", alloc);
@@ -1241,6 +1830,23 @@ impl LibfabricSysAlloc {
     }
     pub(crate) fn num_bytes(&self) -> usize {
         self.range.end - self.range.start
+    }
+
+    #[cfg(feature = "enable-on-node-shmem")]
+    fn shifted_same_node_bases(&self, offset: usize) -> Arc<Vec<Option<usize>>> {
+        Arc::new(
+            self.same_node_bases
+                .iter()
+                .map(|base| base.map(|addr| addr + offset))
+                .collect(),
+        )
+    }
+
+    #[cfg(feature = "enable-on-node-shmem")]
+    fn same_node_addr(&self, pe: usize, offset_bytes: usize) -> Option<CommAllocAddr> {
+        self.same_node_bases
+            .get(pe)
+            .and_then(|base| base.map(|addr| CommAllocAddr(addr + offset_bytes)))
     }
 
     pub(crate) fn contains(&self, addr: &usize) -> bool {
@@ -1377,6 +1983,891 @@ impl LibfabricSysAlloc {
                 curr_idx += msg_len;
             }
         }
+    }
+
+    pub(crate) unsafe fn inner_get<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst_addr: &mut [T],
+        blocking: bool,
+    ) {
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        #[cfg(feature = "enable-on-node-shmem")]
+        if let Some(addr) = self.same_node_addr(pe, offset) {
+            std::ptr::copy_nonoverlapping(
+                addr.as_ptr::<u8>(),
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return Ok(());
+        }
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+
+        let mut remote_src_addr = remote_alloc_info.mem_address.add(offset);
+        let remote_key = remote_alloc_info.key;
+        // trace!(
+        //     "Inner Get: Remote destination address for PE {}: base_addr {:?} offset<T> {} size_of<T> {} len {} {:?}-{:?} {} bytes",
+        //     pe,
+        //     remote_alloc_info.mem_address(),
+        //     offset,
+        //     std::mem::size_of::<T>(),
+        //     dst_addr.len(),
+        //     remote_src_addr,
+        //     remote_src_addr.add(std::mem::size_of_val(dst_addr)),
+        //     std::mem::size_of_val(dst_addr)
+        // );
+        let cg = &self.ofi.comm_group;
+        if dst_addr.len() < (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size / std::mem::size_of::<T>()
+        {
+            // trace!(
+            //     target: "libfabric",
+            //     "GET: from PE {} at addr {:?} to local addr {:?} len {} {}",
+            //     pe,
+            //     remote_src_addr,
+            //     dst_addr.as_mut_ptr(),
+            //     std::mem::size_of_val(dst_addr),
+            //     dst_addr.len(),
+            // );
+            cg.post_get(blocking, || unsafe {
+                libfabric_sys::inlined_fi_read(
+                    cg.ep,
+                    dst_addr.as_mut_ptr().cast(),
+                    std::mem::size_of_val(dst_addr),
+                     self.mr_desc,
+                     cg.mapped_addresses[pe],
+                    remote_src_addr as u64,
+                    remote_key,
+                    std::ptr::null_mut(),
+                )
+            });
+        } else {
+            let mut curr_idx = 0;
+
+            while curr_idx < dst_addr.len() {
+                let msg_len = std::cmp::min(
+                    dst_addr.len() - curr_idx,
+                    self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
+                );
+                cg.post_get(blocking, || unsafe {
+                    trace!(
+                        target: "libfabric",
+                        "GET: from PE {} at addr {:?} to local addr {:?} len {}",
+                        pe,
+                        remote_src_addr,
+                        &mut dst_addr[curr_idx..curr_idx + msg_len] as *mut [T],
+                        msg_len * std::mem::size_of::<T>()
+                    );
+                    libfabric_sys::inlined_fi_read(
+                         cg.ep,
+                         dst_addr[curr_idx..curr_idx + msg_len].as_mut_ptr().cast(),
+                         std::mem::size_of_val(&dst_addr[curr_idx..curr_idx + msg_len]),
+                         self.mr_desc,
+                         cg.mapped_addresses[pe],
+                        remote_src_addr as u64,
+                        remote_key,
+                        std::ptr::null_mut(),
+                    )
+                });
+                remote_src_addr = remote_src_addr.add(msg_len * std::mem::size_of::<T>());
+                curr_idx += msg_len;
+            }
+        }
+    }
+
+    #[inline(never)]
+    pub(crate) unsafe fn inner_get_small<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst_addr: &mut [T],
+        blocking: bool,
+    ) {
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        #[cfg(feature = "enable-on-node-shmem")]
+        if let Some(addr) = self.same_node_addr(pe, offset) {
+            std::ptr::copy_nonoverlapping(
+                addr.as_ptr::<u8>(),
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return;
+        }
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+
+        let remote_src_addr = remote_alloc_info.mem_address.add(offset);
+        let remote_key = remote_alloc_info.key;
+        let cg = &self.ofi.comm_group;
+        cg.post_get(blocking, || unsafe {
+            libfabric_sys::inlined_fi_read(
+                cg.ep,
+                dst_addr.as_mut_ptr().cast(),
+                std::mem::size_of_val(dst_addr),
+                 self.mr_desc,
+                 cg.mapped_addresses[pe],
+                remote_src_addr as u64,
+                remote_key,
+                std::ptr::null_mut(),
+            )
+        });
+    }
+
+    pub(crate) fn atomic_op_inner<T: 'static>(
+        &self,
+        pe: usize,
+        offset: usize,
+        op: &LamellarAtomicOp<T>,
+        blocking: bool,
+    ) {
+        #[cfg(feature = "enable-on-node-shmem")]
+        {
+            let offset_bytes = offset * std::mem::size_of::<T>();
+            if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
+                crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
+                return;
+            }
+        }
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations, offset + 1 because atomics operate on a single element and we verifying we arent missaligned
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+        let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
+        let remote_key = remote_alloc_info.key();
+
+        let src = op.src().expect("Atomic operation has no source");
+        let src = match op {
+            LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+            _ => src,
+        };
+        let buf = std::slice::from_ref(&src);
+        // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
+        let cg = &self.ofi.comm_group;
+        let data_type = rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation");
+        let op = atomic_op_to_fi_atomic_op(op);
+        cg.post_put(blocking, || {
+            unsafe {
+                libfabric_sys::inlined_fi_inject_atomic(
+                    cg.ep, 
+                    buf.as_ptr().cast(), 
+                    buf.len(), 
+                    cg.mapped_addresses[pe], 
+                    remote_dst_addr, 
+                    remote_key, 
+                    data_type, 
+                    op
+                )
+            } 
+        });
+        
+    }
+
+    pub(crate) fn atomic_fetch_op_inner<T: 'static>(
+        &self,
+        pe: usize,
+        offset: usize,
+        op: &LamellarAtomicOp<T>,
+        result: &mut [T],
+        blocking: bool,
+    ) {
+        #[cfg(feature = "enable-on-node-shmem")]
+        {
+            let offset_bytes = offset * std::mem::size_of::<T>();
+            if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
+                crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
+                return Ok(());
+            }
+        }
+
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations, offset + 1 because atomics operate on a single element and we verifying we arent missaligned
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+        let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
+        let remote_key = remote_alloc_info.key();
+
+        // let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
+        let cg = &self.ofi.comm_group;
+        let data_type = rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation");
+        match op.src() {
+            Some(src) => {
+                let src = match op {
+                    LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+                    _ => src,
+                };
+                let buf = std::slice::from_ref(&src);
+                cg.post_get(blocking, || {
+                    unsafe {
+                        libfabric_sys::inlined_fi_fetch_atomic(
+                            cg.ep,
+                            buf.as_ptr().cast(),
+                            buf.len(),
+                            self.mr_desc,
+                            result.as_mut_ptr().cast(),
+                            std::ptr::null_mut(),
+                            cg.mapped_addresses[pe],
+                            remote_dst_addr as u64,
+                            remote_key,
+                            data_type,
+                            atomic_op_to_fi_atomic_op(op),
+                            std::ptr::null_mut(),
+                        )
+                    }
+                });
+            }
+            None => {
+                let buf_val = res[0];
+                cg.post_get(blocking, || {
+                    unsafe {
+                        libfabric_sys::inlined_fi_fetch_atomic(
+                            cg.ep,
+                            std::slice::from_ref(&buf_val).as_ptr().cast(),
+                            1,
+                            self.mr_desc,
+                            result.as_mut_ptr().cast(),
+                            std::ptr::null_mut(),
+                            cg.mapped_addresses[pe],
+                            remote_dst_addr as u64,
+                            remote_key,
+                            data_type,
+                            atomic_op_to_fi_atomic_op(op),
+                            std::ptr::null_mut(),
+                        )
+                    }
+                });
+            }
+        };
+    }
+
+    pub(crate) fn atomic_compare_exchange_op_inner<T: 'static>(
+        &self,
+        pe: usize,
+        offset: usize,
+        current: T,
+        new: T,
+        result: &mut [T],
+        blocking: bool,
+    ) {
+        #[cfg(feature = "enable-on-node-shmem")]
+        {
+            let offset_bytes = offset * std::mem::size_of::<T>();
+            if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
+                result[0] = match crate::lamellae::comm::atomic::net_atomic_compare_exchange(
+                    current,
+                    new,
+                    &addr,
+                ) {
+                    Ok(old) | Err(old) => old,
+                };
+                return;
+            }
+        }
+
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+        let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_key = remote_alloc_info.key();
+
+        // let new = *(&new as *const T as *const OFI);
+        // let current = *(&current as *const T as *const OFI);
+        // let res = &mut *(result as *mut [T] as *mut [OFI]);
+        let cg = &self.ofi.comm_group;
+
+        cg.post_get(blocking, || {
+            unsafe {
+                libfabric_sys::inlined_fi_compare_atomic(
+                    cg.ep,
+                    std::slice::from_ref(&new).as_ptr().cast(),
+                    1,
+                    std::ptr::null_mut(),
+                    std::slice::from_ref(&current).as_ptr().cast(),
+                    std::ptr::null_mut(),
+                    result.as_mut_ptr().cast(),
+                    std::ptr::null_mut(),
+                    cg.mapped_addresses[pe],
+                    remote_dst_addr as u64,
+                    remote_key,
+                    rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation"),
+                    libfabric_sys::fi_op_FI_CSWAP,
+                    std::ptr::null_mut(),
+                )
+            }
+        });
+    }
+
+    // pub(crate) fn allreduce_inplace_inner<T: 'static>(        
+    //     &self,
+    //     op: &AllReduceOp,
+    //     src_and_result: &mut [T],
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let dst = unsafe {std::slice::from_raw_parts_mut(src_and_result.as_mut_ptr(), src_and_result.len())};
+    //     self.allreduce_inner(op, src_and_result, dst, blocking)
+    // }
+
+    // pub(crate) fn allreduce_inner<T: 'static>(
+    //     &self,
+    //     op: &AllReduceOp,
+    //     src: &[T],
+    //     result: &mut [T],
+    //     blocking: bool,
+    // ) {
+    //     let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+    //     let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+    //     let cg = &self.ofi.comm_group;
+    //     let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+    //     cg.post_collective(blocking, || {
+    //             // cg.ep.allreduce(
+    //             //     buf,
+    //             //     None,
+    //             //     res,
+    //             //     None,
+    //             //     mc,
+    //             //     op.into(),
+    //             //     CollectiveOptions::default(),
+    //             // )
+    //         }
+    //     )?;
+    // }
+    // // pub(crate) fn reduce_inplace_inner<T: 'static>(        
+    // //     &self,
+    // //     op: &LamellarReduceOp,
+    // //     root_pe: Option<usize>,
+    // //     blocking: bool,
+    // // ) -> Result<(), libfabric::error::Error> {
+    // //     let dst = unsafe {std::slice::from_raw_parts_mut(self.start() as *mut T, self.num_bytes()/std::mem::size_of::<T>())};
+    // //     let slice_or_pe = if let Some(root) = root_pe {
+    // //         RootOrSliceMut::NotRoot(root)
+    // //     }
+    // //     else {
+    // //         RootOrSliceMut::Root(dst)
+    // //     };
+
+        
+    // //     self.reduce_inner(op, slice_or_pe, blocking)
+    // // }
+
+    // pub(crate) fn allgather_inner<T: 'static>(
+    //     &self,
+    //     src: &[T],
+    //     result: &mut [T],
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_allgather::<T, u8>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_allgather::<T, u16>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_allgather::<T, u32>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_allgather::<T, u64>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+    //             self.typed_allgather::<T, u128>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_allgather::<T, usize>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_allgather::<T, i8>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_allgather::<T, i16>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_allgather::<T, i32>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_allgather::<T, i64>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+    //             self.typed_allgather::<T, i128>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_allgather::<T, isize>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+    //             self.typed_allgather::<T, f32>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+    //             self.typed_allgather::<T, f64>(src, result, blocking)
+    //         } else {
+    //             panic!("Unsupported allgather operation type");
+    //         }
+    //     }
+    // }
+
+    // unsafe fn typed_allgather<T, OFI: AsFiType>(
+    //     &self,
+    //     src: &[T],
+    //     result: &mut [T],
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+    //     let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+    //     let cg = &self.ofi.comm_group;
+    //     let mc = self.mcast_group.as_ref().expect("No multicast group for allgather");
+    //     cg.post_collective(blocking, || {
+    //             cg.ep.allgather(
+    //                 buf,
+    //                 None,
+    //                 res,
+    //                 None,
+    //                 mc,
+    //                 CollectiveOptions::default(),
+    //             )
+    //         }
+    //     )?;
+
+    //     Ok(())
+    // }
+
+    // pub(crate) fn alltoall_inner<T: 'static>(
+    //     &self,
+    //     src: &[T],
+    //     result: &mut [T],
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_alltoall::<T, u8>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_alltoall::<T, u16>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_alltoall::<T, u32>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_alltoall::<T, u64>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+    //             self.typed_alltoall::<T, u128>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_alltoall::<T, usize>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_alltoall::<T, i8>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_alltoall::<T, i16>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_alltoall::<T, i32>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_alltoall::<T, i64>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+    //             self.typed_alltoall::<T, i128>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_alltoall::<T, isize>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+    //             self.typed_alltoall::<T, f32>(src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+    //             self.typed_alltoall::<T, f64>(src, result, blocking)
+    //         } else {
+    //             panic!("Unsupported alltoall operation type");
+    //         }
+    //     }
+    // }
+
+    // unsafe fn typed_alltoall<T, OFI: AsFiType>(
+    //     &self,
+    //     src: &[T],
+    //     result: &mut [T],
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+    //     let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+    //     let cg = &self.ofi.comm_group;
+    //     let mc = self.mcast_group.as_ref().expect("No multicast group for alltoall");
+    //     cg.post_collective(blocking, || {
+    //             cg.ep.alltoall(
+    //                 buf,
+    //                 None,
+    //                 res,
+    //                 None,
+    //                 mc,
+    //                 CollectiveOptions::default(),
+    //             )
+    //         }
+    //     )?;
+
+    //     Ok(())
+    // }
+
+    // pub(crate) fn reduce_inner<T: 'static>(
+    //     &self,
+    //     op: &LamellarReduceOp,
+    //     src: &[T],
+    //     slice_or_pe: RootOrSliceMut<T>,
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_reduce::<T, u8>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_reduce::<T, u16>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_reduce::<T, u32>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_reduce::<T, u64>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+    //             self.typed_reduce::<T, u128>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_reduce::<T, usize>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_reduce::<T, i8>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_reduce::<T, i16>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_reduce::<T, i32>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_reduce::<T, i64>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+    //             self.typed_reduce::<T, i128>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_reduce::<T, isize>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+    //             self.typed_reduce::<T, f32>(op, src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+    //             self.typed_reduce::<T, f64>(op, src, slice_or_pe, blocking)
+    //         } else {
+    //             panic!("Unsupported allreduce operation type");
+    //         }
+    //     }
+    // }
+
+    // unsafe fn typed_reduce<T, OFI: AsFiType>(
+    //     &self,
+    //     op: &LamellarReduceOp,
+    //     src: &[T],
+    //     slice_or_pe: RootOrSliceMut<'_, T>,
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let cg = &self.ofi.comm_group;
+    //     let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+    //     let (result, root_pe) = match slice_or_pe {
+    //         RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+    //         RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+    //     };
+        
+    //     let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+    //     let res = match result {
+    //         Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+    //         None => {
+    //             let res_buf = unsafe {std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}; // if result is None, we are doing an in-place reduce or we reduce on a non-root PE, so we can reuse the source buffer as the destination buffer since it is either the destination or will be ignored by non-root PEs
+    //             unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
+    //         }
+    //     };
+    //     cg.post_collective(blocking, || {
+    //             cg.ep.reduce(
+    //                 buf,
+    //                 None,
+    //                 res,
+    //                 None,
+    //                 mc,
+    //                 &cg.mapped_addresses[root_pe],
+    //                 op.into(),
+    //                 CollectiveOptions::default(),
+    //             )
+    //         }
+    //     )?;
+
+    //     Ok(())
+    // }
+
+    // pub(crate) fn gather_inner<T: 'static>(
+    //     &self,
+    //     src: &[T],
+    //     slice_or_pe: RootOrSliceMut<T>,
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_gather::<T, u8>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_gather::<T, u16>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_gather::<T, u32>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_gather::<T, u64>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_gather::<T, usize>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_gather::<T, i8>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_gather::<T, i16>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_gather::<T, i32>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_gather::<T, i64>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_gather::<T, isize>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+    //             self.typed_gather::<T, u128>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+    //             self.typed_gather::<T, i128>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+    //             self.typed_gather::<T, f32>(src, slice_or_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+    //             self.typed_gather::<T, f64>(src, slice_or_pe, blocking)
+    //         } else {
+    //             panic!("Unsupported allreduce operation type");
+    //         }
+    //     }
+    // }
+
+    // unsafe fn typed_gather<T, OFI: AsFiType>(
+    //     &self,
+    //     src: &[T],
+    //     slice_or_pe: RootOrSliceMut<'_, T>,
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let cg = &self.ofi.comm_group;
+    //     let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+    //     let (result, root_pe) = match slice_or_pe {
+    //         RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+    //         RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+    //     };
+    //     let res = match result {
+    //         Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+    //         None => {
+    //             let res_buf = unsafe {std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}; // if result is None, we are a non-root PE, so we can reuse the source buffer as the destination buffer since it will be ignored.
+    //             unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
+    //         }
+    //     };
+    //     let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+    //     cg.post_collective(blocking, || {
+    //             cg.ep.gather(
+    //                 buf,
+    //                 None,
+    //                 res,
+    //                 None,
+    //                 mc,
+    //                 &cg.mapped_addresses[root_pe],
+    //                 CollectiveOptions::default(),
+    //             )
+    //         }
+    //     )?;
+
+    //     Ok(())
+    // }
+
+    // pub(crate) fn broadcast_inner<T: 'static>(
+    //     &self,
+    //     root_src: RootSrcOrSliceMut<T>,
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_broadcast::<T, u8>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_broadcast::<T, u16>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_broadcast::<T, u32>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_broadcast::<T, u64>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_broadcast::<T, usize>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_broadcast::<T, i8>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_broadcast::<T, i16>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_broadcast::<T, i32>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_broadcast::<T, i64>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_broadcast::<T, isize>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+    //             self.typed_broadcast::<T, u128>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+    //             self.typed_broadcast::<T, i128>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+    //             self.typed_broadcast::<T, f32>(root_src, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+    //             self.typed_broadcast::<T, f64>(root_src, blocking)
+    //         } else {
+    //             panic!("Unsupported broadcast operation type");
+    //         }
+    //     }
+    // }
+
+    // unsafe fn typed_broadcast<T, OFI: AsFiType>(
+    //     &self,
+    //     slice_or_pe: RootSrcOrSliceMut<'_, T>,
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let cg = &self.ofi.comm_group;
+    //     let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+    //     let (result, root_pe) = match slice_or_pe {
+    //         RootSrcOrSliceMut::Root(src) => (src, self.ofi.my_pe) ,
+    //         RootSrcOrSliceMut::NotRoot(result, root_pe) => (result, root_pe),
+    //     };
+    //     let res = unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(result)};
+    //     cg.post_collective(blocking, || {
+    //             cg.ep.broadcast(
+    //                 res,
+    //                 None,
+    //                 mc,
+    //                 &cg.mapped_addresses[root_pe],
+    //                 CollectiveOptions::default(),
+    //             )
+    //         }
+    //     )?;
+
+    //     Ok(())
+    // }
+
+    // pub(crate) fn scatter_inner<T: 'static>(
+    //     &self,
+    //     res: &mut [T],
+    //     src_or_root_pe: RootSrcSliceOrNone<'_, T>,
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_scatter::<T, u8>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_scatter::<T, u16>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_scatter::<T, u32>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_scatter::<T, u64>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_scatter::<T, usize>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_scatter::<T, i8>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_scatter::<T, i16>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_scatter::<T, i32>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_scatter::<T, i64>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_scatter::<T, isize>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+    //             self.typed_scatter::<T, u128>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+    //             self.typed_scatter::<T, i128>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+    //             self.typed_scatter::<T, f32>(res, src_or_root_pe, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+    //             self.typed_scatter::<T, f64>(res, src_or_root_pe, blocking)
+    //         } else {
+    //             panic!("Unsupported scatter operation type");
+    //         }
+    //     }
+    // }
+
+    // unsafe fn typed_scatter<T, OFI: AsFiType>(
+    //     &self,
+    //     res: &mut [T],
+    //     src_or_root_pe: RootSrcSliceOrNone<'_, T>,
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let cg = &self.ofi.comm_group;
+    //     let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+
+    //     let res = unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)};
+        
+    //     let (src, root_pe) = match src_or_root_pe {
+    //         RootSrcSliceOrNone::Root(src) => (unsafe { std::mem::transmute::<&[T], &[OFI]>(src) }, self.ofi.my_pe),
+    //         RootSrcSliceOrNone::NotRoot(root_pe) => (unsafe {std::slice::from_raw_parts(res.as_ptr(), res.len())}, root_pe),
+    //     };
+
+
+    //     cg.post_collective(blocking, || {
+    //             cg.ep.scatter(
+    //                 src,
+    //                 None,
+    //                 res,
+    //                 None,
+    //                 mc,
+    //                 &cg.mapped_addresses[root_pe],
+    //                 CollectiveOptions::default(),
+    //             )
+    //         }
+    //     )?;
+
+    //     Ok(())
+    // }
+
+    // pub(crate) fn reduce_scatter_inner<T: 'static>(
+    //     &self,
+    //     op: &AllReduceOp,
+    //     src: &[T],
+    //     result: &mut [T],
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_reduce_scatter::<T, u8>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_reduce_scatter::<T, u16>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_reduce_scatter::<T, u32>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_reduce_scatter::<T, u64>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_reduce_scatter::<T, usize>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_reduce_scatter::<T, i8>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_reduce_scatter::<T, i16>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_reduce_scatter::<T, i32>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_reduce_scatter::<T, i64>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_reduce_scatter::<T, isize>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
+    //             self.typed_reduce_scatter::<T, u128>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i128>() {
+    //             self.typed_reduce_scatter::<T, i128>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
+    //             self.typed_reduce_scatter::<T, f32>(op, src, result, blocking)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
+    //             self.typed_reduce_scatter::<T, f64>(op, src, result, blocking)
+    //         } else {
+    //             panic!("Unsupported reduce operation type");
+    //         }
+    //     }
+    // }
+
+    // unsafe fn typed_reduce_scatter<T, OFI: AsFiType>(
+    //     &self,
+    //     op: &AllReduceOp,
+    //     src: &[T],
+    //     result: &mut [T],
+    //     blocking: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+    //     let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+    //     let cg = &self.ofi.comm_group;
+    //     let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+    //     cg.post_collective(blocking, || {
+    //             cg.ep.reduce_scatter(
+    //                 buf,
+    //                 None,
+    //                 res,
+    //                 None,
+    //                 mc,
+    //                 op.into(),
+    //                 CollectiveOptions::default(),
+    //             )
+    //         }
+    //     )?;
+
+    //     Ok(())
+    // }
+
+
+    pub(crate) fn wait(&self) {
+        self.ofi.comm_group.wait_all()
     }
     
         
