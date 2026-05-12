@@ -65,7 +65,7 @@ pub(crate) enum Comm {
 }
 
 impl Comm {
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     pub(crate) fn new_serialized_data(
         self: &Arc<Comm>,
         size: usize,

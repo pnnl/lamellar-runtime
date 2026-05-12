@@ -176,7 +176,7 @@ unsafe impl Send for SubSerializedData {}
 unsafe impl Sync for SubSerializedData {}
 
 impl SerializedData {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
         let alloc_size = size; //+ ser_data_size_size;
         let mut alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
@@ -205,40 +205,40 @@ impl SerializedData {
 }
 
 impl SerializedData {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
         self.header_bytes.clone()
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes_mut(&mut self) -> CommSlice<u8> {
         self.header_bytes.clone()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
         self.payload_bytes.clone()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes_mut(&mut self) -> CommSlice<u8> {
         self.payload_bytes.clone()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_len(&self) -> usize {
         self.payload_bytes.len()
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> CommSlice<u8> {
         self.ser_data_bytes.clone()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn len(&self) -> usize {
         self.ser_data_bytes.len()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn print(&self) {
         println!("{:?}", self);
     }
@@ -263,11 +263,11 @@ impl std::fmt::Debug for SerializedData {
 }
 
 impl Des for SerializedData {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
         crate::deserialize(&self.header_as_bytes(), false).unwrap()
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
         Ok(crate::deserialize(&self.data_as_bytes(), true)?)
     }
@@ -276,7 +276,7 @@ impl Des for SerializedData {
 // impl SubData for SubSerializedData {
 impl SerializedData {
     // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
-    #[tracing::instrument(level = "debug")]
+    //#[tracing::instrument(level = "debug")]
     pub(crate) fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
         trace!("sub_data start: {} end: {}", start, end);
         SubSerializedData {
@@ -289,11 +289,11 @@ impl SerializedData {
 }
 
 impl SubSerializedData {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
         self.header_bytes.clone()
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
         self.payload_bytes.clone()
     }
@@ -313,11 +313,11 @@ impl std::fmt::Debug for SubSerializedData {
 }
 
 impl Des for SubSerializedData {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
         crate::deserialize(&self.header_as_bytes(), false).unwrap()
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
         Ok(crate::deserialize(&self.data_as_bytes(), true)?)
     }
@@ -446,7 +446,7 @@ pub(crate) trait LamellaeUtil: Send {
     async fn request_new_alloc(&self, min_size: usize);
 }
 
-#[tracing::instrument(skip_all, level = "debug")]
+//#[tracing::instrument(skip_all, level = "debug")]
 pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "enable-rofi-c")]

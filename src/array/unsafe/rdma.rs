@@ -468,7 +468,7 @@ impl<T: Dist> UnsafeArray<T> {
     // /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     // /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     // ///```
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     // pub unsafe fn get<U>(&self, index: usize, buf: U) -> ArrayRdmaHandle<T>
     // where
     //     U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
@@ -1313,7 +1313,7 @@ impl UnsafeArrayInner {
 
 // #[lamellar_impl::rt_am_local]
 // impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     async fn exec(self) {
 //         let mut reqs = vec![];
 //         for pe in self

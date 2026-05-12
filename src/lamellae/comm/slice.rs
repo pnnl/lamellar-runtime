@@ -38,7 +38,7 @@ impl<T> CommSlice<T> {
         Some(std::slice::from_raw_parts_mut(ptr, len))
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn sub_slice(&self, range: impl std::ops::RangeBounds<usize>) -> Self {
         let start = match range.start_bound() {
             std::ops::Bound::Included(&index) => index,

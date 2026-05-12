@@ -73,14 +73,14 @@ impl<T: Remote> LibfabricPutFuture<T> {
         };
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn inner_put_all(&self, pes: &Vec<usize>, src: &T) {
         for pe in pes {
             self.inner_put(*pe, src);
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn inner_put_all_buf(&self, pes: &Vec<usize>, src: &MemregionRdmaInputInner<T>) {
         for pe in pes {
             self.inner_put_buf(*pe, src);
@@ -170,7 +170,7 @@ pub(crate) struct LibfabricGetFuture<T> {
 }
 
 impl<T: Remote> LibfabricGetFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
@@ -257,7 +257,7 @@ pub(crate) struct LibfabricGetBufferFuture<T> {
 }
 
 impl<T: Remote> LibfabricGetBufferFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {

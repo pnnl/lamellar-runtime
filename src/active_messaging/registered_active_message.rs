@@ -106,7 +106,7 @@ pub(crate) struct UnitHeader {
 
 #[async_trait]
 impl ActiveMessageEngine for RegisteredActiveMessages {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn process_msg(self, am: Am, stall_mark: usize, immediate: bool) {
         trace!("[{:?}] process_msg {am:?}", std::thread::current().id());
 
@@ -281,7 +281,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn exec_msg(self, msg: Msg, mut ser_data: SerializedData, lamellae: Arc<Lamellae>) {
         trace!("[{:?}] exec_msg {:?}", std::thread::current().id(), msg.cmd);
         // let data = ser_data.data_as_bytes();
@@ -358,12 +358,12 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
 }
 
 impl RegisteredActiveMessages {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(batcher: BatcherType, executor: Arc<Executor>) -> RegisteredActiveMessages {
         RegisteredActiveMessages { batcher, executor }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn send_am(
         &self,
         req_data: ReqMetaData,
@@ -428,8 +428,8 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    // #[tracing::instrument(skip_all)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         trace!("send_data_am");
         let header = self.create_header(&req_data, Cmd::Data);
@@ -464,8 +464,8 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    // #[tracing::instrument(skip_all)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn send_unit_am(&self, req_data: ReqMetaData) {
         trace!("send_unit_am");
 
@@ -485,7 +485,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     fn create_header(&self, req_data: &ReqMetaData, cmd: Cmd) -> SerializeHeader {
         let msg = Msg {
             src: req_data.team.world_pe as u16,
@@ -494,7 +494,7 @@ impl RegisteredActiveMessages {
         SerializeHeader { msg }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn create_data_buf(
         &self,
         header: SerializeHeader,
@@ -520,7 +520,7 @@ impl RegisteredActiveMessages {
 
     //we can remove this by cloning self and submitting to the executor
     #[async_recursion]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_local_am(
         &self,
         req_data: ReqMetaData,
@@ -566,7 +566,7 @@ impl RegisteredActiveMessages {
         team.team.team_counters.dec_outstanding(1);
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_am(
         &self,
         msg: &Msg,
@@ -630,7 +630,7 @@ impl RegisteredActiveMessages {
         // ame.process_msg(am, 0, true).await;
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_return_am(
         &self,
         msg: &Msg,
@@ -667,7 +667,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_data_am(
         &self,
         msg: &Msg,
@@ -701,10 +701,10 @@ impl RegisteredActiveMessages {
         );
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
 
     // this represents the completion of an active message that returns nothing
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_unit_am(
         &self,
         msg: &Msg,

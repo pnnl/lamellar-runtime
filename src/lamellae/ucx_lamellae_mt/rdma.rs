@@ -84,14 +84,14 @@ impl<T: Remote> UcxMtPutFuture<T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn inner_put_all(&mut self, pes: &Vec<usize>, src: T) {
         for pe in pes {
             self.inner_put(*pe, src);
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn inner_put_all_buf(&mut self, pes: &Vec<usize>, src: &MemregionRdmaInputInner<T>) {
         for pe in pes {
             self.inner_put_buf(*pe, src);
@@ -190,7 +190,7 @@ pub(crate) struct UcxMtGetFuture<T> {
 }
 
 impl<T: Remote> UcxMtGetFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         unsafe {
             self.request = self.alloc.inner_get(
@@ -279,7 +279,7 @@ pub(crate) struct UcxMtGetBufferFuture<T> {
 }
 
 impl<T: Remote> UcxMtGetBufferFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_get(&mut self) {
         unsafe {
             self.request = self

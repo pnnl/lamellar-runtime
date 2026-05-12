@@ -1396,7 +1396,7 @@ pub(crate) trait ActiveMessageEngine {
 
     async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: Arc<Lamellae>);
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn get_team_and_world(
         &self,
         pe: usize,
@@ -1433,7 +1433,7 @@ pub(crate) trait ActiveMessageEngine {
         (team, world)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn send_data_to_user_handle(&self, req_id: ReqId, pe: usize, data: InternalResult) {
         trace!("returned req_id: {:?}", req_id);
         let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };

@@ -34,7 +34,7 @@ pub(crate) struct LibfabricComm {
 pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl LibfabricComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> LibfabricComm {
         if let Some(size) = config().heap_size {
             HEAP_SIZE.store(size, Ordering::SeqCst);
@@ -107,7 +107,7 @@ impl CommProgress for LibfabricComm {
             panic!("libfabric thread wait error: {}", e);
         }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         self.ofi.barrier().expect("error in libfabric barrier");
     }
@@ -136,7 +136,7 @@ impl CommInfo for LibfabricComm {
 }
 
 impl Drop for LibfabricComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         trace!("dropping libfabric comm");
         if self.mem_occupied() > 0 {

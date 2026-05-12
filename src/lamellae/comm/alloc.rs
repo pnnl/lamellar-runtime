@@ -2169,14 +2169,14 @@ pub(crate) struct CommAlloc {
 }
 
 impl CommAlloc {
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     pub(crate) fn as_comm_slice<T>(&self) -> CommSlice<T> {
         CommSlice {
             inner_alloc: self.inner_alloc.clone(),
             _phantom: std::marker::PhantomData,
         }
     }
-    #[tracing::instrument(level = "debug")]
+    //#[tracing::instrument(level = "debug")]
     pub(crate) fn comm_slice_at_byte_offset<T>(
         &self,
         offset: usize,

@@ -34,7 +34,7 @@ pub(crate) struct ShmemComm {
 pub(crate) static SHMEM_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl ShmemComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new() -> ShmemComm {
         let num_pes = match env::var("LAMELLAR_NUM_PES") {
             Ok(val) => val.parse::<usize>().unwrap(),
@@ -94,7 +94,7 @@ impl CommShutdown for ShmemComm {
 impl CommProgress for ShmemComm {
     fn flush_all(&self) {}
     fn wait_all(&self) {}
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         unsafe { self.allocator.barrier() };
     }
@@ -123,7 +123,7 @@ impl CommInfo for ShmemComm {
 }
 
 impl Drop for ShmemComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // let allocs = self.alloc.read();
         // for alloc in allocs.iter(){

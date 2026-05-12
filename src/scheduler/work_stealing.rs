@@ -107,7 +107,7 @@ pub(crate) struct WorkStealingThread {
 }
 
 impl WorkStealingThread {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn run(
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
@@ -441,7 +441,7 @@ impl LamellarExecutor for WorkStealing {
         // })
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn shutdown(&self) {
         while self.panic.load(Ordering::SeqCst) == 0 && self.active_cnt.load(Ordering::Relaxed) > 0
         {
@@ -451,7 +451,7 @@ impl LamellarExecutor for WorkStealing {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn force_shutdown(&self) {
         trace!("work stealing force shutting down");
 
@@ -474,7 +474,7 @@ impl LamellarExecutor for WorkStealing {
         // );
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_task(&self) {
         let mut rng = rand::rng();
         let t = rand::distr::Uniform::try_from(0..self.work_stealers.len())
@@ -547,7 +547,7 @@ impl WorkStealing {
         ws.init(Arc::new(core_ids));
         ws
     }
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     fn init(&mut self, core_ids: Arc<Vec<CoreId>>) {
         let mut work_workers: std::vec::Vec<crossbeam::deque::Worker<Runnable<usize>>> = vec![];
         for _i in 0..self.max_num_threads {
@@ -601,7 +601,7 @@ impl WorkStealing {
 
 impl Drop for WorkStealing {
     //when is this called with respect to world?
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         debug!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {

@@ -121,7 +121,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.add(idx,val);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn add(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
@@ -167,7 +167,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_add(indices,10);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -206,7 +206,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_add(idx,val);
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn fetch_add(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -251,7 +251,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_add(indices,10);
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_fetch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -288,7 +288,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.sub(idx,val);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
@@ -334,7 +334,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_sub(indices,10);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -373,7 +373,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_sub(idx,val);
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn fetch_sub<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -418,7 +418,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_sub(indices,10);
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_fetch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -455,7 +455,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.mul(idx,val);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
@@ -501,7 +501,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_mul(indices,10);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -540,7 +540,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_mul(idx,val);
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -585,7 +585,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_mul(indices,10);
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_fetch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -622,7 +622,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.div(idx,val);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Div, self.as_lamellar_byte_array())
@@ -668,7 +668,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_div(indices,10);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -707,7 +707,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_div(idx,val);
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn fetch_div<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -752,7 +752,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_div(indices,10);
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_fetch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -789,7 +789,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.rem(idx,val);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Rem, self.as_lamellar_byte_array())
@@ -835,7 +835,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_rem(indices,10);
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_rem<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -874,7 +874,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_rem(idx,val);
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn fetch_rem<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -919,7 +919,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_rem(indices,10);
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_fetch_rem<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1022,7 +1022,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.add(idx,val) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn add(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
@@ -1072,7 +1072,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_add(indices,10) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1111,7 +1111,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.fetch_add(idx,val) };
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fetch_add(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -1157,7 +1157,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_fetch_add(indices,10) };
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_fetch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1194,7 +1194,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.sub(idx,val) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
@@ -1244,7 +1244,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_sub(indices,10) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1283,7 +1283,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.fetch_sub(idx,val) };
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fetch_sub<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -1329,7 +1329,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_fetch_sub(indices,10) };
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_fetch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1366,7 +1366,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.mul(idx,val) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
@@ -1416,7 +1416,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_mul(indices,10) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1455,7 +1455,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.fetch_mul(idx,val) };
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -1501,7 +1501,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_fetch_mul(indices,10) };
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_fetch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1538,7 +1538,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.div(idx,val) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Div, self.as_lamellar_byte_array())
@@ -1588,7 +1588,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_div(indices,10) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1627,7 +1627,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.fetch_div(idx,val) };
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fetch_div<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -1673,7 +1673,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_fetch_div(indices,10) };
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_fetch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1710,7 +1710,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.rem(idx,val) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Rem, self.as_lamellar_byte_array())
@@ -1760,7 +1760,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_rem(indices,10) };
     /// req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_rem<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -1799,7 +1799,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.fetch_rem(idx,val) };
     /// let old = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fetch_rem<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -1845,7 +1845,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let req = unsafe{ array.batch_fetch_rem(indices,10) };
     /// let old_vals = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_fetch_rem<'a>(
         &self,
         index: impl OpInput<'a, usize>,

@@ -69,7 +69,7 @@ impl std::fmt::Debug for TeamAmBatcherInner {
 }
 
 impl TeamAmBatcherInner {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn new(pe: Option<usize>) -> TeamAmBatcherInner {
         TeamAmBatcherInner {
             batch: Arc::new(Mutex::new((HashMap::new(), HashMap::new(), Vec::new()))),
@@ -79,7 +79,7 @@ impl TeamAmBatcherInner {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn add_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -130,7 +130,7 @@ impl TeamAmBatcherInner {
         //println!("updated size: {:?}", self.size.load(Ordering::SeqCst));
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn add_am(&self, req_data: ReqMetaData, data: LamellarData) -> usize {
         match data {
             LamellarData::Am(am, id, am_size) => {
@@ -149,7 +149,7 @@ impl TeamAmBatcherInner {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn add_non_am(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> usize {
         let mut batch = self.batch.lock();
         let size = size + *BATCH_HEADER_LEN;
@@ -157,7 +157,7 @@ impl TeamAmBatcherInner {
         self.size.fetch_add(size, Ordering::SeqCst)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn swap(&self) -> (TeamMap, TeamMap, Vec<(ReqMetaData, LamellarData)>, usize) {
         let mut batch = self.batch.lock();
         let mut new_batch = (HashMap::new(), HashMap::new(), Vec::new());
@@ -181,7 +181,7 @@ pub(crate) struct TeamAmBatcher {
 
 #[async_trait]
 impl Batcher for TeamAmBatcher {
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -243,7 +243,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -306,7 +306,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -370,7 +370,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, mut stall_mark: usize) {
         // println!("[{:?}] add_unit_am_to_batch", std::thread::current().id(),);
         let batch = match req_data.dst {
@@ -421,7 +421,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
@@ -459,7 +459,7 @@ impl Batcher for TeamAmBatcher {
 }
 
 impl TeamAmBatcher {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         num_pes: usize,
         stall_mark: Arc<AtomicUsize>,
@@ -476,7 +476,7 @@ impl TeamAmBatcher {
             executor,
         }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn create_tx_task(
         batch: TeamAmBatcherInner,
         lamellae: Arc<Lamellae>,
@@ -519,7 +519,7 @@ impl TeamAmBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_am_batch(
         am_batch: TeamMap,
         mut data_slice: CommSlice<u8>,
@@ -593,7 +593,7 @@ impl TeamAmBatcher {
         i
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_non_am_batch(
         non_am_batch: Vec<(ReqMetaData, LamellarData)>,
         data_slice: CommSlice<u8>,
@@ -622,7 +622,7 @@ impl TeamAmBatcher {
         i
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_am(
         req_data: ReqMetaData,
         am_size: usize,
@@ -658,7 +658,7 @@ impl TeamAmBatcher {
         i + am_size
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_data(
         req_data: ReqMetaData,
         data_size: usize,
@@ -695,7 +695,7 @@ impl TeamAmBatcher {
         i + data_size
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>) -> usize {
         let mut i = 0;
         let batch_header = BatchHeader {
@@ -717,16 +717,17 @@ impl TeamAmBatcher {
         i + *UNIT_HEADER_LEN
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn create_header(src: usize) -> SerializeHeader {
         let msg = Msg {
             src: src as u16,
             cmd: Cmd::BatchedMsg,
+            padding: [0; 1],
         };
         SerializeHeader { msg }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn create_data_buf(
         header: SerializeHeader,
         size: usize,
@@ -747,7 +748,7 @@ impl TeamAmBatcher {
         data.unwrap()
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn exec_batched_am(
         &self,
         msg: &Msg,
@@ -837,7 +838,7 @@ impl TeamAmBatcher {
         // );
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     fn exec_am(
         &self,
         msg: &Msg,
@@ -894,7 +895,7 @@ impl TeamAmBatcher {
         });
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn exec_return_am(
         &self,
         msg: &Msg,

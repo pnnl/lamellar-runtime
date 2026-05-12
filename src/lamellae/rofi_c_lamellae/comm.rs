@@ -38,7 +38,7 @@ pub(crate) struct RofiCComm {
 pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl RofiCComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(provider: &str, domain: &str) -> RofiCComm {
         if let Some(size) = config().heap_size {
             HEAP_SIZE.store(size, Ordering::SeqCst);
@@ -92,7 +92,7 @@ impl CommProgress for RofiCComm {
     fn wait_all(&self) {
         self.rofi_c.wait_all();
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         self.rofi_c.barrier();
     }
@@ -124,7 +124,7 @@ impl CommInfo for RofiCComm {
 }
 
 impl Drop for RofiCComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         if self.mem_occupied() > 0 {
             println!("dropping rofi_c -- memory in use {:?}", self.mem_occupied());

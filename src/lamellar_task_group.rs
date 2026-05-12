@@ -170,11 +170,11 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
 }
 
 impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn launch(&mut self) {
         self.launch_am_if_needed();
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
         let mut res = self.inner.data.lock().remove(&self.sub_id);
@@ -185,7 +185,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
         self.process_result(res.expect("result should exist"))
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let data = self.inner.data.lock();
@@ -209,7 +209,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn val(&self) -> Self::Output {
         let res = self
             .inner
@@ -434,7 +434,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
         res
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let data = self.inner.data.lock();
@@ -726,7 +726,7 @@ impl ActiveMessaging for LamellarTaskGroup {
     type MultiAmHandle<R: AmDist> = TaskGroupMultiAmHandle<R>;
     type LocalAmHandle<L> = TaskGroupLocalAmHandle<L>;
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
         self.wait_all();
     }
@@ -735,7 +735,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.await_all()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         self.team.barrier();
     }
@@ -744,7 +744,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.team.async_barrier()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -753,7 +753,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.exec_am_all_inner(am)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -761,7 +761,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.exec_am_pe_inner(pe, am)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -1238,7 +1238,7 @@ impl LamellarResultSerde for AmGroupAm {
 }
 
 impl LamellarActiveMessage for AmGroupAm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec(
         self: Arc<Self>,
         __lamellar_current_pe: usize,
@@ -1581,7 +1581,7 @@ impl AmGroup {
     ///     world.block_on(am_group.exec());
     /// }
     /// ```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub async fn exec(&mut self) {
         let timer = std::time::Instant::now();
         let mut reqs = vec![];

@@ -342,7 +342,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         self.mem_region.as_slice()[0]
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_op<'a>(
         &self,
         val: T,
@@ -360,7 +360,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -375,7 +375,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn initiate_batch_op_inner<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -438,7 +438,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         res
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_fetch_op_2<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -501,7 +501,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         ArrayFetchBatchOpHandle::new(byte_array, res, std::cmp::max(i_len, v_len))
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_result_op_2<'a>(
         &self,
         val: impl OpInput<'a, T>,

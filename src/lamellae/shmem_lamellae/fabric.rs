@@ -463,7 +463,7 @@ impl From<OneSidedShmemAlloc> for CommAlloc {
     }
 }
 
-#[tracing::instrument(skip_all, level = "debug")]
+//#[tracing::instrument(skip_all, level = "debug")]
 fn attach_to_shmem(
     _num_pes: usize,
     job_id: usize,
@@ -613,7 +613,7 @@ impl std::fmt::Debug for ShmemAllocator {
 }
 
 impl ShmemAllocator {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(num_pes: usize, pe: usize, job_id: usize) -> Self {
         let size = std::mem::size_of::<AtomicUsize>()
             + std::mem::size_of::<usize>()
@@ -706,7 +706,7 @@ impl ShmemAllocator {
         barrier2[self.my_pe] = 0;
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn alloc(&self, data_size: usize, align: usize, pes: &[usize]) -> ShmemAlloc {
         let mut allocs = self.allocs.write();
         let barrier1 = std::slice::from_raw_parts_mut(self.barrier1, self.num_pes);

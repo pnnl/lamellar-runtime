@@ -173,7 +173,7 @@ pub(crate) enum BatcherType {
 
 #[async_trait]
 impl Batcher for BatcherType {
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -195,7 +195,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -217,7 +217,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -238,7 +238,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, stall_mark: usize) {
         match self {
             BatcherType::Simple(batcher) => {
@@ -249,7 +249,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn exec_batched_msg(
         &self,
         msg: Msg,

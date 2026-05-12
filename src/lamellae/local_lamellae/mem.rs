@@ -12,7 +12,7 @@ use crate::lamellae::{
 use super::{comm::LocalComm, AllocationType};
 
 impl CommMem for LocalComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn alloc(
         &self,
         size: usize,
@@ -35,7 +35,7 @@ impl CommMem for LocalComm {
         })
     }
 
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     // fn free(&self, alloc: CommAlloc) {
     //     assert!(alloc.alloc_type == CommAllocType::Fabric);
     //     let mut allocs = self.allocs.lock();
@@ -47,7 +47,7 @@ impl CommMem for LocalComm {
     //     }
     // }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
         let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
@@ -69,7 +69,7 @@ impl CommMem for LocalComm {
         true
     }
 
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     // fn rt_free(&self, alloc: CommAlloc) {
     //     assert!(alloc.alloc_type == CommAllocType::RtHeap);
     //     let mut allocs = self.heap_allocs.lock();

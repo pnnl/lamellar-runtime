@@ -25,7 +25,7 @@ use super::{
 };
 
 impl CommMem for RofiCComm {
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn alloc(
         &self,
         size: usize,
@@ -46,7 +46,7 @@ impl CommMem for RofiCComm {
         Ok(comm_alloc)
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
         // add space for ref count
         let (padding, size, align) = calc_alloc_padding_size_align(size, align);
@@ -76,7 +76,7 @@ impl CommMem for RofiCComm {
         Err(AllocError::OutOfMemoryError(size))
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
         // add space for ref count
         let (_padding, size, align) = calc_alloc_padding_size_align(size, align);
@@ -90,7 +90,7 @@ impl CommMem for RofiCComm {
         false
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
         let allocs = self.runtime_allocs.read();
@@ -100,7 +100,7 @@ impl CommMem for RofiCComm {
         occupied
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn alloc_pool(&self, min_size: usize) {
         if config().heap_mode == HeapMode::Static {
             panic!("Error: alloc_pool should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
@@ -126,12 +126,12 @@ impl CommMem for RofiCComm {
         }
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn num_pool_allocs(&self) -> usize {
         self.runtime_allocs.read().len()
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn print_pools(&self) {
         let allocs = self.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
@@ -140,7 +140,7 @@ impl CommMem for RofiCComm {
         }
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
         self.rofi_c
             .local_addr(remote_pe, remote_addr)
@@ -184,7 +184,7 @@ impl CommMem for RofiCComm {
         Err(AllocError::LocalNotFound(CommAllocAddr(addr)))
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn remote_addr(&self, pe: usize, local_addr: usize) -> CommAllocAddr {
         self.rofi_c
             .remote_addr(pe, local_addr)
@@ -192,7 +192,7 @@ impl CommMem for RofiCComm {
             .into()
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn get_alloc_cloned(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         trace!("get_alloc: {:?}", addr);
         if let Ok(inner_alloc) = self.rofi_c.get_alloc_from_start_addr(addr) {

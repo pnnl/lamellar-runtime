@@ -19,7 +19,7 @@ use super::comm::{LibfabricMtComm, HEAP_SIZE};
 use tracing::{debug, trace};
 
 impl CommMem for LibfabricMtComm {
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn alloc(
         &self,
         size: usize,
@@ -38,7 +38,7 @@ impl CommMem for LibfabricMtComm {
         Ok(comm_alloc)
     }
 
-    // #[tracing::instrument(skip(self), level = "debug")]
+    // //#[tracing::instrument(skip(self), level = "debug")]
     // fn free(&self, alloc: CommAlloc) {
     //     assert!(alloc.alloc_type == CommAllocType::Fabric);
     //     match alloc.inner_alloc {
@@ -56,7 +56,7 @@ impl CommMem for LibfabricMtComm {
     //     }
     // }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
         // add space for ref count
         let (padding, size, align) = calc_alloc_padding_size_align(size, align);
@@ -91,7 +91,7 @@ impl CommMem for LibfabricMtComm {
         Err(AllocError::OutOfMemoryError(size))
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
         // add space for ref count
         let (_padding, size, align) = calc_alloc_padding_size_align(size, align);
@@ -105,7 +105,7 @@ impl CommMem for LibfabricMtComm {
         false
     }
 
-    // #[tracing::instrument(skip(self), level = "debug")]
+    // //#[tracing::instrument(skip(self), level = "debug")]
     // fn rt_free(&self, alloc: CommAlloc) {
     //     assert!(alloc.alloc_type == CommAllocType::RtHeap);
     //     debug!("rt_free: {:?}", alloc);
@@ -174,7 +174,7 @@ impl CommMem for LibfabricMtComm {
     //     }
     // }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
         let allocs = self.runtime_allocs.read();
@@ -188,7 +188,7 @@ impl CommMem for LibfabricMtComm {
         occupied
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn alloc_pool(&self, min_size: usize) {
         if config().heap_mode == HeapMode::Static {
             panic!("Error: alloc_pool should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
@@ -216,12 +216,12 @@ impl CommMem for LibfabricMtComm {
         }
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn num_pool_allocs(&self) -> usize {
         self.runtime_allocs.read().len()
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn print_pools(&self) {
         let allocs = self.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
@@ -230,7 +230,7 @@ impl CommMem for LibfabricMtComm {
         }
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
         self.ofi.local_addr(remote_pe, remote_addr).into()
     }
@@ -275,12 +275,12 @@ impl CommMem for LibfabricMtComm {
         Err(AllocError::LocalNotFound(CommAllocAddr(addr.into())))
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn remote_addr(&self, pe: usize, local_addr: usize) -> CommAllocAddr {
         self.ofi.remote_addr(pe, local_addr).into()
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
+    //#[tracing::instrument(skip(self), level = "debug")]
     fn get_alloc_cloned(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         trace!("get_alloc cloned: {:?}", addr);
         if let Ok(alloc) = self.ofi.get_alloc_from_start_addr(addr) {

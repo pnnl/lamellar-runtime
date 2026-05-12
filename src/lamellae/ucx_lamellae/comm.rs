@@ -31,7 +31,7 @@ pub(crate) struct UcxComm {
 pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl UcxComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new() -> UcxComm {
         if let Some(size) = config().heap_size {
             HEAP_SIZE.store(size, Ordering::SeqCst);
@@ -88,7 +88,7 @@ impl CommProgress for UcxComm {
         //     std::thread::yield_now();
         // }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         self.ucx.barrier();
     }
@@ -117,7 +117,7 @@ impl CommInfo for UcxComm {
 }
 
 impl Drop for UcxComm {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("dropping ucx comm");
         debug!("Dropping UcxComm");

@@ -70,7 +70,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.load(53);
     /// let val = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
                                                         // let array = self.inner_array();
@@ -119,7 +119,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let vals = req.block();
     /// assert_eq!(vals.len(),indices.len());
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn batch_load<'a>(&self, index: impl OpInput<'a, usize>) -> ArrayFetchBatchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array().initiate_batch_fetch_op_2(
@@ -198,7 +198,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = unsafe{ array.load(53)};
     /// let val = req.block();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
                                                         // let array = self.inner_array();
@@ -240,7 +240,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let vals = req.block();
     /// assert_eq!(vals.len(),indices.len());
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_load<'a>(&self, index: impl OpInput<'a, usize>) -> ArrayFetchBatchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array().initiate_batch_fetch_op_2(

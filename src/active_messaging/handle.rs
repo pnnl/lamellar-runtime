@@ -51,7 +51,7 @@ impl LamellarRequestAddResult for AmHandleInner {
         self.user_handle.load(Ordering::SeqCst) > 0
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) {
         // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         self.data.set(Some(data));
@@ -179,7 +179,7 @@ impl<T: AmDist> LamellarRequest for AmHandle<T> {
         self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
@@ -330,7 +330,7 @@ impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
         self.process_result(data)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
@@ -524,7 +524,7 @@ impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
         res
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();

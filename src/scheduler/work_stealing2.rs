@@ -63,7 +63,7 @@ pub(crate) struct WorkStealingThread {
 }
 
 impl WorkStealingThread {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn run(
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
@@ -155,7 +155,7 @@ impl WorkStealingThread {
 // }
 
 // impl IoThread {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn run(worker: IoThread, active_cnt: Arc<AtomicUsize>, id: CoreId) -> thread::JoinHandle<()> {
 //         let builder = thread::Builder::new().name("io_thread".into());
 //         builder
@@ -337,7 +337,7 @@ impl LamellarExecutor for WorkStealing2 {
         // })
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn shutdown(&self) {
         while self.panic.load(Ordering::SeqCst) == 0 && self.active_cnt.load(Ordering::Relaxed) > 0
         {
@@ -347,7 +347,7 @@ impl LamellarExecutor for WorkStealing2 {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn force_shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.status());
 
@@ -370,7 +370,7 @@ impl LamellarExecutor for WorkStealing2 {
         // );
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_task(&self) {
         let mut rng = rand::rng();
         let t = rand::distr::Uniform::new(0, self.work_stealers.len())
@@ -437,7 +437,7 @@ impl WorkStealing2 {
         ws.init();
         ws
     }
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     fn init(&mut self) {
         let mut num_groups = self.max_num_threads / self.num_threads_per_group;
         if self.max_num_threads % self.num_threads_per_group != 0 {
@@ -550,7 +550,7 @@ impl WorkStealing2 {
 
 impl Drop for WorkStealing2 {
     //when is this called with respect to world?
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {

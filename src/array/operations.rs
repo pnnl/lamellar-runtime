@@ -302,7 +302,7 @@ pub enum OpInputEnum<'a, T: Dist> {
 }
 
 impl<'a, T: Dist> OpInputEnum<'a, T> {
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     // pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> {
     //     match self {
     //         OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
@@ -323,7 +323,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
     //         // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
     //     }
     // }
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn len(&self) -> usize {
         match self {
             OpInputEnum::Val(_) => 1,
@@ -343,7 +343,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn first(&self) -> T {
         match self {
             OpInputEnum::Val(v) => *v,
@@ -361,7 +361,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
         }
     }
 
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn into_vec_chunks(self, chunk_size: usize) -> Vec<Vec<T>> {
         match self {
             OpInputEnum::Val(v) => vec![vec![v]],
@@ -521,7 +521,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &T {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("slice as op input");
         let len = self.len();
@@ -577,7 +577,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut (dyn Iterator<Item = T> + 'a) {
 // }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("slice as mut op input");
         let len = self.len();
@@ -612,7 +612,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec ref as op input");
         (&self[..]).as_op_input()
@@ -620,7 +620,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec ref mut as op input");
         (&self[..]).as_op_input()
@@ -628,7 +628,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec as op input");
         let len = self.len();
@@ -655,7 +655,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = unsafe { self.as_slice() }.expect("mem region not local");
 //         let len = slice.len();
@@ -679,14 +679,14 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
-// //     #[tracing::instrument(skip_all, level = "debug")]
+// //     //#[tracing::instrument(skip_all, level = "debug")]
 // //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 // //         LamellarMemoryRegion::from(self).as_op_input()
 // //     }
 // // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for OneSidedMemoryRegion<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         // LamellarMemoryRegion::from(self).as_op_input()
 //         (&self).as_op_input()
@@ -694,21 +694,21 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &SharedMemoryRegion<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         LamellarMemoryRegion::from(self).as_op_input()
 //     }
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for SharedMemoryRegion<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         LamellarMemoryRegion::from(self).as_op_input()
 //     }
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = unsafe { self.local_as_slice() };
 //         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
@@ -723,7 +723,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = self.local_as_slice();
 //         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
@@ -738,7 +738,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("LocalLockLocalData as_op_input {:?}", self.deref());
         let len = self.len();
@@ -778,7 +778,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("GlobalLockLocalData as_op_input");
         let len = self.len();
@@ -824,7 +824,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicLocalData<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self.array.clone() {
             AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
@@ -835,7 +835,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self.array {
             AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
@@ -852,7 +852,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &__GenericAtomicLocalData<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
 
@@ -896,7 +896,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for __GenericAtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &__NativeAtomicLocalData<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
         // let len = slice.len();
@@ -945,7 +945,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for __NativeAtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &__NetworkAtomicLocalData<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
         // let len = slice.len();

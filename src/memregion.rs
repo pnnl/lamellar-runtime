@@ -113,7 +113,7 @@ pub enum LamellarMemoryRegion<T: Remote> {
 
 // This could be useful for if we want to transfer the actual data instead of the pointer
 // impl<T: Remote + serde::Serialize> LamellarMemoryRegion<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     pub(crate) fn serialize_local_data<S>(
 //         mr: &LamellarMemoryRegion<T>,
 //         s: S,
@@ -130,7 +130,7 @@ pub enum LamellarMemoryRegion<T: Remote> {
 // }
 
 impl<T: Remote> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         // println!("in shared ser");
         match self {
@@ -139,7 +139,7 @@ impl<T: Remote> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
             // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes,darcs),
         }
     }
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
     //     // println!("in shared des");
     //     match self {
@@ -152,7 +152,7 @@ impl<T: Remote> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
 }
 
 impl<T: Remote> LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     /// If the memory region contains local data, return it as a mutable slice
     /// else return a 0 length slice
     pub unsafe fn as_mut_slice(&self) -> &mut [T] {
@@ -163,7 +163,7 @@ impl<T: Remote> LamellarMemoryRegion<T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     /// if the memory region contains local data, return it as a slice
     /// else return a 0 length slice
     pub unsafe fn as_slice(&self) -> &[T] {
@@ -174,7 +174,7 @@ impl<T: Remote> LamellarMemoryRegion<T> {
         }
     }
 
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     // pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> LamellarMemoryRegion<T> {
     //     match self {
     //         LamellarMemoryRegion::Shared(memregion) => memregion.sub_region(range).into(),
@@ -193,7 +193,7 @@ impl<T: Remote> SubRegion<T> for LamellarMemoryRegion<T> {
 }
 
 impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(output: LamellarArrayRdmaOutput<T>) -> Self {
         match output {
             LamellarArrayRdmaOutput::LamellarMemRegion(mr) => mr,
@@ -204,7 +204,7 @@ impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
 }
 
 impl<T: Dist> From<LamellarArrayRdmaInput<T>> for LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(input: LamellarArrayRdmaInput<T>) -> Self {
         match input {
             LamellarArrayRdmaInput::LamellarMemRegion(mr) => mr,
@@ -218,28 +218,28 @@ impl<T: Dist> From<LamellarArrayRdmaInput<T>> for LamellarMemoryRegion<T> {
 }
 
 impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
         LamellarArrayRdmaInput::LamellarMemRegion(mr.clone())
     }
 }
 
 impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn team_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaInput::LamellarMemRegion(mr.clone())
     }
 }
 
 impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn team_from(mr: LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaInput::LamellarMemRegion(mr)
     }
 }
 
 impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn team_try_from(
         mr: &LamellarMemoryRegion<T>,
         _team: &Arc<LamellarTeam>,
@@ -249,7 +249,7 @@ impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T
 }
 
 impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn team_try_from(
         mr: LamellarMemoryRegion<T>,
         _team: &Arc<LamellarTeam>,
@@ -259,28 +259,28 @@ impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T>
 }
 
 impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
         LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone())
     }
 }
 
 impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn team_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone())
     }
 }
 
 impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn team_from(mr: LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaOutput::LamellarMemRegion(mr)
     }
 }
 
 impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn team_try_from(
         mr: &LamellarMemoryRegion<T>,
         _team: &Arc<LamellarTeam>,
@@ -290,7 +290,7 @@ impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<
 }
 
 impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn team_try_from(
         mr: LamellarMemoryRegion<T>,
         _team: &Arc<LamellarTeam>,
@@ -748,14 +748,14 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
 }
 
 impl<T: Remote> Hash for LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id().hash(state);
     }
 }
 
 impl<T: Remote> PartialEq for LamellarMemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn eq(&self, other: &LamellarMemoryRegion<T>) -> bool {
         self.id() == other.id()
     }
@@ -793,7 +793,7 @@ pub(crate) struct MemoryRegion<T: Remote> {
 }
 
 impl<T: Remote> MemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         num_elems: usize, //number of elements of type T
         scheduler: &Arc<Scheduler>,
@@ -808,7 +808,7 @@ impl<T: Remote> MemoryRegion<T> {
             panic!("out of memory")
         }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn try_new(
         num_elems: usize, //number of elements of type T
         scheduler: &Arc<Scheduler>,
@@ -863,7 +863,7 @@ impl<T: Remote> MemoryRegion<T> {
         self.alloc.num_bytes()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn from_remote_addr(
         addr: usize,
         pe: usize,
@@ -896,7 +896,7 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn to_base<B: Dist>(self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
@@ -977,7 +977,7 @@ impl<T: Remote> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
-    #[tracing::instrument(skip(self, data), level = "debug")]
+    //#[tracing::instrument(skip(self, data), level = "debug")]
     pub(crate) unsafe fn put_buffer(
         &self,
         pe: usize,
@@ -1008,7 +1008,7 @@ impl<T: Remote> MemoryRegion<T> {
         self.alloc.inner_alloc.put_buffer_unmanaged(data, pe, index)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn put_all(&self, offset: usize, data: T) -> RdmaHandle<T> {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
@@ -1019,7 +1019,7 @@ impl<T: Remote> MemoryRegion<T> {
             .put_all(&self.scheduler, self.counters.clone(), data, offset)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn put_all_unmanaged(&self, offset: usize, data: T) {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
@@ -1032,7 +1032,7 @@ impl<T: Remote> MemoryRegion<T> {
         self.alloc.inner_alloc.put_all_unmanaged(data, offset);
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn put_all_buffer(
         &self,
         offset: usize,
@@ -1053,7 +1053,7 @@ impl<T: Remote> MemoryRegion<T> {
             .put_all_buffer(&self.scheduler, self.counters.clone(), data, offset)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn put_all_buffer_unmanaged(
         &self,
         offset: usize,
@@ -1276,7 +1276,7 @@ impl<T: Remote> MemoryRegion<T> {
         self.rdma.comm().wait_all();
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn addr(&self) -> MemResult<CommAllocAddr> {
         if self.mode == Mode::Remote {
             return Err(MemRegionError::MemNotLocalError);
@@ -1284,12 +1284,12 @@ impl<T: Remote> MemoryRegion<T> {
         Ok(self.alloc.inner_alloc.addr())
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn as_slice(&self) -> &[T] {
         unsafe { self.as_mut_slice() }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn as_mut_slice(&self) -> &mut [T] {
         if self.mode == Mode::Remote {
             return &mut [];
@@ -1306,7 +1306,7 @@ impl<T: Remote> MemoryRegion<T> {
             self.alloc.num_bytes() / std::mem::size_of::<T>(),
         )
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn as_casted_mut_slice<R: Remote>(&self) -> MemResult<&mut [R]> {
         if self.mode == Mode::Remote {
             return Ok(&mut []);
@@ -1320,7 +1320,7 @@ impl<T: Remote> MemoryRegion<T> {
         ))
     }
 
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     // pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
     //     if self.mode == Mode::Remote {
     //         return Err(MemRegionError::MemNotLocalError);
@@ -1328,7 +1328,7 @@ impl<T: Remote> MemoryRegion<T> {
     //     unsafe { Ok(self.alloc.as_mut_ptr()) }
     // }
 
-    // #[tracing::instrument(skip_all, level = "debug")]
+    // //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn as_casted_mut_ptr<R: Remote>(&self) -> MemResult<*mut R> {
         if self.mode == Mode::Remote {
             return Err(MemRegionError::MemNotLocalError);
@@ -1389,7 +1389,7 @@ impl<T: Remote + PartialEq> MemoryRegion<T> {
 }
 
 impl<T: Remote> MemRegionId for MemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn id(&self) -> usize {
         self.alloc.inner_alloc.addr().into()
     }
@@ -1467,7 +1467,7 @@ pub trait RemoteMemoryRegion {
 }
 
 // impl<T: Remote> Drop for MemoryRegion<T> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn drop(&mut self) {
 //         // println!("trying to dropping mem region {:?}", self);
 //         if self.freeable {

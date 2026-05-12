@@ -104,7 +104,7 @@ pub(crate) struct LocalGetFuture<T> {
 }
 
 impl<T: Remote> LocalGetFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         unsafe {
             let alloc_slice = self.alloc.as_mut_slice();
@@ -169,7 +169,7 @@ pub(crate) struct LocalGetBufferFuture<T> {
 }
 
 impl<T: Remote> LocalGetBufferFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         assert!(self.index + self.len <= alloc_slice.len());

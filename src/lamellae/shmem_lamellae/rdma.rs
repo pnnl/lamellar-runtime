@@ -39,7 +39,7 @@ pub(crate) struct ShmemFuture<T: Remote> {
 }
 
 impl<T: Remote> ShmemFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn inner_put_buf(src: &MemregionRdmaInputInner<T>, dst: &CommAllocAddr) {
         trace!(
             "putting src: {:?} dst: {:?} len: {} num bytes {}",
@@ -122,7 +122,7 @@ pub(crate) struct ShmemGetFuture<T> {
 }
 
 impl<T: Remote> ShmemGetFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting src: {:?} ", self.src);
         unsafe {
@@ -182,7 +182,7 @@ pub(crate) struct ShmemGetBufferFuture<T> {
 }
 
 impl<T: Remote> ShmemGetBufferFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting src: {:?} ", self.src);
         unsafe {

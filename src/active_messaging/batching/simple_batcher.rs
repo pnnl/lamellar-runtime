@@ -68,7 +68,7 @@ struct SimpleBatcherInner {
 }
 
 impl SimpleBatcherInner {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn new(pe: Option<usize>) -> SimpleBatcherInner {
         SimpleBatcherInner {
             batch: Arc::new(Mutex::new(Vec::new())),
@@ -78,7 +78,7 @@ impl SimpleBatcherInner {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn add(
         &self,
         req_data: ReqMetaData,
@@ -95,7 +95,7 @@ impl SimpleBatcherInner {
         self.size.fetch_add(size, Ordering::SeqCst)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn swap(&self) -> (Vec<(ReqMetaData, LamellarData, usize)>, usize, usize) {
         let mut batch = self.batch.lock();
         let size = self.size.load(Ordering::SeqCst);
@@ -117,7 +117,7 @@ pub(crate) struct SimpleBatcher {
 
 #[async_trait]
 impl Batcher for SimpleBatcher {
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -224,7 +224,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -332,7 +332,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -439,7 +439,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, mut stall_mark: usize) {
         let batch = match req_data.dst {
             Some(dst) => {
@@ -532,7 +532,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
@@ -625,7 +625,7 @@ impl Batcher for SimpleBatcher {
 }
 
 impl SimpleBatcher {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         num_pes: usize,
         stall_mark: Arc<AtomicUsize>,
@@ -643,7 +643,7 @@ impl SimpleBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn create_tx_task(batch: SimpleBatcherInner) {
         let old_batch_id = batch.batch_id.load(Ordering::SeqCst);
 
@@ -753,7 +753,7 @@ impl SimpleBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_am(
         req_data: ReqMetaData,
         am_size: usize,
@@ -807,7 +807,7 @@ impl SimpleBatcher {
         i + am_size
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_data(
         req_data: ReqMetaData,
         data_size: usize,
@@ -835,7 +835,7 @@ impl SimpleBatcher {
         i + data_size
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>) -> usize {
         // println!("serialize_unit");
         let mut i = 0;
@@ -849,17 +849,18 @@ impl SimpleBatcher {
         i + *UNIT_HEADER_LEN
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn create_header(src: usize) -> SerializeHeader {
         // println!("create_header");
         let msg = Msg {
             src: src as u16,
             cmd: Cmd::BatchedMsg,
+            padding: [0; 1],
         };
         SerializeHeader { msg }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn create_data_buf(
         header: SerializeHeader,
         size: usize,
@@ -880,9 +881,9 @@ impl SimpleBatcher {
         data.unwrap()
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     // async
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_am(
         &self,
         msg: &Msg,
@@ -954,7 +955,7 @@ impl SimpleBatcher {
         });
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn exec_return_am(
         &self,
         msg: &Msg,

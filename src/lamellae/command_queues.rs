@@ -54,7 +54,7 @@ struct CmdMsg {
 }
 
 impl Default for CmdMsg {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn default() -> Self {
         CmdMsg {
             daddr: 0,
@@ -78,13 +78,13 @@ enum Cmd {
     Panic,
 }
 impl Default for Cmd {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn default() -> Self {
         Cmd::Clear
     }
 }
 
-#[tracing::instrument(skip_all, level = "debug")]
+//#[tracing::instrument(skip_all, level = "debug")]
 fn calc_hash(addr: usize, num_bytes: usize) -> usize {
     //we split into a u64 slice and a u8 slice as u64 seems to compute faster.
     let num_usizes = num_bytes / std::mem::size_of::<usize>();
@@ -119,7 +119,7 @@ fn calc_hash(addr: usize, num_bytes: usize) -> usize {
 }
 
 impl CmdMsg {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn as_bytes(&self) -> &[u8] {
         let pointer = self as *const Self as *const u8;
         let size = std::mem::size_of::<Self>();
@@ -127,7 +127,7 @@ impl CmdMsg {
         slice
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn hash(&self) -> usize {
         let mut res = self
             .daddr
@@ -139,11 +139,11 @@ impl CmdMsg {
         }
         res
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn calc_hash(&mut self) {
         self.cmd_hash = self.hash()
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn check_hash(&self) -> bool {
         if self.cmd_hash == self.hash() && self.cmd_hash != 0 {
             true
@@ -154,7 +154,7 @@ impl CmdMsg {
 }
 
 impl std::fmt::Debug for CmdMsg {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -584,7 +584,7 @@ impl InnerCQ {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn empty(&self) -> bool {
         for buf in &self.cmd_buffers {
             let buf = buf.lock().await;
@@ -595,7 +595,7 @@ impl InnerCQ {
         true
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn ready(&self, src: usize) -> Option<CmdMsg> {
         // let mut recv_buffer = self.recv_buffer[src].write_blocking(); //.await;
         let mut recv_buffer = self.recv_buffer[src].write();
@@ -658,7 +658,7 @@ impl InnerCQ {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn check_panic(&self) -> bool {
         if let Some(panic_buf) = self.panic_buffer.try_lock() {
             let mut paniced = false;
@@ -855,20 +855,9 @@ impl InnerCQ {
             }
             async_std::task::yield_now().await;
         }
-        // if hash != calc_hash(data.usize_addr(), data.len())
-        // {
-        //     panic!(
-        //         "[{:?}] 2. hash mismatch! {:x} {:x} im_waiting {im_waiting} had_to_wait {had_to_wait}",
-        //         std::thread::current().id(),
-        //         hash,
-        //         calc_hash(data.usize_addr(), data.len())
-        //     );
-        // }
     }
 
-    //TODO make this async, and have an atomic variable to check if an alloc is already in progress
-    // because we are probably deadlocking on this lock...
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn send_alloc(&self, min_size: usize) {
         if let Ok(_) = self.pending_alloc.compare_exchange_weak(
             false,
@@ -902,14 +891,13 @@ impl InnerCQ {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn send_panic(&self) {
         let mut panic_buf = self.panic_buffer.lock_blocking();
         self.send_panic_inner(&mut panic_buf);
     }
 
-    // need to include  a "barrier" count...
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn send_alloc_inner(&self, min_size: usize) {
         debug!("in send_alloc_inner");
         let mut new_alloc = true;
@@ -1003,7 +991,7 @@ impl InnerCQ {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn send_panic_inner(&self, panic_buf: &mut CommSlice<CmdMsg>) {
         if panic_buf[self.my_pe].hash() == self.clear_cmd.hash() {
             let cmd = &mut panic_buf[self.my_pe];
@@ -1029,40 +1017,9 @@ impl InnerCQ {
         }
     }
 
-    // We can run into a race condition between send_release and send_free so lets only use send_free.
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // fn send_release(&self, dst: usize, local_daddr_alloc: CommAlloc) {
-    //     // let cmd_buffer = self.cmd_buffers[dst].lock();
-    //     // debug!(
-    //     //     "sending release to dst[{dst}]: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",
-    //     //     self.release_cmd,
-    //     //     cmd,
-    //     //     self.release_cmd.cmd_as_bytes(),
-    //     //     cmd.cmd_as_bytes(),
-    //     //     self.release_cmd.as_addr(),
-    //     //     cmd.daddr + offset_of!(CmdMsg, cmd)
-    //     // );
-    //     // let local_daddr = self.comm.local_addr(dst, cmd.daddr);
-
-    //     // let (local_daddr_alloc, offset) =
-    //     //     self.comm.local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.daddr);
-    //     // let local_daddr_slice =
-    //     //     local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
-    //     // local_daddr_slice
-    //     //     .put::<Cmd>(&self.scheduler, vec![], self.release_cmd.cmd, dst, 0)
-    //     //     .spawn();
-
-    //     let local_cmd_slice =
-    //         local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset_of!(CmdMsg, cmd), 1);
-    //     local_cmd_slice.put_unmanaged::<Cmd>(
-    //         // &self.scheduler, vec![],
-    //         self.release_cmd.cmd,
-    //         dst,
-    //         0,
-    //     );
-    // }
-
-    #[tracing::instrument(skip_all, level = "debug")]
+    // Receiver writes Cmd::Free to sender's send_buffer[dst][0].cmd via ack_addr.
+    // This mirrors how the old design wrote Free to cmd_buffer[0].cmd.
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn send_free(&self, dst: usize, cmd: CmdMsg) {
         trace!(
             "sending free to dst[{dst}]: {:?} cmd: {:?} ",
@@ -1272,7 +1229,7 @@ impl InnerCQ {
         );
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> SerializedData {
         trace!("getting cmd from {}", src);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
@@ -1303,7 +1260,7 @@ impl InnerCQ {
 }
 
 impl Drop for InnerCQ {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         debug!("dropping InnerCQ");
         let old = std::mem::replace(
@@ -1473,17 +1430,17 @@ impl CommandQueue {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn send_alloc(&self, min_size: usize) {
-        self.cq.send_alloc(min_size); //.await;
+        self.cq.send_alloc(min_size);
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn send_panic(&self) {
         self.cq.send_panic();
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn send_data(&self, data: SerializedData, dst: usize) {
         let hash = calc_hash(data.ser_data_bytes.usize_addr(), data.len());
         // debug!(
@@ -1608,7 +1565,7 @@ impl CommandQueue {
         panic!("finished command queue wait_all_print");
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn alloc_task(&self) {
         let mut timer = std::time::Instant::now();
         let mut print = false;
@@ -1641,7 +1598,7 @@ impl CommandQueue {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn recv_data(&self, lamellae: Arc<Lamellae>) {
         let comm = lamellae.comm();
         let num_pes = comm.num_pes();
@@ -1753,7 +1710,7 @@ impl CommandQueue {
 }
 
 impl Drop for CommandQueue {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         debug!(
             "sends {:?}",

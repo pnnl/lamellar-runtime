@@ -381,7 +381,7 @@ impl<T> Clone for WeakDarc<T> {
 }
 
 impl<T> crate::active_messaging::DarcSerde for Darc<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         trace!("darc ser {:?} ", self.inner());
         // println!("darc ser");
@@ -411,7 +411,7 @@ impl<T: 'static> DarcInner<T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn inc_pe_ref_count(&self, pe: usize, amt: usize) -> usize {
         trace!("inc_pe_ref_count pe: {} amt: {} {:?}", pe, amt, self);
         let team_pe = pe;
@@ -468,7 +468,7 @@ impl<T: 'static> DarcInner<T> {
             .into()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn send_finished(&self) -> Vec<LamellarTask<()>> {
         trace!(
             "[{:?}] in send_finished {:?}",
@@ -525,7 +525,7 @@ impl<T: 'static> DarcInner<T> {
         reqs
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn wait_on_state(
         // inner: WrappedInner<T>,
         inner: DarcCommPtr<T>,
@@ -588,7 +588,7 @@ impl<T: 'static> DarcInner<T> {
         true
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn broadcast_state(
         // mut inner: WrappedInner<T>,
         inner: DarcCommPtr<T>,
@@ -611,7 +611,7 @@ impl<T: 'static> DarcInner<T> {
         trace!("broadcasted state {:?}", state);
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn block_on_outstanding(mut inner: DarcCommPtr<T>, state: DarcMode, extra_cnt: usize) {
         trace!(
             "[{:?}] entering block_on_outstanding {:?} {:?}",
@@ -877,7 +877,7 @@ impl<T: 'static> DarcInner<T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
         self.rt_team().lamellae.comm().wait_all(); //want to wait on ops from all threads
         let mut temp_now = Instant::now();
@@ -1054,7 +1054,7 @@ impl Darc<LamellarTeamRT> {
 impl<T> Darc<T> {
     //#[doc(hidden)]
     /// downgrade a darc to a weak darc
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn downgrade(the_darc: &Darc<T>) -> WeakDarc<T> {
         trace!("downgrading darc {:?}", the_darc.id);
         the_darc
@@ -1117,7 +1117,7 @@ impl<T> Darc<T> {
     // }
 
     #[doc(hidden)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn serialize_update_cnts(&self, cnt: usize) {
         trace!("darc[{:?}] serialize darc cnts {:?}", self.id, self.inner());
         self.inner()
@@ -1130,7 +1130,7 @@ impl<T> Darc<T> {
 
     // this occurs in the From<NetworkDarc> for Darc impl so we should be able to delete this...
     #[doc(hidden)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn deserialize_update_cnts(&self) {
         trace!(
             "darc[{:?}] deserialize darc cnts {:?}",
@@ -1143,7 +1143,7 @@ impl<T> Darc<T> {
     }
 
     #[doc(hidden)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn inc_local_cnt(&self, cnt: usize) -> usize {
         trace!("darc[{:?}] inc_local_cnt {:?}", self.id, self.inner());
         self.inner().local_cnt.fetch_add(cnt, Ordering::SeqCst);
@@ -1197,7 +1197,7 @@ impl<T: Send + Sync> Darc<T> {
     ///
     /// let five = Darc::new(&world,5).block().expect("PE in world team");
     /// ```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> DarcHandle<T> {
         let team = team.into().team.clone();
         DarcHandle {
@@ -1212,7 +1212,7 @@ impl<T: Send + Sync> Darc<T> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn async_try_new_with_drop<U: Into<IntoLamellarTeam>>(
         team: U,
         item: T,
@@ -1228,7 +1228,7 @@ impl<T: Send + Sync> Darc<T> {
         .await
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn async_try_new_with_drop_inner(
         team_and_item: TeamAndItem<T>,
         // item: *const T,
@@ -1658,7 +1658,7 @@ macro_rules! launch_drop {
 }
 
 impl<T: 'static> Drop for Darc<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         let inner = self.inner();
         let cnt = inner.local_cnt.fetch_sub(1, Ordering::SeqCst);
@@ -1824,7 +1824,7 @@ impl<T> std::ops::DerefMut for DarcCommPtr<T> {
 
 #[lamellar_impl::rt_am_local]
 impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn exec(self) {
         let mut timeout = std::time::Instant::now();
 

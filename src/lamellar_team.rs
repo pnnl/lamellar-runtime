@@ -107,7 +107,7 @@ pub struct LamellarTeam {
 }
 
 impl LamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         world: Option<Arc<LamellarTeam>>,
         team: Darc<LamellarTeamRT>,
@@ -169,7 +169,7 @@ impl LamellarTeam {
     /// }
     ///```
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn get_pes(&self) -> Vec<usize> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -199,7 +199,7 @@ impl LamellarTeam {
     ///
     /// assert_eq!((num_pes as f64 / 2.0).ceil() as usize,even_pes.num_pes());
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn num_pes(&self) -> usize {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
         trace!(
@@ -233,7 +233,7 @@ impl LamellarTeam {
     ///
     /// assert_eq!((num_pes as f64 / 2.0).ceil() as usize,even_pes.num_pes());
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn num_threads_per_pe(&self) -> usize {
         self.team.scheduler.num_workers()
     }
@@ -262,7 +262,7 @@ impl LamellarTeam {
     ///
     /// assert_eq!(my_pe,even_pes.world_pe_id());
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn world_pe_id(&self) -> usize {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -295,7 +295,7 @@ impl LamellarTeam {
     ///    assert!(my_pe %2 == 0);
     /// }
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -323,7 +323,7 @@ impl LamellarTeam {
     ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
     /// )).expect("PE in world team");
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn create_subteam_from_arch<L>(
         parent: Arc<LamellarTeam>,
         arch: L,
@@ -368,7 +368,7 @@ impl LamellarTeam {
     /// )).expect("PE in world team");
     /// even_pes.print_arch();
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn print_arch(&self) {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -397,7 +397,7 @@ impl LamellarTeam {
     /// //do some work
     /// even_pes.barrier(); //block until all PEs have entered the barrier
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn barrier(&self) {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -420,7 +420,7 @@ impl LamellarTeam {
     /// //do some work
     /// world.barrier(); //block until all PEs have entered the barrier
     ///```
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn async_barrier(&self) -> BarrierHandle {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -429,7 +429,7 @@ impl LamellarTeam {
 
     //used by proc macro
     #[doc(hidden)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn exec_am_group_pe<F, O>(&self, pe: usize, am: F) -> AmHandle<O>
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
@@ -440,7 +440,7 @@ impl LamellarTeam {
 
     //used by proc macro
     #[doc(hidden)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub fn exec_am_group_all<F, O>(&self, am: F) -> MultiAmHandle<O>
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
@@ -625,7 +625,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
     type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
     type LocalAmHandle<L> = LocalAmHandle<L>;
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -636,7 +636,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_all_tg(am, None)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -646,7 +646,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_pe_tg(pe, am, None)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_local<F>(&self, am: F) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -656,35 +656,35 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_local_tg(am, None, None)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.wait_all();
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn await_all(&self) -> impl Future<Output = ()> + Send {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.await_all()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.barrier();
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn async_barrier(&self) -> BarrierHandle {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.async_barrier()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn spawn<F>(&self, task: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
@@ -700,7 +700,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         )
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn block_on<F: Future>(&self, f: F) -> F::Output {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -709,7 +709,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         // )
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
     where
         I: IntoIterator,
@@ -732,7 +732,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
 }
 
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn try_alloc_shared_mem_region<T: Remote>(
         &self,
         size: usize,
@@ -753,7 +753,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         mr
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn alloc_shared_mem_region<T: Remote>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -771,7 +771,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         mr
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn try_alloc_one_sided_mem_region<T: Remote>(
         &self,
         size: usize,
@@ -781,7 +781,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         OneSidedMemoryRegion::try_new(size, &self.team)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn alloc_one_sided_mem_region<T: Remote>(&self, size: usize) -> OneSidedMemoryRegion<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -817,20 +817,20 @@ impl Drop for IntoLamellarTeam {
 }
 
 impl From<Darc<LamellarTeamRT>> for IntoLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Darc<LamellarTeamRT>) -> Self {
         IntoLamellarTeam { team: team.clone() }
     }
 }
 impl From<&Darc<LamellarTeamRT>> for IntoLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(team: &Darc<LamellarTeamRT>) -> Self {
         IntoLamellarTeam { team: team.clone() }
     }
 }
 
 impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Arc<LamellarTeam>) -> Self {
         IntoLamellarTeam {
             team: team.team.clone(),
@@ -839,7 +839,7 @@ impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
 }
 
 impl From<&Arc<LamellarTeam>> for IntoLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(team: &Arc<LamellarTeam>) -> Self {
         IntoLamellarTeam {
             team: team.team.clone(),
@@ -848,7 +848,7 @@ impl From<&Arc<LamellarTeam>> for IntoLamellarTeam {
 }
 
 impl From<&LamellarWorld> for IntoLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(world: &LamellarWorld) -> Self {
         IntoLamellarTeam {
             team: world.team_rt.deref().clone(),
@@ -857,7 +857,7 @@ impl From<&LamellarWorld> for IntoLamellarTeam {
 }
 
 impl From<LamellarWorld> for IntoLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(world: LamellarWorld) -> Self {
         IntoLamellarTeam {
             team: (*world.team_rt.deref()).clone(),
@@ -873,28 +873,28 @@ pub struct ArcLamellarTeam {
 }
 
 impl From<Arc<LamellarTeam>> for ArcLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Arc<LamellarTeam>) -> Self {
         ArcLamellarTeam { team }
     }
 }
 
 impl From<&Arc<LamellarTeam>> for ArcLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(team: &Arc<LamellarTeam>) -> Self {
         ArcLamellarTeam { team: team.clone() }
     }
 }
 
 impl From<&LamellarWorld> for ArcLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(world: &LamellarWorld) -> Self {
         ArcLamellarTeam { team: world.team() }
     }
 }
 
 impl From<LamellarWorld> for ArcLamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn from(world: LamellarWorld) -> Self {
         ArcLamellarTeam { team: world.team() }
     }
@@ -907,7 +907,7 @@ impl From<LamellarWorld> for ArcLamellarTeam {
 // }
 
 // impl From<LamellarTeamRemote> for Darc<LamellarTeamRT> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn from(remote: LamellarTeamRemote) -> Self {
 //         match remote {
 //             LamellarTeamRemote::World(remote_ptr) => remote_ptr.into(),
@@ -924,7 +924,7 @@ impl From<LamellarWorld> for ArcLamellarTeam {
 // }
 
 // impl From<LamellarTeamRemotePtr> for Darc<LamellarTeamRT> {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn from(remote_ptr: LamellarTeamRemotePtr) -> Self {
 //         let lamellae = if let Some(lamellae) = crate::LAMELLAES.read().get(&remote_ptr.backend) {
 //             lamellae.clone()
@@ -945,7 +945,7 @@ impl From<LamellarWorld> for ArcLamellarTeam {
 // }
 
 // impl From<Darc<LamellarTeamRT>> for LamellarTeamRemotePtr {
-//     #[tracing::instrument(skip_all, level = "debug")]
+//     //#[tracing::instrument(skip_all, level = "debug")]
 //     fn from(team: Darc<LamellarTeamRT>) -> Self {
 //         LamellarTeamRemotePtr {
 //             addr: team.remote_ptr_alloc.comm_addr().into(),
@@ -1045,7 +1045,7 @@ impl PartialEq for LamellarTeamRT {
 impl Eq for LamellarTeamRT {}
 
 impl LamellarTeamRT {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         //creates a new root team
         num_pes: usize,
@@ -1162,7 +1162,7 @@ impl LamellarTeamRT {
             .expect("Failed to create team Darc")
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn force_shutdown(&self) {
         // println!("force_shutdown {:?} {:?}",self.tid, std::thread::current().id());
         let first = self
@@ -1201,7 +1201,7 @@ impl LamellarTeamRT {
         // println!("force_shutdown done {:?} {:?}",self.tid, std::thread::current().id());
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn destroy(&self) {
         trace!("destroying team? {:?}", self.mem_regions.read().len());
         if self.panic.load(Ordering::SeqCst) == 0 {
@@ -1234,12 +1234,15 @@ impl LamellarTeamRT {
         if self.panic.load(Ordering::SeqCst) == 0 {
             // what does it mean if we drop a parent team while a sub_team is valid?
             if let None = &self.parent {
-                // println!("shutdown lamellae, going to shutdown scheduler");
+                trace!("shutdown lamellae, going to shutdown scheduler");
                 self.scheduler.begin_shutdown();
                 self.put_dropped();
                 self.drop_barrier();
+                trace!("barrier dropped, now shutting down lamellae and scheduler");
                 self.lamellae.shutdown();
+                trace!("lamellae shutdown, now shutting down scheduler");
                 self.scheduler.shutdown();
+                trace!("scheduler shutdown");
             }
         }
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
@@ -1281,12 +1284,12 @@ impl LamellarTeamRT {
         self.arch.team_pe(self.world_pe)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn counters(&self) -> Vec<Arc<AMCounters>> {
         vec![self.world_counters.clone(), self.team_counters.clone()]
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn create_subteam_from_arch<L>(
         world: Darc<LamellarTeamRT>,
         parent: Darc<LamellarTeamRT>,
@@ -1418,19 +1421,19 @@ impl LamellarTeamRT {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn num_pes(&self) -> usize {
         trace!("num_pes called {:p} {:?}", self, self.arch);
         self.arch.num_pes()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn num_threads(&self) -> usize {
         self.scheduler.num_workers()
     }
 
     #[cfg_attr(test, allow(unreachable_code), allow(unused_variables))]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn check_hash_vals(&self, hash: usize, hash_buf: &MemoryRegion<usize>, timeout: Duration) {
         #[cfg(test)]
         return;
@@ -1483,7 +1486,7 @@ impl LamellarTeamRT {
         // println!("{:?} {:?}", hash,hash_buf.as_slice().unwrap());
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn put_dropped(&self) {
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(parent) = &self.parent {
@@ -1524,7 +1527,7 @@ impl LamellarTeamRT {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop_barrier(&self) {
         let mut s = Instant::now();
         if self.panic.load(Ordering::SeqCst) == 0 {
@@ -1547,7 +1550,7 @@ impl LamellarTeamRT {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn print_arch(&self) {
         println!("-----mapping of team pe ids to parent pe ids-----");
         let mut parent = format!("");
@@ -1603,7 +1606,7 @@ impl LamellarTeamRT {
         )
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn wait_all(&self) {
         // println!("wait_all called on pe: {}", self.world_pe);
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
@@ -1701,7 +1704,7 @@ impl LamellarTeamRT {
         // );
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
         // println!("await_all called on pe: {}", self.world_pe);
         self.lamellae.comm().wait_all(); //want to wait on operations from all threads
@@ -1785,7 +1788,7 @@ impl LamellarTeamRT {
         // );
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn block_on<F>(&self, f: F) -> F::Output
     where
         F: Future + Send + 'static,
@@ -1796,7 +1799,7 @@ impl LamellarTeamRT {
         self.scheduler.block_on(f)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn block_on_all<I>(
         &self,
         iter: I,
@@ -1816,27 +1819,27 @@ impl LamellarTeamRT {
             })))
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn barrier(&self) {
         self.barrier.barrier();
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn tasking_barrier(&self) {
         self.barrier.tasking_barrier();
     }
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn async_barrier(&self) -> BarrierHandle {
         self.barrier.barrier_handle()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn flush(&self) {
         self.lamellae.comm().flush_all();
     }
 }
 impl Darc<LamellarTeamRT> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_all<F>(&self, am: F) -> MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
@@ -1844,7 +1847,7 @@ impl Darc<LamellarTeamRT> {
         self.exec_am_all_tg(am, None)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_all_tg<F>(
         &self,
         am: F,
@@ -1913,7 +1916,7 @@ impl Darc<LamellarTeamRT> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn spawn_am_all_tg<F>(
         &self,
         am: F,
@@ -1987,7 +1990,7 @@ impl Darc<LamellarTeamRT> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn am_group_exec_am_all_tg<F, O>(
         &self,
         am: F,
@@ -2058,7 +2061,7 @@ impl Darc<LamellarTeamRT> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
@@ -2066,7 +2069,7 @@ impl Darc<LamellarTeamRT> {
         self.exec_am_pe_tg(pe, am, None)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_pe_tg<F>(
         &self,
         pe: usize,
@@ -2134,7 +2137,7 @@ impl Darc<LamellarTeamRT> {
         .into()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn spawn_am_pe_tg<F>(
         &self,
         pe: usize,
@@ -2204,7 +2207,7 @@ impl Darc<LamellarTeamRT> {
         .into()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn am_group_exec_am_pe_tg<F, O>(
         &self,
         pe: usize,
@@ -2283,7 +2286,7 @@ impl Darc<LamellarTeamRT> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_arc_am_all<F>(
         &self,
         am: LamellarArcAm,
@@ -2350,7 +2353,7 @@ impl Darc<LamellarTeamRT> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_arc_am_pe<F>(
         &self,
         pe: usize,
@@ -2417,7 +2420,7 @@ impl Darc<LamellarTeamRT> {
     }
 
     #[allow(dead_code)]
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_arc_am_pe_immediately<F>(
         &self,
         pe: usize,
@@ -2483,7 +2486,7 @@ impl Darc<LamellarTeamRT> {
         .into()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_local<F>(&self, am: F) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -2491,7 +2494,7 @@ impl Darc<LamellarTeamRT> {
         self.exec_am_local_tg(am, None, None)
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_local_tg<F>(
         &self,
         am: F,
@@ -2557,7 +2560,7 @@ impl Darc<LamellarTeamRT> {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn spawn_am_local_tg<F>(
         &self,
         am: F,
@@ -2653,7 +2656,7 @@ impl Darc<LamellarTeamRT> {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn alloc_one_sided_mem_region<T: Dist>(
         &self,
         size: usize,
@@ -2682,7 +2685,7 @@ impl Darc<LamellarTeamRT> {
 }
 
 impl Drop for LamellarTeamRT {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("LamellarTeamRT Drop");
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
@@ -2713,7 +2716,7 @@ impl Drop for LamellarTeamRT {
 }
 
 impl Drop for LamellarTeam {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("team handle dropping {:?}", self.team.team_hash);
         // println!("arch: {:?}", Arc::strong_count(&self.team.arch));
