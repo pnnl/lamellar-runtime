@@ -414,7 +414,7 @@ impl From<ShmemAlloc> for CommAlloc {
     fn from(alloc: ShmemAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::ShmemAlloc(alloc),
-            alloc_type: CommAllocType::Fabric,
+            // alloc_type: CommAllocType::Fabric,
         }
     }
 }
@@ -458,7 +458,7 @@ impl From<OneSidedShmemAlloc> for CommAlloc {
     fn from(alloc: OneSidedShmemAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::OneSidedShmemAlloc(alloc),
-            alloc_type: CommAllocType::Remote,
+            // alloc_type: CommAllocType::Remote,
         }
     }
 }

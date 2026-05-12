@@ -1332,7 +1332,7 @@ impl From<LibfabricAsyncAlloc> for CommAlloc {
     fn from(alloc: LibfabricAsyncAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::LibfabricAsyncAlloc(alloc),
-            alloc_type: CommAllocType::Fabric,
+            // alloc_type: CommAllocType::Fabric,
         }
     }
 }
@@ -2483,7 +2483,7 @@ impl From<OneSidedLibfabricAsyncAlloc> for CommAlloc {
     fn from(alloc: OneSidedLibfabricAsyncAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::OneSidedLibfabricAsyncAlloc(alloc),
-            alloc_type: CommAllocType::Remote,
+            // alloc_type: CommAllocType::Remote,
         }
     }
 }

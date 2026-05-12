@@ -2165,7 +2165,7 @@ impl CommAllocAtomic for CommAllocInner {
 #[derive(Clone, Debug)]
 pub(crate) struct CommAlloc {
     pub(crate) inner_alloc: CommAllocInner,
-    pub(crate) alloc_type: CommAllocType,
+    // pub(crate) alloc_type: CommAllocType,
 }
 
 impl CommAlloc {
@@ -2225,7 +2225,7 @@ impl CommAlloc {
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAlloc {
         CommAlloc {
             inner_alloc: self.inner_alloc.sub_alloc(offset, size),
-            alloc_type: self.alloc_type,
+            // alloc_type: self.alloc_type,
         }
     }
     pub(crate) fn set_print(&mut self, _print: bool) {

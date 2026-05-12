@@ -640,7 +640,6 @@ impl From<RofiCAlloc> for CommAlloc {
     fn from(alloc: RofiCAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::RofiCAlloc(alloc),
-            alloc_type: CommAllocType::Fabric,
         }
     }
 }
@@ -675,7 +674,6 @@ impl From<OneSidedRofiCAlloc> for CommAlloc {
     fn from(alloc: OneSidedRofiCAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::OneSidedRofiCAlloc(alloc),
-            alloc_type: CommAllocType::Remote,
         }
     }
 }

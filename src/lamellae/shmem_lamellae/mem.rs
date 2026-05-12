@@ -48,7 +48,7 @@ impl CommMem for ShmemComm {
 
         Ok(CommAlloc {
             inner_alloc: CommAllocInner::ShmemAlloc(inner_alloc),
-            alloc_type: CommAllocType::Fabric,
+            // alloc_type: CommAllocType::Fabric,
         })
     }
 
@@ -97,7 +97,7 @@ impl CommMem for ShmemComm {
 
                 return Ok(CommAlloc {
                     inner_alloc: CommAllocInner::ShmemAlloc(alloc),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 });
             }
         }
@@ -234,7 +234,7 @@ impl CommMem for ShmemComm {
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
                     ),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 });
             }
         }
@@ -255,7 +255,7 @@ impl CommMem for ShmemComm {
         if let Ok(inner_alloc) = self.allocator.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
                 inner_alloc: CommAllocInner::ShmemAlloc(inner_alloc),
-                alloc_type: CommAllocType::Fabric,
+                // alloc_type: CommAllocType::Fabric,
             });
         }
 
@@ -264,7 +264,7 @@ impl CommMem for ShmemComm {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
                     inner_alloc: CommAllocInner::ShmemAlloc(inner_alloc.sub_alloc(addr.0, size)?),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 });
             }
         }

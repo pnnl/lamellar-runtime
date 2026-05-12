@@ -34,7 +34,7 @@ impl CommMem for UcxComm {
         trace!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
             inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
-            alloc_type: CommAllocType::Fabric,
+            // alloc_type: CommAllocType::Fabric,
         };
 
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
@@ -67,7 +67,7 @@ impl CommMem for UcxComm {
 
                 return Ok(CommAlloc {
                     inner_alloc: CommAllocInner::UcxAlloc(alloc),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 });
             }
         }
@@ -175,7 +175,7 @@ impl CommMem for UcxComm {
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
                     ),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 };
                 return Ok(comm_alloc);
             }
@@ -197,7 +197,7 @@ impl CommMem for UcxComm {
         if let Ok(inner_alloc) = self.ucx.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
                 inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
-                alloc_type: CommAllocType::Fabric,
+                // alloc_type: CommAllocType::Fabric,
             });
         }
 
@@ -206,7 +206,7 @@ impl CommMem for UcxComm {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
                     inner_alloc: CommAllocInner::UcxAlloc(inner_alloc.sub_alloc(addr.0, size)?),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 });
             }
         }

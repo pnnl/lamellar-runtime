@@ -32,7 +32,6 @@ impl CommMem for LibfabricComm {
         // }
         let comm_alloc = CommAlloc {
             inner_alloc: CommAllocInner::LibfabricAlloc(inner_alloc),
-            alloc_type: CommAllocType::Fabric,
         };
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
         Ok(comm_alloc)
@@ -84,7 +83,6 @@ impl CommMem for LibfabricComm {
                 // }
                 return Ok(CommAlloc {
                     inner_alloc: CommAllocInner::LibfabricAlloc(alloc),
-                    alloc_type: CommAllocType::RtHeap,
                 });
             }
         }
@@ -267,7 +265,6 @@ impl CommMem for LibfabricComm {
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
                     ),
-                    alloc_type: CommAllocType::RtHeap,
                 };
                 return Ok(comm_alloc);
             }
@@ -286,7 +283,6 @@ impl CommMem for LibfabricComm {
         if let Ok(alloc) = self.ofi.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
                 inner_alloc: CommAllocInner::LibfabricAlloc(alloc),
-                alloc_type: CommAllocType::Fabric,
             });
         }
 
@@ -297,7 +293,6 @@ impl CommMem for LibfabricComm {
                     inner_alloc: CommAllocInner::LibfabricAlloc(
                         inner_alloc.sub_alloc(addr.0, size)?,
                     ),
-                    alloc_type: CommAllocType::RtHeap,
                 });
             }
         }

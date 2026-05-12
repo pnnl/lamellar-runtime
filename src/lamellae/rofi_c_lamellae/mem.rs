@@ -39,7 +39,6 @@ impl CommMem for RofiCComm {
         // println!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
             inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc),
-            alloc_type: CommAllocType::Fabric,
         };
 
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
@@ -68,7 +67,6 @@ impl CommMem for RofiCComm {
                 )?;
                 let comm_alloc = CommAlloc {
                     inner_alloc: CommAllocInner::RofiCAlloc(alloc),
-                    alloc_type: CommAllocType::RtHeap,
                 };
                 return Ok(comm_alloc);
             }
@@ -176,7 +174,6 @@ impl CommMem for RofiCComm {
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
                     ),
-                    alloc_type: CommAllocType::RtHeap,
                 };
                 return Ok(comm_alloc);
             }
@@ -198,7 +195,6 @@ impl CommMem for RofiCComm {
         if let Ok(inner_alloc) = self.rofi_c.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
                 inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc),
-                alloc_type: CommAllocType::Fabric,
             });
         }
 
@@ -207,7 +203,6 @@ impl CommMem for RofiCComm {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
                     inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc.sub_alloc(addr.0, size)?),
-                    alloc_type: CommAllocType::RtHeap,
                 });
             }
         }

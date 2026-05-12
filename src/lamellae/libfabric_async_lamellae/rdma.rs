@@ -158,7 +158,7 @@ impl<T: Remote> LibfabricAsyncGetFuture<T> {
 }
 
 impl<T: Remote> GetFutureData<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn exec_at(mut self) -> T {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
@@ -237,7 +237,7 @@ impl<T: Remote> LibfabricAsyncGetBufferFuture<T> {
 }
 
 impl<T: Remote> GetBufferFutureData<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     async fn exec_at(mut self) -> Vec<T> {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {

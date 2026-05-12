@@ -844,7 +844,7 @@ impl<T: Send> GlobalRwDarc<T> {
         let wrapped_lock = DarcCommPtr {
             alloc: CommAlloc {
                 inner_alloc: inner.alloc.inner_alloc.clone(),
-                alloc_type: inner.alloc.alloc_type,
+                // alloc_type: inner.alloc.alloc_type,
             },
             _phantom: PhantomData::<DarcInner<DistRwLock<T>>>,
         };
@@ -892,7 +892,7 @@ impl<T: Send> GlobalRwDarc<T> {
         let wrapped_lock = DarcCommPtr {
             alloc: CommAlloc {
                 inner_alloc: inner.alloc.inner_alloc.clone(),
-                alloc_type: inner.alloc.alloc_type,
+                // alloc_type: inner.alloc.alloc_type,
             },
             _phantom: PhantomData::<DarcInner<DistRwLock<T>>>,
         };

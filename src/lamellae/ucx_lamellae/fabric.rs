@@ -888,7 +888,7 @@ impl From<UcxAlloc> for CommAlloc {
     fn from(alloc: UcxAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::UcxAlloc(alloc),
-            alloc_type: CommAllocType::Fabric,
+            // alloc_type: CommAllocType::Fabric,
         }
     }
 }
@@ -916,7 +916,7 @@ impl std::fmt::Debug for UcxAlloc {
         .field(
             "fabric_ref_cnt_offset",
             &format_args!(
-                "{} ({:?}): {}",
+                "{} ({:?}) cnt: {}",
                 self.fabric_ref_cnt_offset,
                 unsafe {
                     self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize
@@ -934,7 +934,7 @@ impl std::fmt::Debug for UcxAlloc {
             temp.field(
                 "rt_ref_cnt_offset",
                 &format_args!(
-                    "{} ({:?}): {}, {}",
+                    "{} ({:?}) cnt: {}, padding: {}",
                     self.rt_ref_cnt_offset,
                     unsafe {
                         self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize
@@ -1673,7 +1673,7 @@ impl From<OneSidedUcxAlloc> for CommAlloc {
     fn from(alloc: OneSidedUcxAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::OneSidedUcxAlloc(alloc),
-            alloc_type: CommAllocType::Remote,
+            // alloc_type: CommAllocType::Remote,
         }
     }
 }

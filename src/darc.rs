@@ -1791,7 +1791,7 @@ impl<T> DarcCommPtr<T> {
         DarcCommPtr {
             alloc: CommAlloc {
                 inner_alloc: self.alloc.inner_alloc.clone(),
-                alloc_type: self.alloc.alloc_type,
+                // alloc_type: self.alloc.alloc_type,
             },
             _phantom: std::marker::PhantomData,
         }
@@ -1803,7 +1803,7 @@ impl<T> Clone for DarcCommPtr<T> {
         DarcCommPtr {
             alloc: CommAlloc {
                 inner_alloc: self.alloc.inner_alloc.clone(),
-                alloc_type: self.alloc.alloc_type,
+                // alloc_type: self.alloc.alloc_type,
             },
             _phantom: self._phantom,
         }
