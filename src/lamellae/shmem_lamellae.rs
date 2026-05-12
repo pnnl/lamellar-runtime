@@ -172,10 +172,22 @@ impl LamellaeUtil for Shmem {
         // println!("Requesting new pool of size: {} bytes", min_size);
         self.cq.send_alloc(min_size).await;
     }
+    
+    async fn send_vec_to_pe_async(
+        &self,
+        pe: usize,
+        vec_data: Vec<u8>,
+    ) {
+        self.cq.send_vec(vec_data, pe).await;
+    }
+    
+    fn available_to_send(&self, pe: usize) -> bool {
+        self.cq.available_to_send(pe)
+    }
 }
 
 impl Ser for Shmem {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_header(
         &self,
         header: Option<SerializeHeader>,

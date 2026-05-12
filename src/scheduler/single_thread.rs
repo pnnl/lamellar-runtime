@@ -2,11 +2,11 @@ use async_task::Builder;
 use futures_util::Future;
 use std::collections::VecDeque;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
+use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus};
 
 use tracing::{debug, trace};
 
@@ -15,12 +15,13 @@ static TASK_ID: AtomicUsize = AtomicUsize::new(0);
 #[derive(Debug)]
 pub(crate) struct SingleThread {
     queue: Arc<Mutex<VecDeque<async_task::Runnable<usize>>>>,
+    status: Arc<AtomicU8>,
 }
 
 impl SingleThread {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(status: Arc<AtomicU8>) -> Self {
         let queue = Arc::new(Mutex::new(VecDeque::new()));
-        Self { queue }
+        Self { queue, status }
     }
 
     // fn schedule<F>(&self, task_id: usize, future: F) -> async_task::Task<F::Output,usize>
@@ -74,20 +75,20 @@ impl LamellarExecutor for SingleThread {
         let schedule = move |runnable| {
             let mut guard = queue.lock().unwrap();
             guard.push_back(runnable);
-            trace!("Scheduled task {:?} on single thread executor", task_id);
+            // trace!("Scheduled task {:?} on single thread executor", task_id);
         };
         let id = task_id;
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| async move {
-                trace!(
-                    "[{:?}] Running task {id} on single thread executor",
-                    std::thread::current().id(),
-                );
+                // trace!(
+                //     "[{:?}] Running task {id} on single thread executor",
+                //     std::thread::current().id(),
+                // );
                 let res = task.await;
-                trace!(
-                    "[{:?}] Completed task {id} on single thread executor",
-                    std::thread::current().id(),
-                );
+                // trace!(
+                //     "[{:?}] Completed task {id} on single thread executor",
+                //     std::thread::current().id(),
+                // );
                 res
             },
             schedule,
@@ -109,20 +110,20 @@ impl LamellarExecutor for SingleThread {
         let schedule = move |runnable| {
             let mut guard = queue.lock().unwrap();
             guard.push_back(runnable);
-            trace!("Scheduled task {:?} on single thread executor", task_id);
+            // trace!("Scheduled task {:?} on single thread executor", task_id);
         };
         let id = task_id;
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| async move {
-                trace!(
-                    "[{:?}] Running task {id} on single thread executor",
-                    std::thread::current().id(),
-                );
+                // trace!(
+                //     "[{:?}] Running task {id} on single thread executor",
+                //     std::thread::current().id(),
+                // );
                 let res = task.await;
-                trace!(
-                    "[{:?}] Completed task {id} on single thread executor",
-                    std::thread::current().id(),
-                );
+                // trace!(
+                //     "[{:?}] Completed task {id} on single thread executor",
+                //     std::thread::current().id(),
+                // );
                 res
             },
             schedule,
@@ -166,25 +167,25 @@ impl LamellarExecutor for SingleThread {
         let schedule = move |runnable| {
             let mut guard = queue.lock().unwrap();
             guard.push_back(runnable);
-            trace!(
-                "block on Scheduled task {:?} on single thread executor",
-                task_id
-            );
+            // trace!(
+            //     "block on Scheduled task {:?} on single thread executor",
+            //     task_id
+            // );
         };
         let (runnable, mut task) = unsafe {
             Builder::new().metadata(task_id).spawn_unchecked(
                 move |task_id| async move {
-                    trace!(
-                        "[{:?}] block on Running task {:?} on single thread executor",
-                        std::thread::current().id(),
-                        task_id
-                    );
+                    // trace!(
+                    //     "[{:?}] block on Running task {:?} on single thread executor",
+                    //     std::thread::current().id(),
+                    //     task_id
+                    // );
                     let res = future.await;
-                    trace!(
-                        "[{:?}] block on Completed task {:?} on single thread executor",
-                        std::thread::current().id(),
-                        task_id
-                    );
+                    // trace!(
+                    //     "[{:?}] block on Completed task {:?} on single thread executor",
+                    //     std::thread::current().id(),
+                    //     task_id
+                    // );
                     res
                 },
                 schedule,
@@ -211,6 +212,10 @@ impl LamellarExecutor for SingleThread {
 
     fn num_workers(&self) -> usize {
         1
+    }
+
+    fn active(&self) -> bool {
+        self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
     }
 
     fn shutdown(&self) {

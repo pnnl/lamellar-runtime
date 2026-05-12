@@ -178,9 +178,10 @@ impl WorkStealingThread {
                         {
                             println!("runnable {:?}", runnable);
                             println!(
-                                "work_q size {:?} work inj size {:?} launched_tasks {:?} finished_tasks {:?} {:?}",
+                                "work_q size {:?} work inj size {:?} imm_inj size {:?} launched_tasks {:?} finished_tasks {:?} {:?}",
                                 worker.work_q.len(),
                                 worker.work_inj.len(),
+                                worker.imm_inj.len(),
                                 task_launched_to_string(),
                                 task_finished_to_string(),
                                 io_task_stats(),
@@ -195,9 +196,10 @@ impl WorkStealingThread {
                         && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
                     {
                         println!(
-                            "work_q size {:?} work inj size {:?} launched_tasks {:?} finished_tasks {:?}",
+                            "work_q size {:?} work inj size {:?} imm_inj size {:?} launched_tasks {:?} finished_tasks {:?}",
                             worker.work_q.len(),
                             worker.work_inj.len(),
+                            worker.imm_inj.len(),
                             task_launched_to_string(),
                             task_finished_to_string(),
                             // num_tasks.load(Ordering::SeqCst)
@@ -340,17 +342,20 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        trace!("submitting IO task id: {:?}", task_id);
         // trace_span!("submit_io_task:").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
+                    trace!("starting IO task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::IO)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
+                        trace!("finished IO task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("IO Task", task_id = task_id))
@@ -455,7 +460,7 @@ impl LamellarExecutor for WorkStealing {
     fn force_shutdown(&self) {
         trace!("work stealing force shutting down");
 
-        // println!("work stealing shutting down {:?}",self.status());
+        // trace!("work stealing shutting down {:?}",self.status());
         let my_id = std::thread::current().id();
         if self.threads.iter().any(|e| e.thread().id() == my_id) {
             self.active_cnt.fetch_sub(1, Ordering::SeqCst); // I paniced so I wont actually decrement
@@ -466,7 +471,7 @@ impl LamellarExecutor for WorkStealing {
                 std::thread::yield_now()
             }
         }
-        // println!(
+        // trace!(
         //    "work stealing shut down {:?} {:?} {:?}",
         //     self.status(),
         //     self.active_cnt.load(Ordering::Relaxed),
@@ -507,6 +512,11 @@ impl LamellarExecutor for WorkStealing {
     fn num_workers(&self) -> usize {
         self.orig_num_threads
     }
+
+    fn active(&self) -> bool {
+        self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
+            || self.active_cnt.load(Ordering::Relaxed) > 0
+    }
 }
 
 impl WorkStealing {
@@ -530,7 +540,7 @@ impl WorkStealing {
             id,
             tid
         );
-        // println!("new work stealing queue");
+        // trace!("new work stealing queue");
         let mut ws = WorkStealing {
             orig_num_threads: num_workers,
             max_num_threads: std::cmp::max(1, num_workers - 1), // the main thread does work during blocking_ons and wait_alls
@@ -573,7 +583,7 @@ impl WorkStealing {
         //         vec![core_affinity::CoreId { id: 0 }]
         //     }
         // };
-        // println!("core_ids: {:?}",core_ids);
+        // trace!("core_ids: {:?}",core_ids);
         for i in 0..self.max_num_threads {
             let work_worker = work_workers.pop().unwrap();
             let worker: WorkStealingThread = WorkStealingThread {

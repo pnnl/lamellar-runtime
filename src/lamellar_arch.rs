@@ -43,7 +43,7 @@ impl std::fmt::Display for IdError {
 
 impl std::error::Error for IdError {}
 
-#[derive(Clone)] //, Hash)]
+#[derive(Clone)]//, std::hash::Hash)]
 pub(crate) enum LamellarArchEnum {
     GlobalArch(GlobalArch),
     StridedArch(StridedArch),
@@ -127,12 +127,20 @@ impl LamellarArch for LamellarArchEnum {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone)]//, std::hash::Hash)]
 pub(crate) struct LamellarArchRT {
     pub(crate) parent: Option<Arc<LamellarArchRT>>,
     pub(crate) arch: LamellarArchEnum,
     pub(crate) num_pes: usize,
 }
+
+// impl std::cmp::PartialEq for LamellarArchRT {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.parent == other.parent && self.arch == other.arch && self.num_pes == other.num_pes
+//     }
+// }
+
+// impl std::cmp::Eq for LamellarArchRT {}
 
 impl LamellarArchRT {
     pub(crate) fn new<A>(parent: Arc<LamellarArchRT>, arch: A) -> LamellarArchRT

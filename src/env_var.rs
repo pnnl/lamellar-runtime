@@ -14,6 +14,7 @@
 //! - `LAMELLAR_BATCHER` - selects how small active messages are batched for remote operations
 //!     - possible values
 //!         - `simple` -- default, active messages are only batched based on the PE they are sent to
+//!         - `direct` -- stages batched messages into a local Vec before copying into transport buffers at flush time
 //!         - `team_am` -- active messages are batched heirarchically based on the remote PE, team sending the message, and AM id
 //! - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE, defaults to [std::thread::available_parallelism] if available or else 4
 //! - `LAMELLAR_HEAP_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 4GB
@@ -42,7 +43,12 @@
 //! - `LAMELLAR_ROFI_PROVIDER` - the provider for the rofi backend (only used with the rofi backend), default: "verbs"
 //! - `LAMELLAR_ROFI_DOMAIN` - the domain for the rofi backend (only used with the rofi backend), default: ""
 //! - `LAMELLAR_DISABLE_ON_NODE_SHMEM` - set to true or 1 to disable same-node shared-memory fast path (UCX/libfabric), default: false
-
+//! - `LAMELLAR_CMD_QUEUE` - selects the command queue protocol variant
+//!     - possible values
+//!         - `get` -- default, receiver issues RDMA GET for data
+//!         - `old` -- the original command queue protocol 
+//!         - `put` -- receiver allocates a buffer and sender PUTs data directly
+//!         - `put2` -- an optimized version of the PUT-based protocol
 use serde::Deserialize;
 use std::sync::OnceLock;
 
@@ -123,6 +129,29 @@ pub enum IndexType {
 }
 fn default_array_dynamic_index() -> IndexType {
     IndexType::Dynamic
+}
+
+#[doc(hidden)]
+#[derive(Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum CmdQueue {
+    Old,
+    /// GET-based protocol: receiver GETs data from sender (default)
+    Get,
+    /// GET-based protocol with eager send for small messages (≤4096 bytes)
+    Get2,
+    /// GET-based protocol with N=4 in-flight slots per PE pair
+    GetN,
+    /// PUT-based protocol: receiver allocates buffer, sender PUTs data directly
+    Put,
+    Put2,
+    /// PUT2-based protocol with N=4 in-flight slots per PE pair
+    Put2N,
+    Put3,
+}
+
+fn default_cmd_queue() -> CmdQueue {
+    CmdQueue::Get
 }
 
 fn default_cmd_buf_len() -> usize {
@@ -220,6 +249,9 @@ pub struct Config {
     //used internally by the command queues
     #[serde(default = "default_cmd_buf_cnt")]
     pub cmd_buf_cnt: usize,
+    /// Command queue protocol variant: `old`, `get` (default) or `put`
+    #[serde(default = "default_cmd_queue")]
+    pub cmd_queue: CmdQueue,
 
     #[serde(default = "default_am_size_threshold")]
     pub am_size_threshold: usize, //the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated

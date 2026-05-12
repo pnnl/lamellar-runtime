@@ -21,7 +21,7 @@ use crate::{
 };
 // use log::trace;
 
-use tracing::{debug, trace};
+use tracing::{debug, trace,error};
 
 use futures_util::future::join_all;
 use futures_util::Future;
@@ -676,6 +676,7 @@ impl LamellarWorldBuilder {
         let sched_new = Arc::new(Scheduler::create_scheduler(
             self.executor,
             num_pes,
+            my_pe,
             self.num_threads,
             panic.clone(),
         ));
@@ -688,6 +689,7 @@ impl LamellarWorldBuilder {
 
         // timer = std::time::Instant::now();
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
+        sched_new.init_batcher_task(sched_new.clone(), &lamellae);
         trace!("lamellae initialized");
         // println!("{:?}: init_lamellae", timer.elapsed());
 
@@ -758,6 +760,8 @@ impl LamellarWorldBuilder {
 
         // timer = std::time::Instant::now();
         std::panic::set_hook(Box::new(move |panic_info| {
+            println!("!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-! Lamellar Runtime Panic !-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!");
+            error!("!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-! Lamellar Runtime Panic !-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!");
             let backtrace = std::backtrace::Backtrace::capture();
             // panics.lock().push(format!("{panic_info}"));
             // for p in panics.lock().iter(){

@@ -1,5 +1,12 @@
 pub(crate) mod comm;
 pub(crate) mod command_queues;
+pub(crate) mod command_queues_get2;
+pub(crate) mod command_queues_get_n;
+pub(crate) mod command_queues_put2_n;
+pub(crate) mod command_queues_put;
+pub(crate) mod command_queues_put2;
+pub(crate) mod command_queues_put3;
+pub(crate) mod command_queues_old;
 pub(crate) mod local_lamellae;
 pub(crate) mod shmem_lamellae;
 
@@ -286,6 +293,16 @@ impl SerializedData {
             payload_bytes: self.payload_bytes.sub_slice(start..end),
         }
     }
+
+    pub(crate) fn drop_payload_bytes(&mut self, num_bytes: usize) -> SerializedData {
+        SerializedData {
+            alloc: self.alloc.clone(),
+            ser_data_bytes: self.ser_data_bytes.clone(),
+            header_bytes: self.header_bytes.clone(),
+            payload_bytes: self.payload_bytes.sub_slice(0..self.payload_bytes.len() - num_bytes),
+        }
+       
+    }
 }
 
 impl SubSerializedData {
@@ -443,7 +460,23 @@ pub(crate) trait LamellaeUtil: Send {
         data: SerializedData,
     );
 
+    async fn send_vec_to_pe_async(
+        &self,
+        pe: usize,
+        data: Vec<u8>,
+    );
+
+    async fn send_vec_to_team_pes_async(
+        &self,
+        team: Arc<LamellarArchRT>,
+        data: Vec<u8>,
+    ){
+        unimplemented!()
+    }
+
     async fn request_new_alloc(&self, min_size: usize);
+
+    fn available_to_send(&self,pe: usize) -> bool;
 }
 
 //#[tracing::instrument(skip_all, level = "debug")]

@@ -123,6 +123,25 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
                     panic!("unexpected result type");
                 }
             }
+            InternalResult::NewRemote(x, darcs) => {
+                if let Ok(result) = crate::deserialize::<T>(&x, true) {
+                    for darc in darcs {
+                        match darc {
+                            RemotePtr::NetworkDarc(darc) => {
+                                let temp: Darc<()> = darc.into();
+                                temp.inc_local_cnt(1);
+                            }
+                            RemotePtr::NetMemRegionHandle(mr) => {
+                                let temp: Arc<MemRegionHandleInner> = mr.into();
+                                temp.local_ref.fetch_add(2, Ordering::SeqCst);
+                            }
+                        }
+                    }
+                    result
+                } else {
+                    panic!("unexpected result type");
+                }
+            }
             InternalResult::Unit => {
                 if let Ok(result) = (Box::new(()) as Box<dyn std::any::Any>).downcast::<T>() {
                     *result
@@ -293,10 +312,12 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
 
         let reqs = map.entry(sub_id).or_insert_with(|| HashMap::new());
         reqs.insert(pe, data);
+        trace!("added result for pe {} to sub_id {}, total results for sub_id {} is now {}", pe, sub_id, sub_id, reqs.len());
 
         if reqs.len() == self.arch.num_pes() {
             if let Some(waker) = self.wakers.lock().remove(&sub_id) {
                 // println!("0. waker found for sub_id {}", sub_id);
+                trace!("waking waker for sub_id {}", sub_id);
                 waker.wake();
             }
             // else {
@@ -305,6 +326,7 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
         } else {
             if let Some(waker) = self.wakers.lock().get(&sub_id) {
                 // println!("1. waker found for sub_id {}", sub_id);
+                trace!("waking waker by ref for sub_id {}", sub_id);
                 waker.wake_by_ref();
             }
             //  else {
@@ -346,6 +368,25 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
                             RemotePtr::NetMemRegionHandle(mr) => {
                                 let temp: Arc<MemRegionHandleInner> = mr.into();
                                 temp.local_ref.fetch_add(2, Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
+                            }
+                        }
+                    }
+                    result
+                } else {
+                    panic!("unexpected result type");
+                }
+            }
+            InternalResult::NewRemote(x, darcs) => {
+                if let Ok(result) = crate::deserialize::<T>(&x, true) {
+                    for darc in darcs {
+                        match darc {
+                            RemotePtr::NetworkDarc(darc) => {
+                                let temp: Darc<()> = darc.into();
+                                temp.inc_local_cnt(1);
+                            }
+                            RemotePtr::NetMemRegionHandle(mr) => {
+                                let temp: Arc<MemRegionHandleInner> = mr.into();
+                                temp.local_ref.fetch_add(2, Ordering::SeqCst);
                             }
                         }
                     }
@@ -444,6 +485,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
         }
         if !ready {
             // println!("setting waker for sub_id {}", self.sub_id);
+            trace!("setting waker for sub_id {}", self.sub_id);
             self.inner.wakers.lock().insert(self.sub_id, waker.clone());
             self.inner
                 .wakers
@@ -458,6 +500,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
                 })
                 .or_insert(waker.clone());
         }
+        trace!("ready_or_set_waker for sub_id {} returning {}", self.sub_id, ready);
         ready
     }
 
@@ -542,6 +585,9 @@ impl<T: 'static> TaskGroupLocalAmHandle<T> {
                 }
             }
             InternalResult::Remote(_result, _darcs) => {
+                panic!("unexpected remote result  of type within local am handle");
+            }
+            InternalResult::NewRemote(_, _) => {
                 panic!("unexpected remote result  of type within local am handle");
             }
             InternalResult::Unit => {

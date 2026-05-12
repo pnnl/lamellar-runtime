@@ -114,16 +114,16 @@ impl LamellarAM for ReturnVecAM {
 #[lamellar::main]
 fn main() {
     // let _guard = setup_global_subscriber();
-    let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_thread_ids(true)
-                .with_file(true)
-                .with_line_number(true)
-                .with_level(true),
-        )
-        .init();
+    // let subscriber = tracing_subscriber::registry()
+    //     .with(tracing_subscriber::EnvFilter::from_default_env())
+    //     .with(
+    //         tracing_subscriber::fmt::layer()
+    //             .with_thread_ids(true)
+    //             .with_file(true)
+    //             .with_line_number(true)
+    //             .with_level(true),
+    //     )
+    //     .init();
     let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider

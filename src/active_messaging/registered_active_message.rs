@@ -71,7 +71,7 @@ crate::inventory::collect!(RegisteredAm);
 
 #[derive(Debug, Clone)]
 pub(crate) struct RegisteredActiveMessages {
-    batcher: BatcherType,
+    pub(crate) batcher: BatcherType,
     executor: Arc<Executor>,
 }
 
@@ -84,13 +84,14 @@ lazy_static! {
     pub(crate) static ref CMD_LEN: usize = crate::serialized_size::<Cmd>(&Cmd::Am, false);
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[repr(C)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Copy, Clone)]
 pub(crate) struct AmHeader {
-    pub(crate) am_id: AmId,
-    pub(crate) team_addr: usize,
-    // pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) req_id: ReqId,
+    pub(crate) team_addr: usize,
+    pub(crate) am_id: AmId,
 }
+
 
 #[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
 pub(crate) struct DataHeader {
@@ -490,6 +491,7 @@ impl RegisteredActiveMessages {
         let msg = Msg {
             src: req_data.team.world_pe as u16,
             cmd,
+            padding: [0; 1],
         };
         SerializeHeader { msg }
     }

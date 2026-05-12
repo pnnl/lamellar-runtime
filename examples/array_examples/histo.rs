@@ -20,7 +20,7 @@ fn main() {
     let range = rand::distr::Uniform::new(0, ARRAY_SIZE).unwrap();
 
     // let sum = array.sum().block().expect("array len > 0");
-    println!("PE{} starting", world.my_pe());
+    // println!("PE{} starting", world.my_pe());
     array.barrier();
     // println!("PE{} sum: {}", world.my_pe(), sum);
     let start = Instant::now();
@@ -43,12 +43,13 @@ fn main() {
     // }
     world.wait_all();
     world.barrier();
-    println!(
-        "PE{} time: {:?} done",
-        world.my_pe(),
-        start.elapsed().as_secs_f64()
-    );
+   
     if world.my_pe() == 0 {
+         println!(
+            "PE{} time: {:?} done",
+            world.my_pe(),
+            start.elapsed().as_secs_f64()
+        );
         let sum_time = Instant::now();
         let sum = array.sum().block().expect("array len > 0");
         println!(

@@ -7,6 +7,9 @@ use crate::active_messaging::*;
 pub(crate) mod simple_batcher;
 use simple_batcher::SimpleBatcher;
 
+pub(crate) mod direct_batcher;
+use direct_batcher::DirectBatcher;
+
 pub(crate) mod team_am_batcher;
 use team_am_batcher::TeamAmBatcher;
 
@@ -168,6 +171,7 @@ pub(crate) trait Batcher {
 #[derive(Debug, Clone)]
 pub(crate) enum BatcherType {
     Simple(SimpleBatcher),
+    Direct(DirectBatcher),
     TeamAm(TeamAmBatcher),
 }
 
@@ -184,6 +188,11 @@ impl Batcher for BatcherType {
     ) {
         match self {
             BatcherType::Simple(batcher) => {
+                batcher
+                    .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
+                    .await
+            }
+            BatcherType::Direct(batcher) => {
                 batcher
                     .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                     .await
@@ -210,6 +219,11 @@ impl Batcher for BatcherType {
                     .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                     .await
             }
+            BatcherType::Direct(batcher) => {
+                batcher
+                    .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
+                    .await
+            }
             BatcherType::TeamAm(batcher) => {
                 batcher
                     .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
@@ -231,6 +245,11 @@ impl Batcher for BatcherType {
                     .add_data_am_to_batch(req_data, data, data_size, stall_mark)
                     .await
             }
+            BatcherType::Direct(batcher) => {
+                batcher
+                    .add_data_am_to_batch(req_data, data, data_size, stall_mark)
+                    .await
+            }
             BatcherType::TeamAm(batcher) => {
                 batcher
                     .add_data_am_to_batch(req_data, data, data_size, stall_mark)
@@ -242,6 +261,9 @@ impl Batcher for BatcherType {
     async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, stall_mark: usize) {
         match self {
             BatcherType::Simple(batcher) => {
+                batcher.add_unit_am_to_batch(req_data, stall_mark).await
+            }
+            BatcherType::Direct(batcher) => {
                 batcher.add_unit_am_to_batch(req_data, stall_mark).await
             }
             BatcherType::TeamAm(batcher) => {
@@ -259,6 +281,9 @@ impl Batcher for BatcherType {
     ) {
         match self {
             BatcherType::Simple(batcher) => {
+                batcher.exec_batched_msg(msg, ser_data, lamellae, ame).await
+            }
+            BatcherType::Direct(batcher) => {
                 batcher.exec_batched_msg(msg, ser_data, lamellae, ame).await
             }
             BatcherType::TeamAm(batcher) => {

@@ -131,10 +131,29 @@ impl<T: AmDist> AmHandle<T> {
                     panic!("unexpected unit result  of type ");
                 }
             }
+            InternalResult::NewRemote(x, darcs) => {
+                if let Ok(result) = crate::deserialize::<T>(&x, true) {
+                    for darc in darcs {
+                        match darc {
+                            RemotePtr::NetworkDarc(darc) => {
+                                let temp: Darc<()> = darc.into();
+                                temp.inc_local_cnt(1);
+                            }
+                            RemotePtr::NetMemRegionHandle(mr) => {
+                                let temp: Arc<MemRegionHandleInner> = mr.into();
+                                temp.local_ref.fetch_add(2, Ordering::SeqCst);
+                            }
+                        }
+                    }
+                    result
+                } else {
+                    panic!("unexpected remote result  of type ");
+                }
+            }
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     fn launch_am_if_needed(&mut self) {
         if let Some((am, num_pes)) = self.am.take() {
             self.inner.team_counters.inc_outstanding(num_pes);
@@ -257,6 +276,9 @@ impl<T: 'static> LocalAmHandle<T> {
                 }
             }
             InternalResult::Remote(_x, _darcs) => {
+                panic!("unexpected remote result  of type within local am handle");
+            }
+            InternalResult::NewRemote(_, _) => {
                 panic!("unexpected remote result  of type within local am handle");
             }
             InternalResult::Unit => {
@@ -469,6 +491,25 @@ impl<T: AmDist> MultiAmHandle<T> {
                     *result
                 } else {
                     panic!("unexpected unit result  of type ");
+                }
+            }
+            InternalResult::NewRemote(x, darcs) => {
+                if let Ok(result) = crate::deserialize::<T>(&x, true) {
+                    for darc in darcs {
+                        match darc {
+                            RemotePtr::NetworkDarc(darc) => {
+                                let temp: Darc<()> = darc.into();
+                                temp.inc_local_cnt(1);
+                            }
+                            RemotePtr::NetMemRegionHandle(mr) => {
+                                let temp: Arc<MemRegionHandleInner> = mr.into();
+                                temp.local_ref.fetch_add(2, Ordering::SeqCst);
+                            }
+                        }
+                    }
+                    result
+                } else {
+                    panic!("unexpected remote result  of type ");
                 }
             }
         }

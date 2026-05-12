@@ -13,6 +13,7 @@ use std::task::Waker;
 pub(crate) enum InternalResult {
     Local(LamellarAny), // a local result from a local am (possibly a returned one)
     Remote(SubSerializedData, Vec<RemotePtr>), // a remte result from a remote am
+    NewRemote(Vec<u8>, Vec<RemotePtr>), // a remte result from a remote am
     Unit,
 }
 
@@ -62,7 +63,7 @@ impl std::fmt::Debug for LamellarRequestResult {
 }
 
 impl LamellarRequestResult {
-    #[tracing::instrument(skip_all, level = "debug")]
+    //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn add_result_inner<T: LamellarRequestAddResult>(
         req: &Arc<T>,
         pe: usize,

@@ -1,4 +1,5 @@
 use crate::active_messaging::batching::simple_batcher::SimpleBatcher;
+use crate::active_messaging::batching::direct_batcher::DirectBatcher;
 use crate::active_messaging::batching::team_am_batcher::TeamAmBatcher;
 use crate::active_messaging::batching::BatcherType;
 use crate::active_messaging::registered_active_message::RegisteredActiveMessages;
@@ -14,6 +15,10 @@ use std::pin::{pin, Pin};
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
+
+use bytemuck::{Pod, Zeroable};
+use zerocopy_derive::*;
+
 
 static LAMELLAR_THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 thread_local! {
@@ -83,6 +88,7 @@ pub(crate) enum SchedulerStatus {
 // static IO_SAME_THREAD: AtomicUsize = AtomicUsize::new(0);
 // static IO_DIFF_THREAD: AtomicUsize = AtomicUsize::new(0);
 
+#[repr(C)]
 #[derive(
     Copy,
     Clone,
@@ -93,6 +99,13 @@ pub(crate) enum SchedulerStatus {
     std::cmp::PartialEq,
     Hash,
     Default,
+    // Pod,
+    // Zeroable,
+    FromBytes,
+    IntoBytes,
+    KnownLayout,
+    Immutable,
+
 )]
 pub(crate) struct ReqId {
     pub(crate) id: usize,
@@ -243,6 +256,7 @@ pub(crate) trait LamellarExecutor {
     fn num_workers(&self) -> usize;
     fn shutdown(&self);
     fn force_shutdown(&self);
+    fn active(&self) -> bool;
 }
 
 #[enum_dispatch(LamellarExecutor)]
@@ -609,7 +623,7 @@ impl Scheduler {
         );
     }
 
-    pub(crate) fn active(&self) -> bool {
+    pub(crate) fn active(&self,additional: usize) -> bool {
         // if self.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8 {
         //     println!(
         //         "active: {:?} {:?}",
@@ -619,7 +633,7 @@ impl Scheduler {
         // }
 
         self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
-            || self.num_tasks.load(Ordering::SeqCst) > 3 // the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
+            || self.num_tasks.load(Ordering::SeqCst) > 3 + additional // the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task, additional represents a long running task that we dont want to consider when determining if the scheduler is active
     }
     pub(crate) fn num_workers(&self) -> usize {
         self.executor.num_workers()
@@ -691,6 +705,7 @@ impl Scheduler {
     pub(crate) fn create_scheduler(
         executor: ExecutorType,
         num_pes: usize,
+        my_pe: usize,
         num_workers: usize,
         panic: Arc<AtomicU8>,
     ) -> Scheduler {
@@ -706,11 +721,11 @@ impl Scheduler {
             ExecutorType::LamellarWorkStealing3 => {
                 WorkStealing3::new(num_workers, status.clone(), panic.clone()).into()
             }
-            ExecutorType::AsyncStd => AsyncStdRt::new(num_workers).into(),
+            ExecutorType::AsyncStd => AsyncStdRt::new(num_workers, status.clone()).into(),
 
             #[cfg(feature = "tokio-executor")]
-            ExecutorType::Tokio => TokioRt::new(num_workers).into(),
-            ExecutorType::SingleThread => SingleThread::new().into(),
+            ExecutorType::Tokio => TokioRt::new(num_workers, status.clone()).into(),
+            ExecutorType::SingleThread => SingleThread::new(status.clone()).into(),
         });
 
         let batcher = match config().batcher.as_str() {
@@ -719,12 +734,18 @@ impl Scheduler {
                 am_stall_mark.clone(),
                 executor.clone(),
             )),
+            "direct" => BatcherType::Direct(DirectBatcher::new(
+                num_pes,
+                my_pe,
+                am_stall_mark.clone(),
+                executor.clone(),
+            )),
             "team_am" => BatcherType::TeamAm(TeamAmBatcher::new(
                 num_pes,
                 am_stall_mark.clone(),
                 executor.clone(),
             )),
-            _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple' or 'team_am'")
+            _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple', 'direct', or 'team_am'")
         };
 
         Scheduler::new(
@@ -734,5 +755,11 @@ impl Scheduler {
             status,
             panic,
         )
+    }
+
+    pub(crate) fn init_batcher_task(&self,scheduler: Arc<Scheduler>, lamellae: &Arc<Lamellae>) {
+        if let BatcherType::Direct(batcher) = &self.active_message_engine.batcher {
+            batcher.init_batcher_task(scheduler,lamellae);
+        }
     }
 }

@@ -1,13 +1,15 @@
-use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
+use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus};
 use tokio::runtime::Runtime;
 
 use futures_util::Future;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct TokioRt {
     max_num_threads: usize,
     rt: Runtime,
+    status: Arc<AtomicU8>,
 }
 
 impl LamellarExecutor for TokioRt {
@@ -92,10 +94,14 @@ impl LamellarExecutor for TokioRt {
     fn num_workers(&self) -> usize {
         self.max_num_threads
     }
+
+    fn active(&self) -> bool {
+        self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
+    }
 }
 
 impl TokioRt {
-    pub(crate) fn new(num_workers: usize) -> TokioRt {
+    pub(crate) fn new(num_workers: usize, status: Arc<AtomicU8>) -> TokioRt {
         // println!("New TokioRT with {} workers", num_workers);
         TokioRt {
             max_num_threads: num_workers, //LAMELLAR_THREADS = num_workers + 1,so for tokio runtime, we actually want num_workers + 1 worker threads as block_on will not do anywork on the main thread (i think)...
@@ -104,6 +110,7 @@ impl TokioRt {
                 .enable_all()
                 .build()
                 .unwrap(),
+            status,
         }
     }
 }

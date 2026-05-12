@@ -16,7 +16,7 @@ use lamellar::active_messaging::prelude::*;
 struct AmNoReturn {
     my_pe: usize,
     // #[AmGroup(static)]
-    test_var: u16,
+    test_var: u32,
 }
 
 #[lamellar::am]
@@ -50,24 +50,29 @@ fn main() {
     let start = std::time::Instant::now();
     world.barrier();
     println!("World barriered in {:?}", start.elapsed());
-    let am = AmNoReturn {
-        my_pe: my_pe,
-        test_var: 1000,
-    };
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
-        let res = world.exec_am_pe(my_pe, am.clone()).block();
+        let res = world.exec_am_pe(my_pe, AmNoReturn {
+            my_pe: my_pe,
+            test_var: 0,
+        }).block();
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
-        let res = world.exec_am_pe(num_pes - 1, am.clone()).block();
+        let res = world.exec_am_pe(num_pes - 1, AmNoReturn {
+            my_pe: my_pe,
+            test_var: 1,
+        }).block();
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
         println!("Testing all am no return");
         println!("[{:?}] exec on all", my_pe);
-        let res = world.exec_am_all(am.clone()).block();
+        let res = world.exec_am_all(AmNoReturn {
+            my_pe: my_pe,
+            test_var: 2,
+        }).block();
         assert!(res.iter().all(|x| *x == ()));
         println!("no return result: {:?}", res);
         println!("---------------------------------------------------------------");
@@ -75,22 +80,24 @@ fn main() {
         println!("Task Group---------------------------------------------------------------");
 
         let task_group = LamellarTaskGroup::new(world.clone());
-        for i in 0..10 {
+        for i in 1..=10 {
+            println!("[{:?}] starting task group loop {}", my_pe, i);
             task_group
                 .exec_am_pe(
                     i % num_pes,
                     AmNoReturn {
                         my_pe: i,
-                        test_var: 10 * (i as u16),
+                        test_var: 10 * (i as u32),
                     },
                 )
                 .block();
             task_group
                 .exec_am_all(AmNoReturn {
                     my_pe: i,
-                    test_var: 10 * (i as u16),
+                    test_var: 100 * (i as u32),
                 })
                 .block();
+            println!("[{:?}] finished task group loop {}", my_pe, i);
         }
         for r in res.iter() {
             println!("PE[{:?}] return result: {:?}", my_pe, r);
@@ -98,17 +105,17 @@ fn main() {
         println!("Typed Am Group---------------------------------------------------------------");
 
         let mut am_group = typed_am_group!(AmNoReturn, world.clone());
-        for i in 0..10 {
+        for i in 1..=10 {
             am_group.add_am_pe(
                 i % num_pes,
                 AmNoReturn {
                     my_pe: i,
-                    test_var: 10 * (i as u16),
+                    test_var: 1000 * (i as u32),
                 },
             );
             am_group.add_am_all(AmNoReturn {
                 my_pe: i,
-                test_var: 10 * (i as u16),
+                test_var: 10000 * (i as u32),
             });
         }
         let res = world.block_on(am_group.exec());

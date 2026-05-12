@@ -904,22 +904,38 @@ impl std::fmt::Debug for Am {
     PartialOrd,
     Ord,
     Default,
+    // bytemuck::CheckedBitPattern,
+    // bytemuck::Zeroable,
+    // bytemuck::NoUninit,
+    zerocopy_derive::IntoBytes,
+    zerocopy_derive::TryFromBytes,
+    zerocopy_derive::KnownLayout,
+    zerocopy_derive::Immutable,
+    zerocopy_derive::Unaligned,
 )]
 pub(crate) enum Cmd {
     #[default]
-    Am, //a single am
-    ReturnAm, //a single return am
-    Data,     //a single data result
-    Unit,     //a single unit result
-    BatchedMsg, //a batched message, can contain a variety of am types
+    Am = 0, //a single am
+    ReturnAm = 1, //a single return am
+    Data = 2,     //a single data result
+    Unit = 3,     //a single unit result
+    BatchedMsg = 4, //a batched message, can contain a variety of am types
               // BatchedReturnAm, //a batched message, only containing return ams -- not sure this can happen
               // BatchedData, //a batched message, only containing data results
 }
+// // SAFETY: `Cmd` is `#[repr(C)]` with `Am = 0` as the default/zero value,
+// // making Zeroable sound. Pod is required for use in bytemuck-cast structs
+// // (e.g. MyAmHeader); only internally-constructed values are ever cast.
+// unsafe impl bytemuck::Zeroable for Cmd {}
+// unsafe impl bytemuck::Pod for Cmd {}
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default)]
+#[repr(C)]
+// #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default, bytemuck::CheckedBitPattern, bytemuck::NoUninit, bytemuck::Zeroable)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default, zerocopy_derive::IntoBytes,zerocopy_derive::TryFromBytes,zerocopy_derive::KnownLayout,zerocopy_derive::Immutable)]
 pub(crate) struct Msg {
     pub(crate) src: u16,
     pub(crate) cmd: Cmd,
+    padding: [u8; 1], //padding to enable IntoBytes 
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
