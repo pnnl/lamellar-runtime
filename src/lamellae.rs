@@ -182,6 +182,7 @@ unsafe impl Sync for SerializedData {}
 unsafe impl Send for SubSerializedData {}
 unsafe impl Sync for SubSerializedData {}
 
+#[lamellar_prof::prof]
 impl SerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
@@ -211,6 +212,7 @@ impl SerializedData {
     }
 }
 
+#[lamellar_prof::prof]
 impl SerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
@@ -256,6 +258,7 @@ impl SerializedData {
     }
 }
 
+
 impl std::fmt::Debug for SerializedData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SeralizedData addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
@@ -269,6 +272,7 @@ impl std::fmt::Debug for SerializedData {
     }
 }
 
+#[lamellar_prof::prof]
 impl Des for SerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
@@ -281,6 +285,7 @@ impl Des for SerializedData {
 }
 
 // impl SubData for SubSerializedData {
+#[lamellar_prof::prof]
 impl SerializedData {
     // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
     //#[tracing::instrument(level = "debug")]
@@ -305,6 +310,7 @@ impl SerializedData {
     }
 }
 
+#[lamellar_prof::prof]
 impl SubSerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
@@ -329,6 +335,7 @@ impl std::fmt::Debug for SubSerializedData {
     }
 }
 
+#[lamellar_prof::prof]
 impl Des for SubSerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
@@ -408,6 +415,7 @@ pub(crate) enum Lamellae {
     Local,
 }
 
+#[lamellar_prof::prof]
 impl Lamellae {
     pub(crate) fn comm(&self) -> &Comm {
         match self {

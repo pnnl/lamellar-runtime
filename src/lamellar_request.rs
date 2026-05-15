@@ -61,7 +61,7 @@ impl std::fmt::Debug for LamellarRequestResult {
         }
     }
 }
-
+#[lamellar_prof::prof]
 impl LamellarRequestResult {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn add_result_inner<T: LamellarRequestAddResult>(

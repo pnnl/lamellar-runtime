@@ -1044,6 +1044,7 @@ impl PartialEq for LamellarTeamRT {
 
 impl Eq for LamellarTeamRT {}
 
+#[lamellar::prof]
 impl LamellarTeamRT {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(

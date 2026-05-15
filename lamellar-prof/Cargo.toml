@@ -1,15 +1,15 @@
 [package]
 name = "lamellar-prof"
 version = "0.1.0"
-authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>", " Mark V Raugas <mark.raugas@pnnl.gov>", "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>"]
-edition = "2018"
+authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>"]
+edition = "2024"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
 readme = "../README.md"
 repository = "https://github.com/pnnl/lamellar-runtime"
 homepage = "https://github.com/pnnl/lamellar-runtime"
 license-file = "../LICENSE"
-keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
-categories = ["asynchronous","concurrency", "network-programming","science"]
+keywords = ["hpc", "runtime", "pgas", "distributed", "asynchronous"]
+categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 [lib]
 proc-macro = true
@@ -17,7 +17,21 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = { version = "1.0", features = ["full","extra-traits","visit-mut"] }
+syn = { version = "1.0", features = ["full", "extra-traits", "visit-mut"] }
 
 [features]
-enable-prof=[]
+enable-prof = []
+# backtrace-prof activates init_prof_bt!(). Users must also add `backtrace = "0.3"`
+# and `thread_local` to their own crate's [dependencies] since generated code uses them.
+backtrace-prof = ["enable-prof"]
+# use-lamellar: macros generate ::lamellar::prof:: paths instead of crate:: paths,
+# and init_prof_bt!() becomes a no-op (infrastructure lives in lamellar/src/prof.rs).
+# Enabled automatically when lamellar's "enable-prof" feature is active.
+use-lamellar = ["enable-prof"]
+
+[dev-dependencies]
+backtrace = "0.3"
+thread_local = "1.1.9"
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+
+# [workspace]

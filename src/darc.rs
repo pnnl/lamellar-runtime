@@ -109,6 +109,7 @@ pub(crate) enum DarcMode {
     RestartDrop,
 }
 
+#[lamellar_prof::prof]
 impl DarcMode {
     fn drop_am_launched(&self) -> bool {
         matches!(
@@ -118,12 +119,14 @@ impl DarcMode {
     }
 }
 
+#[lamellar_prof::prof]
 impl Default for DarcMode {
     fn default() -> Self {
         DarcMode::Darc
     }
 }
 
+#[lamellar_prof::prof]
 impl From<u64> for DarcMode {
     fn from(val: u64) -> Self {
         match val {
@@ -246,6 +249,7 @@ pub struct Darc<T: 'static> {
 unsafe impl<T: Sync + Send> Send for Darc<T> {}
 unsafe impl<T: Sync + Send> Sync for Darc<T> {}
 
+#[lamellar_prof::prof]
 impl<T> LamellarEnv for Darc<T> {
     fn my_pe(&self) -> usize {
         self.inner().my_pe
@@ -264,6 +268,7 @@ impl<T> LamellarEnv for Darc<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: 'static> serde::Serialize for Darc<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -273,6 +278,7 @@ impl<T: 'static> serde::Serialize for Darc<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -338,6 +344,7 @@ pub struct WeakDarc<T: 'static> {
 unsafe impl<T: Send> Send for WeakDarc<T> {}
 unsafe impl<T: Sync> Sync for WeakDarc<T> {}
 
+#[lamellar_prof::prof]
 impl<T> WeakDarc<T> {
     /// attempts to upgrade the `WeakDarc` to a [Darc], if the inner value has not been dropped
     /// returns `None` if the value has been dropped
@@ -361,6 +368,7 @@ impl<T> WeakDarc<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T> Drop for WeakDarc<T> {
     fn drop(&mut self) {
         let inner = &*self.inner;
@@ -369,6 +377,7 @@ impl<T> Drop for WeakDarc<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T> Clone for WeakDarc<T> {
     fn clone(&self) -> Self {
         let inner = &*self.inner;
@@ -380,6 +389,7 @@ impl<T> Clone for WeakDarc<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T> crate::active_messaging::DarcSerde for Darc<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
@@ -392,6 +402,7 @@ impl<T> crate::active_messaging::DarcSerde for Darc<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: 'static> DarcInner<T> {
     pub(crate) fn darc_rt_team(&self) -> Darc<LamellarTeamRT> {
         unsafe { Darc::cloned_team_from_raw(self.team) }
@@ -453,10 +464,7 @@ impl<T: 'static> DarcInner<T> {
         self.item = item;
     }
 
-    #[allow(dead_code)]
-    fn item(&self) -> &T {
-        unsafe { &(*self.item) }
-    }
+   
 
     fn set_dropping(&self) -> DarcMode {
         let mode = unsafe {
@@ -930,6 +938,13 @@ impl<T: 'static> DarcInner<T> {
     }
 }
 
+impl<T: 'static> DarcInner<T> {
+     #[allow(dead_code)]
+    fn item(&self) -> &T {
+        unsafe { &(*self.item) }
+    }
+}
+
 impl<T: 'static> fmt::Debug for DarcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{:}/{:?}] ", self.my_pe, self.num_pes)?;
@@ -952,6 +967,7 @@ enum TeamAndItem<T> {
     NonTeam(Darc<LamellarTeamRT>, T),
 }
 
+#[lamellar_prof::prof]
 impl<T> TeamAndItem<T> {
     fn team(&self) -> &LamellarTeamRT {
         match self {
@@ -974,6 +990,7 @@ impl<T> TeamAndItem<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl Darc<LamellarTeamRT> {
     pub(crate) async fn async_try_new_team_darc(
         team_rt: LamellarTeamRT,
@@ -1051,10 +1068,12 @@ impl Darc<LamellarTeamRT> {
     }
 }
 
+// #[lamellar_prof::prof]
 impl<T> Darc<T> {
     //#[doc(hidden)]
     /// downgrade a darc to a weak darc
     //#[tracing::instrument(skip_all, level = "debug")]
+    #[lamellar_prof::prof]
     pub fn downgrade(the_darc: &Darc<T>) -> WeakDarc<T> {
         trace!("downgrading darc {:?}", the_darc.id);
         the_darc
@@ -1073,6 +1092,7 @@ impl<T> Darc<T> {
         self.inner.addr().into()
     }
 
+    #[lamellar_prof::prof]
     pub(crate) async fn into_inner(self) -> T {
         DarcInner::block_on_outstanding(
             self.inner.clone(),
@@ -1118,6 +1138,7 @@ impl<T> Darc<T> {
 
     #[doc(hidden)]
     //#[tracing::instrument(skip_all, level = "debug")]
+    #[lamellar_prof::prof]
     pub fn serialize_update_cnts(&self, cnt: usize) {
         trace!("darc[{:?}] serialize darc cnts {:?}", self.id, self.inner());
         self.inner()
@@ -1131,6 +1152,7 @@ impl<T> Darc<T> {
     // this occurs in the From<NetworkDarc> for Darc impl so we should be able to delete this...
     #[doc(hidden)]
     //#[tracing::instrument(skip_all, level = "debug")]
+    #[lamellar_prof::prof]
     pub fn deserialize_update_cnts(&self) {
         trace!(
             "darc[{:?}] deserialize darc cnts {:?}",
@@ -1144,6 +1166,7 @@ impl<T> Darc<T> {
 
     #[doc(hidden)]
     //#[tracing::instrument(skip_all, level = "debug")]
+    #[lamellar_prof::prof]
     pub fn inc_local_cnt(&self, cnt: usize) -> usize {
         trace!("darc[{:?}] inc_local_cnt {:?}", self.id, self.inner());
         self.inner().local_cnt.fetch_add(cnt, Ordering::SeqCst);
@@ -1177,6 +1200,7 @@ fn calc_padding(addr: usize, align: usize) -> usize {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Send + Sync> Darc<T> {
     #[doc(alias = "Collective")]
     /// Constructs a new `Darc<T>` on the PEs specified by team.
@@ -1560,6 +1584,7 @@ impl<T: Send + Sync> Darc<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T> Clone for Darc<T> {
     fn clone(&self) -> Self {
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -1583,12 +1608,14 @@ impl<T> Deref for Darc<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Hash> Hash for Darc<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         (**self).hash(state);
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: PartialEq> PartialEq for Darc<T> {
     fn eq(&self, other: &Self) -> bool {
         (**self).eq(&**other)
@@ -1657,6 +1684,7 @@ macro_rules! launch_drop {
     }};
 }
 
+#[lamellar_prof::prof]
 impl<T: 'static> Drop for Darc<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
@@ -1769,6 +1797,7 @@ impl<T> std::fmt::Debug for DarcCommPtr<T> {
 unsafe impl<T> Send for DarcCommPtr<T> {}
 unsafe impl<T> Sync for DarcCommPtr<T> {}
 
+// #[lamellar_prof::prof]
 impl<T> DarcCommPtr<T> {
     pub(crate) fn as_ptr(&self) -> *const DarcInner<T> {
         unsafe { self.alloc.as_ptr() }
@@ -1798,6 +1827,7 @@ impl<T> DarcCommPtr<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T> Clone for DarcCommPtr<T> {
     fn clone(&self) -> Self {
         DarcCommPtr {
@@ -1825,6 +1855,7 @@ impl<T> std::ops::DerefMut for DarcCommPtr<T> {
 #[lamellar_impl::rt_am_local]
 impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
+    
     async fn exec(self) {
         let mut timeout = std::time::Instant::now();
 
@@ -1980,6 +2011,7 @@ impl std::fmt::Debug for __NetworkDarc {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T> From<Darc<T>> for __NetworkDarc {
     fn from(darc: Darc<T>) -> Self {
         trace!("net darc from darc id: {:?}", darc.id);
@@ -1996,6 +2028,7 @@ impl<T> From<Darc<T>> for __NetworkDarc {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T> From<&Darc<T>> for __NetworkDarc {
     fn from(darc: &Darc<T>) -> Self {
         trace!("net darc from &darc {:?}", darc.id);
@@ -2013,6 +2046,7 @@ impl<T> From<&Darc<T>> for __NetworkDarc {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T> From<__NetworkDarc> for Darc<T> {
     fn from(ndarc: __NetworkDarc) -> Self {
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {

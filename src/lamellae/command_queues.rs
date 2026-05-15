@@ -955,7 +955,7 @@ impl CQGet {
             }
             self.cq.check_alloc(print);
             print = false;
-            async_std::task::yield_now().await;
+            async_std::task::sleep(std::time::Duration::from_millis(10)).await;
         }
     } 
 
@@ -964,7 +964,7 @@ impl CQGet {
         let mut panic = false;
         while self.scheduler.active(0) && !panic {
             panic = self.cq.check_panic();
-            async_std::task::yield_now().await;
+            async_std::task::sleep(std::time::Duration::from_millis(1000)).await;
         }
         if panic {
             warn!("received panic from other PE");

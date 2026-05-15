@@ -129,6 +129,7 @@ pub enum LamellarMemoryRegion<T: Remote> {
 //     }
 // }
 
+#[lamellar_prof::prof]
 impl<T: Remote> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
@@ -151,6 +152,7 @@ impl<T: Remote> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
     // }
 }
 
+#[lamellar_prof::prof]
 impl<T: Remote> LamellarMemoryRegion<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     /// If the memory region contains local data, return it as a mutable slice
@@ -183,6 +185,8 @@ impl<T: Remote> LamellarMemoryRegion<T> {
     //     }
     // }
 }
+
+#[lamellar_prof::prof]
 impl<T: Remote> SubRegion<T> for LamellarMemoryRegion<T> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
         match self {
@@ -192,6 +196,8 @@ impl<T: Remote> SubRegion<T> for LamellarMemoryRegion<T> {
     }
 }
 
+
+#[lamellar_prof::prof]
 impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn from(output: LamellarArrayRdmaOutput<T>) -> Self {
@@ -203,6 +209,8 @@ impl<T: Dist> From<LamellarArrayRdmaOutput<T>> for LamellarMemoryRegion<T> {
     }
 }
 
+
+#[lamellar_prof::prof]
 impl<T: Dist> From<LamellarArrayRdmaInput<T>> for LamellarMemoryRegion<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn from(input: LamellarArrayRdmaInput<T>) -> Self {
@@ -217,6 +225,7 @@ impl<T: Dist> From<LamellarArrayRdmaInput<T>> for LamellarMemoryRegion<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
@@ -224,6 +233,7 @@ impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn team_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
@@ -231,6 +241,7 @@ impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn team_from(mr: LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
@@ -238,6 +249,7 @@ impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn team_try_from(
@@ -248,6 +260,7 @@ impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn team_try_from(
@@ -258,6 +271,7 @@ impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T>
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn from(mr: &LamellarMemoryRegion<T>) -> Self {
@@ -265,6 +279,7 @@ impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn team_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
@@ -272,6 +287,7 @@ impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> 
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn team_from(mr: LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
@@ -279,6 +295,7 @@ impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn team_try_from(
@@ -289,6 +306,7 @@ impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<
     }
 }
 
+#[lamellar_prof::prof]
 impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn team_try_from(
@@ -792,6 +810,7 @@ pub(crate) struct MemoryRegion<T: Remote> {
     phantom: PhantomData<T>,
 }
 
+#[lamellar_prof::prof]
 impl<T: Remote> MemoryRegion<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
@@ -1306,7 +1325,18 @@ impl<T: Remote> MemoryRegion<T> {
             self.alloc.num_bytes() / std::mem::size_of::<T>(),
         )
     }
-    //#[tracing::instrument(skip_all, level = "debug")]
+    
+
+    // //#[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
+    //     if self.mode == Mode::Remote {
+    //         return Err(MemRegionError::MemNotLocalError);
+    //     }
+    //     unsafe { Ok(self.alloc.as_mut_ptr()) }
+    // }
+}
+impl<T: Remote> MemoryRegion<T> {
+//#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn as_casted_mut_slice<R: Remote>(&self) -> MemResult<&mut [R]> {
         if self.mode == Mode::Remote {
             return Ok(&mut []);
@@ -1319,15 +1349,6 @@ impl<T: Remote> MemoryRegion<T> {
             self.alloc.num_bytes() / std::mem::size_of::<R>(),
         ))
     }
-
-    // //#[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
-    //     if self.mode == Mode::Remote {
-    //         return Err(MemRegionError::MemNotLocalError);
-    //     }
-    //     unsafe { Ok(self.alloc.as_mut_ptr()) }
-    // }
-
     // //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn as_casted_mut_ptr<R: Remote>(&self) -> MemResult<*mut R> {
         if self.mode == Mode::Remote {
@@ -1343,6 +1364,8 @@ impl<T: Remote> MemoryRegion<T> {
         Ok(self.alloc.as_comm_slice())
     }
 }
+
+#[lamellar_prof::prof]
 impl<T: Remote + PartialEq> MemoryRegion<T> {
     pub(crate) fn atomic_compare_exchange(
         &self,
@@ -1388,6 +1411,8 @@ impl<T: Remote + PartialEq> MemoryRegion<T> {
     }
 }
 
+
+#[lamellar_prof::prof]
 impl<T: Remote> MemRegionId for MemoryRegion<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn id(&self) -> usize {

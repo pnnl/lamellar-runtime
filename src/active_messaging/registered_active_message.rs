@@ -105,6 +105,7 @@ pub(crate) struct UnitHeader {
     pub(crate) req_id: ReqId,
 }
 
+ #[lamellar_prof::prof]
 #[async_trait]
 impl ActiveMessageEngine for RegisteredActiveMessages {
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -358,6 +359,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
     }
 }
 
+ #[lamellar_prof::prof]
 impl RegisteredActiveMessages {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(batcher: BatcherType, executor: Arc<Executor>) -> RegisteredActiveMessages {

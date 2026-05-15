@@ -11,6 +11,8 @@ use lamellar::active_messaging::prelude::*;
 
 // use tracing_flame::FlameLayer;
 
+
+
 //----------------- Active message returning nothing-----------------//
 #[lamellar::AmData(Debug, Clone)]
 struct AmNoReturn {
@@ -30,8 +32,24 @@ impl LamellarAM for AmNoReturn {
             hostname::get().unwrap()
         );
         println!("\t{:?} {:?} leaving", self.my_pe, self.test_var);
+        test_am_no_return();
+        test_am_no_return_async().await;
     }
 }
+
+#[lamellar::prof]
+fn test_am_no_return() {
+    println!("This is a test function for AmNoReturn");
+}
+
+#[lamellar::prof]
+async fn test_am_no_return_async() {
+    println!("This is a test async function for AmNoReturn");
+    std::thread::sleep(std::time::Duration::from_millis(1));
+    async_std::task::yield_now().await;
+    std::thread::sleep(std::time::Duration::from_millis(2));
+}
+
 
 #[lamellar::main]
 fn main() {

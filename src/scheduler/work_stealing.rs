@@ -210,6 +210,8 @@ impl WorkStealingThread {
                 }
                 active_cnt.fetch_sub(1, Ordering::SeqCst);
                 trace!("TestSchdulerWorker thread shutting down");
+                // #[cfg(feature = "enable-prof")]
+                // lamellar_prof::fini_prof!();
             })
             .unwrap()
     }

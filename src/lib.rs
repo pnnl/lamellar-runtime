@@ -218,6 +218,7 @@
 //!         - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
 //!
 
+extern crate self as lamellar;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -308,7 +309,24 @@ pub use crate::scheduler::LamellarTask;
 // pub mod lamellar_impl;
 // //#[doc(hidden)]
 pub use lamellar_impl::Dist;
-// use lamellar_impl;
+
+
+#[cfg(feature = "enable-prof")]
+pub mod prof;
+
+#[cfg(feature = "enable-prof")]
+pub use lamellar_prof;
+#[cfg(feature = "enable-prof")]
+pub use lamellar_prof::prof;
+#[cfg(feature = "enable-prof")]
+pub use lamellar_prof::prof_all;
+#[cfg(feature = "enable-prof")]
+pub use lamellar_prof::init_prof;
+#[cfg(feature = "enable-prof")]
+pub use lamellar_prof::init_prof_bt;
+#[cfg(feature = "enable-prof")]
+pub use lamellar_prof::fini_prof;
+
 
 #[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::main;

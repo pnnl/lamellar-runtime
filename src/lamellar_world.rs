@@ -476,6 +476,9 @@ impl Drop for LamellarWorld {
                 ManuallyDrop::drop(&mut self.team_rt);
             }
         }
+
+        // #[cfg(feature = "enable-prof")]
+        // lamellar_prof::fini_prof!();
     }
 }
 

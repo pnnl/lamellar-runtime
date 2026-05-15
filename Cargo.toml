@@ -22,6 +22,7 @@ categories = ["asynchronous", "concurrency", "network-programming", "science"]
 [dependencies]
 lamellar-impl = { version = "0.8.0", path = "impl" }
 lamellar_main = { path = "./lamellar_main", optional = true }
+lamellar-prof = { path = "./lamellar-prof", optional = true }
 
 libfabric = { git = "https://github.com/pnnl/lamellar.git", features = [
     # "use-async-std",
@@ -103,6 +104,9 @@ thiserror = { version = "2.0.16", optional = true }
 zerocopy = "0.8.48"
 zerocopy-derive = "0.8.48"
 
+# hotpath = "0.16"
+backtrace = { version = "0.3", optional = true }
+
 
 [dev-dependencies]
 trybuild = "1.0.71"
@@ -112,6 +116,7 @@ hostname = "0.3"
 nix = "0.23"
 assert_cmd = "2.0.4"
 serial_test = "3.2.0"
+backtrace = "0.3"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
 [workspace]
@@ -162,6 +167,16 @@ with-pmi2 = ["pmi/with-pmi2"]
 with-pmix = ["pmi/with-pmix"]
 with-pmix-vendored = ["pmi/with-pmix-vendored"]
 vendored-pmi = ["pmi/vendored"]
+
+enable-prof = [
+    "lamellar-prof/use-lamellar",
+    "backtrace",
+    "lamellar_main/enable-prof",
+]
+
+# hotpath = ["hotpath/hotpath"]
+# hotpath-cpu = ["hotpath/hotpath-cpu"]
+# hotpath-alloc = ["hotpath/hotpath-alloc"]
 
 
 [profile.release]

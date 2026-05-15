@@ -214,6 +214,7 @@ impl std::fmt::Debug for UcxWorld {
     }
 }
 
+#[lamellar_prof::prof]
 impl UcxWorld {
     pub(crate) fn new() -> Self {
         let my_pmi = Arc::new(
@@ -856,6 +857,7 @@ pub(crate) struct UcxAlloc {
     alloc_table: AllocTable,
 }
 
+#[lamellar_prof::prof]
 impl Clone for UcxAlloc {
     fn clone(&self) -> Self {
         self.increment_fabric_ref_count();
@@ -948,6 +950,7 @@ impl std::fmt::Debug for UcxAlloc {
     }
 }
 
+#[lamellar_prof::prof]
 impl UcxAlloc {
     unsafe fn negate_atomic_value<T>(value: *mut T) {
         let num_bytes = std::mem::size_of::<T>();
@@ -1583,6 +1586,7 @@ impl UcxAlloc {
     }
 }
 
+#[lamellar_prof::prof]
 impl Drop for UcxAlloc {
     fn drop(&mut self) {
         trace!(target: "ucx", "Dropping UcxAlloc mem: {:x} - ({:x}) {:x}",

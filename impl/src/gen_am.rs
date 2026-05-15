@@ -17,6 +17,7 @@ fn impl_lamellar_active_message_trait(
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     // let trace_name = quote! {stringify!(#am_name)};
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
                 let __lamellar_thread_id = #lamellar::LAMELLAR_THREAD_ID.with(|id| *id);
@@ -43,6 +44,7 @@ pub(crate) fn impl_lamellar_am_trait(
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
         #[async_trait::async_trait]
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::LamellarAM for #am_name #ty_generics #where_clause {
             type Output = #ret_type;
             async fn exec(self) -> Self::Output{
@@ -59,6 +61,7 @@ fn impl_serde_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl  #impl_generics #lamellar::active_messaging::Serde for #am_name #ty_generics #where_clause {}
     }
 }
@@ -70,6 +73,7 @@ pub(crate) fn impl_lamellar_serde_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::LamellarSerde for #am_name #ty_generics #where_clause {
             fn serialized_size(&self)->usize{
                 #lamellar::serialized_size(self,true)
@@ -91,6 +95,7 @@ fn impl_return_lamellar_serde_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::LamellarSerde for #am_name #ty_generics #where_clause {
             fn serialized_size(&self)->usize{
                 #lamellar::serialized_size(&self.val,true)
@@ -113,6 +118,7 @@ pub(crate) fn impl_lamellar_result_serde_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::LamellarResultSerde for #am_name #ty_generics #where_clause {
             fn serialized_result_size(&self,result: & Box<dyn std::any::Any + Sync + Send>)->usize{
                 let result  = result.downcast_ref::<#ret_type>().expect("can downcast result box");
@@ -133,6 +139,7 @@ pub(crate) fn impl_remote_active_message_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::RemoteActiveMessage for #am_name #ty_generics #where_clause {
         fn as_local(self: std::sync::Arc<Self>) -> std::sync::Arc<dyn #lamellar::active_messaging::LamellarActiveMessage + Send + Sync>{
             self
@@ -147,6 +154,7 @@ fn impl_lamellar_result_darc_serde_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::LamellarResultDarcSerde for #am_name #ty_generics #where_clause{}
     }
 }
@@ -159,6 +167,7 @@ fn impl_unpack_and_register_function(
     let (impl_generics, ty_generics, _where_clause) = generics.split_for_impl();
     let am_name_unpack = quote::format_ident!("{}_unpack", am_name.clone());
     quote! {
+        #[#lamellar::lamellar_prof::prof]
         fn #am_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::active_messaging::RemoteActiveMessage + Sync + Send>  {
             let __lamellar_data: std::sync::Arc<#am_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).expect("can deserialize into remote active message"));
             // <#am_name #ty_generics as #lamellar::active_messaging::DarcSerde>::des(&__lamellar_data,cur_pe);
@@ -182,6 +191,7 @@ pub(crate) fn impl_local_am_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::LocalAM for #am_name #ty_generics #where_clause{
             type Output = #ret_type;
         }
@@ -197,6 +207,7 @@ fn impl_darc_serde_trait(
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote! {
+        #[#lamellar::lamellar_prof::prof_all]
         impl #impl_generics #lamellar::active_messaging::DarcSerde for #name #ty_generics #where_clause{
             fn ser (&self,  num_pes: usize, darcs: &mut Vec<#lamellar::active_messaging::RemotePtr>){
                 #ser

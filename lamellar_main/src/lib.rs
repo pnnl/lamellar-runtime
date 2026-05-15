@@ -331,6 +331,17 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         .stmts
         .iter()
         .position(|stmt| quote!(#stmt).to_string().contains("LamellarWorldBuilder"));
+
+
+    let (init_prof,fini_prof) = if cfg!(feature = "enable-prof") {
+        (quote! {
+            lamellar::init_prof_bt!();
+        }, quote! {
+            lamellar::fini_prof!();
+        })
+    } else {
+        (quote! {}, quote! {})
+    };
     let timed_body = if let Some(idx) = world_build_idx {
         let pre = &func.block.stmts[..idx];
         let world_stmt = &func.block.stmts[idx];
@@ -346,6 +357,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 __lamellar_app_start = std::time::Instant::now();
                 #(#post)*
+                
             } // this should enforce that world is dropped across all PEs before we print the application time, which is important for accurate timing of the application code.
             if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
                 println!("[LAMELLAR_MAIN] application time: {:?}", __lamellar_app_start.elapsed());
@@ -353,7 +365,11 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         }
     } else {
         let stmts = &func.block.stmts;
-        quote! { #(#stmts)* }
+        quote! {
+            {
+                #(#stmts)*
+            }
+        }
     };
 
     #[cfg(not(any(feature = "use-prterun", feature = "use-srun")))]
@@ -391,6 +407,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     let res = quote! {
         #import
 
+        // #[hotpath::main]
         fn main() #ret_type {
             #launch_block
             else {
@@ -413,6 +430,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 }
                 let result = (|| { #timed_body })();
+                #fini_prof
                 result
             }
         }
