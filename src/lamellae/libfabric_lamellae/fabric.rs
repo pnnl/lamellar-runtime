@@ -670,7 +670,7 @@ impl Ofi {
                 mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
                     
             let contexts_cache_size = 10;
-            let mut contexts = Arc::new(Mutex::new(Vec::with_capacity(contexts_cache_size)));
+            let contexts = Arc::new(Mutex::new(Vec::with_capacity(contexts_cache_size)));
             for _ in 0..contexts_cache_size {
                 contexts.lock().push(
                     CachedContext{
@@ -790,6 +790,7 @@ impl Ofi {
         }
     }
 
+    #[allow(dead_code)]
     fn allocate_context(&self) -> CachedContext {
         self.comm_group.allocate_context()
     }
@@ -1181,6 +1182,7 @@ impl Ofi {
         let mut barrier_impl = self.barrier_impl.write();
         *barrier_impl = BarrierImpl::Uninit;
     }
+
     pub(crate) fn alloc(
         self: &Arc<Ofi>,
         size: usize,

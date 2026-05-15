@@ -3,7 +3,7 @@ use std::sync::{Arc, atomic::AtomicUsize};
 use async_std::task::yield_now;
 use crate::Distribution;
 use crate::scheduler::Scheduler;
-use crate::{ActiveMessaging, AsLamellarBuffer, BroadcastInput, Dist, ElementArithmeticOps, ElementBitWiseOps, GenericAtomicArray, GlobalLockArray, LamellarArray, LamellarBuffer, NativeAtomicArray, ReadOnlyOps, array::NetworkAtomicArray, lamellae::{CommAlloc, CommAllocRdma, collective::{ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer}}};
+use crate::{ActiveMessaging, AsLamellarBuffer, Dist, ElementArithmeticOps, ElementBitWiseOps, GenericAtomicArray, GlobalLockArray, LamellarArray, LamellarBuffer, NativeAtomicArray, ReadOnlyOps, array::NetworkAtomicArray, lamellae::{CommAlloc, CommAllocRdma, collective::{ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer}}};
 
 pub(crate) trait AtomicArrayOpsForCollectiveOps<T: Dist>: LamellarArray<T> + ActiveMessaging + ReadOnlyOps<T> {
     fn copy_local_data(&self, index: usize, count: usize, buffer: &mut [T]);
@@ -770,7 +770,7 @@ where
     sync_slice[0].store(index, std::sync::atomic::Ordering::SeqCst); // store index in sync array to signal to other PEs that we are ready to start the gather
     sync_slice.iter_mut().skip(2).for_each(|elem| elem.store(0, std::sync::atomic::Ordering::SeqCst)); // initialize sync array to 0
     array.async_barrier().await; // ensure all PEs have written the index before starting the gather
-    let mut my_new_id ;
+    let my_new_id ;
 
     let mut replace = vec![T::default(); count];
     array.copy_local_data(index, count, &mut replace);

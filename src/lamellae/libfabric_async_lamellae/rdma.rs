@@ -29,7 +29,6 @@ pub(super) enum AllocOp<T: Remote> {
 }
 
 struct PutFutureData<T: Remote> {
-    my_pe: usize,
     alloc: LibfabricAsyncAlloc,
     offset: usize,
     op: AllocOp<T>,
@@ -287,7 +286,6 @@ impl<T: Remote> Future for LibfabricAsyncGetBufferFuture<T> {
 }
 
 struct GetIntoBufferFutureData<T: Remote, B: AsLamellarBuffer<T>> {
-    my_pe: usize,
     alloc: LibfabricAsyncAlloc,
     pe: usize,
     offset: usize,
@@ -460,7 +458,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     ) -> RdmaHandle<T> {
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-                my_pe: self.ofi.my_pe,
                 alloc: self.clone(),
                 offset,
                 op: AllocOp::Put(pe, src),
@@ -509,7 +506,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     ) -> RdmaHandle<T> {
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-                my_pe: self.ofi.my_pe,
                 alloc: self.clone(),
                 offset,
                 op: AllocOp::PutBuf(pe, src.into()),
@@ -544,7 +540,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         let pes = (0..self.num_pes()).collect();
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-                my_pe: self.ofi.my_pe,
                 alloc: self.clone(),
                 offset,
                 op: AllocOp::PutAll(pes, src.into()),
@@ -585,7 +580,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         let pes = (0..self.num_pes()).collect();
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-                my_pe: self.ofi.my_pe,
                 alloc: self.clone(),
                 offset,
                 op: AllocOp::PutAllBuf(pes, src.into()),
@@ -728,7 +722,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     ) -> RdmaGetIntoBufferHandle<T, B> {
         LibfabricAsyncGetIntoBufferFuture {
             fut_data: Some(GetIntoBufferFutureData {
-                my_pe: self.ofi.my_pe,
                 alloc: self.clone(),
                 pe,
                 offset,
@@ -805,7 +798,6 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
 
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-                my_pe: self.alloc.ofi.my_pe,
                 alloc: self.alloc.clone(),
                 offset: offset,
                 op: AllocOp::Put(pe, src),
@@ -874,7 +866,6 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
 
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-                my_pe: self.alloc.ofi.my_pe,
                 alloc: self.alloc.clone(),
                 offset,
                 op: AllocOp::PutBuf(pe, src.into()),
@@ -1034,7 +1025,6 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         );
         LibfabricAsyncGetIntoBufferFuture {
             fut_data: Some(GetIntoBufferFutureData {
-                my_pe: self.alloc.ofi.my_pe,
                 alloc: self.alloc.clone(),
                 pe,
                 offset,

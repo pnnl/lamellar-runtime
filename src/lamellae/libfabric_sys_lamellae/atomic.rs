@@ -52,13 +52,12 @@ impl<T: Send + 'static> LibfabricSysAtomicFuture<T> {
         );
         for pe in &self.remote_pes {
             LibfabricSysAlloc::atomic_op_inner(&self.alloc, *pe, self.offset, &self.op, false)
-                .unwrap();
         }
         self.spawned = true;
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all()
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
@@ -67,7 +66,7 @@ impl<T: Send + 'static> LibfabricSysAtomicFuture<T> {
         let ofi = self.alloc.ofi.clone();
         self.scheduler
             .clone()
-            .spawn_task(async move { ofi.wait_all().unwrap() }, counters)
+            .spawn_task(async move { ofi.wait_all() }, counters)
     }
 }
 
@@ -94,7 +93,7 @@ impl<T: Send + 'static> Future for LibfabricSysAtomicFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
         Poll::Ready(())
     }
 }
@@ -127,13 +126,12 @@ impl<T: Remote> LibfabricSysAtomicFetchFuture<T> {
             &self.op,
             std::slice::from_mut(self.result.as_mut()),
             false,
-        )
-        .unwrap();
+        );
         self.spawned = true;
     }
     pub(crate) fn block(mut self) -> T {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
         *self.result
     }
 
@@ -169,7 +167,7 @@ impl<T: Remote> Future for LibfabricSysAtomicFetchFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
 
         Poll::Ready(*self.result)
     }
@@ -198,14 +196,13 @@ impl<T: Remote + PartialEq> LibfabricSysAtomicCompareExchangeFuture<T> {
             self.new,
             std::slice::from_mut(self.result.as_mut()),
             false,
-        )
-        .unwrap();
+        );
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Result<T, T> {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
         compare_exchange_result(*self.result, self.current)
     }
 
@@ -241,7 +238,7 @@ impl<T: Remote + PartialEq> Future for LibfabricSysAtomicCompareExchangeFuture<T
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
         Poll::Ready(compare_exchange_result(*self.result, self.current))
     }
 }
@@ -267,10 +264,10 @@ impl CommAllocAtomic for LibfabricSysAlloc {
         .into()
     }
     fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        LibfabricSysAlloc::atomic_op_inner(self, pe, offset, &op, true).unwrap();
+        LibfabricSysAlloc::atomic_op_inner(self, pe, offset, &op, true);
     }
     fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        LibfabricSysAlloc::atomic_op_inner(self, pe, offset, &op, false).unwrap();
+        LibfabricSysAlloc::atomic_op_inner(self, pe, offset, &op, false);
     }
     fn atomic_op_all<T: Remote>(
         &self,
@@ -292,7 +289,7 @@ impl CommAllocAtomic for LibfabricSysAlloc {
     }
     fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, offset: usize) {
         for pe in 0..self.num_pes() {
-            LibfabricSysAlloc::atomic_op_inner(self, pe, offset, &op, false).unwrap();
+            LibfabricSysAlloc::atomic_op_inner(self, pe, offset, &op, false);
         }
     }
     fn atomic_fetch_op<T: Remote>(
@@ -318,8 +315,7 @@ impl CommAllocAtomic for LibfabricSysAlloc {
     fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
         let mut result = T::default();
         let mut_result_slice = std::slice::from_mut(&mut result);
-        LibfabricSysAlloc::atomic_fetch_op_inner(self, pe, offset, &op, mut_result_slice, true)
-            .unwrap();
+        LibfabricSysAlloc::atomic_fetch_op_inner(self, pe, offset, &op, mut_result_slice, true);
         result
     }
     fn atomic_compare_exchange<T: Remote + PartialEq>(
@@ -360,8 +356,7 @@ impl CommAllocAtomic for LibfabricSysAlloc {
             new,
             std::slice::from_mut(&mut result),
             true,
-        )
-        .unwrap();
+        );
         compare_exchange_result(result, current)
     }
 }
@@ -397,7 +392,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
             "atomic op called on OneSidedLibfabricSysAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        LibfabricSysAlloc::atomic_op_inner(&self.alloc, pe, offset, &op, true).unwrap();
+        LibfabricSysAlloc::atomic_op_inner(&self.alloc, pe, offset, &op, true);
     }
 
     fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
@@ -406,7 +401,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
             "atomic op called on OneSidedLibfabricSysAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        LibfabricSysAlloc::atomic_op_inner(&self.alloc, pe, offset, &op, false).unwrap();
+        LibfabricSysAlloc::atomic_op_inner(&self.alloc, pe, offset, &op, false);
     }
     fn atomic_op_all<T: Remote>(
         &self,
@@ -453,8 +448,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
         );
         let mut result = T::default();
         let mut_result_slice = std::slice::from_mut(&mut result);
-        LibfabricSysAlloc::atomic_fetch_op_inner(&self.alloc, pe, offset, &op, mut_result_slice, true)
-            .unwrap();
+        LibfabricSysAlloc::atomic_fetch_op_inner(&self.alloc, pe, offset, &op, mut_result_slice, true);
         result
     }
     fn atomic_compare_exchange<T: Remote + PartialEq>(
@@ -505,8 +499,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
             new,
             std::slice::from_mut(&mut result),
             true,
-        )
-        .unwrap();
+        );
         compare_exchange_result(result, current)
     }
 }

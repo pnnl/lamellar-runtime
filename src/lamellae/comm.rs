@@ -14,6 +14,9 @@ pub(crate) use slice::*;
 use super::Backend;
 pub use rdma::Remote;
 
+#[cfg(feature = "enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::comm::LibfabricSysComm;
+
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::comm::LibfabricComm;
 
@@ -60,6 +63,8 @@ pub(crate) enum CollectiveOpKind {
 #[enum_dispatch(CommMem, CommShutdown, CommInfo, CommProgress)]
 #[derive(Debug)]
 pub(crate) enum Comm {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(LibfabricSysComm),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(LibfabricComm),
     #[cfg(feature = "enable-libfabric-mt")]

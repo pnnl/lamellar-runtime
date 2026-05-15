@@ -61,14 +61,12 @@ impl<T: Remote> LibfabricSysPutFuture<T> {
                 self.offset,
                 std::slice::from_ref(src),
                 false,
-            )
-            .expect("error in put")
+            );
         };
     }
     fn inner_put_buf(&self, pe: usize, src: &MemregionRdmaInputInner<T>) {
         unsafe {
-            LibfabricSysAlloc::inner_put(&self.alloc, pe, self.offset, src.as_slice(), false)
-                .expect("error in put_buf")
+            LibfabricSysAlloc::inner_put(&self.alloc, pe, self.offset, src.as_slice(), false);
         };
     }
 
@@ -106,7 +104,7 @@ impl<T: Remote> LibfabricSysPutFuture<T> {
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
@@ -114,7 +112,7 @@ impl<T: Remote> LibfabricSysPutFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler
             .clone()
-            .spawn_task(async move { self.alloc.ofi.wait_all().unwrap() }, counters)
+            .spawn_task(async move { self.alloc.ofi.wait_all() }, counters)
     }
 }
 
@@ -141,7 +139,7 @@ impl<T: Remote> Future for LibfabricSysPutFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
 
         Poll::Ready(())
     }
@@ -169,15 +167,14 @@ impl<T: Remote> LibfabricSysGetFuture<T> {
                     self.offset,
                     std::slice::from_mut(&mut *self.result),
                     false,
-                )
-                .expect("error in get");
+                );
         }
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
         // unsafe { self.result.assume_init_read() }
         *self.result
     }
@@ -187,7 +184,7 @@ impl<T: Remote> LibfabricSysGetFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                self.alloc.ofi.wait_all().unwrap();
+                self.alloc.ofi.wait_all();
                 *self.result
             },
             counters,
@@ -219,7 +216,7 @@ impl<T: Remote> Future for LibfabricSysGetFuture<T> {
             self.exec_at();
         }
         let this = self.project();
-        this.alloc.ofi.wait_all().unwrap();
+        this.alloc.ofi.wait_all();
 
         // Poll::Ready(unsafe { this.result.assume_init_read() })
         Poll::Ready(**this.result)
@@ -244,8 +241,7 @@ impl<T: Remote> LibfabricSysGetBufferFuture<T> {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
             self.alloc
-                .inner_get(self.pe, self.offset, &mut self.result, false)
-                .expect("error in get_buffer");
+                .inner_get(self.pe, self.offset, &mut self.result, false);
             self.spawned = true;
         }
     }
@@ -253,7 +249,7 @@ impl<T: Remote> LibfabricSysGetBufferFuture<T> {
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_at();
 
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
         std::mem::take(&mut self.result)
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
@@ -262,7 +258,7 @@ impl<T: Remote> LibfabricSysGetBufferFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                self.alloc.ofi.wait_all().unwrap();
+                self.alloc.ofi.wait_all();
                 std::mem::take(&mut self.result)
             },
             counters,
@@ -294,7 +290,7 @@ impl<T: Remote> Future for LibfabricSysGetBufferFuture<T> {
             self.exec_at();
         }
         let this = self.project();
-        this.alloc.ofi.wait_all().unwrap();
+        this.alloc.ofi.wait_all();
         Poll::Ready(std::mem::take(this.result))
     }
 }
@@ -320,15 +316,14 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysGetIntoBufferFuture<T, B> {
                 self.offset,
                 self.dst.as_mut_slice(),
                 false,
-            )
-            .expect("error in get_into_buffer");
+            );
         };
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
@@ -337,7 +332,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysGetIntoBufferFuture<T, B> {
         let ofi = self.alloc.ofi.clone();
         self.scheduler
             .clone()
-            .spawn_task(async move { ofi.wait_all().unwrap() }, counters)
+            .spawn_task(async move { ofi.wait_all() }, counters)
     }
 }
 
@@ -366,7 +361,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricSysGetIntoBufferFutu
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        self.alloc.ofi.wait_all();
         Poll::Ready(())
     }
 }
@@ -393,8 +388,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
     }
     fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         unsafe {
-            LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), true)
-                .expect("error in put_blocking")
+            LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), true);
         };
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -403,8 +397,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
             std::mem::size_of::<T>()
         );
         unsafe {
-            LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
-                .expect("error in put_unmanaged")
+            LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false);
         };
     }
     fn put_buffer<T: Remote>(
@@ -435,8 +428,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
         let src = src.into();
 
         unsafe {
-            LibfabricSysAlloc::inner_put(&self, pe, offset, src.as_slice(), false)
-                .expect("error in put_buffer_unmanaged")
+            LibfabricSysAlloc::inner_put(&self, pe, offset, src.as_slice(), false);
         };
     }
     fn put_all<T: Remote>(
@@ -461,8 +453,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
     fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
         for pe in 0..self.num_pes() {
             unsafe {
-                LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
-                    .expect("error in put_all_unmanaged")
+                LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false);
             };
         }
     }
@@ -493,8 +484,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
         let src = src.into();
         for pe in 0..self.num_pes() {
             unsafe {
-                LibfabricSysAlloc::inner_put(&self, pe, offset, src.as_slice(), false)
-                    .expect("error in put_all_buffer_unmanaged")
+                LibfabricSysAlloc::inner_put(&self, pe, offset, src.as_slice(), false);
             };
         }
     }
@@ -522,8 +512,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
         let mut val = T::default();
         let val_slice = std::slice::from_mut(&mut val);
         unsafe {
-            LibfabricSysAlloc::inner_get_small(self, pe, offset, val_slice, true)
-                .expect("error in blocking_get")
+            LibfabricSysAlloc::inner_get_small(self, pe, offset, val_slice, true);
         };
         val
         // let mut result = T::default();
@@ -562,8 +551,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
     fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
         let mut dst = vec![T::default(); len];
         unsafe {
-            self.inner_get(pe, offset, &mut dst, true)
-                .expect("error in blocking_get_buffer")
+            self.inner_get(pe, offset, &mut dst, true);
         };
         dst
     }
@@ -594,8 +582,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            LibfabricSysAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), true)
-                .expect("error in blocking_get_into_buffer")
+            LibfabricSysAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), true);
         };
     }
 
@@ -606,8 +593,7 @@ impl CommAllocRdma for LibfabricSysAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            LibfabricSysAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), false)
-                .expect("error in get_into_buffer_unmanaged")
+            LibfabricSysAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), false);
         };
     }
 }
@@ -645,8 +631,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
             pe, self.remote_pe
         );
         unsafe {
-            LibfabricSysAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src), true)
-                .expect("error in put_blocking")
+            LibfabricSysAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src), true);
         };
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -656,8 +641,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
             pe, self.remote_pe
         );
         unsafe {
-            LibfabricSysAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src), false)
-                .expect("error in put_unmanaged")
+            LibfabricSysAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src), false);
         };
     }
     fn put_buffer<T: Remote>(
@@ -698,8 +682,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
         );
         let src = src.into();
         unsafe {
-            LibfabricSysAlloc::inner_put(&self.alloc, pe, offset, src.as_slice(), false)
-                .expect("error in put_buffer_unmanaged")
+            LibfabricSysAlloc::inner_put(&self.alloc, pe, offset, src.as_slice(), false);
         };
     }
     fn put_all<T: Remote>(
@@ -763,8 +746,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
         let mut val = T::default();
         let val_slice = std::slice::from_mut(&mut val);
         unsafe {
-            LibfabricSysAlloc::inner_get_small(&self.alloc, pe, offset, val_slice, true)
-                .expect("error in blocking_get")
+            LibfabricSysAlloc::inner_get_small(&self.alloc, pe, offset, val_slice, true);
         };
         val
     }
@@ -802,8 +784,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
         let mut dst = vec![T::default(); len];
         unsafe {
             self.alloc
-                .inner_get(pe, offset, &mut dst, true)
-                .expect("error in blocking_get_buffer");
+                .inner_get(pe, offset, &mut dst, true);
         };
         dst
     }
@@ -844,8 +825,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
             pe, self.remote_pe
         );
         unsafe {
-            LibfabricSysAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), true)
-                .expect("error in blocking_get_into_buffer")
+            LibfabricSysAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), true);
         };
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
@@ -856,8 +836,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
     ) {
         assert_eq!(pe, self.remote_pe, "get_into_buffer_unmanaged called on OneSidedLibfabricSysAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
         unsafe {
-            LibfabricSysAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), false)
-                .expect("error in get_into_buffer_unmanaged")
+            LibfabricSysAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), false);
         };
     }
 }

@@ -40,7 +40,7 @@ impl LibfabricSysComm {
             HEAP_SIZE.store(size, Ordering::SeqCst);
         }
         let ofi = Ofi::new(provider, domain).expect("error in ofi init");
-        trace!("ofi initialized: {:?}", ofi);
+        println!("ofi initialized: {:?}", ofi);
 
         ofi.barrier().unwrap();
         let num_pes = ofi.num_pes;
@@ -55,7 +55,11 @@ impl LibfabricSysComm {
                 std::mem::align_of::<u8>(),
             )
             .expect("error in ofi alloc");
-
+        println!(
+            "ofi allocated memory: addr={:?}, len={:?}",
+            alloc_info.start(),
+            alloc_info.num_bytes()
+        );
         let lib_fabric_comm = LibfabricSysComm {
             ofi: ofi.clone(),
             runtime_allocs: RwLock::new(vec![(
@@ -71,9 +75,11 @@ impl LibfabricSysComm {
             get_amt: Arc::new(AtomicUsize::new(0)),
             // get_cnt: Arc::new(AtomicUsize::new(0)),
         };
+        println!("lib_fabric_comm initialized: {:?}", lib_fabric_comm);
         lib_fabric_comm.runtime_allocs.write()[0]
             .1
             .init(alloc_info.start(), total_mem);
+        println!("lib_fabric_comm runtime allocator initialized with memory: addr={:?}, len={:?}", alloc_info.start(), total_mem);
         lib_fabric_comm
     }
 
@@ -94,14 +100,14 @@ impl CommProgress for LibfabricSysComm {
         self.ofi.thread_progress();
     }
     fn wait_all(&self) {
-        self.ofi.wait_all().expect("libfabric-sys wait error");
+        self.ofi.wait_all();
     }
     fn thread_wait(&self) {
-        self.ofi.thread_wait().expect("libfabric-sys thread wait error");
+        self.ofi.thread_wait();
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
-        // self.ofi.barrier().expect("error in libfabric-sys barrier");
+        self.ofi.barrier().expect("error in libfabric-sys barrier");
     }
 }
 

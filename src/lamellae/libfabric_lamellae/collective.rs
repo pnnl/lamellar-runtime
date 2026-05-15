@@ -3,7 +3,7 @@ use crate::{
 };
 
 use super::{
-    fabric::{LibfabricAlloc, CachedContext},
+    fabric::{LibfabricAlloc},
     Scheduler,
 };
 
