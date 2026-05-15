@@ -137,10 +137,12 @@ impl LibfabricMem {
         }
     }
 
+    #[allow(dead_code)]
     fn as_slice(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
 
+    #[allow(dead_code)]
     fn as_mut_slice(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut(self.as_ptr(), self.len()) }
     }
@@ -669,7 +671,7 @@ impl Ofi {
                 mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
                     
             let contexts_cache_size = 10;
-            let mut contexts = Arc::new(Mutex::new(Vec::with_capacity(contexts_cache_size)));
+            let contexts = Arc::new(Mutex::new(Vec::with_capacity(contexts_cache_size)));
             for _ in 0..contexts_cache_size {
                 contexts.lock().push(
                     CachedContext{
@@ -789,6 +791,7 @@ impl Ofi {
         }
     }
 
+    #[allow(dead_code)]
     fn allocate_context(&self) -> CachedContext {
         self.comm_group.allocate_context()
     }
@@ -1142,6 +1145,7 @@ impl Ofi {
         Ok(all_mem_info)
     }
 
+    #[allow(dead_code)]
     fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
         let mut coll_attr = CollectiveAttr::<()>::new();
 
@@ -1174,10 +1178,12 @@ impl Ofi {
             Ok(())
         }
     }
+
     pub(crate) fn clear_barrier(&self) {
         let mut barrier_impl = self.barrier_impl.write();
         *barrier_impl = BarrierImpl::Uninit;
     }
+
     pub(crate) fn alloc(
         self: &Arc<Ofi>,
         size: usize,
@@ -2232,11 +2238,13 @@ impl LibfabricAlloc {
             }
         }
     }
-
+    
+    #[allow(dead_code)]
     pub(crate) fn remote_info(&self, remote_pe: &usize) -> Option<RemoteMemAddressInfo> {
         self.remote_allocs.get(remote_pe).cloned()
     }
-
+    
+    #[allow(dead_code)]
     pub(crate) fn mr(&self) -> MemoryRegion {
         self.mr.clone()
     }

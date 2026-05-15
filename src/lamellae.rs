@@ -6,6 +6,8 @@ pub(crate) mod shmem_lamellae;
 #[cfg(feature = "enable-on-node-shmem")]
 pub(crate) mod shmem_utils;
 
+#[cfg(feature="enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::LibfabricSys;
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
 
@@ -33,6 +35,8 @@ pub(crate) mod libfabric_async_lamellae;
 #[cfg(feature = "enable-ucx")]
 pub(crate) mod ucx_lamellae;
 
+#[cfg(feature = "enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::LibfabricSysBuilder;
 #[cfg(feature = "enable-libfabric-async")]
 use libfabric_async_lamellae::{LibfabricAsync, LibfabricAsyncBuilder};
 #[cfg(feature = "enable-libfabric")]
@@ -62,6 +66,9 @@ pub enum Backend {
     #[cfg(feature = "enable-rofi-c")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-rofi-c")))]
     RofiC,
+    #[cfg(feature = "enable-libfabric-sys")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric-sys")))]
+    LibfabricSys,
     #[cfg(feature = "enable-libfabric")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric")))]
     Libfabric,
@@ -99,6 +106,12 @@ impl Default for Backend {
                 return Backend::RofiC;
                 #[cfg(not(feature = "enable-rofi-c"))]
                 panic!("unable to set rofi C backend, recompile with 'enable-rofi-c' feature")
+            }
+            "libfabric-sys" => {
+                #[cfg(feature = "enable-libfabric-sys")]
+                return Backend::LibfabricSys;
+                #[cfg(not(feature = "enable-libfabric-sys"))]
+                panic!("unable to set libfabric-sys backend, recompile with 'enable-libfabric-sys' feature")
             }
             "libfabric" => {
                 #[cfg(feature = "enable-libfabric")]
@@ -334,6 +347,8 @@ pub(crate) trait Des {
 pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-rofi-c")]
     RofiCBuilder,
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSysBuilder,
     #[cfg(feature = "enable-libfabric")]
     LibfabricBuilder,
     #[cfg(feature = "enable-libfabric-mt")]
@@ -377,6 +392,8 @@ pub(crate) trait Ser {
 pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi-c")]
     RofiC,
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys,
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
     #[cfg(feature = "enable-libfabric-mt")]
@@ -398,7 +415,9 @@ impl Lamellae {
         match self {
             #[cfg(feature = "enable-rofi-c")]
             Lamellae::RofiC(rofi_c) => rofi_c.comm(),
-            #[cfg(feature = "enable-libfabric")]
+            #[cfg(feature = "enable-libfabric-sys")]
+            Lamellae::LibfabricSys(libfabric_sys) => libfabric_sys.comm(),
+                        #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.comm(),
             #[cfg(feature = "enable-libfabric-mt")]
             Lamellae::LibfabricMt(libfabric_mt) => libfabric_mt.comm(),
@@ -417,6 +436,8 @@ impl Lamellae {
         match self {
             #[cfg(feature = "enable-rofi-c")]
             Lamellae::RofiC(rofi_c) => rofi_c.wait_all_print(),
+            #[cfg(feature = "enable-libfabric-sys")]
+            Lamellae::LibfabricSys(libfabric_sys) => libfabric_sys.wait_all_print(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.wait_all_print(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -456,6 +477,13 @@ pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeB
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             return LamellaeBuilder::RofiCBuilder(RofiCBuilder::new(&provider, &domain));
+        }
+        #[cfg(feature = "enable-libfabric-sys")]
+        Backend::LibfabricSys => {
+
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            LamellaeBuilder::LibfabricSysBuilder(LibfabricSysBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-libfabric")]
         Backend::Libfabric => {

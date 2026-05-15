@@ -25,7 +25,7 @@ use crate::{
         RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer,
         RootSrcOrLamellarBufferInner, ScatterInput, ScatterInputInner,
     }, ucx_lamellae::ucc::UccRequest},
-    memregion::MemregionRdmaInputInner,
+    // memregion::MemregionRdmaInputInner,
     scheduler::Scheduler,
     warnings::RuntimeWarning,
     AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote,

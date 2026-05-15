@@ -82,6 +82,7 @@ struct CommGroup{
     get_cntr: Counter<WaitableCntr>,
     av: AddressVector,
     eq: EventQueue<WaitableEq>,
+    #[allow(dead_code)]
     info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
@@ -960,6 +961,7 @@ impl Ofi {
         Ok(all_mem_info)
     }
 
+    #[allow(unused)]
     fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
         let mut coll_attr = CollectiveAttr::<()>::new();
 
@@ -1940,10 +1942,12 @@ impl LibfabricMtAlloc {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn remote_info(&self, remote_pe: &usize) -> Option<RemoteMemAddressInfo> {
         self.remote_allocs.get(remote_pe).cloned()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn mr(&self) -> MemoryRegion {
         self.mr.clone()
     }

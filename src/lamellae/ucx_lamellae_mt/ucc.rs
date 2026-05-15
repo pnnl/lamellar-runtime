@@ -478,10 +478,10 @@ impl UccTeam {
         self.post_coll_req(alltoall_args)
     }
 
-    pub(crate) fn barrier(&self) -> Result<UccRequest, Error> {
-        let barrier_args = generate_coll_args::<i32>(&[], &mut [], ucc_coll_type_t_UCC_COLL_TYPE_BARRIER, None, None);
-        self.post_coll_req(barrier_args)
-    }
+    // pub(crate) fn barrier(&self) -> Result<UccRequest, Error> {
+    //     let barrier_args = generate_coll_args::<i32>(&[], &mut [], ucc_coll_type_t_UCC_COLL_TYPE_BARRIER, None, None);
+    //     self.post_coll_req(barrier_args)
+    // }
 
     pub(crate) fn broadcast<T: 'static>(
         &self,

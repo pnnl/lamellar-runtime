@@ -448,6 +448,7 @@ pub struct ArrayCollectiveReduceInPlaceHandle<T: Dist> {
 
 #[pin_project(project = ArrayCollectiveReduceInPlaceStateProj)]
 pub(crate) enum ArrayCollectiveReduceInPlaceState<T: Dist> {
+    #[allow(dead_code)]
     CollectiveReduceInPlace(#[pin] CollectiveReduceInPlaceOpHandle<T>),
     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am

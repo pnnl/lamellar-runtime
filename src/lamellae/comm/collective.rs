@@ -1,3 +1,24 @@
+#[cfg(feature="enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::collective::{
+    LibfabricSysCollectiveAllGatherFuture,
+    LibfabricSysCollectiveAllGatherIntoBufferFuture,
+    LibfabricSysCollectiveAllReduceFuture,
+    LibfabricSysCollectiveAllReduceInPlaceFuture,
+    LibfabricSysCollectiveAllReduceIntoBufferFuture,
+    LibfabricSysCollectiveAllToAllFuture,
+    LibfabricSysCollectiveAllToAllIntoBufferFuture,
+    LibfabricSysCollectiveBroadcastFuture,
+    LibfabricSysCollectiveBroadcastIntoBufferFuture,
+    LibfabricSysCollectiveGatherFuture,
+    LibfabricSysCollectiveGatherIntoBufferFuture,
+    LibfabricSysCollectiveReduceFuture,
+    LibfabricSysCollectiveReduceInPlaceFuture,
+    LibfabricSysCollectiveReduceIntoBufferFuture,
+    LibfabricSysCollectiveReduceScatterFuture,
+    LibfabricSysCollectiveReduceScatterIntoBufferFuture,
+    LibfabricSysCollectiveScatterFuture,
+    LibfabricSysCollectiveScatterIntoBufferFuture,
+};
 use crate::{AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote, active_messaging::AMCounters, scheduler::Scheduler};
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::collective::{
@@ -124,6 +145,8 @@ pub struct CollectiveAllReduceOpHandle<T: Remote> {
 
 #[pin_project(project = CollectiveAllReduceOpFutureProj)]
 pub(crate) enum CollectiveAllReduceOpFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveAllReduceFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllReduceFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -142,6 +165,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> Vec<T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -164,6 +189,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -186,6 +213,8 @@ impl<T: Remote> Future for CollectiveAllReduceOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -211,6 +240,8 @@ pub struct CollectiveAllReduceIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<
 
 #[pin_project(project = CollectiveAllReduceIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveAllReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveAllReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -229,6 +260,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceIntoBufferOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -251,6 +284,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -273,6 +308,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceIntoBuffer
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -298,6 +335,8 @@ pub struct CollectiveAllReduceInPlaceOpHandle<T: Remote, B: AsLamellarBuffer<T>>
 
 #[pin_project(project = CollectiveAllReduceInPlaceOpFutureProj)]
 pub(crate) enum CollectiveAllReduceInPlaceOpFuture<T: Remote, B: AsLamellarBuffer<T>>  {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveAllReduceInPlaceFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllReduceInPlaceFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -316,6 +355,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceInPlaceOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceInPlaceOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -338,6 +379,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceInPlaceOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceInPlaceOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -360,6 +403,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceInPlaceOpH
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllReduceInPlaceOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceInPlaceOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -387,6 +432,8 @@ pub struct CollectiveReduceOpHandle<T: Remote> {
 
 #[pin_project(project = CollectiveReduceOpFutureProj)]
 pub(crate) enum CollectiveReduceOpFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveReduceFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -405,6 +452,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> Option<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -427,6 +476,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -449,6 +500,8 @@ impl<T: Remote> Future for CollectiveReduceOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -475,6 +528,8 @@ pub struct CollectiveReduceIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>>
 
 #[pin_project(project = CollectiveReduceIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -493,6 +548,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self)  {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceIntoBufferOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -515,6 +572,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -537,6 +596,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceIntoBufferOpH
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -555,7 +616,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceIntoBufferOpH
 
 #[must_use = " CollectiveReduceInPlaceOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
-pub struct CollectiveReduceInPlaceOpHandle<T> {
+pub(crate) struct CollectiveReduceInPlaceOpHandle<T> {
     #[pin]
     pub(crate) future: CollectiveReduceInPlaceOpFuture<T>,
 }
@@ -563,12 +624,15 @@ pub struct CollectiveReduceInPlaceOpHandle<T> {
 
 #[pin_project(project = CollectiveReduceInPlaceOpFutureProj)]
 pub(crate) enum CollectiveReduceInPlaceOpFuture<T> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveReduceInPlaceFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceInPlaceFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
     LibfabricMt(#[pin] LibfabricMtCollectiveReduceInPlaceFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveReduceInPlaceFuture<T>),
+    #[allow(dead_code)]
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceInPlaceFuture<T>),
     #[cfg(feature = "enable-ucx-mt")]
@@ -621,6 +685,8 @@ impl<T: Remote> Future for CollectiveReduceInPlaceOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceInPlaceOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceInPlaceOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -647,6 +713,8 @@ pub struct CollectiveAllGatherOpHandle<T: Remote> {
 
 #[pin_project(project = CollectiveAllGatherOpFutureProj)]
 pub(crate) enum CollectiveAllGatherOpFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveAllGatherFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllGatherFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -665,6 +733,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> Vec<T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllGatherOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -687,6 +757,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllGatherOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -709,6 +781,8 @@ impl<T: Remote> Future for CollectiveAllGatherOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllGatherOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -734,6 +808,8 @@ pub struct CollectiveAllGatherIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<
 
 #[pin_project(project = CollectiveAllGatherIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveAllGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveAllGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -752,6 +828,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllGatherIntoBufferOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -774,6 +852,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllGatherIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -796,6 +876,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllGatherIntoBuffer
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllGatherIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -822,6 +904,8 @@ pub struct CollectiveGatherOpHandle<T: Remote> {
 
 #[pin_project(project = CollectiveGatherOpFutureProj)]
 pub(crate) enum CollectiveGatherOpFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveGatherFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveGatherFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -840,6 +924,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> Option<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveGatherOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -862,6 +948,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveGatherOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -884,6 +972,8 @@ impl<T: Remote> Future for CollectiveGatherOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveGatherOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -910,6 +1000,8 @@ pub struct CollectiveGatherIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>>
 
 #[pin_project(project = CollectiveGatherIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -928,6 +1020,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self)  {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveGatherIntoBufferOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -950,6 +1044,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveGatherIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -972,6 +1068,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveGatherIntoBufferOpH
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveGatherIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -998,6 +1096,8 @@ pub struct CollectiveAllToAllOpHandle<T: Remote> {
 
 #[pin_project(project = CollectiveAllToAllOpFutureProj)]
 pub(crate) enum CollectiveAllToAllOpFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveAllToAllFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllToAllFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -1016,6 +1116,8 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> Vec<T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllToAllOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1038,6 +1140,8 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllToAllOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1060,6 +1164,8 @@ impl<T: Remote> Future for CollectiveAllToAllOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllToAllOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1085,6 +1191,8 @@ pub struct CollectiveAllToAllIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T
 
 #[pin_project(project = CollectiveAllToAllIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveAllToAllIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveAllToAllIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllToAllIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -1103,6 +1211,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllToAllIntoBufferOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1125,6 +1235,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllToAllIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1147,6 +1259,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllToAllIntoBufferO
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveAllToAllIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1172,6 +1286,8 @@ pub struct CollectiveBroadcastOpHandle<T: Remote> {
 
 #[pin_project(project = CollectiveBroadcastOpFutureProj)]
 pub(crate) enum CollectiveBroadcastOpFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveBroadcastFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveBroadcastFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -1190,6 +1306,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> Option<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveBroadcastOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1212,6 +1330,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveBroadcastOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1234,6 +1354,8 @@ impl<T: Remote> Future for CollectiveBroadcastOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveBroadcastOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1259,6 +1381,8 @@ pub struct CollectiveBroadcastIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<
 
 #[pin_project(project = CollectiveBroadcastIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveBroadcastIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveBroadcastIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveBroadcastIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -1277,6 +1401,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveBroadcastIntoBufferOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1299,6 +1425,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveBroadcastIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1321,6 +1449,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveBroadcastIntoBuffer
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveBroadcastIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1347,6 +1477,8 @@ pub struct CollectiveScatterOpHandle<T: Remote> {
 
 #[pin_project(project = CollectiveScatterOpFutureProj)]
 pub(crate) enum CollectiveScatterOpFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveScatterFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveScatterFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -1365,6 +1497,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> Vec<T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveScatterOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1387,6 +1521,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveScatterOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1409,6 +1545,8 @@ impl<T: Remote> Future for CollectiveScatterOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveScatterOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1434,6 +1572,8 @@ pub struct CollectiveScatterIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>
 
 #[pin_project(project = CollectiveScatterIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveScatterIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -1452,6 +1592,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveScatterIntoBufferOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1474,6 +1616,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveScatterIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1496,6 +1640,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveScatterIntoBufferOp
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveScatterIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1522,6 +1668,8 @@ pub struct CollectiveReduceScatterOpHandle<T: Remote> {
 
 #[pin_project(project = CollectiveReduceScatterOpFutureProj)]
 pub(crate) enum CollectiveReduceScatterOpFuture<T: Remote> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveReduceScatterFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceScatterFuture<T>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -1540,6 +1688,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> Vec<T> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceScatterOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1562,6 +1712,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Vec<T>> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceScatterOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1584,6 +1736,8 @@ impl<T: Remote> Future for CollectiveReduceScatterOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceScatterOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1609,6 +1763,8 @@ pub struct CollectiveReduceScatterIntoBufferOpHandle<T: Remote, B: AsLamellarBuf
 
 #[pin_project(project = CollectiveReduceScatterIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveReduceScatterIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric-sys")]
+    LibfabricSys(#[pin] LibfabricSysCollectiveReduceScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-mt")]
@@ -1627,6 +1783,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceScatterIntoBufferOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1649,6 +1807,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceScatterIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-mt")]
@@ -1671,6 +1831,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceScatterIntoBu
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
+            #[cfg(feature = "enable-libfabric-sys")]
+            CollectiveReduceScatterIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-mt")]

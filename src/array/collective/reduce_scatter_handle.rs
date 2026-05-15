@@ -4,7 +4,7 @@ use std::{
     pin::Pin, sync::Arc, task::{Context, Poll}
 };
 
-use crate::{AsLamellarBuffer, Dist, LamellarTask, active_messaging::AMCounters, lamellae::collective::{CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpHandle}, scheduler::Scheduler};
+use crate::{AsLamellarBuffer, Dist, LamellarTask, active_messaging::AMCounters, lamellae::collective::{CollectiveReduceScatterIntoBufferOpHandle}, scheduler::Scheduler};
 use crate::array::LamellarByteArray;
 use crate::lamellae::comm::collective::CollectiveReduceScatterOpHandle;
 use crate::warnings::RuntimeWarning;
