@@ -751,6 +751,102 @@ impl crate::active_messaging::DarcSerde for __AtomicByteArray {
     // }
 }
 
+/// Holds a pre-created `Arc` for one of the three sub-array variants, so that iterators
+/// pay only a single `Arc::clone` per element instead of the full `Darc` clone chain.
+pub(crate) enum AtomicIterData<T: Dist> {
+    Native(Arc<crate::array::native_atomic::NativeAtomicArray<T>>),
+    Generic(Arc<crate::array::generic_atomic::GenericAtomicArray<T>>),
+    Network(Arc<crate::array::network_atomic::NetworkAtomicArray<T>>),
+}
+
+impl<T: Dist> Clone for AtomicIterData<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Native(a) => Self::Native(Arc::clone(a)),
+            Self::Generic(a) => Self::Generic(Arc::clone(a)),
+            Self::Network(a) => Self::Network(Arc::clone(a)),
+        }
+    }
+}
+
+impl<T: Dist + 'static> AtomicIterData<T> {
+    pub(crate) fn from_array(array: &AtomicArray<T>) -> Self {
+        match array {
+            AtomicArray::NativeAtomicArray(a) => Self::Native(Arc::new(a.clone())),
+            AtomicArray::GenericAtomicArray(a) => Self::Generic(Arc::new(a.clone())),
+            AtomicArray::NetworkAtomicArray(a) => Self::Network(Arc::new(a.clone())),
+        }
+    }
+
+    pub(crate) fn into_array(&self) -> AtomicArray<T> {
+        match self {
+            Self::Native(a) => AtomicArray::NativeAtomicArray((**a).clone()),
+            Self::Generic(a) => AtomicArray::GenericAtomicArray((**a).clone()),
+            Self::Network(a) => AtomicArray::NetworkAtomicArray((**a).clone()),
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            Self::Native(a) => a.len(),
+            Self::Generic(a) => a.len(),
+            Self::Network(a) => a.len(),
+        }
+    }
+
+    pub(crate) fn num_elems_local(&self) -> usize {
+        match self {
+            Self::Native(a) => a.num_elems_local(),
+            Self::Generic(a) => a.num_elems_local(),
+            Self::Network(a) => a.num_elems_local(),
+        }
+    }
+
+    pub(crate) fn subarray_index_from_local(
+        &self,
+        index: usize,
+        stride: usize,
+    ) -> Option<usize> {
+        match self {
+            Self::Native(a) => a.subarray_index_from_local(index, stride),
+            Self::Generic(a) => a.subarray_index_from_local(index, stride),
+            Self::Network(a) => a.subarray_index_from_local(index, stride),
+        }
+    }
+
+    pub(crate) fn get_element(&self, index: usize) -> Option<AtomicElement<T>> {
+        match self {
+            Self::Native(arc) => {
+                if index < arc.num_elems_local() {
+                    Some(AtomicElement::NativeAtomicElement(
+                        NativeAtomicElement::new_for_iter(Arc::clone(arc), index),
+                    ))
+                } else {
+                    None
+                }
+            }
+            Self::Generic(arc) => {
+                if index < arc.num_elems_local() {
+                    Some(AtomicElement::GenericAtomicElement(
+                        GenericAtomicElement::new_for_iter(Arc::clone(arc), index),
+                    ))
+                } else {
+                    None
+                }
+            }
+            Self::Network(arc) => {
+                if index < arc.num_elems_local() {
+                    Some(AtomicElement::NetworkAtomicElement(
+                        NetworkAtomicElement::new_for_iter(Arc::clone(arc), index),
+                    ))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
 /// Provides access to a PEs local data to provide "local" indexing while maintaining safety guarantees of the array type.
 ///
 /// It may be useful (albeit incorrect) to think of this as a slice of the PEs local data.
@@ -760,7 +856,7 @@ pub struct AtomicLocalData<T: Dist> {
 
 /// An iterator over the elements in an [AtomicLocalData]
 pub struct AtomicLocalDataIter<T: Dist> {
-    array: AtomicArray<T>,
+    data: AtomicIterData<T>,
     index: usize,
 }
 
@@ -849,30 +945,30 @@ impl<T: Dist> AtomicLocalData<T> {
     ///```
     pub fn iter(&self) -> AtomicLocalDataIter<T> {
         AtomicLocalDataIter {
-            array: self.array.clone(),
+            data: AtomicIterData::from_array(&self.array),
             index: 0,
         }
     }
 }
 
-impl<T: Dist> IntoIterator for AtomicLocalData<T> {
+impl<T: Dist + 'static> IntoIterator for AtomicLocalData<T> {
     type Item = AtomicElement<T>;
     type IntoIter = AtomicLocalDataIter<T>;
     fn into_iter(self) -> Self::IntoIter {
         AtomicLocalDataIter {
-            array: self.array,
+            data: AtomicIterData::from_array(&self.array),
             index: 0,
         }
     }
 }
 
-impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
+impl<T: Dist + 'static> Iterator for AtomicLocalDataIter<T> {
     type Item = AtomicElement<T>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.array.num_elems_local() {
+        if self.index < self.data.num_elems_local() {
             let index = self.index;
             self.index += 1;
-            self.array.get_element(index)
+            self.data.get_element(index)
         } else {
             None
         }

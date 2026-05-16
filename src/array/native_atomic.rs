@@ -22,6 +22,7 @@ use crate::Remote;
 
 use serde::ser::SerializeSeq;
 use std::any::TypeId;
+use std::sync::Arc;
 use std::ops::{
     AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
     ShrAssign, SubAssign,
@@ -651,8 +652,14 @@ macro_rules! impl_compare_exchange_eps {
 }
 /// `NativeAtomicElement` represents a native (like AtomicUsize, AtomicU8, etc.) atomic element in a `NativeAtomicArray`.
 pub struct NativeAtomicElement<T: Remote> {
-    array: NativeAtomicArray<T>,
-    local_index: usize,
+    pub(crate) array: Arc<NativeAtomicArray<T>>,
+    pub(crate) local_index: usize,
+}
+
+impl<T: Dist> NativeAtomicElement<T> {
+    pub(crate) fn new_for_iter(array: Arc<NativeAtomicArray<T>>, local_index: usize) -> Self {
+        NativeAtomicElement { array, local_index }
+    }
 }
 
 impl<T: Dist> From<NativeAtomicElement<T>> for AtomicElement<T> {
@@ -859,7 +866,7 @@ pub struct __NativeAtomicLocalData<T: Remote> {
 #[derive(Debug)]
 pub struct __NativeAtomicLocalDataIter<T: Dist> {
     //+ NativeAtomicOps> {
-    array: NativeAtomicArray<T>,
+    array: Arc<NativeAtomicArray<T>>,
     index: usize,
     end_index: usize,
 }
@@ -867,14 +874,14 @@ pub struct __NativeAtomicLocalDataIter<T: Dist> {
 impl<T: Dist> __NativeAtomicLocalData<T> {
     pub fn at(&self, index: usize) -> NativeAtomicElement<T> {
         NativeAtomicElement {
-            array: self.array.clone(),
+            array: Arc::new(self.array.clone()),
             local_index: index,
         }
     }
 
     pub fn get_mut(&self, index: usize) -> Option<NativeAtomicElement<T>> {
         Some(NativeAtomicElement {
-            array: self.array.clone(),
+            array: Arc::new(self.array.clone()),
             local_index: index,
         })
     }
@@ -885,7 +892,7 @@ impl<T: Dist> __NativeAtomicLocalData<T> {
 
     pub fn iter(&self) -> __NativeAtomicLocalDataIter<T> {
         __NativeAtomicLocalDataIter {
-            array: self.array.clone(),
+            array: Arc::new(self.array.clone()),
             index: self.start_index,
             end_index: self.end_index,
         }
@@ -1003,7 +1010,7 @@ impl<T: Dist> IntoIterator for __NativeAtomicLocalData<T> {
     type IntoIter = __NativeAtomicLocalDataIter<T>;
     fn into_iter(self) -> Self::IntoIter {
         __NativeAtomicLocalDataIter {
-            array: self.array,
+            array: Arc::new(self.array),
             index: self.start_index,
             end_index: self.end_index,
         }
@@ -1017,7 +1024,7 @@ impl<T: Dist> Iterator for __NativeAtomicLocalDataIter<T> {
             let index = self.index;
             self.index += 1;
             Some(NativeAtomicElement {
-                array: self.array.clone(),
+                array: Arc::clone(&self.array),
                 local_index: index,
             })
         } else {
@@ -1064,7 +1071,7 @@ impl<T: Dist> NativeAtomicArray<T> {
         if index < unsafe { self.__local_as_slice().len() } {
             //We are only directly accessing the local slice for its len
             Some(NativeAtomicElement {
-                array: self.clone(),
+                array: Arc::new(self.clone()),
                 local_index: index,
             })
         } else {

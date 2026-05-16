@@ -15,6 +15,7 @@ use crate::{
     DistributedIterator, GenericAtomicArray, IndexedDistributedIterator, LamellarArray,
     LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator, Remote,
 };
+use std::sync::Arc;
 
 impl<T: Remote> InnerArray for GenericAtomicArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
@@ -23,11 +24,20 @@ impl<T: Remote> InnerArray for GenericAtomicArray<T> {
 }
 
 //#[doc(hidden)]
-#[derive(Clone)]
 pub struct GenericAtomicDistIter<T: Dist> {
-    data: GenericAtomicArray<T>,
+    data: Arc<GenericAtomicArray<T>>,
     cur_i: usize,
     end_i: usize,
+}
+
+impl<T: Dist> Clone for GenericAtomicDistIter<T> {
+    fn clone(&self) -> Self {
+        GenericAtomicDistIter {
+            data: Arc::clone(&self.data),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+        }
+    }
 }
 
 impl<T: Dist> InnerIter for GenericAtomicDistIter<T> {
@@ -35,11 +45,7 @@ impl<T: Dist> InnerIter for GenericAtomicDistIter<T> {
         None
     }
     fn iter_clone(&self, _s: Sealed) -> Self {
-        GenericAtomicDistIter {
-            data: self.data.clone(),
-            cur_i: self.cur_i,
-            end_i: self.end_i,
-        }
+        self.clone()
     }
 }
 
@@ -56,11 +62,20 @@ impl<T: Dist> std::fmt::Debug for GenericAtomicDistIter<T> {
 }
 
 //#[doc(hidden)]
-#[derive(Clone)]
 pub struct GenericAtomicLocalIter<T: Dist> {
-    data: GenericAtomicArray<T>,
+    data: Arc<GenericAtomicArray<T>>,
     cur_i: usize,
     end_i: usize,
+}
+
+impl<T: Dist> Clone for GenericAtomicLocalIter<T> {
+    fn clone(&self) -> Self {
+        GenericAtomicLocalIter {
+            data: Arc::clone(&self.data),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+        }
+    }
 }
 
 impl<T: Dist> InnerIter for GenericAtomicLocalIter<T> {
@@ -68,11 +83,7 @@ impl<T: Dist> InnerIter for GenericAtomicLocalIter<T> {
         None
     }
     fn iter_clone(&self, _s: Sealed) -> Self {
-        GenericAtomicLocalIter {
-            data: self.data.clone(),
-            cur_i: self.cur_i,
-            end_i: self.end_i,
-        }
+        self.clone()
     }
 }
 
@@ -95,19 +106,19 @@ impl<T: Dist> DistributedIterator for GenericAtomicDistIter<T> {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         GenericAtomicDistIter {
-            data: self.data.clone(),
+            data: Arc::clone(&self.data),
             cur_i: std::cmp::min(start_i, max_i),
             end_i: std::cmp::min(start_i + cnt, max_i),
         }
     }
     fn array(&self) -> Self::Array {
-        self.data.clone()
+        (*self.data).clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             Some(GenericAtomicElement {
-                array: self.data.clone(),
+                array: Arc::clone(&self.data),
                 local_index: self.cur_i - 1,
             })
         } else {
@@ -135,19 +146,19 @@ impl<T: Dist> LocalIterator for GenericAtomicLocalIter<T> {
         let max_i = self.data.num_elems_local();
         // println!("init generic_atomic start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
         GenericAtomicLocalIter {
-            data: self.data.clone(),
+            data: Arc::clone(&self.data),
             cur_i: std::cmp::min(start_i, max_i),
             end_i: std::cmp::min(start_i + cnt, max_i),
         }
     }
     fn array(&self) -> Self::Array {
-        self.data.clone()
+        (*self.data).clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             Some(GenericAtomicElement {
-                array: self.data.clone(),
+                array: Arc::clone(&self.data),
                 local_index: self.cur_i - 1,
             })
         } else {
@@ -170,7 +181,7 @@ impl<T: Dist> LamellarArrayIterators<T> for GenericAtomicArray<T> {
     type OnesidedIter = OneSidedIter<T, Self>;
     fn dist_iter(&self) -> Self::DistIter {
         GenericAtomicDistIter {
-            data: self.clone(),
+            data: Arc::new(self.clone()),
             cur_i: 0,
             end_i: 0,
         }
@@ -178,7 +189,7 @@ impl<T: Dist> LamellarArrayIterators<T> for GenericAtomicArray<T> {
 
     fn local_iter(&self) -> Self::LocalIter {
         GenericAtomicLocalIter {
-            data: self.clone(),
+            data: Arc::new(self.clone()),
             cur_i: 0,
             end_i: 0,
         }
@@ -199,7 +210,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GenericAtomicArray<T> {
 
     fn dist_iter_mut(&self) -> Self::DistIter {
         GenericAtomicDistIter {
-            data: self.clone(),
+            data: Arc::new(self.clone()),
             cur_i: 0,
             end_i: 0,
         }
@@ -207,7 +218,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GenericAtomicArray<T> {
 
     fn local_iter_mut(&self) -> Self::LocalIter {
         GenericAtomicLocalIter {
-            data: self.clone(),
+            data: Arc::new(self.clone()),
             cur_i: 0,
             end_i: 0,
         }
