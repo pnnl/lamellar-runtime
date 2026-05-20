@@ -314,18 +314,12 @@ pub use lamellar_impl::Dist;
 #[cfg(feature = "enable-prof")]
 pub mod prof;
 
-#[cfg(feature = "enable-prof")]
 pub use lamellar_prof;
-#[cfg(feature = "enable-prof")]
-pub use lamellar_prof::prof;
-#[cfg(feature = "enable-prof")]
-pub use lamellar_prof::prof_all;
-#[cfg(feature = "enable-prof")]
-pub use lamellar_prof::init_prof;
-#[cfg(feature = "enable-prof")]
-pub use lamellar_prof::init_prof_bt;
-#[cfg(feature = "enable-prof")]
 pub use lamellar_prof::fini_prof;
+pub use lamellar_prof::init_prof;
+pub use lamellar_prof::init_prof_bt;
+pub use lamellar_prof::prof;
+pub use lamellar_prof::prof_all;
 
 
 #[cfg(feature = "enable-lamellar-main")]
