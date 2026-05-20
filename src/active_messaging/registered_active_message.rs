@@ -18,6 +18,8 @@ use async_recursion::async_recursion;
 // use log::trace;
 use std::sync::{Arc, OnceLock};
 
+use tracing::{debug, trace};
+
 pub(crate) const AM_ID_START: AmId = 1;
 
 pub(crate) type UnpackFn = fn(&[u8], Result<usize, IdError>) -> LamellarArcAm;
@@ -122,7 +124,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err())
                 {
                     let ame = self.clone();
-                    let req_data_clone = req_data.clone();
+                    let req_data_clone = Arc::clone(&req_data);
                     let am_clone = am.clone();
                     self.executor.submit_io_task(async move {
                         //spawn a task so that we can the execute the local am immediately
@@ -130,7 +132,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         if am_size < config().am_size_threshold && !immediate {
                             ame.batcher
                                 .add_remote_am_to_batch(
-                                    req_data_clone.clone(),
+                                    Arc::clone(&req_data_clone),
                                     am_clone.clone(),
                                     am_id,
                                     am_size,
@@ -369,7 +371,7 @@ impl RegisteredActiveMessages {
     //#[tracing::instrument(skip_all, level = "debug")]
     async fn send_am(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -433,7 +435,7 @@ impl RegisteredActiveMessages {
 
     // //#[tracing::instrument(skip_all)]
     //#[tracing::instrument(skip_all, level = "debug")]
-    async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
+    async fn send_data_am(&self, req_data: Arc<ReqMetaData>, data: LamellarResultArc, data_size: usize) {
         trace!("send_data_am");
         let header = self.create_header(&req_data, Cmd::Data);
         let mut darcs = vec![];
@@ -469,7 +471,7 @@ impl RegisteredActiveMessages {
 
     // //#[tracing::instrument(skip_all)]
     //#[tracing::instrument(skip_all, level = "debug")]
-    async fn send_unit_am(&self, req_data: ReqMetaData) {
+    async fn send_unit_am(&self, req_data: Arc<ReqMetaData>) {
         trace!("send_unit_am");
 
         let header = self.create_header(&req_data, Cmd::Unit);
@@ -527,12 +529,12 @@ impl RegisteredActiveMessages {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_local_am(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcLocalAm,
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>,
     ) {
-        trace!("[{:?}] exec_local_am", std::thread::current().id());
+        debug!("[{:?}] exec_local_am", std::thread::current().id());
         world.team.world_counters.inc_outstanding(1);
         team.team.team_counters.inc_outstanding(1);
         match am
@@ -595,7 +597,7 @@ impl RegisteredActiveMessages {
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
 
-        let req_data = ReqMetaData {
+        let req_data = Arc::new(ReqMetaData {
             src: team.team.world_pe,
             dst: Some(msg.src as usize),
             id: am_header.req_id,
@@ -603,7 +605,7 @@ impl RegisteredActiveMessages {
             world: world.team.clone(),
             team: team.team.clone(),
             // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
-        };
+        });
 
         world.team.world_counters.inc_outstanding(1);
         team.team.team_counters.inc_outstanding(1);
@@ -658,7 +660,7 @@ impl RegisteredActiveMessages {
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
 
-        let req_data = ReqMetaData {
+        let req_data = Arc::new(ReqMetaData {
             src: msg.src as usize,
             dst: Some(team.team.world_pe),
             id: am_header.req_id,
@@ -666,7 +668,7 @@ impl RegisteredActiveMessages {
             world: world.team.clone(),
             team: team.team.clone(),
             // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
-        };
+        });
         self.exec_local_am(req_data, am.as_local(), world, team)
             .await;
     }

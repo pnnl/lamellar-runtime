@@ -136,7 +136,7 @@ impl std::fmt::Debug for LamellarData {
 pub(crate) trait Batcher {
     async fn add_remote_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -144,7 +144,7 @@ pub(crate) trait Batcher {
     );
     async fn add_return_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -152,12 +152,12 @@ pub(crate) trait Batcher {
     );
     async fn add_data_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         data: LamellarResultArc,
         data_size: usize,
         stall_mark: usize,
     );
-    async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, stall_mark: usize);
+    async fn add_unit_am_to_batch(&self, req_data: Arc<ReqMetaData>, stall_mark: usize);
 
     async fn exec_batched_msg(
         &self,
@@ -180,7 +180,7 @@ impl Batcher for BatcherType {
     // //#[tracing::instrument(skip_all)]
     async fn add_remote_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -207,7 +207,7 @@ impl Batcher for BatcherType {
     // //#[tracing::instrument(skip_all)]
     async fn add_return_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -234,7 +234,7 @@ impl Batcher for BatcherType {
     // //#[tracing::instrument(skip_all)]
     async fn add_data_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         data: LamellarResultArc,
         data_size: usize,
         stall_mark: usize,
@@ -258,7 +258,7 @@ impl Batcher for BatcherType {
         }
     }
     // //#[tracing::instrument(skip_all)]
-    async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, stall_mark: usize) {
+    async fn add_unit_am_to_batch(&self, req_data: Arc<ReqMetaData>, stall_mark: usize) {
         match self {
             BatcherType::Simple(batcher) => {
                 batcher.add_unit_am_to_batch(req_data, stall_mark).await

@@ -27,7 +27,7 @@ lazy_static! {
 
 // type TeamId = Darc<LamellarTeamRT>;
 type TeamId = usize;
-type AmIdMap = HashMap<AmId, Vec<(ReqMetaData, LamellarArcAm, usize)>>;
+type AmIdMap = HashMap<AmId, Vec<(Arc<ReqMetaData>, LamellarArcAm, usize)>>;
 type TeamMap = HashMap<TeamId, AmIdMap>;
 
 #[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
@@ -51,7 +51,7 @@ struct BatchedAmHeader {
 
 #[derive(Clone)]
 struct TeamAmBatcherInner {
-    batch: Arc<Mutex<(TeamMap, TeamMap, Vec<(ReqMetaData, LamellarData)>)>>,
+    batch: Arc<Mutex<(TeamMap, TeamMap, Vec<(Arc<ReqMetaData>, LamellarData)>)>>,
     size: Arc<AtomicUsize>,
     batch_id: Arc<AtomicUsize>,
     pe: Option<usize>,
@@ -82,7 +82,7 @@ impl TeamAmBatcherInner {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn add_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         id: AmId,
         am_size: usize,
@@ -131,7 +131,7 @@ impl TeamAmBatcherInner {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn add_am(&self, req_data: ReqMetaData, data: LamellarData) -> usize {
+    fn add_am(&self, req_data: Arc<ReqMetaData>, data: LamellarData) -> usize {
         match data {
             LamellarData::Am(am, id, am_size) => {
                 let mut batch = self.batch.lock();
@@ -150,7 +150,7 @@ impl TeamAmBatcherInner {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn add_non_am(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> usize {
+    fn add_non_am(&self, req_data: Arc<ReqMetaData>, data: LamellarData, size: usize) -> usize {
         let mut batch = self.batch.lock();
         let size = size + *BATCH_HEADER_LEN;
         batch.2.push((req_data, data));
@@ -158,7 +158,7 @@ impl TeamAmBatcherInner {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn swap(&self) -> (TeamMap, TeamMap, Vec<(ReqMetaData, LamellarData)>, usize) {
+    fn swap(&self) -> (TeamMap, TeamMap, Vec<(Arc<ReqMetaData>, LamellarData)>, usize) {
         let mut batch = self.batch.lock();
         let mut new_batch = (HashMap::new(), HashMap::new(), Vec::new());
         std::mem::swap(&mut batch.0, &mut new_batch.0);
@@ -184,7 +184,7 @@ impl Batcher for TeamAmBatcher {
     // //#[tracing::instrument(skip_all)]
     async fn add_remote_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -198,7 +198,7 @@ impl Batcher for TeamAmBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let size = batch.add_am(req_data.clone(), LamellarData::Am(am, am_id, am_size));
+        let size = batch.add_am(Arc::clone(&req_data), LamellarData::Am(am, am_id, am_size));
         if size == 0 {
             //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
@@ -246,7 +246,7 @@ impl Batcher for TeamAmBatcher {
     // //#[tracing::instrument(skip_all)]
     async fn add_return_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -260,7 +260,7 @@ impl Batcher for TeamAmBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let size = batch.add_am(req_data.clone(), LamellarData::Return(am, am_id, am_size));
+        let size = batch.add_am(Arc::clone(&req_data), LamellarData::Return(am, am_id, am_size));
         if size == 0 {
             //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
@@ -309,7 +309,7 @@ impl Batcher for TeamAmBatcher {
     // //#[tracing::instrument(skip_all)]
     async fn add_data_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         data: LamellarResultArc,
         data_size: usize,
         mut stall_mark: usize,
@@ -326,7 +326,7 @@ impl Batcher for TeamAmBatcher {
         data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
         let darc_list_size = crate::serialized_size(&darcs, false);
         let size = batch.add_non_am(
-            req_data.clone(),
+            Arc::clone(&req_data),
             LamellarData::Data(data, darcs, data_size, darc_list_size),
             data_size + darc_list_size + *DATA_HEADER_LEN,
         );
@@ -371,7 +371,7 @@ impl Batcher for TeamAmBatcher {
     }
 
     // //#[tracing::instrument(skip_all)]
-    async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, mut stall_mark: usize) {
+    async fn add_unit_am_to_batch(&self, req_data: Arc<ReqMetaData>, mut stall_mark: usize) {
         // println!("[{:?}] add_unit_am_to_batch", std::thread::current().id(),);
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
@@ -380,7 +380,7 @@ impl Batcher for TeamAmBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let size = batch.add_non_am(req_data.clone(), LamellarData::Unit, *UNIT_HEADER_LEN);
+        let size = batch.add_non_am(Arc::clone(&req_data), LamellarData::Unit, *UNIT_HEADER_LEN);
         if size == 0 {
             //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
@@ -595,7 +595,7 @@ impl TeamAmBatcher {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_non_am_batch(
-        non_am_batch: Vec<(ReqMetaData, LamellarData)>,
+        non_am_batch: Vec<(Arc<ReqMetaData>, LamellarData)>,
         data_slice: CommSlice<u8>,
     ) -> usize {
         let mut i = 0;
@@ -624,7 +624,7 @@ impl TeamAmBatcher {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_am(
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am_size: usize,
         am: LamellarArcAm,
         _am_id: AmId,
@@ -660,7 +660,7 @@ impl TeamAmBatcher {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_data(
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         data_size: usize,
         data: LamellarResultArc,
         mut data_buf: CommSlice<u8>,
@@ -696,7 +696,7 @@ impl TeamAmBatcher {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>) -> usize {
+    fn serialize_unit(req_data: Arc<ReqMetaData>, mut data_buf: CommSlice<u8>) -> usize {
         let mut i = 0;
         let batch_header = BatchHeader {
             cmd: Cmd::Unit,
@@ -858,7 +858,7 @@ impl TeamAmBatcher {
         *i += am.serialized_size();
         // println!("Team Batcher exec am");
 
-        let req_data = ReqMetaData {
+        let req_data = Arc::new(ReqMetaData {
             src: team.team.world_pe,
             dst: Some(msg.src as usize),
             id: req_id,
@@ -866,7 +866,7 @@ impl TeamAmBatcher {
             world: world.team.clone(),
             team: team.team.clone(),
             // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
-        };
+        });
 
         let ame = ame.clone();
         world.team.world_counters.inc_outstanding(1);
@@ -915,7 +915,7 @@ impl TeamAmBatcher {
         let am = AMS_EXECS.get(&am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
 
-        let req_data = ReqMetaData {
+        let req_data = Arc::new(ReqMetaData {
             src: msg.src as usize,
             dst: Some(team.team.world_pe),
             id: req_id,
@@ -923,7 +923,7 @@ impl TeamAmBatcher {
             world: world.team.clone(),
             team: team.team.clone(),
             // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
-        };
+        });
 
         ame.clone()
             .exec_local_am(req_data, am.as_local(), world, team)

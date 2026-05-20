@@ -1092,7 +1092,7 @@ impl LamellarTaskGroup {
         // self.team.scheduler.submit_am();
         TaskGroupMultiAmHandle {
             inner: self.multi_req.clone(),
-            am: Some((Am::All(req_data, func), self.team.num_pes)),
+            am: Some((Am::All(Arc::new(req_data), func), self.team.num_pes)),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
         }
@@ -1134,7 +1134,7 @@ impl LamellarTaskGroup {
         // self.team.scheduler.submit_am(Am::Remote(req_data, func));
         TaskGroupAmHandle {
             inner: self.req.clone(),
-            am: Some((Am::Remote(req_data, func), 1)),
+            am: Some((Am::Remote(Arc::new(req_data), func), 1)),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
         }
@@ -1187,7 +1187,7 @@ impl LamellarTaskGroup {
         // })
         TaskGroupLocalAmHandle {
             inner: self.local_req.clone(),
-            am: Some((Am::Local(req_data, func), 1)),
+            am: Some((Am::Local(Arc::new(req_data), func), 1)),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
         }

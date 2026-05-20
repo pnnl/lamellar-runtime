@@ -61,7 +61,7 @@ pub(crate) fn io_task_stats() -> String {
 
 #[derive(Clone, Debug)]
 struct SimpleBatcherInner {
-    batch: Arc<Mutex<Vec<(ReqMetaData, LamellarData, usize)>>>, //reqid,data,data size,team addr
+    batch: Arc<Mutex<Vec<(Arc<ReqMetaData>, LamellarData, usize)>>>, //reqid,data,data size,team addr
     size: Arc<AtomicUsize>,
     batch_id: Arc<AtomicUsize>,
     pe: Option<usize>,
@@ -81,7 +81,7 @@ impl SimpleBatcherInner {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn add(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         data: LamellarData,
         payload_size: usize,
         header_size: usize,
@@ -96,7 +96,7 @@ impl SimpleBatcherInner {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn swap(&self) -> (Vec<(ReqMetaData, LamellarData, usize)>, usize, usize) {
+    fn swap(&self) -> (Vec<(Arc<ReqMetaData>, LamellarData, usize)>, usize, usize) {
         let mut batch = self.batch.lock();
         let size = self.size.load(Ordering::SeqCst);
         self.size.store(0, Ordering::SeqCst);
@@ -120,7 +120,7 @@ impl Batcher for SimpleBatcher {
     // //#[tracing::instrument(skip_all)]
     async fn add_remote_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -227,7 +227,7 @@ impl Batcher for SimpleBatcher {
     //#[tracing::instrument(skip_all, level = "debug")]
     async fn add_return_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
@@ -335,7 +335,7 @@ impl Batcher for SimpleBatcher {
     // //#[tracing::instrument(skip_all)]
     async fn add_data_am_to_batch(
         &self,
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         data: LamellarResultArc,
         data_size: usize,
         mut stall_mark: usize,
@@ -440,7 +440,7 @@ impl Batcher for SimpleBatcher {
     }
 
     // //#[tracing::instrument(skip_all)]
-    async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, mut stall_mark: usize) {
+    async fn add_unit_am_to_batch(&self, req_data: Arc<ReqMetaData>, mut stall_mark: usize) {
         let batch = match req_data.dst {
             Some(dst) => {
                 stats!(
@@ -755,7 +755,7 @@ impl SimpleBatcher {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_am(
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         am_size: usize,
         am: LamellarArcAm,
         am_id: AmId,
@@ -809,7 +809,7 @@ impl SimpleBatcher {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     fn serialize_data(
-        req_data: ReqMetaData,
+        req_data: Arc<ReqMetaData>,
         data_size: usize,
         data: LamellarResultArc,
         mut data_buf: CommSlice<u8>,
@@ -836,7 +836,7 @@ impl SimpleBatcher {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>) -> usize {
+    fn serialize_unit(req_data: Arc<ReqMetaData>, mut data_buf: CommSlice<u8>) -> usize {
         // println!("serialize_unit");
         let mut i = 0;
         crate::serialize_into(&mut data_buf[i..i + *CMD_LEN], &Cmd::Unit, false).unwrap();
@@ -914,7 +914,7 @@ impl SimpleBatcher {
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
 
-        let req_data = ReqMetaData {
+        let req_data = Arc::new(ReqMetaData {
             src: team.team.world_pe,
             dst: Some(msg.src as usize),
             id: am_header.req_id,
@@ -922,7 +922,7 @@ impl SimpleBatcher {
             world: world.team.clone(),
             team: team.team.clone(),
             // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
-        };
+        });
         // println!(
         //     "[{:?}] simple batcher exec_am submit task",
         //     std::thread::current().id()
@@ -985,7 +985,7 @@ impl SimpleBatcher {
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
 
-        let req_data = ReqMetaData {
+        let req_data = Arc::new(ReqMetaData {
             src: msg.src as usize,
             dst: Some(team.team.world_pe),
             id: am_header.req_id,
@@ -993,7 +993,7 @@ impl SimpleBatcher {
             world: world.team.clone(),
             team: team.team.clone(),
             // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
-        };
+        });
         // println!(
         //     "[{:?}] exec_return_am submit task",
         //     std::thread::current().id()
