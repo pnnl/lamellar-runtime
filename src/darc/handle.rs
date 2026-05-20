@@ -167,10 +167,10 @@ impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
     type Output = LocalRwDarcReadGuard<T>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.launched = true;
-        let inner_darc = self.darc.darc.clone();
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Init => {
+                let inner_darc = this.darc.darc.clone();
                 let lock = Box::pin(async move { inner_darc.read_arc().await });
                 *this.state = State::TryingRead(lock);
                 cx.waker().wake_by_ref();
@@ -323,10 +323,10 @@ impl<T: Sync + Send> Future for LocalRwDarcWriteHandle<T> {
     type Output = LocalRwDarcWriteGuard<T>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.launched = true;
-        let inner_darc = self.darc.darc.clone();
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Init => {
+                let inner_darc = this.darc.darc.clone();
                 let lock = Box::pin(async move { inner_darc.write_arc().await });
                 *this.state = State::TryingWrite(lock);
                 cx.waker().wake_by_ref();
