@@ -21,7 +21,6 @@ use crate::Remote;
 
 use parking_lot::{Mutex, MutexGuard};
 use serde::ser::SerializeSeq;
-use std::sync::Arc;
 // use std::ops::{Deref, DerefMut};
 
 use std::ops::{
@@ -31,14 +30,8 @@ use std::ops::{
 
 #[doc(hidden)]
 pub struct GenericAtomicElement<T: Remote> {
-    pub(crate) array: Arc<GenericAtomicArray<T>>,
-    pub(crate) local_index: usize,
-}
-
-impl<T: Dist> GenericAtomicElement<T> {
-    pub(crate) fn new_for_iter(array: Arc<GenericAtomicArray<T>>, local_index: usize) -> Self {
-        GenericAtomicElement { array, local_index }
-    }
+    array: GenericAtomicArray<T>,
+    local_index: usize,
 }
 
 impl<T: Dist> From<GenericAtomicElement<T>> for AtomicElement<T> {
@@ -328,7 +321,7 @@ pub struct __GenericAtomicLocalData<T: Dist> {
 /// see [AtomicLocalDataIter][crate::array::atomic::AtomicLocalDataIter].
 #[derive(Debug)]
 pub struct __GenericAtomicLocalDataIter<T: Dist> {
-    array: Arc<GenericAtomicArray<T>>,
+    array: GenericAtomicArray<T>,
     index: usize,
     end_index: usize,
 }
@@ -336,14 +329,14 @@ pub struct __GenericAtomicLocalDataIter<T: Dist> {
 impl<T: Dist> __GenericAtomicLocalData<T> {
     pub fn at(&self, index: usize) -> GenericAtomicElement<T> {
         GenericAtomicElement {
-            array: Arc::new(self.array.clone()),
+            array: self.array.clone(),
             local_index: index,
         }
     }
 
     pub fn get_mut(&self, index: usize) -> Option<GenericAtomicElement<T>> {
         Some(GenericAtomicElement {
-            array: Arc::new(self.array.clone()),
+            array: self.array.clone(),
             local_index: index,
         })
     }
@@ -354,7 +347,7 @@ impl<T: Dist> __GenericAtomicLocalData<T> {
 
     pub fn iter(&self) -> __GenericAtomicLocalDataIter<T> {
         __GenericAtomicLocalDataIter {
-            array: Arc::new(self.array.clone()),
+            array: self.array.clone(),
             index: self.start_index,
             end_index: self.end_index,
         }
@@ -387,7 +380,7 @@ impl<T: Dist> IntoIterator for __GenericAtomicLocalData<T> {
     type IntoIter = __GenericAtomicLocalDataIter<T>;
     fn into_iter(self) -> Self::IntoIter {
         __GenericAtomicLocalDataIter {
-            array: Arc::new(self.array),
+            array: self.array,
             index: self.start_index,
             end_index: self.end_index,
         }
@@ -401,7 +394,7 @@ impl<T: Dist> Iterator for __GenericAtomicLocalDataIter<T> {
             let index = self.index;
             self.index += 1;
             Some(GenericAtomicElement {
-                array: Arc::clone(&self.array),
+                array: self.array.clone(),
                 local_index: index,
             })
         } else {
@@ -448,7 +441,7 @@ impl<T: Dist> GenericAtomicArray<T> {
         if index < unsafe { self.__local_as_slice().len() } {
             //We are only directly accessing the local slice for its len
             Some(GenericAtomicElement {
-                array: Arc::new(self.clone()),
+                array: self.clone(),
                 local_index: index,
             })
         } else {

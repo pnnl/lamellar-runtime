@@ -870,12 +870,12 @@ pub(crate) struct ReqMetaData {
 }
 
 pub(crate) enum Am {
-    All(Arc<ReqMetaData>, LamellarArcAm),
-    Remote(Arc<ReqMetaData>, LamellarArcAm), //req data, am to execute
-    Local(Arc<ReqMetaData>, LamellarArcLocalAm), //req data, am to execute
-    Return(Arc<ReqMetaData>, LamellarArcAm), //req data, am to return and execute
-    Data(Arc<ReqMetaData>, LamellarResultArc), //req data, data to return
-    Unit(Arc<ReqMetaData>),                  //req data
+    All(ReqMetaData, LamellarArcAm),
+    Remote(ReqMetaData, LamellarArcAm), //req data, am to execute
+    Local(ReqMetaData, LamellarArcLocalAm), //req data, am to execute
+    Return(ReqMetaData, LamellarArcAm), //req data, am to return and execute
+    Data(ReqMetaData, LamellarResultArc), //req data, data to return
+    Unit(ReqMetaData),                  //req data
 }
 
 impl std::fmt::Debug for Am {

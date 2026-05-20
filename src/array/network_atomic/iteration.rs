@@ -10,7 +10,6 @@ use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::memregion::Dist;
 use crate::Remote;
-use std::sync::Arc;
 
 use self::iterator::IterLockFuture;
 // use parking_lot::{
@@ -25,20 +24,11 @@ impl<T: Remote> InnerArray for NetworkAtomicArray<T> {
 }
 
 //#[doc(hidden)]
+#[derive(Clone)]
 pub struct NetworkAtomicDistIter<T: Dist> {
-    data: Arc<NetworkAtomicArray<T>>,
+    data: NetworkAtomicArray<T>,
     cur_i: usize,
     end_i: usize,
-}
-
-impl<T: Dist> Clone for NetworkAtomicDistIter<T> {
-    fn clone(&self) -> Self {
-        NetworkAtomicDistIter {
-            data: Arc::clone(&self.data),
-            cur_i: self.cur_i,
-            end_i: self.end_i,
-        }
-    }
 }
 
 impl<T: Dist> InnerIter for NetworkAtomicDistIter<T> {
@@ -46,7 +36,11 @@ impl<T: Dist> InnerIter for NetworkAtomicDistIter<T> {
         None
     }
     fn iter_clone(&self, _s: Sealed) -> Self {
-        self.clone()
+        NetworkAtomicDistIter {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+        }
     }
 }
 
@@ -63,20 +57,11 @@ impl<T: Dist> std::fmt::Debug for NetworkAtomicDistIter<T> {
 }
 
 //#[doc(hidden)]
+#[derive(Clone)]
 pub struct NetworkAtomicLocalIter<T: Dist> {
-    data: Arc<NetworkAtomicArray<T>>,
+    data: NetworkAtomicArray<T>,
     cur_i: usize,
     end_i: usize,
-}
-
-impl<T: Dist> Clone for NetworkAtomicLocalIter<T> {
-    fn clone(&self) -> Self {
-        NetworkAtomicLocalIter {
-            data: Arc::clone(&self.data),
-            cur_i: self.cur_i,
-            end_i: self.end_i,
-        }
-    }
 }
 
 impl<T: Dist> InnerIter for NetworkAtomicLocalIter<T> {
@@ -84,7 +69,11 @@ impl<T: Dist> InnerIter for NetworkAtomicLocalIter<T> {
         None
     }
     fn iter_clone(&self, _s: Sealed) -> Self {
-        self.clone()
+        NetworkAtomicLocalIter {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+        }
     }
 }
 
@@ -108,19 +97,19 @@ impl<T: Dist> DistributedIterator for NetworkAtomicDistIter<T> {
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         // println!("num_elems_local: {:?}",self.data.num_elems_local());
         NetworkAtomicDistIter {
-            data: Arc::clone(&self.data),
+            data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
             end_i: std::cmp::min(start_i + cnt, max_i),
         }
     }
     fn array(&self) -> Self::Array {
-        (*self.data).clone()
+        self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             Some(NetworkAtomicElement {
-                array: Arc::clone(&self.data),
+                array: self.data.clone(),
                 local_index: self.cur_i - 1,
             })
         } else {
@@ -156,19 +145,19 @@ impl<T: Dist> LocalIterator for NetworkAtomicLocalIter<T> {
         let max_i = self.data.num_elems_local();
         // println!("init Network_atomic start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
         NetworkAtomicLocalIter {
-            data: Arc::clone(&self.data),
+            data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
             end_i: std::cmp::min(start_i + cnt, max_i),
         }
     }
     fn array(&self) -> Self::Array {
-        (*self.data).clone()
+        self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             Some(NetworkAtomicElement {
-                array: Arc::clone(&self.data),
+                array: self.data.clone(),
                 local_index: self.cur_i - 1,
             })
         } else {
@@ -191,7 +180,7 @@ impl<T: Dist> LamellarArrayIterators<T> for NetworkAtomicArray<T> {
     type OnesidedIter = OneSidedIter<T, Self>;
     fn dist_iter(&self) -> Self::DistIter {
         NetworkAtomicDistIter {
-            data: Arc::new(self.clone()),
+            data: self.clone(),
             cur_i: 0,
             end_i: 0,
         }
@@ -199,7 +188,7 @@ impl<T: Dist> LamellarArrayIterators<T> for NetworkAtomicArray<T> {
 
     fn local_iter(&self) -> Self::LocalIter {
         NetworkAtomicLocalIter {
-            data: Arc::new(self.clone()),
+            data: self.clone(),
             cur_i: 0,
             end_i: 0,
         }
@@ -220,7 +209,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for NetworkAtomicArray<T> {
 
     fn dist_iter_mut(&self) -> Self::DistIter {
         NetworkAtomicDistIter {
-            data: Arc::new(self.clone()),
+            data: self.clone(),
             cur_i: 0,
             end_i: 0,
         }
@@ -228,7 +217,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for NetworkAtomicArray<T> {
 
     fn local_iter_mut(&self) -> Self::LocalIter {
         NetworkAtomicLocalIter {
-            data: Arc::new(self.clone()),
+            data: self.clone(),
             cur_i: 0,
             end_i: 0,
         }

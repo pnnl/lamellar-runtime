@@ -1,5 +1,4 @@
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use crate::darc::handle::{
@@ -123,17 +122,16 @@ impl<T: Dist + ArrayOps + 'static> Future for GlobalLockArrayHandle<T> {
 /// task.block();
 ///```
 pub struct GlobalLockReadHandle<T: Remote> {
-    pub(crate) array: Arc<GlobalLockArray<T>>,
+    pub(crate) array: GlobalLockArray<T>,
     #[pin]
     pub(crate) lock_handle: GlobalRwDarcReadHandle<()>,
 }
 
 impl<T: Dist> GlobalLockReadHandle<T> {
     pub(crate) fn new(array: GlobalLockArray<T>) -> Self {
-        let lock_handle = array.lock.read();
         Self {
-            array: Arc::new(array),
-            lock_handle,
+            array: array.clone(),
+            lock_handle: array.lock.read(),
         }
     }
     /// Handle used to retrieve the aquired read lock of a GlobalLockArray within a non async context
@@ -192,7 +190,7 @@ impl<T: Dist> Future for GlobalLockReadHandle<T> {
         let this = self.project();
         match this.lock_handle.poll(cx) {
             Poll::Ready(val) => Poll::Ready(GlobalLockReadGuard {
-                array: Arc::clone(this.array),
+                array: this.array.clone(),
                 lock_guard: val,
             }),
             Poll::Pending => Poll::Pending,
@@ -225,7 +223,7 @@ impl<T: Dist> Future for GlobalLockReadHandle<T> {
 /// println!("PE{my_pe}, local_data: {:?}", local_data);
 ///```
 pub struct GlobalLockLocalDataHandle<T: Dist> {
-    pub(crate) array: Arc<GlobalLockArray<T>>,
+    pub(crate) array: GlobalLockArray<T>,
     pub(crate) start_index: usize,
     pub(crate) end_index: usize,
     #[pin]
@@ -292,7 +290,7 @@ impl<T: Dist> Future for GlobalLockLocalDataHandle<T> {
         let this = self.project();
         match this.lock_handle.poll(cx) {
             Poll::Ready(val) => Poll::Ready(GlobalLockLocalData {
-                array: Arc::clone(this.array),
+                array: this.array.clone(),
                 start_index: *this.start_index,
                 end_index: *this.end_index,
                 // lock: self.lock.clone(),

@@ -1913,7 +1913,7 @@ impl Darc<LamellarTeamRT> {
         // self.scheduler.submit_am(Am::All(req_data, func));
         MultiAmHandle {
             inner: req,
-            am: Some((Am::All(Arc::new(req_data), func), self.num_pes)),
+            am: Some((Am::All(req_data, func), self.num_pes)),
             _phantom: PhantomData,
         }
     }
@@ -1984,7 +1984,7 @@ impl Darc<LamellarTeamRT> {
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team exec all", std::thread::current().id());
         self.scheduler
-            .submit_am(Am::All(Arc::new(req_data.clone()), func.clone()));
+            .submit_am(Am::All(req_data.clone(), func.clone()));
         MultiAmHandle {
             inner: req,
             am: None,
@@ -2058,7 +2058,7 @@ impl Darc<LamellarTeamRT> {
         // self.scheduler.submit_am(Am::All(req_data, func));
         MultiAmHandle {
             inner: req,
-            am: Some((Am::All(Arc::new(req_data), func), self.num_pes)),
+            am: Some((Am::All(req_data, func), self.num_pes)),
             _phantom: PhantomData,
         }
     }
@@ -2133,9 +2133,10 @@ impl Darc<LamellarTeamRT> {
 
         AmHandle {
             inner: req,
-            am: Some((Am::Remote(Arc::new(req_data), func), 1)),
+            am: Some((Am::Remote(req_data, func), 1)),
             _phantom: PhantomData,
         }
+        .into()
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -2198,13 +2199,14 @@ impl Darc<LamellarTeamRT> {
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
 
-        self.scheduler.submit_am(Am::Remote(Arc::new(req_data), func));
+        self.scheduler.submit_am(Am::Remote(req_data, func));
 
         AmHandle {
             inner: req,
             am: None,
             _phantom: PhantomData,
         }
+        .into()
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -2281,7 +2283,7 @@ impl Darc<LamellarTeamRT> {
         // })
         AmHandle {
             inner: req,
-            am: Some((Am::Remote(Arc::new(req_data), func), 1)),
+            am: Some((Am::Remote(req_data, func), 1)),
             _phantom: PhantomData,
         }
     }
@@ -2348,7 +2350,7 @@ impl Darc<LamellarTeamRT> {
 
         MultiAmHandle {
             inner: req,
-            am: Some((Am::All(Arc::new(req_data), am), self.num_pes)),
+            am: Some((Am::All(req_data, am), self.num_pes)),
             _phantom: PhantomData,
         }
     }
@@ -2413,9 +2415,10 @@ impl Darc<LamellarTeamRT> {
         // })
         AmHandle {
             inner: req,
-            am: Some((Am::Remote(Arc::new(req_data), am), 1)),
+            am: Some((Am::Remote(req_data, am), 1)),
             _phantom: PhantomData,
         }
+        .into()
     }
 
     #[allow(dead_code)]
@@ -2471,7 +2474,7 @@ impl Darc<LamellarTeamRT> {
         };
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
-        self.scheduler.exec_am(Am::Remote(Arc::new(req_data), am)).await;
+        self.scheduler.exec_am(Am::Remote(req_data, am)).await;
 
         // Box::new(LamellarRequestHandle {
         //     inner: req,
@@ -2482,6 +2485,7 @@ impl Darc<LamellarTeamRT> {
             am: None,
             _phantom: PhantomData,
         }
+        .into()
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -2552,7 +2556,7 @@ impl Darc<LamellarTeamRT> {
         // })
         LocalAmHandle {
             inner: req,
-            am: Some((Am::Local(Arc::new(req_data), func), 1)),
+            am: Some((Am::Local(req_data, func), 1)),
             _phantom: PhantomData,
             thread: thread,
         }
@@ -2614,7 +2618,7 @@ impl Darc<LamellarTeamRT> {
         };
         // println!("[{:?}] team exec am local", std::thread::current().id());
         self.scheduler
-            .submit_am(Am::Local(Arc::new(req_data.clone()), func.clone()));
+            .submit_am(Am::Local(req_data.clone(), func.clone()));
 
         // Box::new(LamellarLocalRequestHandle {
         //     inner: req,

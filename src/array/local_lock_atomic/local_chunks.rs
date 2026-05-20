@@ -23,7 +23,7 @@ pub struct LocalLockLocalChunks<T: Dist> {
     pub(crate) chunk_size: usize,
     pub(crate) index: usize,     //global index within the array local data
     pub(crate) end_index: usize, //global index within the array local data
-    pub(crate) array: Arc<LocalLockArray<T>>,
+    pub(crate) array: LocalLockArray<T>,
     pub(crate) lock_guard: Arc<LocalRwDarcReadGuard<()>>,
 }
 
@@ -36,7 +36,7 @@ impl<T: Dist> InnerIter for LocalLockLocalChunks<T> {
             chunk_size: self.chunk_size,
             index: self.index,
             end_index: self.end_index,
-            array: Arc::clone(&self.array),
+            array: self.array.clone(),
             // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
@@ -114,13 +114,13 @@ impl<T: Dist> LocalIterator for LocalLockLocalChunks<T> {
             chunk_size: self.chunk_size,
             index: new_start_i,
             end_index: end_i,
-            array: Arc::clone(&self.array),
+            array: self.array.clone(),
             // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
     fn array(&self) -> Self::Array {
-        (*self.array).clone()
+        self.array.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         // println!("next index {} end_index: {}", self.index, self.end_index);
@@ -133,7 +133,7 @@ impl<T: Dist> LocalIterator for LocalLockLocalChunks<T> {
             //     start_i, end_i, self.index, self.end_index
             // );
             Some(LocalLockLocalData {
-                array: Arc::clone(&self.array),
+                array: self.array.clone(),
                 start_index: start_i,
                 end_index: end_i,
                 // lock: self.lock.clone(),
@@ -268,7 +268,7 @@ impl<T: Dist> LocalLockArray<T> {
             chunk_size,
             index: 0,
             end_index: 0,
-            array: Arc::new(self.clone()),
+            array: self.clone(),
             lock_handle: lock,
         }
     }

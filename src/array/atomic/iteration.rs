@@ -23,15 +23,19 @@ impl<T: Dist> InnerArray for AtomicArray<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct AtomicDistIter<T: Dist> {
     //dont need a AtomicDistIterMut in this case as any updates to inner elements are atomic
-    data: AtomicIterData<T>,
+    data: AtomicArray<T>,
     cur_i: usize,
     end_i: usize,
 }
 
-impl<T: Dist> Clone for AtomicDistIter<T> {
-    fn clone(&self) -> Self {
+impl<T: Dist> InnerIter for AtomicDistIter<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         AtomicDistIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -40,16 +44,7 @@ impl<T: Dist> Clone for AtomicDistIter<T> {
     }
 }
 
-impl<T: Dist + 'static> InnerIter for AtomicDistIter<T> {
-    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
-        None
-    }
-    fn iter_clone(&self, _s: Sealed) -> Self {
-        self.clone()
-    }
-}
-
-impl<T: Dist + 'static> std::fmt::Debug for AtomicDistIter<T> {
+impl<T: Dist> std::fmt::Debug for AtomicDistIter<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -61,26 +56,30 @@ impl<T: Dist + 'static> std::fmt::Debug for AtomicDistIter<T> {
     }
 }
 
-impl<T: Dist + 'static> AtomicDistIter<T> {
+impl<T: Dist> AtomicDistIter<T> {
     pub(crate) fn new(data: AtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         AtomicDistIter {
-            data: AtomicIterData::from_array(&data),
+            data,
             cur_i,
             end_i: cur_i + cnt,
         }
     }
 }
 
+#[derive(Clone)]
 pub struct AtomicLocalIter<T: Dist> {
     //dont need a AtomicDistIterMut in this case as any updates to inner elements are atomic
-    data: AtomicIterData<T>,
+    data: AtomicArray<T>,
     cur_i: usize,
     end_i: usize,
 }
 
-impl<T: Dist> Clone for AtomicLocalIter<T> {
-    fn clone(&self) -> Self {
+impl<T: Dist> InnerIter for AtomicLocalIter<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         AtomicLocalIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -89,16 +88,7 @@ impl<T: Dist> Clone for AtomicLocalIter<T> {
     }
 }
 
-impl<T: Dist + 'static> InnerIter for AtomicLocalIter<T> {
-    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
-        None
-    }
-    fn iter_clone(&self, _s: Sealed) -> Self {
-        self.clone()
-    }
-}
-
-impl<T: Dist + 'static> std::fmt::Debug for AtomicLocalIter<T> {
+impl<T: Dist> std::fmt::Debug for AtomicLocalIter<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -110,18 +100,18 @@ impl<T: Dist + 'static> std::fmt::Debug for AtomicLocalIter<T> {
     }
 }
 
-impl<T: Dist + 'static> AtomicLocalIter<T> {
+impl<T: Dist> AtomicLocalIter<T> {
     pub(crate) fn new(data: AtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         AtomicLocalIter {
-            data: AtomicIterData::from_array(&data),
+            data,
             cur_i,
             end_i: cur_i + cnt,
         }
     }
 }
 
-impl<T: Dist + 'static> DistributedIterator for AtomicDistIter<T> {
+impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
     type Item = AtomicElement<T>;
     type Array = AtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
@@ -135,7 +125,7 @@ impl<T: Dist + 'static> DistributedIterator for AtomicDistIter<T> {
         }
     }
     fn array(&self) -> Self::Array {
-        self.data.into_array()
+        self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         // println!("{:?} {:?}",self.cur_i,self.end_i);
@@ -153,14 +143,14 @@ impl<T: Dist + 'static> DistributedIterator for AtomicDistIter<T> {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
 }
-impl<T: Dist + 'static> IndexedDistributedIterator for AtomicDistIter<T> {
+impl<T: Dist> IndexedDistributedIterator for AtomicDistIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.subarray_index_from_local(index, 1);
         g_index
     }
 }
 
-impl<T: Dist + 'static> LocalIterator for AtomicLocalIter<T> {
+impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
     type Item = AtomicElement<T>;
     type Array = AtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
@@ -174,7 +164,7 @@ impl<T: Dist + 'static> LocalIterator for AtomicLocalIter<T> {
         }
     }
     fn array(&self) -> Self::Array {
-        self.data.into_array()
+        self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         // println!("{:?} {:?} {:?} {:?}",self.cur_i,self.end_i,self.cur_i < self.end_i,std::thread::current().id());
@@ -198,7 +188,7 @@ impl<T: Dist + 'static> LocalIterator for AtomicLocalIter<T> {
 impl<T: Dist + 'static> IndexedLocalIterator for AtomicLocalIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
         if index < self.data.len() {
-            Some(index)
+            Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
         } else {
             None
         }
