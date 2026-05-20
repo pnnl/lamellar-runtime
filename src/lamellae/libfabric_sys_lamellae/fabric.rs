@@ -816,8 +816,7 @@ impl Ofi {
     ) -> HashMap<usize, RemoteMemAddressInfo> {
         let (mc, av_set_addr) = self.create_mc_group(pes);
         let cg = &self.comm_group;
-
-        let addr = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode } == (libfabric_sys::FI_MR_VIRT_ADDR | libfabric_sys::fi_mr_mode_FI_MR_BASIC) as i32 {
+        let addr = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode } & (libfabric_sys::FI_MR_VIRT_ADDR | libfabric_sys::fi_mr_mode_FI_MR_BASIC) as i32 != 0 {
             mem.as_ptr() as u64
         } else {
             0u64
@@ -827,7 +826,7 @@ impl Ofi {
             std::mem::size_of_val(mem);
 
         let mut key_bytes = unsafe {
-            let mut base_addr = 0u64;
+            let mut base_addr = addr;
             let mut key_size = (*(*self.comm_group.info_entry).domain_attr).mr_key_size ;
             let mut raw_key = vec![0u8; key_size + std::mem::size_of::<u64>()];
             if  (*(*self.comm_group.info_entry).domain_attr).mr_mode & (libfabric_sys::FI_MR_RAW as i32) != 0  {
@@ -878,8 +877,6 @@ impl Ofi {
                 std::mem::size_of::<usize>(),
             )
         });
-        println!("PE {}: key bytes: {:?}", self.my_pe, key_bytes);
-        println!("PE {}: key bytes length: {}", self.my_pe, key_bytes.len());
 
         let mut all_mem_info_bytes = vec![0u8; key_bytes.len() * pes.len()];
         cg.post_collective(
@@ -2234,6 +2231,12 @@ impl LibfabricSysAlloc {
                     (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size / std::mem::size_of::<T>(),
                 );
 
+                trace!(
+                    target: "libfabric-sys",
+                    "Posting write to PE {} at address {:?}",
+                    pe,
+                    remote_dst_addr,
+                );
                 cg.post_put(blocking, || unsafe {
                     libfabric_sys::inlined_fi_write(
                         cg.ep,
