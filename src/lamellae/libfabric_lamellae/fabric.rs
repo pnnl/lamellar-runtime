@@ -2305,6 +2305,12 @@ impl LibfabricAlloc {
                 )
             })?;
         } else {
+            trace!(
+                target: "libfabric",
+                "Posting write to PE {} at address {:?}",
+                pe,
+                remote_dst_addr.as_ptr(),
+            );
             let mut curr_idx = 0;
             while curr_idx < src_addr.len() {
                 let msg_len = std::cmp::min(
