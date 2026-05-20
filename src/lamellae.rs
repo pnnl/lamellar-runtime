@@ -188,7 +188,7 @@ impl SerializedData {
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
         let alloc_size = size; //+ ser_data_size_size;
         let mut alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
-        alloc.set_print(true);
+
         let ser_data_bytes = alloc.comm_slice_at_byte_offset(0, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);

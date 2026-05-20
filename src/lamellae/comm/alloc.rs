@@ -2164,7 +2164,7 @@ impl CommAllocAtomic for CommAllocInner {
 
 #[derive(Clone, Debug)]
 pub(crate) struct CommAlloc {
-    pub(crate) inner_alloc: CommAllocInner,
+    pub(crate) inner_alloc: Arc<CommAllocInner>,
     // pub(crate) alloc_type: CommAllocType,
 }
 
@@ -2172,7 +2172,7 @@ impl CommAlloc {
     //#[tracing::instrument(skip(self), level = "debug")]
     pub(crate) fn as_comm_slice<T>(&self) -> CommSlice<T> {
         CommSlice {
-            inner_alloc: self.inner_alloc.clone(),
+            inner_alloc: Arc::clone(&self.inner_alloc),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -2191,9 +2191,10 @@ impl CommAlloc {
         );
         assert!(offset + num_elems * std::mem::size_of::<T>() <= self.num_bytes());
         CommSlice {
-            inner_alloc: self
-                .inner_alloc
-                .sub_alloc(offset, num_elems * std::mem::size_of::<T>()),
+            inner_alloc: Arc::new(
+                self.inner_alloc
+                    .sub_alloc(offset, num_elems * std::mem::size_of::<T>()),
+            ),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -2220,20 +2221,12 @@ impl CommAlloc {
     // if the CommAlloc was allocated directly from the fabric then None is returned
     // since we cannot guarantee the memory will remain valid
     pub(crate) fn leak(self) -> Option<CommAllocAddr> {
-        self.inner_alloc.leak()
+        (*self.inner_alloc).clone().leak()
     }
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAlloc {
         CommAlloc {
-            inner_alloc: self.inner_alloc.sub_alloc(offset, size),
+            inner_alloc: Arc::new(self.inner_alloc.sub_alloc(offset, size)),
             // alloc_type: self.alloc_type,
-        }
-    }
-    pub(crate) fn set_print(&mut self, _print: bool) {
-        #[cfg(feature = "enable-libfabric")]
-        {
-            if let CommAllocInner::LibfabricAlloc(inner_alloc) = &mut self.inner_alloc {
-                inner_alloc.print = _print;
-            }
         }
     }
 }

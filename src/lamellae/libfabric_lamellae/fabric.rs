@@ -1423,7 +1423,6 @@ pub(crate) struct LibfabricAlloc {
     rt_ref_cnt_offset: usize,
     id: usize,
     alloc_table: AllocTable,
-    pub(crate) print: bool,
 }
 
 impl std::fmt::Debug for LibfabricAlloc {
@@ -1503,7 +1502,6 @@ impl Clone for LibfabricAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
             id: self.id,
             alloc_table: self.alloc_table.clone(),
-            print: self.print,
         }
     }
 }
@@ -1511,7 +1509,7 @@ impl Clone for LibfabricAlloc {
 impl From<LibfabricAlloc> for CommAlloc {
     fn from(alloc: LibfabricAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::LibfabricAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::LibfabricAlloc(alloc)),
             // alloc_type: CommAllocType::Fabric,
         }
     }
@@ -1616,7 +1614,6 @@ impl LibfabricAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Fabric(alloc_table),
-            print: false,
         };
         //initialize ref count to 1
         // let encoded = encode_ref_count_and_padding(1, padding);
@@ -1661,7 +1658,6 @@ impl LibfabricAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             id,
             alloc_table: self.alloc_table.clone(),
-            print: self.print,
         };
         debug!(target: "libfabric", "Created Libfabric sub-allocation: {:?}", alloc);
         Ok(alloc)
@@ -1709,7 +1705,6 @@ impl LibfabricAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start + offset, alloc_manager),
-            print: self.print,
         };
 
         unsafe {
@@ -1752,7 +1747,6 @@ impl LibfabricAlloc {
             remote_allocs: self.remote_allocs.clone(),
             id: self.id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start, alloc_manager),
-            print: true,
         };
         get_ref_count(unsafe {
             &*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize)
@@ -2397,15 +2391,6 @@ impl LibfabricAlloc {
 impl Drop for LibfabricAlloc {
     fn drop(&mut self) {
         let fabric_ref_count = self.decrement_fabric_ref_count();
-        // if self.print {
-        //     println!(
-        //         "[{:?}] Dropping LibfabricAlloc: {:x} - {:x} ref_cnt(before drop) {}",
-        //         std::thread::current().id(),
-        //         self.range.start,
-        //         self.range.end,
-        //         fabric_ref_count
-        //     );
-        // }
         debug!(target: "libfabric", "Dropping LibfabricAlloc: {:x} - {:x} ref_cnt(before drop) {}", self.range.start,self.range.end, fabric_ref_count);
 
         match &self.alloc_table {
@@ -2417,14 +2402,6 @@ impl Drop for LibfabricAlloc {
             }
             AllocTable::Runtime(rt_alloc_table, addr, fabric_alloc_table) => {
                 let rt_ref_count = self.decrement_rt_ref_count();
-                // if self.print {
-                //     println!(
-                //         "[{:?}, {:?}] Freeing runtime LibfabricAlloc: {:?}",
-                //         std::time::Instant::now(),
-                //         std::thread::current().id(),
-                //         self
-                //     );
-                // }
                 if rt_ref_count == 1 {
                     debug!(target: "libfabric", "Freeing runtime LibfabricAlloc: {:?}",  self);
 
@@ -2468,7 +2445,7 @@ impl OneSidedLibfabricAlloc {
 impl From<OneSidedLibfabricAlloc> for CommAlloc {
     fn from(alloc: OneSidedLibfabricAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::OneSidedLibfabricAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::OneSidedLibfabricAlloc(alloc)),
             // alloc_type: CommAllocType::Remote,
         }
     }

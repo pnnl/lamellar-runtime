@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use crate::{
     config,
@@ -31,7 +32,7 @@ impl CommMem for LibfabricComm {
         //     inner_alloc.zeroize_bytes();
         // }
         let comm_alloc = CommAlloc {
-            inner_alloc: CommAllocInner::LibfabricAlloc(inner_alloc),
+            inner_alloc: Arc::new(CommAllocInner::LibfabricAlloc(inner_alloc)),
         };
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
         Ok(comm_alloc)
@@ -82,7 +83,7 @@ impl CommMem for LibfabricComm {
                 //     alloc.zeroize_bytes();
                 // }
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricAlloc(alloc),
+                    inner_alloc: Arc::new(CommAllocInner::LibfabricAlloc(alloc)),
                 });
             }
         }
@@ -199,7 +200,7 @@ impl CommMem for LibfabricComm {
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
 
-            if let CommAllocInner::LibfabricAlloc(inner_alloc) = alloc.inner_alloc {
+            if let CommAllocInner::LibfabricAlloc(inner_alloc) = alloc.inner_alloc.as_ref() {
                 println!("Allocated new libfabric alloc pool: {:?}", inner_alloc);
                 let mut new_alloc = BTreeAlloc::new("libfabric_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
@@ -260,11 +261,11 @@ impl CommMem for LibfabricComm {
         for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricAlloc(
+                    inner_alloc: Arc::new(CommAllocInner::LibfabricAlloc(
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
-                    ),
+                    )),
                 };
                 return Ok(comm_alloc);
             }
@@ -282,7 +283,7 @@ impl CommMem for LibfabricComm {
         trace!("get_alloc cloned: {:?}", addr);
         if let Ok(alloc) = self.ofi.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
-                inner_alloc: CommAllocInner::LibfabricAlloc(alloc),
+                inner_alloc: Arc::new(CommAllocInner::LibfabricAlloc(alloc)),
             });
         }
 
@@ -290,9 +291,9 @@ impl CommMem for LibfabricComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricAlloc(
+                    inner_alloc: Arc::new(CommAllocInner::LibfabricAlloc(
                         inner_alloc.sub_alloc(addr.0, size)?,
-                    ),
+                    )),
                 });
             }
         }

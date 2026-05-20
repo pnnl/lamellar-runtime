@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::{atomic::Ordering, Arc};
 
 use tracing::trace;
 
@@ -47,7 +47,7 @@ impl CommMem for ShmemComm {
         }
 
         Ok(CommAlloc {
-            inner_alloc: CommAllocInner::ShmemAlloc(inner_alloc),
+            inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(inner_alloc)),
             // alloc_type: CommAllocType::Fabric,
         })
     }
@@ -96,7 +96,7 @@ impl CommMem for ShmemComm {
                 }
 
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::ShmemAlloc(alloc),
+                    inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(alloc)),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }
@@ -167,7 +167,7 @@ impl CommMem for ShmemComm {
         ) / self.num_pes;
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
-            if let CommAllocInner::ShmemAlloc(inner_alloc) = alloc.inner_alloc {
+            if let CommAllocInner::ShmemAlloc(inner_alloc) = alloc.inner_alloc.as_ref() {
                 let mut new_alloc = BTreeAlloc::new("libfabric_c_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
                 self.runtime_allocs
@@ -229,11 +229,11 @@ impl CommMem for ShmemComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr) {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::ShmemAlloc(
+                    inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
-                    ),
+                    )),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }
@@ -254,7 +254,7 @@ impl CommMem for ShmemComm {
         trace!("get_alloc_cloned: {:?}", addr);
         if let Ok(inner_alloc) = self.allocator.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
-                inner_alloc: CommAllocInner::ShmemAlloc(inner_alloc),
+                inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(inner_alloc)),
                 // alloc_type: CommAllocType::Fabric,
             });
         }
@@ -263,7 +263,7 @@ impl CommMem for ShmemComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::ShmemAlloc(inner_alloc.sub_alloc(addr.0, size)?),
+                    inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(inner_alloc.sub_alloc(addr.0, size)?)),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }

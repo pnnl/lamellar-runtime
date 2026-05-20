@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use tracing::trace;
 
@@ -33,7 +34,7 @@ impl CommMem for UcxComm {
         // }
         trace!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
-            inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
+            inner_alloc: Arc::new(CommAllocInner::UcxAlloc(inner_alloc)),
             // alloc_type: CommAllocType::Fabric,
         };
 
@@ -66,7 +67,7 @@ impl CommMem for UcxComm {
                 // }
 
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::UcxAlloc(alloc),
+                    inner_alloc: Arc::new(CommAllocInner::UcxAlloc(alloc)),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }
@@ -110,7 +111,7 @@ impl CommMem for UcxComm {
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
 
-            if let CommAllocInner::UcxAlloc(inner_alloc) = alloc.inner_alloc {
+            if let CommAllocInner::UcxAlloc(inner_alloc) = alloc.inner_alloc.as_ref() {
                 let mut new_alloc = BTreeAlloc::new("ucx_c_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
                 self.runtime_allocs
@@ -170,11 +171,11 @@ impl CommMem for UcxComm {
         for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
-                    inner_alloc: CommAllocInner::UcxAlloc(
+                    inner_alloc: Arc::new(CommAllocInner::UcxAlloc(
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
-                    ),
+                    )),
                     // alloc_type: CommAllocType::RtHeap,
                 };
                 return Ok(comm_alloc);
@@ -196,7 +197,7 @@ impl CommMem for UcxComm {
         trace!("get_alloc: {:?}", addr);
         if let Ok(inner_alloc) = self.ucx.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
-                inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
+                inner_alloc: Arc::new(CommAllocInner::UcxAlloc(inner_alloc)),
                 // alloc_type: CommAllocType::Fabric,
             });
         }
@@ -205,7 +206,7 @@ impl CommMem for UcxComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::UcxAlloc(inner_alloc.sub_alloc(addr.0, size)?),
+                    inner_alloc: Arc::new(CommAllocInner::UcxAlloc(inner_alloc.sub_alloc(addr.0, size)?)),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }

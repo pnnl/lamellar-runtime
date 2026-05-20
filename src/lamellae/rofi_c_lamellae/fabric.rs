@@ -639,7 +639,7 @@ impl Drop for RofiCAlloc {
 impl From<RofiCAlloc> for CommAlloc {
     fn from(alloc: RofiCAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::RofiCAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::RofiCAlloc(alloc)),
         }
     }
 }
@@ -673,7 +673,7 @@ impl OneSidedRofiCAlloc {
 impl From<OneSidedRofiCAlloc> for CommAlloc {
     fn from(alloc: OneSidedRofiCAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::OneSidedRofiCAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::OneSidedRofiCAlloc(alloc)),
         }
     }
 }

@@ -38,7 +38,7 @@ impl CommMem for RofiCComm {
         // }
         // println!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
-            inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc),
+            inner_alloc: Arc::new(CommAllocInner::RofiCAlloc(inner_alloc)),
         };
 
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
@@ -66,7 +66,7 @@ impl CommMem for RofiCComm {
                     size,
                 )?;
                 let comm_alloc = CommAlloc {
-                    inner_alloc: CommAllocInner::RofiCAlloc(alloc),
+                    inner_alloc: Arc::new(CommAllocInner::RofiCAlloc(alloc)),
                 };
                 return Ok(comm_alloc);
             }
@@ -110,7 +110,7 @@ impl CommMem for RofiCComm {
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
 
-            if let CommAllocInner::RofiCAlloc(inner_alloc) = alloc.inner_alloc {
+            if let CommAllocInner::RofiCAlloc(inner_alloc) = alloc.inner_alloc.as_ref() {
                 let mut new_alloc = BTreeAlloc::new("rofi_c_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
                 self.runtime_allocs
@@ -169,11 +169,11 @@ impl CommMem for RofiCComm {
         for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
-                    inner_alloc: CommAllocInner::RofiCAlloc(
+                    inner_alloc: Arc::new(CommAllocInner::RofiCAlloc(
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
-                    ),
+                    )),
                 };
                 return Ok(comm_alloc);
             }
@@ -194,7 +194,7 @@ impl CommMem for RofiCComm {
         trace!("get_alloc: {:?}", addr);
         if let Ok(inner_alloc) = self.rofi_c.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
-                inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc),
+                inner_alloc: Arc::new(CommAllocInner::RofiCAlloc(inner_alloc)),
             });
         }
 
@@ -202,7 +202,7 @@ impl CommMem for RofiCComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc.sub_alloc(addr.0, size)?),
+                    inner_alloc: Arc::new(CommAllocInner::RofiCAlloc(inner_alloc.sub_alloc(addr.0, size)?)),
                 });
             }
         }

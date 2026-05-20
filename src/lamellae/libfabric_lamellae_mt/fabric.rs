@@ -1373,7 +1373,7 @@ impl Clone for LibfabricMtAlloc {
 impl From<LibfabricMtAlloc> for CommAlloc {
     fn from(alloc: LibfabricMtAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::LibfabricMtAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::LibfabricMtAlloc(alloc)),
             alloc_type: CommAllocType::Fabric,
         }
     }
@@ -2244,7 +2244,7 @@ impl OneSidedLibfabricMtAlloc {
 impl From<OneSidedLibfabricMtAlloc> for CommAlloc {
     fn from(alloc: OneSidedLibfabricMtAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::OneSidedLibfabricMtAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::OneSidedLibfabricMtAlloc(alloc)),
             alloc_type: CommAllocType::Remote,
         }
     }

@@ -485,7 +485,7 @@ impl Clone for UcxMtAlloc {
 impl From<UcxMtAlloc> for CommAlloc {
     fn from(alloc: UcxMtAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::UcxMtAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::UcxMtAlloc(alloc)),
             alloc_type: CommAllocType::Fabric,
         }
     }
@@ -1179,7 +1179,7 @@ impl OneSidedUcxMtAlloc {
 impl From<OneSidedUcxMtAlloc> for CommAlloc {
     fn from(alloc: OneSidedUcxMtAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::OneSidedUcxMtAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::OneSidedUcxMtAlloc(alloc)),
             alloc_type: CommAllocType::Remote,
         }
     }

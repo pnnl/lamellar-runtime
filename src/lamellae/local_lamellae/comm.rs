@@ -64,7 +64,7 @@ impl LocalAlloc {
 impl From<Arc<LocalAlloc>> for CommAlloc {
     fn from(alloc: Arc<LocalAlloc>) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::LocalAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::LocalAlloc(alloc)),
             // alloc_type: CommAllocType::Fabric,
         }
     }

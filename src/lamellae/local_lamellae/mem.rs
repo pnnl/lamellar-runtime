@@ -30,7 +30,7 @@ impl CommMem for LocalComm {
         allocs.insert(data_addr, alloc.clone());
         trace!("new alloc: {:?} {}", alloc.ptr, alloc.layout.size());
         Ok(CommAlloc {
-            inner_alloc: CommAllocInner::LocalAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::LocalAlloc(alloc)),
             // alloc_type: CommAllocType::Fabric,
         })
     }
@@ -60,7 +60,7 @@ impl CommMem for LocalComm {
         allocs.insert(data_addr, alloc.clone());
         trace!("new rt alloc: {:x} {}", data_addr, size);
         Ok(CommAlloc {
-            inner_alloc: CommAllocInner::LocalAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::LocalAlloc(alloc)),
             // alloc_type: CommAllocType::RtHeap,
         })
     }
@@ -150,7 +150,7 @@ impl CommMem for LocalComm {
         for (_addr, alloc) in allocs.iter() {
             if alloc.start() <= addr && addr < alloc.start() + alloc.num_bytes() {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::LocalAlloc(alloc.clone()),
+                    inner_alloc: Arc::new(CommAllocInner::LocalAlloc(alloc.clone())),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }
@@ -166,14 +166,14 @@ impl CommMem for LocalComm {
         let allocs = self.allocs.lock();
         if let Some(alloc) = allocs.get(&addr.0) {
             return Ok(CommAlloc {
-                inner_alloc: CommAllocInner::LocalAlloc(alloc.clone()),
+                inner_alloc: Arc::new(CommAllocInner::LocalAlloc(alloc.clone())),
                 // alloc_type: CommAllocType::Fabric,
             });
         }
         let allocs = self.heap_allocs.lock();
         if let Some(alloc) = allocs.get(&addr.0) {
             return Ok(CommAlloc {
-                inner_alloc: CommAllocInner::LocalAlloc(alloc.clone()),
+                inner_alloc: Arc::new(CommAllocInner::LocalAlloc(alloc.clone())),
                 // alloc_type: CommAllocType::RtHeap,
             });
         }

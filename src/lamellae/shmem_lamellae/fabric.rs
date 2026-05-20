@@ -413,7 +413,7 @@ impl Drop for ShmemAlloc {
 impl From<ShmemAlloc> for CommAlloc {
     fn from(alloc: ShmemAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::ShmemAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(alloc)),
             // alloc_type: CommAllocType::Fabric,
         }
     }
@@ -457,7 +457,7 @@ impl OneSidedShmemAlloc {
 impl From<OneSidedShmemAlloc> for CommAlloc {
     fn from(alloc: OneSidedShmemAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::OneSidedShmemAlloc(alloc),
+            inner_alloc: Arc::new(CommAllocInner::OneSidedShmemAlloc(alloc)),
             // alloc_type: CommAllocType::Remote,
         }
     }

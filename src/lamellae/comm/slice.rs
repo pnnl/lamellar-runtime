@@ -15,7 +15,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub(crate) struct CommSlice<T> {
-    pub(crate) inner_alloc: CommAllocInner,
+    pub(crate) inner_alloc: Arc<CommAllocInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
@@ -61,10 +61,10 @@ impl<T> CommSlice<T> {
             (end - start) * std::mem::size_of::<T>()
         );
         CommSlice {
-            inner_alloc: self.inner_alloc.sub_alloc(
+            inner_alloc: Arc::new(self.inner_alloc.sub_alloc(
                 start * std::mem::size_of::<T>(),
                 (end - start) * std::mem::size_of::<T>(),
-            ),
+            )),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -89,7 +89,7 @@ impl<T> CommSlice<T> {
 
     pub(crate) unsafe fn from_raw_parts(data: *const T, len: usize) -> Self {
         CommSlice {
-            inner_alloc: CommAllocInner::Raw(data as usize, len * std::mem::size_of::<T>()),
+            inner_alloc: Arc::new(CommAllocInner::Raw(data as usize, len * std::mem::size_of::<T>())),
             _phantom: std::marker::PhantomData,
         }
     }
