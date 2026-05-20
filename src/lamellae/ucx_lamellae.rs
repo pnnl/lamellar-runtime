@@ -54,16 +54,16 @@ impl LamellaeInit for UcxBuilder {
         let ucx = Arc::new(Lamellae::Ucx(ucx));
         let ucx_clone = ucx.clone();
         let cq_clone = cq.clone();
-        scheduler.submit_task(async move {
+        scheduler.submit_long_task(async move {
             cq_clone.recv_data(ucx_clone.clone()).await;
         });
 
         let cq_clone = cq.clone();
-        scheduler.submit_task(async move {
+        scheduler.submit_long_task(async move {
             cq_clone.alloc_task().await;
         });
         let cq_clone = cq.clone();
-        scheduler.submit_task(async move {
+        scheduler.submit_long_task(async move {
             cq_clone.panic_task().await;
         });
         ucx

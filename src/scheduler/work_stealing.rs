@@ -12,7 +12,7 @@ use core_affinity::CoreId;
 use crossbeam::deque::Worker;
 use futures_util::Future;
 use rand::prelude::*;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::panic;
 use std::pin::Pin;
 use std::process;
@@ -26,32 +26,68 @@ use std::thread;
 
 static TASK_ID: AtomicUsize = AtomicUsize::new(0);
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug, PartialOrd, Ord)]
 pub(crate) enum TaskType {
     Spawn,
     Submit,
+    LongSubmit,
     IO,
     Immediate,
     BlockOn,
+    AmSubmit,
+    AmImmediate,
+    AmExec,
+    AmRemote,
+    TaskSpawn,
+    TaskSubmit,
+    TaskLongSubmit,
+    TaskImmediate,
+    TaskIo,
+    TaskExec,
+    SchedBlockOn,
 }
 
 lazy_static! {
-    pub(crate) static ref TASKS_LAUNCHED: HashMap<TaskType, AtomicUsize> = {
-        let mut m = HashMap::new();
+    pub(crate) static ref TASKS_LAUNCHED: BTreeMap<TaskType, AtomicUsize> = {
+        let mut m = BTreeMap::new();
         m.insert(TaskType::Spawn, AtomicUsize::new(0));
         m.insert(TaskType::Submit, AtomicUsize::new(0));
+        m.insert(TaskType::LongSubmit, AtomicUsize::new(0));
         m.insert(TaskType::IO, AtomicUsize::new(0));
         m.insert(TaskType::Immediate, AtomicUsize::new(0));
         m.insert(TaskType::BlockOn, AtomicUsize::new(0));
+        m.insert(TaskType::AmSubmit, AtomicUsize::new(0));
+        m.insert(TaskType::AmImmediate, AtomicUsize::new(0));
+        m.insert(TaskType::AmExec, AtomicUsize::new(0));
+        m.insert(TaskType::AmRemote, AtomicUsize::new(0));
+        m.insert(TaskType::TaskSpawn, AtomicUsize::new(0));
+        m.insert(TaskType::TaskSubmit, AtomicUsize::new(0));
+        m.insert(TaskType::TaskLongSubmit, AtomicUsize::new(0));
+        m.insert(TaskType::TaskImmediate, AtomicUsize::new(0));
+        m.insert(TaskType::TaskIo, AtomicUsize::new(0));
+        m.insert(TaskType::TaskExec, AtomicUsize::new(0));
+        m.insert(TaskType::SchedBlockOn, AtomicUsize::new(0));
         m
     };
-    pub(crate) static ref TASKS_FINISHED: HashMap<TaskType, AtomicUsize> = {
-        let mut m = HashMap::new();
+    pub(crate) static ref TASKS_FINISHED: BTreeMap<TaskType, AtomicUsize> = {
+        let mut m = BTreeMap::new();
         m.insert(TaskType::Spawn, AtomicUsize::new(0));
         m.insert(TaskType::Submit, AtomicUsize::new(0));
+        m.insert(TaskType::LongSubmit, AtomicUsize::new(0));
         m.insert(TaskType::IO, AtomicUsize::new(0));
         m.insert(TaskType::Immediate, AtomicUsize::new(0));
         m.insert(TaskType::BlockOn, AtomicUsize::new(0));
+        m.insert(TaskType::AmSubmit, AtomicUsize::new(0));
+        m.insert(TaskType::AmImmediate, AtomicUsize::new(0));
+        m.insert(TaskType::AmExec, AtomicUsize::new(0));
+        m.insert(TaskType::AmRemote, AtomicUsize::new(0));
+        m.insert(TaskType::TaskSpawn, AtomicUsize::new(0));
+        m.insert(TaskType::TaskSubmit, AtomicUsize::new(0));
+        m.insert(TaskType::TaskLongSubmit, AtomicUsize::new(0));
+        m.insert(TaskType::TaskImmediate, AtomicUsize::new(0));
+        m.insert(TaskType::TaskIo, AtomicUsize::new(0));
+        m.insert(TaskType::TaskExec, AtomicUsize::new(0));
+        m.insert(TaskType::SchedBlockOn, AtomicUsize::new(0));
         m
     };
 }
@@ -62,9 +98,21 @@ pub(crate) fn task_launched_to_string() -> String {
         let task_type_str = match task_type {
             TaskType::Spawn => "Spawn",
             TaskType::Submit => "Submit",
+            TaskType::LongSubmit => "LongSubmit",
             TaskType::IO => "IO",
             TaskType::Immediate => "Immediate",
             TaskType::BlockOn => "BlockOn",
+            TaskType::AmSubmit => "AmSubmit",
+            TaskType::AmImmediate => "AmImmediate",
+            TaskType::AmExec => "AmExec",
+            TaskType::AmRemote => "AmRemote",
+            TaskType::TaskSpawn => "TaskSpawn",
+            TaskType::TaskSubmit => "TaskSubmit",
+            TaskType::TaskLongSubmit => "TaskLongSubmit",
+            TaskType::TaskImmediate => "TaskImmediate",
+            TaskType::TaskIo => "TaskIo",
+            TaskType::TaskExec => "TaskExec",
+            TaskType::SchedBlockOn => "SchedBlockOn",
         };
         s.push_str(&format!(
             "{}: {}, ",
@@ -81,9 +129,21 @@ pub(crate) fn task_finished_to_string() -> String {
         let task_type_str = match task_type {
             TaskType::Spawn => "Spawn",
             TaskType::Submit => "Submit",
+            TaskType::LongSubmit => "LongSubmit",
             TaskType::IO => "IO",
             TaskType::Immediate => "Immediate",
             TaskType::BlockOn => "BlockOn",
+            TaskType::AmSubmit => "AmSubmit",
+            TaskType::AmImmediate => "AmImmediate",
+            TaskType::AmExec => "AmExec",
+            TaskType::AmRemote => "AmRemote",
+            TaskType::TaskSpawn => "TaskSpawn",
+            TaskType::TaskSubmit => "TaskSubmit",
+            TaskType::TaskLongSubmit => "TaskLongSubmit",
+            TaskType::TaskImmediate => "TaskImmediate",
+            TaskType::TaskIo => "TaskIo",
+            TaskType::TaskExec => "TaskExec",
+            TaskType::SchedBlockOn => "SchedBlockOn",
         };
         s.push_str(&format!(
             "{}: {}, ",
@@ -243,17 +303,20 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace!("spawn task id: {:?}", task_id);
         // trace_span!("spawn_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
+                    // trace!("starting spawn task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::Spawn)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
+                        // trace!("finished spawn task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Spawned Task", task_id = task_id))
@@ -268,6 +331,42 @@ impl LamellarExecutor for WorkStealing {
         }
         // })
     }
+
+    fn submit_long_task<F>(&self, task: F)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        TASKS_LAUNCHED
+            .get(&TaskType::LongSubmit)
+            .unwrap()
+            .fetch_add(1, Ordering::Relaxed);
+        let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace!("submit long task id: {:?}", task_id);
+        // trace_span!("submit_task").in_scope(|| {
+        let work_inj = self.work_inj.clone();
+        let schedule = move |runnable| work_inj.push(runnable);
+        let (runnable, task) = Builder::new().metadata(task_id).spawn(
+            move |_task_id| {
+                async move {
+                    // trace!("starting long submit task id: {:?} ", task_id);
+                    let res = task.await;
+                    TASKS_FINISHED
+                        .get(&TaskType::LongSubmit)
+                        .unwrap()
+                        .fetch_add(1, Ordering::Relaxed);
+                        // trace!("finished long submit task id: {:?} ", task_id);
+                    res
+                }
+                .instrument(trace_span!("Submitted Task", task_id = task_id))
+            },
+            schedule,
+        );
+
+        runnable.schedule();
+        task.detach();
+        // });
+    }
     fn submit_task<F>(&self, task: F)
     where
         F: Future + Send + 'static,
@@ -278,17 +377,20 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace!("submit task id: {:?}", task_id);
         // trace_span!("submit_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
+                    // trace!("starting submit task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::Submit)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
+                        // trace!("finished submit task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Submitted Task", task_id = task_id))
@@ -311,17 +413,20 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace!("submit task thread id: {:?} task id: {:?}", tid, task_id);
         // trace_span!("submit_task_thread").in_scope(|| {
         let work_inj = self.thread_injs[tid].clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
+                    // trace!("starting thread submit task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::Submit)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
+                        // trace!("finished thread submit task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Submitted Task", task_id = task_id))
@@ -345,19 +450,20 @@ impl LamellarExecutor for WorkStealing {
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         trace!("submitting IO task id: {:?}", task_id);
+        // trace!("submit IO task id: {:?}", task_id);
         // trace_span!("submit_io_task:").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
-                    trace!("starting IO task id: {:?} ", task_id);
+                    // trace!("starting IO task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::IO)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        trace!("finished IO task id: {:?} ", task_id);
+                        // trace!("finished IO task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("IO Task", task_id = task_id))
@@ -380,17 +486,20 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace!("submit immediate task id: {:?}", task_id);
         // trace_span!("submit_immediate_task").in_scope(|| {
         let imm_inj = self.imm_inj.clone();
         let schedule = move |runnable| imm_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
+                    // trace!("starting immediate task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::Immediate)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
+                        // trace!("finished immediate task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Immediate Task", task_id = task_id))
@@ -410,6 +519,7 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace!("block on task id: {:?}", task_id);
         // trace_span!("block_on").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
@@ -417,11 +527,13 @@ impl LamellarExecutor for WorkStealing {
             Builder::new().metadata(task_id).spawn_unchecked(
                 move |_task_id| {
                     async move {
+                        // trace!("starting block on task id: {:?} ", task_id);
                         let res = fut.await;
                         TASKS_FINISHED
                             .get(&TaskType::BlockOn)
                             .unwrap()
                             .fetch_add(1, Ordering::Relaxed);
+                        // trace!("finished block on task id: {:?} ", task_id);
                         res
                     }
                     .instrument(trace_span!("Block OnTask", task_id = task_id))

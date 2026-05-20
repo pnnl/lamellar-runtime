@@ -1273,7 +1273,8 @@ impl LamellarTeamRT {
         //     // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
         //     Pin::new_unchecked(arc_team); //allows us to get rid of the extra reference created in new
         // }
-
+        trace!("Tasks Launched: {:?} Tasks Completed: {:?}", task_launched_to_string(),
+                        task_finished_to_string(),);
         trace!("team destroyed");
     }
     #[allow(dead_code)]
