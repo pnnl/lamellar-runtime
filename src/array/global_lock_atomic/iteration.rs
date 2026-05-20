@@ -405,7 +405,7 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockReadGuard<T> {
 
     fn dist_iter(&self) -> Self::DistIter {
         GlobalLockDistIter {
-            data: self.array.clone(),
+            data: (*self.array).clone(),
             lock: Arc::new(Mutex::new(Some(self.lock_guard.clone()))),
             cur_i: 0,
             end_i: 0,
@@ -415,7 +415,7 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockReadGuard<T> {
 
     fn local_iter(&self) -> Self::LocalIter {
         GlobalLockLocalIter {
-            data: self.array.clone(),
+            data: (*self.array).clone(),
             lock: Arc::new(Mutex::new(Some(self.lock_guard.clone()))),
             cur_i: 0,
             end_i: 0,

@@ -113,7 +113,7 @@ impl<T: Dist> DerefMut for LocalLockMutLocalData<T> {
 /// When the instance is dropped the lock is released.
 #[derive(Debug)]
 pub struct LocalLockLocalData<T: Dist> {
-    pub(crate) array: LocalLockArray<T>,
+    pub(crate) array: Arc<LocalLockArray<T>>,
     start_index: usize,
     end_index: usize,
     lock_guard: Arc<LocalRwDarcReadGuard<()>>,
@@ -123,7 +123,7 @@ impl<T: Dist> Clone for LocalLockLocalData<T> {
     fn clone(&self) -> Self {
         // println!("getting read lock in LocalLockLocalData clone");
         LocalLockLocalData {
-            array: self.array.clone(),
+            array: Arc::clone(&self.array),
             start_index: self.start_index,
             end_index: self.end_index,
             // lock: self.lock.clone(),
@@ -166,7 +166,7 @@ impl<T: Dist> LocalLockLocalData<T> {
     pub fn into_sub_data(self, start: usize, end: usize) -> LocalLockLocalData<T> {
         // println!("into sub data {:?} {:?}", start, end);
         LocalLockLocalData {
-            array: self.array.clone(),
+            array: self.array,
             start_index: start,
             end_index: end,
             // lock: self.lock.clone(),
@@ -241,17 +241,18 @@ impl<T: Dist> Deref for LocalLockLocalData<T> {
 /// Captures a read lock on the array, allowing immutable access to the underlying data
 #[derive(Clone)]
 pub struct LocalLockReadGuard<T: Dist> {
-    pub(crate) array: LocalLockArray<T>,
+    pub(crate) array: Arc<LocalLockArray<T>>,
     lock_guard: Arc<LocalRwDarcReadGuard<()>>,
 }
 
 impl<T: Dist> LocalLockReadGuard<T> {
     /// Access the underlying local data immutably through the read lock
     pub fn local_data(&self) -> LocalLockLocalData<T> {
+        let end_index = self.array.num_elems_local();
         LocalLockLocalData {
-            array: self.array.clone(),
+            array: Arc::clone(&self.array),
             start_index: 0,
-            end_index: self.array.num_elems_local(),
+            end_index,
             // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
@@ -436,7 +437,7 @@ impl<T: Dist> LocalLockArray<T> {
     ///```
     pub fn read_local_data(&self) -> LocalLockLocalDataHandle<T> {
         LocalLockLocalDataHandle {
-            array: self.clone(),
+            array: Arc::new(self.clone()),
             start_index: 0,
             end_index: self.num_elems_local(),
             lock_handle: self.lock.read(),
@@ -1086,7 +1087,7 @@ impl<T: Dist + AmDist + 'static> LocalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn reduce(self, op: &str) -> LocalLockArrayReduceHandle<T> {
         LocalLockArrayReduceHandle {
-            req: self.array.array.reduce_data(op, self.array.clone().into()),
+            req: self.array.array.reduce_data(op, (*self.array).clone().into()),
             lock_guard: self,
         }
     }

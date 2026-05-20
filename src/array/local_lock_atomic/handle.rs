@@ -121,7 +121,7 @@ impl<T: Dist + ArrayOps + 'static> Future for LocalLockArrayHandle<T> {
 /// task.block();
 ///```
 pub struct LocalLockReadHandle<T: Remote> {
-    pub(crate) array: LocalLockArray<T>,
+    pub(crate) array: Arc<LocalLockArray<T>>,
     #[pin]
     pub(crate) lock_handle: LocalRwDarcReadHandle<()>,
 }
@@ -137,9 +137,10 @@ impl<T: Remote> PinnedDrop for LocalLockReadHandle<T> {
 
 impl<T: Dist> LocalLockReadHandle<T> {
     pub(crate) fn new(array: LocalLockArray<T>) -> Self {
+        let lock_handle = array.lock.read();
         Self {
-            array: array.clone(),
-            lock_handle: array.lock.read(),
+            array: Arc::new(array),
+            lock_handle,
         }
     }
 
@@ -198,7 +199,7 @@ impl<T: Dist> Future for LocalLockReadHandle<T> {
         let this = self.project();
         match this.lock_handle.poll(cx) {
             Poll::Ready(val) => Poll::Ready(LocalLockReadGuard {
-                array: this.array.clone(),
+                array: Arc::clone(this.array),
                 lock_guard: Arc::new(val),
             }),
             Poll::Pending => Poll::Pending,
@@ -231,7 +232,7 @@ impl<T: Dist> Future for LocalLockReadHandle<T> {
 /// println!("PE{my_pe}, local_data: {:?}", local_data);
 ///```
 pub struct LocalLockLocalDataHandle<T: Dist> {
-    pub(crate) array: LocalLockArray<T>,
+    pub(crate) array: Arc<LocalLockArray<T>>,
     pub(crate) start_index: usize,
     pub(crate) end_index: usize,
     #[pin]
@@ -307,7 +308,7 @@ impl<T: Dist> Future for LocalLockLocalDataHandle<T> {
         let this = self.project();
         match this.lock_handle.poll(cx) {
             Poll::Ready(val) => Poll::Ready(LocalLockLocalData {
-                array: this.array.clone(),
+                array: Arc::clone(this.array),
                 start_index: *this.start_index,
                 end_index: *this.end_index,
                 // lock: self.lock.clone(),
@@ -572,7 +573,7 @@ pub struct LocalLockLocalChunksHandle<T: Remote> {
     pub(crate) chunk_size: usize,
     pub(crate) index: usize,     //global index within the array local data
     pub(crate) end_index: usize, //global index within the array local data
-    pub(crate) array: LocalLockArray<T>,
+    pub(crate) array: Arc<LocalLockArray<T>>,
     #[pin]
     pub(crate) lock_handle: LocalRwDarcReadHandle<()>,
 }
@@ -651,7 +652,7 @@ impl<T: Dist> Future for LocalLockLocalChunksHandle<T> {
                 chunk_size: *this.chunk_size,
                 index: *this.index, //global index within the array local data
                 end_index: *this.end_index, //global index within the array local data
-                array: this.array.clone(),
+                array: Arc::clone(this.array),
                 lock_guard: Arc::new(val),
             }),
             Poll::Pending => Poll::Pending,

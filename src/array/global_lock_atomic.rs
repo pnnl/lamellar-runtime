@@ -26,6 +26,7 @@ use crate::{array::*, Darc};
 use pin_project::pin_project;
 
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 /// A safe abstraction of a distributed array, providing read/write access protected by locks.
@@ -161,7 +162,7 @@ impl<T: Dist> DerefMut for GlobalLockCollectiveMutLocalData<T> {
 ///
 /// When the instance is dropped the lock is released.
 pub struct GlobalLockLocalData<T: Dist> {
-    pub(crate) array: GlobalLockArray<T>,
+    pub(crate) array: Arc<GlobalLockArray<T>>,
     // lock: GlobalRwDarc<()>,
     start_index: usize,
     end_index: usize,
@@ -177,7 +178,7 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for GlobalLockLocalData<T> {
 impl<T: Dist> Clone for GlobalLockLocalData<T> {
     fn clone(&self) -> Self {
         GlobalLockLocalData {
-            array: self.array.clone(),
+            array: Arc::clone(&self.array),
             start_index: self.start_index,
             end_index: self.end_index,
             // lock: self.lock.clone(),
@@ -220,7 +221,7 @@ impl<T: Dist> GlobalLockLocalData<T> {
     ///```
     pub fn into_sub_data(self, start: usize, end: usize) -> GlobalLockLocalData<T> {
         GlobalLockLocalData {
-            array: self.array.clone(),
+            array: self.array,
             start_index: start,
             end_index: end,
             // lock: self.lock,
@@ -273,17 +274,18 @@ impl<'a, T: Dist> IntoIterator for &'a GlobalLockLocalData<T> {
 /// Captures a read lock on the array, allowing immutable access to the underlying data
 #[derive(Clone)]
 pub struct GlobalLockReadGuard<T: Dist> {
-    pub(crate) array: GlobalLockArray<T>,
+    pub(crate) array: Arc<GlobalLockArray<T>>,
     lock_guard: GlobalRwDarcReadGuard<()>,
 }
 
 impl<T: Dist> GlobalLockReadGuard<T> {
     /// Access the underlying local data through the read lock
     pub fn local_data(&self) -> GlobalLockLocalData<T> {
+        let end_index = self.array.num_elems_local();
         GlobalLockLocalData {
-            array: self.array.clone(),
+            array: Arc::clone(&self.array),
             start_index: 0,
-            end_index: self.array.num_elems_local(),
+            end_index,
             // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
@@ -459,7 +461,7 @@ impl<T: Dist> GlobalLockArray<T> {
     ///```
     pub fn read_local_data(&self) -> GlobalLockLocalDataHandle<T> {
         GlobalLockLocalDataHandle {
-            array: self.clone(),
+            array: Arc::new(self.clone()),
             start_index: 0,
             end_index: self.array.num_elems_local(),
             // lock: self.lock.clone(),
@@ -1154,7 +1156,7 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn reduce(self, op: &str) -> GlobalLockArrayReduceHandle<T> {
         GlobalLockArrayReduceHandle {
-            req: self.array.array.reduce_data(op, self.array.clone().into()),
+            req: self.array.array.reduce_data(op, (*self.array).clone().into()),
             lock_guard: self,
         }
     }
