@@ -22,7 +22,7 @@ categories = ["asynchronous", "concurrency", "network-programming", "science"]
 [dependencies]
 lamellar-impl = { version = "0.8.0", path = "impl" }
 lamellar_main = { path = "./lamellar_main", optional = true }
-lamellar-prof = { path = "./lamellar-prof", optional = true }
+lamellar-prof = { path = "./lamellar-prof" }
 
 libfabric = { git = "https://github.com/pnnl/lamellar.git", features = [
     # "use-async-std",
