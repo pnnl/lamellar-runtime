@@ -334,10 +334,8 @@ impl Ofi {
                     curr_info = (*curr_info).next;
                     continue;
                 }
-                println!("Selected provider: {}, domain: {}", std::ffi::CStr::from_ptr((*curr_info).fabric_attr.as_ref().unwrap().prov_name).to_str().unwrap(), std::ffi::CStr::from_ptr((*curr_info).domain_attr.as_ref().unwrap().name).to_str().unwrap());
                 break;
             }
-            println!("Finished iterating fi_info list. Current info: {:?}", curr_info);
             let ret: *mut libfabric_sys::fi_info = libfabric_sys::fi_dupinfo(curr_info);
             libfabric_sys::fi_freeinfo(hints);
             libfabric_sys::fi_freeinfo(info);
@@ -866,7 +864,6 @@ impl Ofi {
                     std::mem::size_of::<usize>(),
                 ));
 
-                println!("PE {}: key: {:x}, addr: {:x}, addr_size: {}", self.my_pe, key, base_addr, addr_size);
                 bytes
             }
         };
@@ -906,7 +903,6 @@ impl Ofi {
                 let addr_len  = unsafe{*(chunk[chunk.len() - std::mem::size_of::<usize>()..].as_ptr() as *const u64)};
                 let key_addr = unsafe{*(chunk[chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()..chunk.len() - std::mem::size_of::<usize>()].as_ptr() as *const u64)};
                 let mut key = chunk[..chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()].to_vec();
-                println!("PE {}: Received key bytes from PE {}: {:?}, addr_len: {}, key_addr: {}", self.my_pe, pe, chunk, addr_len, key_addr);
                 let mem_info = if unsafe{(*(*self.comm_group.info_entry).domain_attr).mr_mode} & (libfabric_sys::FI_MR_RAW as i32) != 0 {
                     let mut mapped_key = 0u64;
                     let err = unsafe{libfabric_sys::inlined_fi_mr_map_raw(self.domain, key_addr, key.as_mut_ptr(), key.len(), &mut mapped_key, 0)};

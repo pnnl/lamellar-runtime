@@ -155,6 +155,7 @@ enable-rofi-c-shared = [
 rofi-c = []
 enable-rofi-rust = []
 enable-libfabric = ["libfabric", "pmi", "libc"]
+enable-libfabric-sys = ["libfabric-sys", "pmi", "libc"]
 enable-libfabric-async = ["libfabric/use-async-std", "pmi"]
 enable-ucx = ["lamellar-ucx-sys", "lamellar-ucc-sys", "pmi", "thiserror"]
 enable-libfabric-mt = ["enable-libfabric"]
