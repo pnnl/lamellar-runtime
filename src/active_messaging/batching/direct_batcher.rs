@@ -88,7 +88,7 @@ impl DirectBatcher {
 
     pub(crate) fn send_batch_if_needed(&self, lamellae: &Arc<Lamellae>, pe: usize, batch: &mut MutexGuard<Vec<u8>>) {
         if batch.len() > self.inner.header_bytes.len() {
-            trace!("Checking if need to send batch for PE {:?}, batch size: {:?}, stall_mark: {:?} available_to_send: {:?}", pe, batch.len(), self.inner.stall_mark.load(Ordering::SeqCst), lamellae.available_to_send(pe));
+            trace!("Checking if need to send batch for PE {:?}, batch size: {:?}, stall_mark: {:?} available_to_send: {:?}", pe, batch.len(), self.inner.stall_mark.load(Ordering::Relaxed), lamellae.available_to_send(pe));
         }
        if batch.len() > self.inner.header_bytes.len() && batch.len() > MAX_BATCH_SIZE && lamellae.available_to_send(pe) {
             
@@ -114,7 +114,7 @@ impl DirectBatcher {
             let mut same_stall_count = 0;
             let mut same_batch_size_count = vec![0; lamellae.comm().num_pes()];
             while scheduler.active(1) {
-                let current_stall_mark = stall_mark.load(Ordering::SeqCst);
+                let current_stall_mark = stall_mark.load(Ordering::Acquire);
                 for (pe, batch_lock) in inner.pe_batch.iter().enumerate().filter(|(pe, _)| *pe != lamellae.comm().my_pe() && lamellae.available_to_send(*pe) ) {
                     let mut batch_lock = batch_lock.lock();
                     // if prev_stall_mark != current_stall_mark || previous_batch_size[pe] != batch_lock.len() {

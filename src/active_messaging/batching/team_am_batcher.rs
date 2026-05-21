@@ -208,7 +208,7 @@ impl Batcher for TeamAmBatcher {
             // );
             let cur_stall_mark = self.stall_mark.clone();
             self.executor.submit_io_task(async move {
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                while stall_mark != cur_stall_mark.load(Ordering::Acquire)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
@@ -270,7 +270,7 @@ impl Batcher for TeamAmBatcher {
             // );
             let cur_stall_mark = self.stall_mark.clone();
             self.executor.submit_io_task(async move {
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                while stall_mark != cur_stall_mark.load(Ordering::Acquire)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
@@ -339,7 +339,7 @@ impl Batcher for TeamAmBatcher {
             // );
             let cur_stall_mark = self.stall_mark.clone();
             self.executor.submit_io_task(async move {
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                while stall_mark != cur_stall_mark.load(Ordering::Acquire)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
@@ -390,7 +390,7 @@ impl Batcher for TeamAmBatcher {
             // );
             let cur_stall_mark = self.stall_mark.clone();
             self.executor.submit_io_task(async move {
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                while stall_mark != cur_stall_mark.load(Ordering::Acquire)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {

@@ -171,7 +171,7 @@ impl Batcher for SimpleBatcher {
             self.executor.submit_io_task(async move {
                 stats!(IO_TASK_START[0].fetch_add(1, Ordering::Relaxed));
                 let mut timer = std::time::Instant::now();
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                while stall_mark != cur_stall_mark.load(Ordering::Acquire)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
@@ -181,12 +181,12 @@ impl Batcher for SimpleBatcher {
                             std::thread::current().id(),
                             batch_id,
                             stall_mark,
-                            cur_stall_mark.load(Ordering::SeqCst),
+                            cur_stall_mark.load(Ordering::Relaxed),
                             batch.size.load(Ordering::SeqCst)
                         );
                         timer = std::time::Instant::now();
                     }
-                    stall_mark = cur_stall_mark.load(Ordering::SeqCst);
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
@@ -278,7 +278,7 @@ impl Batcher for SimpleBatcher {
             self.executor.submit_io_task(async move {
                 stats!(IO_TASK_START[1].fetch_add(1, Ordering::Relaxed));
                 let mut timer = std::time::Instant::now();
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                while stall_mark != cur_stall_mark.load(Ordering::Acquire)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
@@ -288,7 +288,7 @@ impl Batcher for SimpleBatcher {
                             std::thread::current().id(),
                             batch_id,
                             stall_mark,
-                            cur_stall_mark.load(Ordering::SeqCst),
+                            cur_stall_mark.load(Ordering::Relaxed),
                             batch.size.load(Ordering::SeqCst)
                         );
                         timer = std::time::Instant::now();
@@ -387,7 +387,7 @@ impl Batcher for SimpleBatcher {
             self.executor.submit_io_task(async move {
                     stats!(IO_TASK_START[2].fetch_add(1, Ordering::Relaxed));
                 let mut timer = std::time::Instant::now();
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                while stall_mark != cur_stall_mark.load(Ordering::Acquire)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
@@ -397,7 +397,7 @@ impl Batcher for SimpleBatcher {
                             std::thread::current().id(),
                             batch_id,
                             stall_mark,
-                            cur_stall_mark.load(Ordering::SeqCst),
+                            cur_stall_mark.load(Ordering::Relaxed),
                             batch.size.load(Ordering::SeqCst)
                         );
                         timer = std::time::Instant::now();
@@ -480,7 +480,7 @@ impl Batcher for SimpleBatcher {
             self.executor.submit_io_task(async move {
                 stats!(IO_TASK_START[3].fetch_add(1, Ordering::Relaxed));
                 let mut timer = std::time::Instant::now();
-                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                while stall_mark != cur_stall_mark.load(Ordering::Acquire)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
@@ -490,7 +490,7 @@ impl Batcher for SimpleBatcher {
                             std::thread::current().id(),
                             batch_id,
                             stall_mark,
-                            cur_stall_mark.load(Ordering::SeqCst),
+                            cur_stall_mark.load(Ordering::Relaxed),
                             batch.size.load(Ordering::SeqCst)
                         );
                         timer = std::time::Instant::now();

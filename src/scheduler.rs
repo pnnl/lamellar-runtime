@@ -315,7 +315,7 @@ impl Scheduler {
     }
 
     pub(crate) fn increment_stall_mark(&self) -> usize {
-        self.am_stall_mark.fetch_add(1, Ordering::SeqCst)
+        self.am_stall_mark.fetch_add(1, Ordering::Release)
     }
     pub(crate) fn submit_am(&self, am: Am) {
         let num_ams = self.num_ams.clone();
