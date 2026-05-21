@@ -319,58 +319,28 @@ impl Scheduler {
     }
     pub(crate) fn submit_am(&self, am: Am) {
         let num_ams = self.num_ams.clone();
-        let max_ams = self.max_ams.clone();
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
-        let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
+        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         TASKS_LAUNCHED
             .get(&TaskType::AmSubmit)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         // println!("am ptr {:p} ", &am);
         let am_future = async move {
-            // let start_tid = thread::current().id();
-
-            // println!(
-            //     "[{:?}] submit work exec req {:?} {:?} TaskId: {:?}",
-            //     std::thread::current().id(),
-            //     num_ams.load(Ordering::Relaxed),
-            //     max_ams.load(Ordering::Relaxed),
-            //     _am_id
-            // );
-            // println!("[{:?}] submit_am {:?}", std::thread::current().id(), am_id);
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::AmSubmit)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
-            // if thread::current().id() != start_tid {
-            //     AM_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
-            // } else {
-            //     AM_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
-            // }
-            // println!(
-            //     "[{:?}] submit_am_done {:?}",
-            //     std::thread::current().id(),
-            //     am_id
-            // );
-            // println!(
-            //     "[{:?}] submit work done req {:?} {:?} TaskId: {:?} ",
-            //     std::thread::current().id(),
-            //     num_ams.load(Ordering::Relaxed),
-            //     max_ams.load(Ordering::Relaxed),
-            //     _am_id,
-            //     // reqs
-            // );
         };
         self.executor.submit_task(am_future);
     }
 
     pub(crate) fn submit_am_thread(&self, am: Am, tid: usize) {
         let num_ams = self.num_ams.clone();
-        let max_ams = self.max_ams.clone();
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
@@ -378,7 +348,7 @@ impl Scheduler {
             .get(&TaskType::AmSubmit)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
-        let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
+        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         let am_future = async move {
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
@@ -393,7 +363,6 @@ impl Scheduler {
     #[allow(dead_code)]
     pub(crate) fn submit_am_immediate(&self, am: Am) {
         let num_ams = self.num_ams.clone();
-        let max_ams = self.max_ams.clone();
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
@@ -401,97 +370,46 @@ impl Scheduler {
             .get(&TaskType::AmImmediate)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
-        let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
+        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         let am_future = async move {
-            // let start_tid = thread::current().id();
-
-            // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
-            // println!(
-            //     "[{:?}] submit_am_immediate {:?}",
-            //     std::thread::current().id(),
-            //     am_id
-            // );
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::AmImmediate)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
-            // if thread::current().id() != start_tid {
-            //     AM_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
-            // } else {
-            //     AM_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
-            // }
-            // println!(
-            //     "[{:?}] submit_am_immediate done {:?}",
-            //     std::thread::current().id(),
-            //     am_id
-            // );
-            // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
         };
         self.executor.submit_immediate_task(am_future);
     }
 
     #[allow(dead_code)]
     pub(crate) async fn exec_am(&self, am: Am) {
-        let num_ams = self.num_ams.clone();
-        let max_ams = self.max_ams.clone();
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
-        // let am_future = async move {
-        // let start_tid = thread::current().id();
         TASKS_LAUNCHED
             .get(&TaskType::AmExec)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
-        num_ams.fetch_add(1, Ordering::Relaxed);
-        let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
-        // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
-        // println!(
-        //     "[{:?}] submit_am_immediate {:?}",
-        //     std::thread::current().id(),
-        //     am_id
-        // );
+        self.num_ams.fetch_add(1, Ordering::Relaxed);
+        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         ame.process_msg(am, am_stall_mark, false).await;
-        num_ams.fetch_sub(1, Ordering::Relaxed);
+        self.num_ams.fetch_sub(1, Ordering::Relaxed);
         TASKS_FINISHED
             .get(&TaskType::AmExec)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
-        // if thread::current().id() != start_tid {
-        //     AM_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
-        // } else {
-        //     AM_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
-        // }
-        // println!(
-        //     "[{:?}] submit_am_immediate done {:?}",
-        //     std::thread::current().id(),
-        //     am_id
-        // );
-        // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
-        // };
-        // self.executor.submit_immediate_task(am_future);
     }
 
     pub(crate) fn submit_remote_am(&self, data: SerializedData, lamellae: Arc<Lamellae>) {
         let num_ams = self.num_ams.clone();
-        let max_ams = self.max_ams.clone();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
-        let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
+        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         TASKS_LAUNCHED
             .get(&TaskType::AmRemote)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let am_future = async move {
-            // let start_tid = std::thread::current().id();
-
-            // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
-            // println!(
-            //     "[{:?}] submit_remote_am {:?}",
-            //     std::thread::current().id(),
-            //     am_id
-            // );
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
                 ame.exec_msg(msg, data, lamellae).await;
@@ -504,17 +422,6 @@ impl Scheduler {
                 .get(&TaskType::AmRemote)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
-            // if start_tid == std::thread::current().id() {
-            //     AM_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
-            // } else {
-            //     AM_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
-            // }
-            // println!(
-            //     "[{:?}] submit_remote_am done {:?}",
-            //     std::thread::current().id(),
-            //     am_id
-            // );
-            // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
         };
         self.executor.submit_task(am_future);
     }
@@ -529,12 +436,11 @@ impl Scheduler {
         F::Output: Send,
     {
         let num_tasks = self.num_tasks.clone();
-        let max_tasks = self.max_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
         for cntr in outstanding_reqs.iter() {
             cntr.inc_outstanding(1);
         }
-        let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
+        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         TASKS_LAUNCHED
             .get(&TaskType::TaskSpawn)
             .unwrap()
@@ -561,37 +467,19 @@ impl Scheduler {
         F: Future<Output = ()> + Send + 'static,
     {
         let num_tasks = self.num_tasks.clone();
-        let max_tasks = self.max_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
+        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         TASKS_LAUNCHED
             .get(&TaskType::TaskSubmit)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let future = async move {
-            // let start_tid = std::thread::current().id();
-
-            // println!(
-            //     "[{:?}] execing new task {:?}",
-            //     std::thread::current().id(),
-            //     task_id
-            // );
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::TaskSubmit)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
-            // println!(
-            //     "[{:?}] done new task {:?} ",
-            //     std::thread::current().id(),
-            //     task_id
-            // );
-            // if start_tid == std::thread::current().id() {
-            //     TASK_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
-            // } else {
-            //     TASK_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
-            // }
         };
         self.executor.submit_task(future);
     }
@@ -601,37 +489,19 @@ impl Scheduler {
         F: Future<Output = ()> + Send + 'static,
     {
         let num_tasks = self.num_tasks.clone();
-        let max_tasks = self.max_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
+        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         TASKS_LAUNCHED
             .get(&TaskType::TaskLongSubmit)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let future = async move {
-            // let start_tid = std::thread::current().id();
-
-            // println!(
-            //     "[{:?}] execing new task {:?}",
-            //     std::thread::current().id(),
-            //     task_id
-            // );
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::TaskLongSubmit)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
-            // println!(
-            //     "[{:?}] done new task {:?} ",
-            //     std::thread::current().id(),
-            //     task_id
-            // );
-            // if start_tid == std::thread::current().id() {
-            //     TASK_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
-            // } else {
-            //     TASK_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
-            // }
         };
         self.executor.submit_long_task(future);
     }
@@ -641,37 +511,19 @@ impl Scheduler {
         F: Future<Output = ()> + Send + 'static,
     {
         let num_tasks = self.num_tasks.clone();
-        let max_tasks = self.max_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
+        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         TASKS_LAUNCHED
             .get(&TaskType::TaskImmediate)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let future = async move {
-            // let start_tid = std::thread::current().id();
-
-            // println!(
-            //     "[{:?}] execing new task immediate {:?}",
-            //     std::thread::current().id(),
-            //     _task_id
-            // );
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::TaskImmediate)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
-            // println!(
-            //     "[{:?}] done new task immediate {:?} ",
-            //     std::thread::current().id(),
-            //     task_id
-            // );
-            // if start_tid == std::thread::current().id() {
-            //     TASK_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
-            // } else {
-            //     TASK_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
-            // }
         };
         self.executor.submit_immediate_task(future);
     }
@@ -681,37 +533,19 @@ impl Scheduler {
         F: Future<Output = ()> + Send + 'static,
     {
         let num_tasks = self.num_tasks.clone();
-        let max_tasks = self.max_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
+        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         TASKS_LAUNCHED
             .get(&TaskType::TaskIo)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let future = async move {
-            // let start_tid = std::thread::current().id();
-
-            // println!(
-            //     "[{:?}] execing new task {:?}",
-            //     std::thread::current().id(),
-            //     task_id
-            // );
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::TaskIo)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
-            // println!(
-            //     "[{:?}] done new task {:?} ",
-            //     std::thread::current().id(),
-            //     task_id
-            // );
-            // if start_tid == std::thread::current().id() {
-            //     IO_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
-            // } else {
-            //     IO_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
-            // }
         };
 
         self.executor.submit_io_task(future);
@@ -722,15 +556,11 @@ impl Scheduler {
             .get(&TaskType::TaskExec)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
-        // if std::thread::current().id() == *crate::MAIN_THREAD {
         self.executor.exec_task();
         TASKS_FINISHED
             .get(&TaskType::TaskExec)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
-        // } else {
-        //     std::thread::yield_now();
-        // }
     }
 
     pub(crate) fn block_on<F: Future>(&self, task: F) -> F::Output {
@@ -764,13 +594,6 @@ impl Scheduler {
     }
 
     pub(crate) fn active(&self,additional: usize) -> bool {
-        // if self.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8 {
-        //     println!(
-        //         "active: {:?} {:?}",
-        //         self.status.load(Ordering::SeqCst),
-        //         self.num_tasks.load(Ordering::SeqCst)
-        //     );
-        // }
 
         self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
             || self.num_tasks.load(Ordering::SeqCst) > 3 + additional // the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task, additional represents a long running task that we dont want to consider when determining if the scheduler is active
@@ -785,18 +608,9 @@ impl Scheduler {
     }
     pub(crate) fn shutdown(&self) {
         let mut timer = std::time::Instant::now();
-        // println!(
-        //     "shutting down executor panic {:?} num_tasks {:?} max_tasks {:?} num_ams {:?} max_ams {:?}",
-        //     self.panic.load(Ordering::SeqCst),
-        //     self.num_tasks.load(Ordering::Relaxed),
-        //     self.max_tasks.load(Ordering::Relaxed),
-        //     self.num_ams.load(Ordering::Relaxed),
-        //     self.max_ams.load(Ordering::Relaxed),
-        // );
         while self.panic.load(Ordering::SeqCst) == 0
             && self.num_tasks.load(Ordering::Relaxed) > 3
             && self.num_ams.load(Ordering::Relaxed) > 0
-        //TODO maybe this should be > 2
         {
             //the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
             if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
@@ -810,21 +624,6 @@ impl Scheduler {
             std::thread::yield_now()
         }
         self.executor.shutdown();
-        // println!(
-        //     "AM_SAME: {:?} AM_DIFF: {:?}",
-        //     AM_SAME_THREAD.load(Ordering::Relaxed),
-        //     AM_DIFF_THREAD.load(Ordering::Relaxed)
-        // );
-        // println!(
-        //     "TASK_SAME: {:?} TASK_DIFF: {:?}",
-        //     TASK_SAME_THREAD.load(Ordering::Relaxed),
-        //     TASK_DIFF_THREAD.load(Ordering::Relaxed)
-        // );
-        // println!(
-        //     "IO_SAME: {:?} IO_DIFF: {:?}",
-        //     IO_SAME_THREAD.load(Ordering::Relaxed),
-        //     IO_DIFF_THREAD.load(Ordering::Relaxed)
-        // );
     }
     pub(crate) fn force_shutdown(&self) {
         self.status
