@@ -33,7 +33,7 @@ pub(crate) struct LocalFuture<T: Remote> {
     index: usize,
     op: AllocOp<T>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
 }
 
@@ -60,8 +60,7 @@ impl<T: Remote> LocalFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.spawn_task(async {}, counters)
     }
 }
@@ -98,7 +97,7 @@ pub(crate) struct LocalGetFuture<T> {
     alloc: Arc<LocalAlloc>,
     index: usize,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     result: Box<T>,
 }
@@ -122,8 +121,7 @@ impl<T: Remote> LocalGetFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler
             .clone()
             .spawn_task(async move { *self.result }, counters)
@@ -163,7 +161,7 @@ pub(crate) struct LocalGetBufferFuture<T> {
     index: usize,
     len: usize,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     result: Vec<T>,
 }
@@ -187,8 +185,7 @@ impl<T: Remote> LocalGetBufferFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler
             .clone()
             .spawn_task(async move { std::mem::take(&mut self.result) }, counters)
@@ -228,7 +225,7 @@ pub(crate) struct LocalGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     index: usize,
     buffer: LamellarBuffer<T, B>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
 }
 
@@ -250,8 +247,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LocalGetIntoBufferFuture<T, B> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.spawn_task(async {}, counters)
     }
 }
@@ -289,7 +285,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         _pe: usize,
         offset: usize,
@@ -328,7 +324,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     fn put_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         _pe: usize,
         offset: usize,
@@ -359,7 +355,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -385,7 +381,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     fn put_all_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -416,7 +412,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         _pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
@@ -440,7 +436,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         _pe: usize,
         offset: usize,
         len: usize,
@@ -470,7 +466,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         _pe: usize,
         offset: usize,
         dst: LamellarBuffer<T, B>,

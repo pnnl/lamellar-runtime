@@ -40,7 +40,7 @@ pub(crate) struct RofiCPutFuture<T: Remote> {
     offset: usize,
     op: AllocOp<T>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     alloc: RofiCAlloc,
     wait_cnt: Option<usize>,
@@ -102,8 +102,7 @@ impl<T: Remote> RofiCPutFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -150,7 +149,7 @@ pub(crate) struct RofiCGetFuture<T: Remote> {
     pe: usize,
     offset: usize,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     issued_network: bool,
     result: Box<T>,
@@ -185,8 +184,7 @@ impl<T: Remote> RofiCGetFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -235,7 +233,7 @@ pub(crate) struct RofiCGetBufferFuture<T: Remote> {
     offset: usize,
     len: usize,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     issued_network: bool,
     result: Vec<T>,
@@ -267,8 +265,7 @@ impl<T: Remote> RofiCGetBufferFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -317,7 +314,7 @@ pub(crate) struct RofiCGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     offset: usize,
     dst: LamellarBuffer<T, B>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     issued_network: bool,
     alloc: RofiCAlloc,
@@ -354,8 +351,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RofiCGetIntoBufferFuture<T, B> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -407,7 +403,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         pe: usize,
         offset: usize,
@@ -466,7 +462,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn put_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
@@ -503,7 +499,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -537,7 +533,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn put_all_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -574,7 +570,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
@@ -610,7 +606,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         len: usize,
@@ -653,7 +649,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         dst: LamellarBuffer<T, B>,
@@ -712,7 +708,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::OneSidedRofiCAl
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         pe: usize,
         offset: usize,
@@ -734,7 +730,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::OneSidedRofiCAl
     fn put_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
@@ -752,7 +748,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::OneSidedRofiCAl
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -764,7 +760,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::OneSidedRofiCAl
     fn put_all_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -780,7 +776,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::OneSidedRofiCAl
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
@@ -792,7 +788,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::OneSidedRofiCAl
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         len: usize,
@@ -811,7 +807,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::OneSidedRofiCAl
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         dst: LamellarBuffer<T, B>,

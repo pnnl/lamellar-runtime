@@ -506,7 +506,7 @@ pub(crate) trait CommAllocAtomic {
     fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -522,7 +522,7 @@ pub(crate) trait CommAllocAtomic {
     fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T>;
@@ -530,7 +530,7 @@ pub(crate) trait CommAllocAtomic {
     fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -545,7 +545,7 @@ pub(crate) trait CommAllocAtomic {
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
         _scheduler: &Arc<Scheduler>,
-        _counters: Vec<Arc<AMCounters>>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
         _current: T,
         _new: T,
         _pe: usize,

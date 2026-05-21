@@ -84,7 +84,7 @@ use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeA
 //             InnerRdmaHandle::Spawned(reqs) => reqs.clear(),
 //         }
 //     }
-//     pub(crate) fn launch(&mut self, scheduler: &Arc<Scheduler>, am_counters: Vec<Arc<AMCounters>>) {
+//     pub(crate) fn launch(&mut self, scheduler: &Arc<Scheduler>, am_counters: Option<Arc<[Arc<AMCounters>]>>) {
 //         take_mut::take(self, |this| match this {
 //             InnerRdmaHandle::Am(mut reqs) => {
 //                 for am in reqs.iter_mut() {

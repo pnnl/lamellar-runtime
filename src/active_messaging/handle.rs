@@ -175,7 +175,7 @@ impl<T: AmDist> AmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<T> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //AM handles counters
+        self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> T {
@@ -317,7 +317,7 @@ impl<T: Send + 'static> LocalAmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<T> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //AM handles counters)
+        self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters)
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> T {
@@ -536,7 +536,7 @@ impl<T: AmDist> MultiAmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //AM handles counters
+        self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> Vec<T> {

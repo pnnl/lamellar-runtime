@@ -111,7 +111,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
     fn put<U: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: U,
         pe: usize,
         offset: usize,
@@ -155,7 +155,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
     fn put_buffer<U: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<U>>,
         pe: usize,
         offset: usize,
@@ -189,7 +189,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
     fn put_all<U: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: U,
         offset: usize,
     ) -> RdmaHandle<U> {
@@ -215,7 +215,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
     fn put_all_buffer<U: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<U>>,
         offset: usize,
     ) -> RdmaHandle<U> {
@@ -246,7 +246,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
     fn get<U: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<U> {
@@ -272,7 +272,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
     fn get_buffer<U: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         len: usize,
@@ -307,7 +307,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
     fn get_into_buffer<U: Remote, B: AsLamellarBuffer<U>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         dst: LamellarBuffer<U, B>,

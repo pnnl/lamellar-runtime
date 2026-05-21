@@ -29,7 +29,7 @@ pub(crate) struct LocalAtomicFuture<T> {
     offset: usize,
     pub(super) op: AtomicOp<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -44,8 +44,7 @@ impl<T: 'static> LocalAtomicFuture<T> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.spawn_task(async {}, counters)
     }
 }
@@ -84,7 +83,7 @@ pub(crate) struct LocalAtomicFetchFuture<T> {
     pub(super) op: AtomicOp<T>,
     pub(super) result: Box<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -106,8 +105,7 @@ impl<T: Remote> LocalAtomicFetchFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler
             .clone()
             .spawn_task(async move { *self.result }, counters)
@@ -149,7 +147,7 @@ pub(crate) struct LocalAtomicCompareExchangeFuture<T> {
     new: T,
     result: Option<Result<T, T>>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -173,8 +171,7 @@ impl<T: Remote> LocalAtomicCompareExchangeFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
                 self.result
@@ -222,7 +219,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
     fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         _pe: usize,
         offset: usize,
@@ -254,7 +251,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
     fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T> {
@@ -275,7 +272,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
     fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         _pe: usize,
         offset: usize,
@@ -306,7 +303,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         current: T,
         new: T,
         _pe: usize,

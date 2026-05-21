@@ -34,7 +34,7 @@ struct PutFutureData<T: Remote> {
     offset: usize,
     op: AllocOp<T>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
 }
 
@@ -112,8 +112,7 @@ impl<T: Remote> PutFutureData<T> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.spawned = true;
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
                 self.exec_op().await;
@@ -128,7 +127,7 @@ struct GetFutureData<T> {
     pe: usize,
     offset: usize,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     result: MaybeUninit<T>,
 }
@@ -139,7 +138,7 @@ pub(crate) struct LibfabricAsyncGetFuture<T> {
     // pe: usize,
     // offset: usize,
     // scheduler: Arc<Scheduler>,
-    // counters: Vec<Arc<AMCounters>>,
+    // counters: Option<Arc<[Arc<AMCounters>]>>,
     // spawned: bool,
     // result: MaybeUninit<T>,
     fut: Option<Pin<Box<dyn Future<Output = T> + Send>>>,
@@ -184,8 +183,7 @@ impl<T: Remote> GetFutureData<T> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.spawned = true;
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler
             .clone()
             .spawn_task(async move { self.exec_at().await }, counters)
@@ -214,7 +212,7 @@ struct GetBufferFutureData<T> {
     offset: usize,
     len: usize,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     result: MaybeUninit<Vec<T>>,
 }
@@ -265,8 +263,7 @@ impl<T: Remote> GetBufferFutureData<T> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.spawned = true;
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler
             .clone()
             .spawn_task(async move { self.exec_at().await }, counters)
@@ -296,7 +293,7 @@ struct GetIntoBufferFutureData<T: Remote, B: AsLamellarBuffer<T>> {
     offset: usize,
     dst: LamellarBuffer<T, B>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
 }
 
@@ -340,8 +337,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> GetIntoBufferFutureData<T, B> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.spawned = true;
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
                 self.exec_op().await;
@@ -457,7 +453,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         pe: usize,
         offset: usize,
@@ -506,7 +502,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     fn put_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
@@ -541,7 +537,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -582,7 +578,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     fn put_all_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -638,7 +634,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
@@ -685,7 +681,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         len: usize,
@@ -725,7 +721,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         dst: LamellarBuffer<T, B>,
@@ -777,7 +773,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         pe: usize,
         offset: usize,
@@ -846,7 +842,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     fn put_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
@@ -891,7 +887,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -903,7 +899,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     fn put_all_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -920,7 +916,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
@@ -962,7 +958,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         len: usize,
@@ -1007,7 +1003,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         pe: usize,
         offset: usize,
         dst: LamellarBuffer<T, B>,

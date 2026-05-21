@@ -82,7 +82,7 @@ pub(crate) struct RofiCAtomicFuture<T> {
     offset: usize,
     op: AtomicOp<T>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     wait_cnt: Option<usize>,
 }
@@ -102,8 +102,7 @@ impl<T: Remote + Copy + 'static> RofiCAtomicFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -151,7 +150,7 @@ pub(crate) struct RofiCAtomicFetchFuture<T> {
     op: AtomicOp<T>,
     result: Box<T>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     wait_cnt: Option<usize>,
 }
@@ -176,8 +175,7 @@ impl<T: Remote + Copy + 'static> RofiCAtomicFetchFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -234,7 +232,7 @@ pub(crate) struct RofiCAtomicCompareExchangeFuture<T> {
     new: Pin<Box<T>>,
     result: Box<T>,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     wait_cnt: Option<usize>,
 }
@@ -260,8 +258,7 @@ impl<T: Remote + Copy + PartialEq + 'static> RofiCAtomicCompareExchangeFuture<T>
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -305,7 +302,7 @@ impl CommAllocAtomic for RofiCAlloc {
     fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -341,7 +338,7 @@ impl CommAllocAtomic for RofiCAlloc {
     fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T> {
@@ -367,7 +364,7 @@ impl CommAllocAtomic for RofiCAlloc {
     fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -402,7 +399,7 @@ impl CommAllocAtomic for RofiCAlloc {
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         current: T,
         new: T,
         pe: usize,
@@ -442,7 +439,7 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
     fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -467,7 +464,7 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
     fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T> {
@@ -481,7 +478,7 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
     fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -504,7 +501,7 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         current: T,
         new: T,
         pe: usize,

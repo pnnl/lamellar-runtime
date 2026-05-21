@@ -803,7 +803,7 @@ pub(crate) struct MemoryRegion<T: Remote> {
     pe: usize,
     backend: Backend,
     scheduler: Arc<Scheduler>,
-    counters: Vec<Arc<AMCounters>>,
+    counters: Option<Arc<[Arc<AMCounters>]>>,
     rdma: Arc<Lamellae>,
     mode: Mode,
     // freeable: bool, //indicates if this object is responsible for freeing the underlying data -- calling as_base creates a new object that shares the same underlying data but we don't want to free it twice
@@ -816,7 +816,7 @@ impl<T: Remote> MemoryRegion<T> {
     pub(crate) fn new(
         num_elems: usize, //number of elements of type T
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         lamellae: &Arc<Lamellae>,
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
@@ -831,7 +831,7 @@ impl<T: Remote> MemoryRegion<T> {
     pub(crate) fn try_new(
         num_elems: usize, //number of elements of type T
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         lamellae: &Arc<Lamellae>,
         alloc: AllocationType,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {

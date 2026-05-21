@@ -1063,13 +1063,13 @@ impl InnerCQ {
     //     // let local_daddr_slice =
     //     //     local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
     //     // local_daddr_slice
-    //     //     .put::<Cmd>(&self.scheduler, vec![], self.release_cmd.cmd, dst, 0)
+    //     //     .put::<Cmd>(&self.scheduler, None, self.release_cmd.cmd, dst, 0)
     //     //     .spawn();
 
     //     let local_cmd_slice =
     //         local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset_of!(CmdMsg, cmd), 1);
     //     local_cmd_slice.put_unmanaged::<Cmd>(
-    //         // &self.scheduler, vec![],
+    //         // &self.scheduler, None,
     //         self.release_cmd.cmd,
     //         dst,
     //         0,
@@ -1125,7 +1125,7 @@ impl InnerCQ {
                 )
             };
             remote_cmd_buffer
-                .get_into_buffer(&self.scheduler, vec![],src, 0, buffer.split_off(0)).await;
+                .get_into_buffer(&self.scheduler, None,src, 0, buffer.split_off(0)).await;
             // let _ = remote_cmd_buffer.get_into_buffer_unmanaged(src, 0, buffer.split_off(0));
             // let mut timer = std::time::Instant::now();
             // while calc_hash(
@@ -1162,7 +1162,7 @@ impl InnerCQ {
             let mut buffer = LamellarBuffer::<CmdMsg, Vec<CmdMsg>>::from_vec(data);
 
             remote_cmd_buffer
-                .get_into_buffer(&self.scheduler, vec![], src, 0, buffer.split_off(0)).await;
+                .get_into_buffer(&self.scheduler, None, src, 0, buffer.split_off(0)).await;
             // remote_cmd_buffer
             //     .get_into_buffer_unmanaged(src, 0, buffer.split_off(0));
             // let mut timer = std::time::Instant::now();
@@ -1222,7 +1222,7 @@ impl InnerCQ {
             .comm
             .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
         let task = local_daddr_alloc
-            .get_into_buffer(&self.scheduler, vec![], src, offset, buffer.split_off(0))
+            .get_into_buffer(&self.scheduler, None, src, offset, buffer.split_off(0))
             .spawn();
         // let _task = local_daddr_alloc
         //     .get_into_buffer_unmanaged( src, offset, buffer.split_off(0));

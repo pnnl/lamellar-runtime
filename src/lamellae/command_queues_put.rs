@@ -465,7 +465,7 @@ impl InnerCQ {
 
                     let dst_data = comm.one_sided_alloc_from_remote_pe_and_addr(
                         dst, ready.daddr, data.len());
-                    dst_data.put_buffer::<u8>(&scheduler, vec![], data.clone(), dst, 0).await;
+                    dst_data.put_buffer::<u8>(&scheduler, None, data.clone(), dst, 0).await;
 
                     if data.len() > 0 {
                         let _alloc = comm

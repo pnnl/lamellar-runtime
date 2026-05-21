@@ -469,7 +469,7 @@ impl InnerCQ {
         let dst_magic = self.eager_recv_comm_alloc.comm_slice_at_byte_offset::<u64>(byte_offset + EAGER_DATA_SIZE, 1);
 
         dst_data
-            .put_buffer::<u8>(&self.scheduler, vec![], data, dst, 0)
+            .put_buffer::<u8>(&self.scheduler, None, data, dst, 0)
             .await;
         // PUT magic after data so RDMA ordering ensures data arrives first.
         dst_magic.put_unmanaged::<u64>(size as u64, dst, 0);
@@ -491,11 +491,11 @@ impl InnerCQ {
             data_slice.copy_from_slice(&data);
             self.put_amt.fetch_add(size, Ordering::Relaxed);
             dst_data
-                .put_buffer::<u8>(&self.scheduler, vec![], data_slice, dst, 0)
+                .put_buffer::<u8>(&self.scheduler, None, data_slice, dst, 0)
                 .await;
         } else {
             dst_data
-                .put_buffer::<u8>(&self.scheduler, vec![], data, dst, 0)
+                .put_buffer::<u8>(&self.scheduler, None, data, dst, 0)
                 .await;
         }
         dst_magic.put_unmanaged::<u64>(size as u64, dst, 0);
@@ -599,7 +599,7 @@ impl InnerCQ {
                     let magic_data = dst_data_full
                         .comm_slice_at_byte_offset::<u64>(data.len(), 1);
                     dst_data
-                        .put_buffer::<u8>(&scheduler, vec![], data.clone(), dst, 0)
+                        .put_buffer::<u8>(&scheduler, None, data.clone(), dst, 0)
                         .await;
                     magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
 
@@ -708,11 +708,11 @@ impl InnerCQ {
                         data_slice.copy_from_slice(&data);
                         put_amt.fetch_add(data.len(), Ordering::Relaxed);
                         dst_data_full
-                            .put_buffer::<u8>(&scheduler, vec![], data_slice, dst, 0)
+                            .put_buffer::<u8>(&scheduler, None, data_slice, dst, 0)
                             .await;
                     } else {
                         dst_data_full
-                            .put_buffer::<u8>(&scheduler, vec![], data, dst, 0)
+                            .put_buffer::<u8>(&scheduler, None, data, dst, 0)
                             .await;
                     }
 

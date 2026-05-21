@@ -644,7 +644,7 @@ impl InnerCQ {
             .comm
             .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
         let task = local_daddr_alloc
-            .get_into_buffer(&self.scheduler, vec![], src, offset, buffer.split_off(0))
+            .get_into_buffer(&self.scheduler, None, src, offset, buffer.split_off(0))
             .spawn();
         let data_slice = ser_data.header_and_data_as_bytes_mut();
 

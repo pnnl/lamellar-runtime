@@ -429,7 +429,7 @@ impl Scheduler {
     pub(crate) fn spawn_task<F>(
         &self,
         task: F,
-        outstanding_reqs: Vec<Arc<AMCounters>>,
+        outstanding_reqs: Option<Arc<[Arc<AMCounters>]>>,
     ) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
@@ -437,8 +437,10 @@ impl Scheduler {
     {
         let num_tasks = self.num_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        for cntr in outstanding_reqs.iter() {
-            cntr.inc_outstanding(1);
+        if let Some(reqs) = &outstanding_reqs {
+            for cntr in reqs.iter() {
+                cntr.inc_outstanding(1);
+            }
         }
         let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         TASKS_LAUNCHED
@@ -448,8 +450,10 @@ impl Scheduler {
         let future = async move {
             let result = task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
-            for cntr in outstanding_reqs.iter() {
-                cntr.dec_outstanding(1);
+            if let Some(reqs) = &outstanding_reqs {
+                for cntr in reqs.iter() {
+                    cntr.dec_outstanding(1);
+                }
             }
             TASKS_FINISHED
                 .get(&TaskType::TaskSpawn)

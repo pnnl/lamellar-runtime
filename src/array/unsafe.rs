@@ -256,9 +256,14 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         if remaining_elems > 0 {
             per_pe_size += 1
         }
-        let mut team_counters = team.counters();
         let array_counters = Arc::new(AMCounters::new());
-        team_counters.push(array_counters.clone());
+        let team_counters: Option<Arc<[Arc<AMCounters>]>> = {
+            let base = team.counters();
+            let inner = base.as_deref().unwrap_or(&[]);
+            let mut v = inner.to_vec();
+            v.push(array_counters.clone());
+            Some(Arc::from(v))
+        };
         let rmr_t: MemoryRegion<T> = if team.num_world_pes == team.num_pes {
             MemoryRegion::new(
                 per_pe_size,
@@ -1228,11 +1233,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
     {
         self.inner.data.team.scheduler.spawn_task(
             f,
-            vec![
-                self.inner.data.team.world_counters.clone(),
-                self.inner.data.team.team_counters.clone(),
-                self.inner.data.array_counters.clone(),
-            ],
+            Some(Arc::from([self.inner.data.team.world_counters.clone(), self.inner.data.team.team_counters.clone(), self.inner.data.array_counters.clone()])),
         )
     }
     fn block_on<F: Future>(&self, f: F) -> F::Output {
@@ -1625,11 +1626,7 @@ impl UnsafeArrayInner {
     {
         self.data.team.scheduler.spawn_task(
             f,
-            vec![
-                self.data.team.world_counters.clone(),
-                self.data.team.team_counters.clone(),
-                self.data.array_counters.clone(),
-            ],
+            Some(Arc::from([self.data.team.world_counters.clone(), self.data.team.team_counters.clone(), self.data.array_counters.clone()])),
         )
     }
     pub(crate) fn block_on<F: Future>(&self, f: F) -> F::Output {

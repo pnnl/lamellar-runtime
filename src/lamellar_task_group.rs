@@ -174,7 +174,7 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
     pub fn spawn(mut self) -> LamellarTask<T> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //counters managed by AM
+        self.inner.scheduler.clone().spawn_task(self, None) //counters managed by AM
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> T {
@@ -426,7 +426,7 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
     pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //counters managed by AM
+        self.inner.scheduler.clone().spawn_task(self, None) //counters managed by AM
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> Vec<T> {
@@ -623,7 +623,7 @@ impl<T: Send + 'static> TaskGroupLocalAmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
     pub fn spawn(mut self) -> LamellarTask<T> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //counters managed by AM
+        self.inner.scheduler.clone().spawn_task(self, None) //counters managed by AM
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> T {
@@ -822,11 +822,7 @@ impl ActiveMessaging for LamellarTaskGroup {
     {
         self.team.scheduler.spawn_task(
             task,
-            vec![
-                self.team.world_counters.clone(),
-                self.team.team_counters.clone(),
-                self.counters.clone(),
-            ],
+            Some(Arc::from([self.team.world_counters.clone(), self.team.team_counters.clone(), self.counters.clone()])),
         )
     }
     fn block_on<F>(&self, f: F) -> F::Output
@@ -848,11 +844,7 @@ impl ActiveMessaging for LamellarTaskGroup {
             .block_on(join_all(iter.into_iter().map(|task| {
                 self.team.scheduler.spawn_task(
                     task,
-                    vec![
-                        self.team.world_counters.clone(),
-                        self.team.team_counters.clone(),
-                        self.counters.clone(),
-                    ],
+                    Some(Arc::from([self.team.world_counters.clone(), self.team.team_counters.clone(), self.counters.clone()])),
                 )
             })))
     }

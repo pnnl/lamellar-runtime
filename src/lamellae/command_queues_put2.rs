@@ -461,7 +461,7 @@ impl InnerCQ {
                         dst, ready.daddr, data.len() + std::mem::size_of::<u64>());
                     let dst_data = dst_data_full.comm_slice_at_byte_offset::<u8>(0, data.len());
                     let magic_data = dst_data_full.comm_slice_at_byte_offset::<u64>(data.len(), 1);
-                    dst_data.put_buffer::<u8>(&scheduler, vec![], data.clone(), dst, 0).await;
+                    dst_data.put_buffer::<u8>(&scheduler, None, data.clone(), dst, 0).await;
                     magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
 
                     sent_cnt.fetch_add(1, Ordering::SeqCst);
@@ -557,9 +557,9 @@ impl InnerCQ {
                         let mut data_slice = rt_data.as_comm_slice::<u8>();
                         data_slice.copy_from_slice(&data);
                         put_amt.fetch_add(data.len(), Ordering::Relaxed);
-                        dst_data_full.put_buffer::<u8>(&scheduler, vec![], data_slice, dst, 0).await;
+                        dst_data_full.put_buffer::<u8>(&scheduler, None, data_slice, dst, 0).await;
                     } else {
-                        dst_data_full.put_buffer::<u8>(&scheduler, vec![], data, dst, 0).await;
+                        dst_data_full.put_buffer::<u8>(&scheduler, None, data, dst, 0).await;
                     }
 
                     // magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);

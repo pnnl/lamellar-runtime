@@ -69,7 +69,7 @@ impl Barrier {
                 trace!("creating barrier {:?}", alloc);
 
                 let mem_region =
-                    MemoryRegion::new(num_rounds * n, &scheduler, vec![], &lamellae, alloc.clone());
+                    MemoryRegion::new(num_rounds * n, &scheduler, None, &lamellae, alloc.clone());
                 let mem_region_comm_slice = unsafe {
                     mem_region.as_comm_slice().expect(
                         "MemoryRegion should be registered and able to be converted to CommSlice",

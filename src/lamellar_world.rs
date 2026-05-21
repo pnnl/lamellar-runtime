@@ -111,10 +111,7 @@ impl ActiveMessaging for LamellarWorld {
     {
         self.team_rt.scheduler.spawn_task(
             f,
-            vec![
-                self.team_rt.world_counters.clone(),
-                self.team_rt.team_counters.clone(),
-            ],
+            Some(Arc::from([self.team_rt.world_counters.clone(), self.team_rt.team_counters.clone()])),
         )
     }
 
@@ -141,10 +138,7 @@ impl ActiveMessaging for LamellarWorld {
             .block_on(join_all(iter.into_iter().map(|task| {
                 self.team_rt.scheduler.spawn_task(
                     task,
-                    vec![
-                        self.team_rt.world_counters.clone(),
-                        self.team_rt.team_counters.clone(),
-                    ],
+                    Some(Arc::from([self.team_rt.world_counters.clone(), self.team_rt.team_counters.clone()])),
                 )
             })))
         // )
