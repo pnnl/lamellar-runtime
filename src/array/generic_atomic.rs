@@ -499,7 +499,7 @@ impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for GenericAtomicElementRef<
 #[derive(crate::Deserialize, crate::Serialize, Clone, Debug)]
 #[serde(bound = "T: Dist")]
 pub struct GenericAtomicArray<T: Remote> {
-    locks: Darc<Vec<Mutex<()>>>,
+    pub(crate) locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeArray<T>,
 }
 

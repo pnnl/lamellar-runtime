@@ -1,5 +1,12 @@
-use crate::array::atomic::*;
+use std::ops::{
+    AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
+    ShrAssign, SubAssign,
+};
 
+use crate::array::atomic::*;
+use crate::array::generic_atomic::iteration::{
+    element_at_local_index as generic_element_at, GenericAtomicDistIterElement,
+};
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
@@ -7,7 +14,11 @@ use crate::array::iterator::{
     private::{InnerIter, Sealed},
     LamellarArrayIterators, LamellarArrayMutIterators,
 };
+use crate::array::native_atomic::iteration::NativeAtomicDistIterElement;
+use crate::array::network_atomic::iteration::NetworkAtomicDistIterElement;
+use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
+use crate::array::{ElementArithmeticOps, ElementBitWiseOps, ElementShiftOps};
 use crate::array::*;
 use crate::memregion::Dist;
 
@@ -23,9 +34,187 @@ impl<T: Dist> InnerArray for AtomicArray<T> {
     }
 }
 
+/// Zero-clone element yielded by `AtomicDistIter` and `AtomicLocalIter`.
+///
+/// Dispatches to the appropriate per-variant element type based on which
+/// `AtomicArray` variant backs the iterator.
+pub enum AtomicDistIterElement<'a, T: Dist> {
+    Native(NativeAtomicDistIterElement<'a, T>),
+    Generic(GenericAtomicDistIterElement<'a, T>),
+    Network(NetworkAtomicDistIterElement<'a, T>),
+}
+
+unsafe impl<T: Dist> Send for AtomicDistIterElement<'_, T> {}
+unsafe impl<T: Dist> Sync for AtomicDistIterElement<'_, T> {}
+
+impl<'a, T: Dist> AtomicDistIterElement<'a, T> {
+    pub fn load(&self) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.load(),
+            AtomicDistIterElement::Generic(e) => e.load(),
+            AtomicDistIterElement::Network(e) => e.load(),
+        }
+    }
+    pub fn store(&self, val: T) {
+        match self {
+            AtomicDistIterElement::Native(e) => e.store(val),
+            AtomicDistIterElement::Generic(e) => e.store(val),
+            AtomicDistIterElement::Network(e) => e.store(val),
+        }
+    }
+    pub fn swap(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.swap(val),
+            AtomicDistIterElement::Generic(e) => e.swap(val),
+            AtomicDistIterElement::Network(e) => e.swap(val),
+        }
+    }
+}
+
+impl<'a, T: Dist + std::cmp::Eq> AtomicDistIterElement<'a, T> {
+    pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
+        match self {
+            AtomicDistIterElement::Native(e) => e.compare_exchange(current, new),
+            AtomicDistIterElement::Generic(e) => e.compare_exchange(current, new),
+            AtomicDistIterElement::Network(e) => e.compare_exchange(current, new),
+        }
+    }
+}
+
+impl<'a, T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
+    AtomicDistIterElement<'a, T>
+{
+    pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
+        match self {
+            AtomicDistIterElement::Native(e) => e.compare_exchange_epsilon(current, new, eps),
+            AtomicDistIterElement::Generic(e) => e.compare_exchange_epsilon(current, new, eps),
+            AtomicDistIterElement::Network(e) => e.compare_exchange_epsilon(current, new, eps),
+        }
+    }
+}
+
+impl<'a, T: Dist + ElementArithmeticOps> AtomicDistIterElement<'a, T> {
+    pub fn fetch_add(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_add(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_add(val),
+            AtomicDistIterElement::Network(e) => e.fetch_add(val),
+        }
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_sub(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_sub(val),
+            AtomicDistIterElement::Network(e) => e.fetch_sub(val),
+        }
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_mul(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_mul(val),
+            AtomicDistIterElement::Network(e) => e.fetch_mul(val),
+        }
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_div(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_div(val),
+            AtomicDistIterElement::Network(e) => e.fetch_div(val),
+        }
+    }
+    pub fn fetch_rem(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_rem(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_rem(val),
+            AtomicDistIterElement::Network(e) => e.fetch_rem(val),
+        }
+    }
+}
+
+impl<'a, T: Dist + ElementBitWiseOps + 'static> AtomicDistIterElement<'a, T> {
+    pub fn fetch_and(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_and(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_and(val),
+            AtomicDistIterElement::Network(e) => e.fetch_and(val),
+        }
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_or(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_or(val),
+            AtomicDistIterElement::Network(e) => e.fetch_or(val),
+        }
+    }
+    pub fn fetch_xor(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_xor(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_xor(val),
+            AtomicDistIterElement::Network(e) => e.fetch_xor(val),
+        }
+    }
+}
+
+impl<'a, T: Dist + ElementShiftOps + 'static> AtomicDistIterElement<'a, T> {
+    pub fn fetch_shl(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_shl(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_shl(val),
+            AtomicDistIterElement::Network(e) => e.fetch_shl(val),
+        }
+    }
+    pub fn fetch_shr(&self, val: T) -> T {
+        match self {
+            AtomicDistIterElement::Native(e) => e.fetch_shr(val),
+            AtomicDistIterElement::Generic(e) => e.fetch_shr(val),
+            AtomicDistIterElement::Network(e) => e.fetch_shr(val),
+        }
+    }
+}
+
+impl<'a, T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicDistIterElement<'a, T> {
+    fn add_assign(&mut self, val: T) { self.fetch_add(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> SubAssign<T> for AtomicDistIterElement<'a, T> {
+    fn sub_assign(&mut self, val: T) { self.fetch_sub(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> MulAssign<T> for AtomicDistIterElement<'a, T> {
+    fn mul_assign(&mut self, val: T) { self.fetch_mul(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicDistIterElement<'a, T> {
+    fn div_assign(&mut self, val: T) { self.fetch_div(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> RemAssign<T> for AtomicDistIterElement<'a, T> {
+    fn rem_assign(&mut self, val: T) { self.fetch_rem(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicDistIterElement<'a, T> {
+    fn bitand_assign(&mut self, val: T) { self.fetch_and(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicDistIterElement<'a, T> {
+    fn bitor_assign(&mut self, val: T) { self.fetch_or(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitXorAssign<T> for AtomicDistIterElement<'a, T> {
+    fn bitxor_assign(&mut self, val: T) { self.fetch_xor(val); }
+}
+impl<'a, T: Dist + ElementShiftOps> ShlAssign<T> for AtomicDistIterElement<'a, T> {
+    fn shl_assign(&mut self, val: T) { self.fetch_shl(val); }
+}
+impl<'a, T: Dist + ElementShiftOps> ShrAssign<T> for AtomicDistIterElement<'a, T> {
+    fn shr_assign(&mut self, val: T) { self.fetch_shr(val); }
+}
+
+impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicDistIterElement<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AtomicDistIterElement::Native(e) => write!(f, "{e:?}"),
+            AtomicDistIterElement::Generic(e) => write!(f, "{e:?}"),
+            AtomicDistIterElement::Network(e) => write!(f, "{e:?}"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AtomicDistIter<T: Dist> {
-    //dont need a AtomicDistIterMut in this case as any updates to inner elements are atomic
     data: AtomicArray<T>,
     cur_i: usize,
     end_i: usize,
@@ -58,7 +247,6 @@ impl<T: Dist> std::fmt::Debug for AtomicDistIter<T> {
 
 impl<T: Dist> AtomicDistIter<T> {
     pub(crate) fn new(data: AtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
-        // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         AtomicDistIter {
             data,
             cur_i,
@@ -69,7 +257,6 @@ impl<T: Dist> AtomicDistIter<T> {
 
 #[derive(Clone)]
 pub struct AtomicLocalIter<T: Dist> {
-    //dont need a AtomicDistIterMut in this case as any updates to inner elements are atomic
     data: AtomicArray<T>,
     cur_i: usize,
     end_i: usize,
@@ -102,7 +289,6 @@ impl<T: Dist> std::fmt::Debug for AtomicLocalIter<T> {
 
 impl<T: Dist> AtomicLocalIter<T> {
     pub(crate) fn new(data: AtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
-        // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
         AtomicLocalIter {
             data,
             cur_i,
@@ -111,13 +297,38 @@ impl<T: Dist> AtomicLocalIter<T> {
     }
 }
 
-impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
-    type Item = AtomicElement<T>;
+fn next_atomic_element<T: Dist>(
+    data: &AtomicArray<T>,
+    local_i: usize,
+) -> AtomicDistIterElement<'static, T> {
+    match data {
+        AtomicArray::NativeAtomicArray(arr) => {
+            let value = unsafe { arr.local_as_ptr().add(local_i) };
+            AtomicDistIterElement::Native(NativeAtomicDistIterElement {
+                value,
+                orig_t: arr.orig_t,
+                _marker: std::marker::PhantomData,
+            })
+        }
+        AtomicArray::GenericAtomicArray(arr) => {
+            AtomicDistIterElement::Generic(unsafe { generic_element_at(arr, local_i) })
+        }
+        AtomicArray::NetworkAtomicArray(arr) => {
+            let value = unsafe { arr.local_as_ptr().add(local_i) };
+            AtomicDistIterElement::Network(NetworkAtomicDistIterElement {
+                value,
+                orig_t: arr.orig_t,
+                _marker: std::marker::PhantomData,
+            })
+        }
+    }
+}
+
+impl<T: Dist + 'static> DistributedIterator for AtomicDistIter<T> {
+    type Item = AtomicDistIterElement<'static, T>;
     type Array = AtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
-        // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
-        // println!("num_elems_local: {:?}",self.data.num_elems_local());
         AtomicDistIter {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
@@ -128,10 +339,10 @@ impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
         self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        // println!("{:?} {:?}",self.cur_i,self.end_i);
         if self.cur_i < self.end_i {
+            let local_i = self.cur_i;
             self.cur_i += 1;
-            self.data.get_element(self.cur_i - 1)
+            Some(next_atomic_element(&self.data, local_i))
         } else {
             None
         }
@@ -143,20 +354,19 @@ impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }
 }
-impl<T: Dist> IndexedDistributedIterator for AtomicDistIter<T> {
+
+impl<T: Dist + 'static> IndexedDistributedIterator for AtomicDistIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
         let g_index = self.data.subarray_index_from_local(index, 1);
         g_index
     }
 }
 
-impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
-    type Item = AtomicElement<T>;
+impl<T: Dist + 'static> LocalIterator for AtomicLocalIter<T> {
+    type Item = AtomicDistIterElement<'static, T>;
     type Array = AtomicArray<T>;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
-        // println!("init atomic start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
-
         AtomicLocalIter {
             data: self.data.clone(),
             cur_i: std::cmp::min(start_i, max_i),
@@ -167,11 +377,10 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
         self.data.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        // println!("{:?} {:?} {:?} {:?}",self.cur_i,self.end_i,self.cur_i < self.end_i,std::thread::current().id());
-
         if self.cur_i < self.end_i {
+            let local_i = self.cur_i;
             self.cur_i += 1;
-            self.data.get_element(self.cur_i - 1)
+            Some(next_atomic_element(&self.data, local_i))
         } else {
             None
         }
@@ -188,7 +397,7 @@ impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
 impl<T: Dist + 'static> IndexedLocalIterator for AtomicLocalIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
         if index < self.data.len() {
-            Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
+            Some(index)
         } else {
             None
         }
@@ -196,7 +405,6 @@ impl<T: Dist + 'static> IndexedLocalIterator for AtomicLocalIter<T> {
 }
 
 impl<T: Dist> LamellarArrayIterators<T> for AtomicArray<T> {
-    // type Array = AtomicArray<T>;
     type DistIter = AtomicDistIter<T>;
     type LocalIter = AtomicLocalIter<T>;
     type OnesidedIter = OneSidedIter<T, Self>;
