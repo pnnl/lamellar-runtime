@@ -8,11 +8,13 @@ pub(crate) mod handle;
 pub use handle::AtomicArrayHandle;
 
 use crate::active_messaging::ActiveMessaging;
-use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};
+use crate::array::generic_atomic::{
+    GenericAtomicElement, GenericAtomicElementRef, LocalGenericAtomicElement,
+};
 use crate::array::iterator::distributed_iterator::DistIteratorLauncher;
 use crate::array::iterator::local_iterator::LocalIteratorLauncher;
-use crate::array::native_atomic::NativeAtomicElement;
-use crate::array::network_atomic::NetworkAtomicElement;
+use crate::array::native_atomic::{NativeAtomicElement, NativeAtomicElementRef};
+use crate::array::network_atomic::{NetworkAtomicElement, NetworkAtomicElementRef};
 use crate::{array::*, Darc};
 // use crate::darc::{Darc, DarcMode};
 use crate::barrier::BarrierHandle;
@@ -540,6 +542,75 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
     }
 }
 
+/// Borrowed reference to a single local element of an [AtomicArray].
+/// Zero Darc clone/drop cost per element — holds a plain reference to the underlying concrete array.
+pub enum AtomicElementRef<'a, T: Dist> {
+    NativeAtomicElementRef(NativeAtomicElementRef<'a, T>),
+    GenericAtomicElementRef(GenericAtomicElementRef<'a, T>),
+    NetworkAtomicElementRef(NetworkAtomicElementRef<'a, T>),
+}
+
+impl<'a, T: Dist> AtomicElementRef<'a, T> {
+    pub fn load(&self) -> T {
+        match self {
+            AtomicElementRef::NativeAtomicElementRef(e) => e.load(),
+            AtomicElementRef::GenericAtomicElementRef(e) => e.load(),
+            AtomicElementRef::NetworkAtomicElementRef(e) => e.load(),
+        }
+    }
+    pub fn store(&self, val: T) {
+        match self {
+            AtomicElementRef::NativeAtomicElementRef(e) => e.store(val),
+            AtomicElementRef::GenericAtomicElementRef(e) => e.store(val),
+            AtomicElementRef::NetworkAtomicElementRef(e) => e.store(val),
+        }
+    }
+    pub fn swap(&self, val: T) -> T {
+        match self {
+            AtomicElementRef::NativeAtomicElementRef(e) => e.swap(val),
+            AtomicElementRef::GenericAtomicElementRef(e) => e.swap(val),
+            AtomicElementRef::NetworkAtomicElementRef(e) => e.swap(val),
+        }
+    }
+}
+
+impl<'a, T: ElementArithmeticOps> AtomicElementRef<'a, T> {
+    pub fn fetch_add(&self, val: T) -> T {
+        match self {
+            AtomicElementRef::NativeAtomicElementRef(e) => e.fetch_add(val),
+            AtomicElementRef::GenericAtomicElementRef(e) => e.fetch_add(val),
+            AtomicElementRef::NetworkAtomicElementRef(e) => e.fetch_add(val),
+        }
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        match self {
+            AtomicElementRef::NativeAtomicElementRef(e) => e.fetch_sub(val),
+            AtomicElementRef::GenericAtomicElementRef(e) => e.fetch_sub(val),
+            AtomicElementRef::NetworkAtomicElementRef(e) => e.fetch_sub(val),
+        }
+    }
+}
+
+impl<'a, T: Dist + std::cmp::Eq> AtomicElementRef<'a, T> {
+    pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
+        match self {
+            AtomicElementRef::NativeAtomicElementRef(e) => e.compare_exchange(current, new),
+            AtomicElementRef::GenericAtomicElementRef(e) => e.compare_exchange(current, new),
+            AtomicElementRef::NetworkAtomicElementRef(e) => e.compare_exchange(current, new),
+        }
+    }
+}
+
+impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElementRef<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AtomicElementRef::NativeAtomicElementRef(e) => e.fmt(f),
+            AtomicElementRef::GenericAtomicElementRef(e) => e.fmt(f),
+            AtomicElementRef::NetworkAtomicElementRef(e) => e.fmt(f),
+        }
+    }
+}
+
 ///A safe abstraction of a distributed array, providing read/write access protect by atomic elements
 ///
 /// If the type of the Array is an integer type (U8, usize, i32, i16, etc.) the array will use the appropriate Atomic* type underneath.
@@ -758,9 +829,10 @@ pub struct AtomicLocalData<T: Dist> {
     pub(crate) array: AtomicArray<T>,
 }
 
-/// An iterator over the elements in an [AtomicLocalData]
-pub struct AtomicLocalDataIter<T: Dist> {
-    array: AtomicArray<T>,
+/// An iterator over the elements in an [AtomicLocalData].
+/// Holds a reference to the array — no Darc operations occur per element.
+pub struct AtomicLocalDataIter<'a, T: Dist> {
+    array: &'a AtomicArray<T>,
     index: usize,
 }
 
@@ -847,32 +919,32 @@ impl<T: Dist> AtomicLocalData<T> {
     ///    println!("elem {:?}",elem.load());
     /// }
     ///```
-    pub fn iter(&self) -> AtomicLocalDataIter<T> {
+    pub fn iter(&self) -> AtomicLocalDataIter<'_, T> {
         AtomicLocalDataIter {
-            array: self.array.clone(),
+            array: &self.array,
             index: 0,
         }
     }
 }
 
-impl<T: Dist> IntoIterator for AtomicLocalData<T> {
-    type Item = AtomicElement<T>;
-    type IntoIter = AtomicLocalDataIter<T>;
+impl<'a, T: Dist + 'static> IntoIterator for &'a AtomicLocalData<T> {
+    type Item = AtomicElementRef<'a, T>;
+    type IntoIter = AtomicLocalDataIter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         AtomicLocalDataIter {
-            array: self.array,
+            array: &self.array,
             index: 0,
         }
     }
 }
 
-impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
-    type Item = AtomicElement<T>;
+impl<'a, T: Dist + 'static> Iterator for AtomicLocalDataIter<'a, T> {
+    type Item = AtomicElementRef<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.array.num_elems_local() {
             let index = self.index;
             self.index += 1;
-            self.array.get_element(index)
+            self.array.get_element_ref(index)
         } else {
             None
         }
@@ -958,6 +1030,20 @@ impl<T: Dist + 'static> AtomicArray<T> {
             AtomicArray::NativeAtomicArray(array) => Some(array.get_element(index)?.into()),
             AtomicArray::GenericAtomicArray(array) => Some(array.get_element(index)?.into()),
             AtomicArray::NetworkAtomicArray(array) => Some(array.get_element(index)?.into()),
+        }
+    }
+
+    pub(crate) fn get_element_ref(&self, index: usize) -> Option<AtomicElementRef<'_, T>> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => Some(AtomicElementRef::NativeAtomicElementRef(
+                array.get_element_ref(index)?,
+            )),
+            AtomicArray::GenericAtomicArray(array) => Some(
+                AtomicElementRef::GenericAtomicElementRef(array.get_element_ref(index)?),
+            ),
+            AtomicArray::NetworkAtomicArray(array) => Some(
+                AtomicElementRef::NetworkAtomicElementRef(array.get_element_ref(index)?),
+            ),
         }
     }
 }

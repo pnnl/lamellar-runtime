@@ -778,6 +778,103 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NetworkAtomicElement<T> {
         write!(f, "{:?}", self.load())
     }
 }
+
+/// Borrowed reference to a single element of a [NetworkAtomicArray].
+/// Zero Darc clone/drop cost — holds a plain `&'a NetworkAtomicArray<T>`.
+#[doc(hidden)]
+pub struct NetworkAtomicElementRef<'a, T: Remote> {
+    pub(crate) array: &'a NetworkAtomicArray<T>,
+    pub(crate) local_index: usize,
+}
+
+impl<'a, T: Dist> NetworkAtomicElementRef<'a, T> {
+    pub fn load(&self) -> T {
+        impl_load!(self)
+    }
+    pub fn store(&self, val: T) {
+        impl_store!(self, val);
+    }
+    pub fn swap(&self, val: T) -> T {
+        impl_swap!(self, val)
+    }
+    pub fn compare_exchange(&self, old: T, new: T) -> Result<T, T> {
+        impl_compare_exchange!(self, old, new)
+    }
+    pub fn compare_exchange_epsilon(&self, old: T, new: T, eps: T) -> Result<T, T> {
+        impl_compare_exchange_eps!(self, old, new, eps)
+    }
+    pub fn fetch_add(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_add, val)
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_sub, val)
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        impl_mul_div!(self, *, val)
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        impl_mul_div!(self, /, val)
+    }
+    pub fn fetch_rem(&self, val: T) -> T {
+        impl_mul_div!(self, %, val)
+    }
+    pub fn fetch_shl(&self, val: T) -> T {
+        impl_shift!(self, <<, val)
+    }
+    pub fn fetch_shr(&self, val: T) -> T {
+        impl_shift!(self, >>, val)
+    }
+}
+
+impl<'a, T: ElementBitWiseOps + 'static> NetworkAtomicElementRef<'a, T> {
+    pub fn fetch_and(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_and, val)
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_or, val)
+    }
+    pub fn fetch_xor(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_xor, val)
+    }
+}
+
+impl<'a, T: Dist + ElementArithmeticOps> AddAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn add_assign(&mut self, val: T) { self.fetch_add(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> SubAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn sub_assign(&mut self, val: T) { self.fetch_sub(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> MulAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn mul_assign(&mut self, val: T) { self.fetch_mul(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> DivAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn div_assign(&mut self, val: T) { self.fetch_div(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> RemAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn rem_assign(&mut self, val: T) { self.fetch_rem(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitAndAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn bitand_assign(&mut self, val: T) { self.fetch_and(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitOrAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn bitor_assign(&mut self, val: T) { self.fetch_or(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitXorAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn bitxor_assign(&mut self, val: T) { self.fetch_xor(val); }
+}
+impl<'a, T: Dist + ElementShiftOps> ShlAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn shl_assign(&mut self, val: T) { self.fetch_shl(val); }
+}
+impl<'a, T: Dist + ElementShiftOps> ShrAssign<T> for NetworkAtomicElementRef<'a, T> {
+    fn shr_assign(&mut self, val: T) { self.fetch_shr(val); }
+}
+
+impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for NetworkAtomicElementRef<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self.load())
+    }
+}
+
 /// A variant of an [AtomicArray] providing atomic access for any integer type that has a corresponding Rust supported Atomic type (e.g. usize -> AtomicUsize)
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
@@ -820,28 +917,25 @@ pub struct __NetworkAtomicLocalData<T: Remote> {
 }
 
 /// Internal iterator for `__NetworkAtomicLocalData`.
-/// Not intended for direct use by library users.
-/// Users should iterate via the public `AtomicLocalDataIter` type instead;
-/// see [AtomicLocalDataIter][crate::array::atomic::AtomicLocalDataIter].
+/// Holds a reference to the array — no Darc operations occur per element.
 #[derive(Debug)]
-pub struct __NetworkAtomicLocalDataIter<T: Dist> {
-    //+ NetworkAtomicOps> {
-    array: NetworkAtomicArray<T>,
+pub struct __NetworkAtomicLocalDataIter<'a, T: Dist> {
+    array: &'a NetworkAtomicArray<T>,
     index: usize,
     end_index: usize,
 }
 
 impl<T: Dist> __NetworkAtomicLocalData<T> {
-    pub fn at(&self, index: usize) -> NetworkAtomicElement<T> {
-        NetworkAtomicElement {
-            array: self.array.clone(),
+    pub fn at(&self, index: usize) -> NetworkAtomicElementRef<'_, T> {
+        NetworkAtomicElementRef {
+            array: &self.array,
             local_index: index,
         }
     }
 
-    pub fn get_mut(&self, index: usize) -> Option<NetworkAtomicElement<T>> {
-        Some(NetworkAtomicElement {
-            array: self.array.clone(),
+    pub fn get_mut(&self, index: usize) -> Option<NetworkAtomicElementRef<'_, T>> {
+        Some(NetworkAtomicElementRef {
+            array: &self.array,
             local_index: index,
         })
     }
@@ -850,9 +944,9 @@ impl<T: Dist> __NetworkAtomicLocalData<T> {
         self.end_index - self.start_index
     }
 
-    pub fn iter(&self) -> __NetworkAtomicLocalDataIter<T> {
+    pub fn iter(&self) -> __NetworkAtomicLocalDataIter<'_, T> {
         __NetworkAtomicLocalDataIter {
-            array: self.array.clone(),
+            array: &self.array,
             index: self.start_index,
             end_index: self.end_index,
         }
@@ -965,26 +1059,26 @@ impl<T: Dist + serde::Serialize> serde::Serialize for __NetworkAtomicLocalData<T
     }
 }
 
-impl<T: Dist> IntoIterator for __NetworkAtomicLocalData<T> {
-    type Item = NetworkAtomicElement<T>;
-    type IntoIter = __NetworkAtomicLocalDataIter<T>;
+impl<'a, T: Dist> IntoIterator for &'a __NetworkAtomicLocalData<T> {
+    type Item = NetworkAtomicElementRef<'a, T>;
+    type IntoIter = __NetworkAtomicLocalDataIter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         __NetworkAtomicLocalDataIter {
-            array: self.array,
+            array: &self.array,
             index: self.start_index,
             end_index: self.end_index,
         }
     }
 }
 
-impl<T: Dist> Iterator for __NetworkAtomicLocalDataIter<T> {
-    type Item = NetworkAtomicElement<T>;
+impl<'a, T: Dist> Iterator for __NetworkAtomicLocalDataIter<'a, T> {
+    type Item = NetworkAtomicElementRef<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.end_index {
             let index = self.index;
             self.index += 1;
-            Some(NetworkAtomicElement {
-                array: self.array.clone(),
+            Some(NetworkAtomicElementRef {
+                array: self.array,
                 local_index: index,
             })
         } else {
@@ -1054,6 +1148,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
             //We are only directly accessing the local slice for its len
             Some(NetworkAtomicElement {
                 array: self.clone(),
+                local_index: index,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_element_ref(&self, index: usize) -> Option<NetworkAtomicElementRef<'_, T>> {
+        if index < unsafe { self.__local_as_slice().len() } {
+            Some(NetworkAtomicElementRef {
+                array: self,
                 local_index: index,
             })
         } else {

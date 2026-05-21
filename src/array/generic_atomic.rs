@@ -264,6 +264,232 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for GenericAtomicElement<T> {
     }
 }
 
+/// A borrowed reference to a single element of a [GenericAtomicArray], yielded by
+/// `IntoIterator for &__GenericAtomicLocalData`.  Unlike [GenericAtomicElement] this
+/// type holds a plain reference to the array rather than a cloned handle, so creating
+/// and dropping it costs zero Darc operations.
+#[doc(hidden)]
+pub struct GenericAtomicElementRef<'a, T: Remote> {
+    array: &'a GenericAtomicArray<T>,
+    local_index: usize,
+}
+
+impl<'a, T: Dist> GenericAtomicElementRef<'a, T> {
+    pub fn load(&self) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] }
+    }
+    pub fn store(&self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            self.array.__local_as_mut_slice()[self.local_index] = val;
+        }
+    }
+    pub fn swap(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] = val;
+            old
+        }
+    }
+}
+
+impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
+    pub fn fetch_add(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] += val;
+            old
+        }
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] -= val;
+            old
+        }
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] *= val;
+            old
+        }
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] /= val;
+            old
+        }
+    }
+    pub fn fetch_rem(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] %= val;
+            old
+        }
+    }
+}
+
+impl<'a, T: Dist + std::cmp::Eq> GenericAtomicElementRef<'a, T> {
+    pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
+        let _lock = self.array.lock_index(self.local_index);
+        let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
+        if current_val == current {
+            unsafe {
+                self.array.__local_as_mut_slice()[self.local_index] = new;
+            }
+            Ok(current_val)
+        } else {
+            Err(current_val)
+        }
+    }
+}
+
+impl<'a, T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
+    GenericAtomicElementRef<'a, T>
+{
+    pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
+        let _lock = self.array.lock_index(self.local_index);
+        let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
+        let same = if current_val > current {
+            current_val - current < eps
+        } else {
+            current - current_val < eps
+        };
+        if same {
+            unsafe {
+                self.array.__local_as_mut_slice()[self.local_index] = new;
+            }
+            Ok(current_val)
+        } else {
+            Err(current_val)
+        }
+    }
+}
+
+impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
+    pub fn fetch_and(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] &= val;
+            old
+        }
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] |= val;
+            old
+        }
+    }
+    pub fn fetch_xor(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] ^= val;
+            old
+        }
+    }
+}
+
+impl<'a, T: ElementShiftOps + 'static> GenericAtomicElementRef<'a, T> {
+    pub fn fetch_shl(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] <<= val;
+            old
+        }
+    }
+    pub fn fetch_shr(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            self.array.__local_as_mut_slice()[self.local_index] >>= val;
+            old
+        }
+    }
+}
+
+impl<'a, T: Dist + ElementArithmeticOps> AddAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn add_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] += val }
+    }
+}
+impl<'a, T: Dist + ElementArithmeticOps> SubAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn sub_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] -= val }
+    }
+}
+impl<'a, T: Dist + ElementArithmeticOps> MulAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn mul_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] *= val }
+    }
+}
+impl<'a, T: Dist + ElementArithmeticOps> DivAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn div_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] /= val }
+    }
+}
+impl<'a, T: Dist + ElementArithmeticOps> RemAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn rem_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] %= val }
+    }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitAndAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn bitand_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] &= val }
+    }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitOrAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn bitor_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] |= val }
+    }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitXorAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn bitxor_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index] ^= val }
+    }
+}
+impl<'a, T: Dist + ElementShiftOps> ShlAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn shl_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index].shl_assign(val) }
+    }
+}
+impl<'a, T: Dist + ElementShiftOps> ShrAssign<T> for GenericAtomicElementRef<'a, T> {
+    fn shr_assign(&mut self, val: T) {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe { self.array.__local_as_mut_slice()[self.local_index].shr_assign(val) }
+    }
+}
+
+impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for GenericAtomicElementRef<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _lock = self.array.lock_index(self.local_index);
+        let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
+        write!(f, "{current_val:?}")
+    }
+}
+
 /// A variant of an [AtomicArray] providing atomic access for any type that implements [Dist][crate::memregion::Dist].
 ///
 /// Atomicity is gauranteed by constructing a 1-Byte mutex for each element in the array.
@@ -316,27 +542,25 @@ pub struct __GenericAtomicLocalData<T: Dist> {
 }
 
 /// Internal iterator for `__GenericAtomicLocalData`.
-/// Not intended for direct use by library users.
-/// Users should iterate via the public `AtomicLocalDataIter` type instead;
-/// see [AtomicLocalDataIter][crate::array::atomic::AtomicLocalDataIter].
+/// Holds a reference to the array — no Darc operations occur per element.
 #[derive(Debug)]
-pub struct __GenericAtomicLocalDataIter<T: Dist> {
-    array: GenericAtomicArray<T>,
+pub struct __GenericAtomicLocalDataIter<'a, T: Dist> {
+    array: &'a GenericAtomicArray<T>,
     index: usize,
     end_index: usize,
 }
 
 impl<T: Dist> __GenericAtomicLocalData<T> {
-    pub fn at(&self, index: usize) -> GenericAtomicElement<T> {
-        GenericAtomicElement {
-            array: self.array.clone(),
+    pub fn at(&self, index: usize) -> GenericAtomicElementRef<'_, T> {
+        GenericAtomicElementRef {
+            array: &self.array,
             local_index: index,
         }
     }
 
-    pub fn get_mut(&self, index: usize) -> Option<GenericAtomicElement<T>> {
-        Some(GenericAtomicElement {
-            array: self.array.clone(),
+    pub fn get_mut(&self, index: usize) -> Option<GenericAtomicElementRef<'_, T>> {
+        Some(GenericAtomicElementRef {
+            array: &self.array,
             local_index: index,
         })
     }
@@ -345,9 +569,9 @@ impl<T: Dist> __GenericAtomicLocalData<T> {
         unsafe { self.array.__local_as_mut_slice().len() }
     }
 
-    pub fn iter(&self) -> __GenericAtomicLocalDataIter<T> {
+    pub fn iter(&self) -> __GenericAtomicLocalDataIter<'_, T> {
         __GenericAtomicLocalDataIter {
-            array: self.array.clone(),
+            array: &self.array,
             index: self.start_index,
             end_index: self.end_index,
         }
@@ -375,26 +599,26 @@ impl<T: Dist + serde::Serialize> serde::Serialize for __GenericAtomicLocalData<T
     }
 }
 
-impl<T: Dist> IntoIterator for __GenericAtomicLocalData<T> {
-    type Item = GenericAtomicElement<T>;
-    type IntoIter = __GenericAtomicLocalDataIter<T>;
+impl<'a, T: Dist> IntoIterator for &'a __GenericAtomicLocalData<T> {
+    type Item = GenericAtomicElementRef<'a, T>;
+    type IntoIter = __GenericAtomicLocalDataIter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         __GenericAtomicLocalDataIter {
-            array: self.array,
+            array: &self.array,
             index: self.start_index,
             end_index: self.end_index,
         }
     }
 }
 
-impl<T: Dist> Iterator for __GenericAtomicLocalDataIter<T> {
-    type Item = GenericAtomicElement<T>;
+impl<'a, T: Dist> Iterator for __GenericAtomicLocalDataIter<'a, T> {
+    type Item = GenericAtomicElementRef<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.end_index {
             let index = self.index;
             self.index += 1;
-            Some(GenericAtomicElement {
-                array: self.array.clone(),
+            Some(GenericAtomicElementRef {
+                array: self.array,
                 local_index: index,
             })
         } else {
@@ -442,6 +666,17 @@ impl<T: Dist> GenericAtomicArray<T> {
             //We are only directly accessing the local slice for its len
             Some(GenericAtomicElement {
                 array: self.clone(),
+                local_index: index,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_element_ref(&self, index: usize) -> Option<GenericAtomicElementRef<'_, T>> {
+        if index < unsafe { self.__local_as_slice().len() } {
+            Some(GenericAtomicElementRef {
+                array: self,
                 local_index: index,
             })
         } else {

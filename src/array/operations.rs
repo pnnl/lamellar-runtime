@@ -369,12 +369,12 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             OpInputEnum::Vec(v) => v.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect(),
             OpInputEnum::NativeAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
-
+                let a_len = a.len();
                 a.iter()
                     .enumerate()
                     .filter_map(move |(i, elem)| {
                         data.push(elem.load());
-                        if data.len() == chunk_size || i == a.len() - 1 {
+                        if data.len() == chunk_size || i == a_len - 1 {
                             let mut new_data = Vec::with_capacity(chunk_size);
                             std::mem::swap(&mut data, &mut new_data);
                             Some(new_data)
@@ -386,12 +386,12 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             }
             OpInputEnum::GenericAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
-
+                let a_len = a.len();
                 a.iter()
                     .enumerate()
                     .filter_map(move |(i, elem)| {
                         data.push(elem.load());
-                        if data.len() == chunk_size || i == a.len() - 1 {
+                        if data.len() == chunk_size || i == a_len - 1 {
                             let mut new_data = Vec::with_capacity(chunk_size);
                             std::mem::swap(&mut data, &mut new_data);
                             Some(new_data)
@@ -409,12 +409,12 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             }
             OpInputEnum::NetworkAtomicLocalData(a) => {
                 let mut data = Vec::with_capacity(chunk_size);
-
+                let a_len = a.len();
                 a.iter()
                     .enumerate()
                     .filter_map(move |(i, elem)| {
                         data.push(elem.load());
-                        if data.len() == chunk_size || i == a.len() - 1 {
+                        if data.len() == chunk_size || i == a_len - 1 {
                             let mut new_data = Vec::with_capacity(chunk_size);
                             std::mem::swap(&mut data, &mut new_data);
                             Some(new_data)

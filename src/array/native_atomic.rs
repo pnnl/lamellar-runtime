@@ -811,6 +811,102 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
         write!(f, "{:?}", self.load())
     }
 }
+
+/// Borrowed reference to a single element of a [NativeAtomicArray].
+/// Zero Darc clone/drop cost — holds a plain `&'a NativeAtomicArray<T>`.
+#[doc(hidden)]
+pub struct NativeAtomicElementRef<'a, T: Remote> {
+    pub(crate) array: &'a NativeAtomicArray<T>,
+    pub(crate) local_index: usize,
+}
+
+impl<'a, T: Dist> NativeAtomicElementRef<'a, T> {
+    pub fn load(&self) -> T {
+        impl_load!(self)
+    }
+    pub fn store(&self, val: T) {
+        impl_store!(self, val);
+    }
+    pub fn swap(&self, val: T) -> T {
+        impl_swap!(self, val)
+    }
+    pub fn compare_exchange(&self, old: T, new: T) -> Result<T, T> {
+        impl_compare_exchange!(self, old, new)
+    }
+    pub fn compare_exchange_epsilon(&self, old: T, new: T, eps: T) -> Result<T, T> {
+        impl_compare_exchange_eps!(self, old, new, eps)
+    }
+    pub fn fetch_add(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_add, val)
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_sub, val)
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        impl_mul_div!(self, *, val)
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        impl_mul_div!(self, /, val)
+    }
+    pub fn fetch_rem(&self, val: T) -> T {
+        impl_mul_div!(self, %, val)
+    }
+    pub fn fetch_shl(&self, val: T) -> T {
+        impl_shift!(self, <<, val)
+    }
+    pub fn fetch_shr(&self, val: T) -> T {
+        impl_shift!(self, >>, val)
+    }
+}
+
+impl<'a, T: ElementBitWiseOps + 'static> NativeAtomicElementRef<'a, T> {
+    pub fn fetch_and(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_and, val)
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_or, val)
+    }
+    pub fn fetch_xor(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_xor, val)
+    }
+}
+
+impl<'a, T: Dist + ElementArithmeticOps> AddAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn add_assign(&mut self, val: T) { self.fetch_add(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> SubAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn sub_assign(&mut self, val: T) { self.fetch_sub(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> MulAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn mul_assign(&mut self, val: T) { self.fetch_mul(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> DivAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn div_assign(&mut self, val: T) { self.fetch_div(val); }
+}
+impl<'a, T: Dist + ElementArithmeticOps> RemAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn rem_assign(&mut self, val: T) { self.fetch_rem(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitAndAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn bitand_assign(&mut self, val: T) { self.fetch_and(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitOrAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn bitor_assign(&mut self, val: T) { self.fetch_or(val); }
+}
+impl<'a, T: Dist + ElementBitWiseOps> BitXorAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn bitxor_assign(&mut self, val: T) { self.fetch_xor(val); }
+}
+impl<'a, T: Dist + ElementShiftOps> ShlAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn shl_assign(&mut self, val: T) { self.fetch_shl(val); }
+}
+impl<'a, T: Dist + ElementShiftOps> ShrAssign<T> for NativeAtomicElementRef<'a, T> {
+    fn shr_assign(&mut self, val: T) { self.fetch_shr(val); }
+}
+
+impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElementRef<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self.load())
+    }
+}
 /// A variant of an [AtomicArray] providing atomic access for any integer type that has a corresponding Rust supported Atomic type (e.g. usize -> AtomicUsize)
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
@@ -853,28 +949,25 @@ pub struct __NativeAtomicLocalData<T: Remote> {
 }
 
 /// Internal iterator for `__NativeAtomicLocalData`.
-/// Not intended for direct use by library users.
-/// Users should iterate via the public `AtomicLocalDataIter` type instead;
-/// see [AtomicLocalDataIter][crate::array::atomic::AtomicLocalDataIter].
+/// Holds a reference to the array — no Darc operations occur per element.
 #[derive(Debug)]
-pub struct __NativeAtomicLocalDataIter<T: Dist> {
-    //+ NativeAtomicOps> {
-    array: NativeAtomicArray<T>,
+pub struct __NativeAtomicLocalDataIter<'a, T: Dist> {
+    array: &'a NativeAtomicArray<T>,
     index: usize,
     end_index: usize,
 }
 
 impl<T: Dist> __NativeAtomicLocalData<T> {
-    pub fn at(&self, index: usize) -> NativeAtomicElement<T> {
-        NativeAtomicElement {
-            array: self.array.clone(),
+    pub fn at(&self, index: usize) -> NativeAtomicElementRef<'_, T> {
+        NativeAtomicElementRef {
+            array: &self.array,
             local_index: index,
         }
     }
 
-    pub fn get_mut(&self, index: usize) -> Option<NativeAtomicElement<T>> {
-        Some(NativeAtomicElement {
-            array: self.array.clone(),
+    pub fn get_mut(&self, index: usize) -> Option<NativeAtomicElementRef<'_, T>> {
+        Some(NativeAtomicElementRef {
+            array: &self.array,
             local_index: index,
         })
     }
@@ -883,9 +976,9 @@ impl<T: Dist> __NativeAtomicLocalData<T> {
         self.end_index - self.start_index
     }
 
-    pub fn iter(&self) -> __NativeAtomicLocalDataIter<T> {
+    pub fn iter(&self) -> __NativeAtomicLocalDataIter<'_, T> {
         __NativeAtomicLocalDataIter {
-            array: self.array.clone(),
+            array: &self.array,
             index: self.start_index,
             end_index: self.end_index,
         }
@@ -998,26 +1091,26 @@ impl<T: Dist + serde::Serialize> serde::Serialize for __NativeAtomicLocalData<T>
     }
 }
 
-impl<T: Dist> IntoIterator for __NativeAtomicLocalData<T> {
-    type Item = NativeAtomicElement<T>;
-    type IntoIter = __NativeAtomicLocalDataIter<T>;
+impl<'a, T: Dist> IntoIterator for &'a __NativeAtomicLocalData<T> {
+    type Item = NativeAtomicElementRef<'a, T>;
+    type IntoIter = __NativeAtomicLocalDataIter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         __NativeAtomicLocalDataIter {
-            array: self.array,
+            array: &self.array,
             index: self.start_index,
             end_index: self.end_index,
         }
     }
 }
 
-impl<T: Dist> Iterator for __NativeAtomicLocalDataIter<T> {
-    type Item = NativeAtomicElement<T>;
+impl<'a, T: Dist> Iterator for __NativeAtomicLocalDataIter<'a, T> {
+    type Item = NativeAtomicElementRef<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.end_index {
             let index = self.index;
             self.index += 1;
-            Some(NativeAtomicElement {
-                array: self.array.clone(),
+            Some(NativeAtomicElementRef {
+                array: self.array,
                 local_index: index,
             })
         } else {
@@ -1065,6 +1158,17 @@ impl<T: Dist> NativeAtomicArray<T> {
             //We are only directly accessing the local slice for its len
             Some(NativeAtomicElement {
                 array: self.clone(),
+                local_index: index,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_element_ref(&self, index: usize) -> Option<NativeAtomicElementRef<'_, T>> {
+        if index < unsafe { self.__local_as_slice().len() } {
+            Some(NativeAtomicElementRef {
+                array: self,
                 local_index: index,
             })
         } else {
