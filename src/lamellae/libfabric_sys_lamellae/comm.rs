@@ -40,7 +40,7 @@ impl LibfabricSysComm {
             HEAP_SIZE.store(size, Ordering::SeqCst);
         }
         let ofi = Ofi::new(provider, domain).expect("error in ofi init");
-        println!("ofi initialized: {:?}", ofi);
+        trace!("ofi initialized: {:?}", ofi);
 
         ofi.barrier().unwrap();
         let num_pes = ofi.num_pes;
@@ -55,7 +55,7 @@ impl LibfabricSysComm {
                 std::mem::align_of::<u8>(),
             )
             .expect("error in ofi alloc");
-        println!(
+        trace!(
             "ofi allocated memory: addr={:?}, len={:?}",
             alloc_info.start(),
             alloc_info.num_bytes()
@@ -75,11 +75,10 @@ impl LibfabricSysComm {
             get_amt: Arc::new(AtomicUsize::new(0)),
             // get_cnt: Arc::new(AtomicUsize::new(0)),
         };
-        println!("lib_fabric_comm initialized: {:?}", lib_fabric_comm);
+        trace!("lib_fabric_comm initialized: {:?}", lib_fabric_comm);
         lib_fabric_comm.runtime_allocs.write()[0]
             .1
             .init(alloc_info.start(), total_mem);
-        println!("lib_fabric_comm runtime allocator initialized with memory: addr={:?}, len={:?}", alloc_info.start(), total_mem);
         lib_fabric_comm
     }
 
