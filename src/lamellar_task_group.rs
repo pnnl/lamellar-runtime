@@ -561,6 +561,7 @@ pub struct TaskGroupLocalAmHandle<T> {
     inner: Arc<TaskGroupAmHandleInner>,
     am: Option<(Am, usize)>,
     sub_id: usize,
+    thread: Option<usize>,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -610,7 +611,11 @@ impl<T: 'static> TaskGroupLocalAmHandle<T> {
                 tg_counters.inc_outstanding(num_pes);
                 tg_counters.inc_launched(num_pes);
             }
-            self.inner.scheduler.submit_am(am);
+            if let Some(thread) = self.thread {
+                self.inner.scheduler.submit_am_thread(am, thread);
+            } else {
+                self.inner.scheduler.submit_am(am);
+            }
         }
     }
 }
@@ -1051,7 +1056,7 @@ impl LamellarTaskGroup {
         // println!("task group exec am all");
         self.team.team_counters.inc_send_req(self.team.num_pes);
         self.team.world_counters.inc_send_req(self.team.num_pes);
-        self.counters.inc_send_req(self.team.num_pes);
+        self.counters.inc_send_req(1);
         // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
 
         self.cnt.fetch_add(1, Ordering::SeqCst);
@@ -1181,8 +1186,264 @@ impl LamellarTaskGroup {
             inner: self.local_req.clone(),
             am: Some((Am::Local(req_data, func), 1)),
             sub_id: req_id.sub_id,
+            thread: None,
             _phantom: PhantomData,
         }
+    }
+
+    pub(crate) fn spawn_am_all_inner<F>(&self, am: F) -> TaskGroupMultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.team.team_counters.inc_send_req(self.team.num_pes);
+        self.team.world_counters.inc_send_req(self.team.num_pes);
+        self.counters.inc_send_req(1);
+
+        self.cnt.fetch_add(1, Ordering::SeqCst);
+        let func: LamellarArcAm = Arc::new(am);
+        let world = if let Some(world) = &self.team.world {
+            world.clone()
+        } else {
+            self.team.clone()
+        };
+        for _ in 0..(self.team.num_pes) {
+            unsafe { Arc::increment_strong_count(Arc::as_ptr(&self.rt_multi_req)) }
+        }
+        let req_id = ReqId {
+            id: self.multi_id,
+            sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
+        };
+        let req_data = ReqMetaData {
+            src: self.team.world_pe,
+            dst: None,
+            id: req_id,
+            lamellae: self.team.lamellae.clone(),
+            world,
+            team: self.team.clone(),
+        };
+        self.team.team_counters.inc_outstanding(self.team.num_pes);
+        self.team.team_counters.inc_launched(self.team.num_pes);
+        self.team.world_counters.inc_outstanding(self.team.num_pes);
+        self.team.world_counters.inc_launched(self.team.num_pes);
+        self.counters.inc_outstanding(self.team.num_pes);
+        self.counters.inc_launched(self.team.num_pes);
+        self.team.scheduler.submit_am(Am::All(req_data, func));
+        TaskGroupMultiAmHandle {
+            inner: self.multi_req.clone(),
+            am: None,
+            sub_id: req_id.sub_id,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub(crate) fn spawn_am_pe_inner<F>(&self, pe: usize, am: F) -> TaskGroupAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.team.team_counters.inc_send_req(1);
+        self.team.world_counters.inc_send_req(1);
+        self.counters.inc_send_req(1);
+
+        self.cnt.fetch_add(1, Ordering::SeqCst);
+        let func: LamellarArcAm = Arc::new(am);
+        let world = if let Some(world) = &self.team.world {
+            world.clone()
+        } else {
+            self.team.clone()
+        };
+        unsafe { Arc::increment_strong_count(Arc::as_ptr(&self.rt_req)) }
+        let req_id = ReqId {
+            id: self.id,
+            sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
+        };
+        let req_data = ReqMetaData {
+            src: self.team.world_pe,
+            dst: Some(self.team.arch.world_pe(pe).expect("pe not member of team")),
+            id: req_id,
+            lamellae: self.team.lamellae.clone(),
+            world,
+            team: self.team.clone(),
+        };
+        self.team.team_counters.inc_outstanding(1);
+        self.team.team_counters.inc_launched(1);
+        self.team.world_counters.inc_outstanding(1);
+        self.team.world_counters.inc_launched(1);
+        self.counters.inc_outstanding(1);
+        self.counters.inc_launched(1);
+        self.team.scheduler.submit_am(Am::Remote(req_data, func));
+        TaskGroupAmHandle {
+            inner: self.req.clone(),
+            am: None,
+            sub_id: req_id.sub_id,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub(crate) fn spawn_am_local_inner<F>(&self, am: F) -> TaskGroupLocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.team.team_counters.inc_send_req(1);
+        self.team.world_counters.inc_send_req(1);
+        self.counters.inc_send_req(1);
+
+        self.cnt.fetch_add(1, Ordering::SeqCst);
+        let func: LamellarArcLocalAm = Arc::new(am);
+        let world = if let Some(world) = &self.team.world {
+            world.clone()
+        } else {
+            self.team.clone()
+        };
+        unsafe { Arc::increment_strong_count(Arc::as_ptr(&self.rt_local_req)) }
+        let req_id = ReqId {
+            id: self.local_id,
+            sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
+        };
+        let req_data = ReqMetaData {
+            src: self.team.world_pe,
+            dst: Some(self.team.world_pe),
+            id: req_id,
+            lamellae: self.team.lamellae.clone(),
+            world,
+            team: self.team.clone(),
+        };
+        self.team.team_counters.inc_outstanding(1);
+        self.team.team_counters.inc_launched(1);
+        self.team.world_counters.inc_outstanding(1);
+        self.team.world_counters.inc_launched(1);
+        self.counters.inc_outstanding(1);
+        self.counters.inc_launched(1);
+        self.team.scheduler.submit_am(Am::Local(req_data, func));
+        TaskGroupLocalAmHandle {
+            inner: self.local_req.clone(),
+            am: None,
+            sub_id: req_id.sub_id,
+            thread: None,
+            _phantom: PhantomData,
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn an active message on all PEs within this task group's team,
+    /// returning a handle to retrieve the results.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_all`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The calling PE manages transferring the active message to all remote PEs in the team.
+    /// Results are only available on the calling PE.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { lamellar::current_pe }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let tg = LamellarTaskGroup::new(&world);
+    /// let handle = tg.spawn_am_all(MyAm { val: world.my_pe() });
+    /// let results = handle.block();
+    ///```
+    pub fn spawn_am_all<F>(&self, am: F) -> TaskGroupMultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.spawn_am_all_inner(am)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn an active message on a specific PE within this task group's team,
+    /// returning a handle to retrieve the result.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_pe`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The calling PE manages transferring the active message to the target PE.
+    /// The result is only available on the calling PE.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { lamellar::current_pe }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let tg = LamellarTaskGroup::new(&world);
+    /// let handle = tg.spawn_am_pe(0, MyAm { val: world.my_pe() });
+    /// let result = handle.block();
+    ///```
+    pub fn spawn_am_pe<F>(&self, pe: usize, am: F) -> TaskGroupAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.spawn_am_pe_inner(pe, am)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn a local active message on the calling PE, returning a handle to retrieve the result.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_local`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The active message executes only on the calling PE; remote PEs are not involved.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmLocalData(Debug, Clone)]
+    /// struct MyLocalAm { val: usize }
+    ///
+    /// #[lamellar::local_am]
+    /// impl LamellarAM for MyLocalAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let tg = LamellarTaskGroup::new(&world);
+    /// let handle = tg.spawn_am_local(MyLocalAm { val: 21 });
+    /// let result = handle.block();
+    /// assert_eq!(result, 42);
+    ///```
+    pub fn spawn_am_local<F>(&self, am: F) -> TaskGroupLocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.spawn_am_local_inner(am)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and execute a local active message, pinned to the specified worker thread index.
+    ///
+    /// This is a lower-level variant of [`ActiveMessaging::exec_am_local`] that allows the caller
+    /// to direct the active message to a particular worker thread within this PE.
+    ///
+    /// Returns a lazy handle; call `.spawn()`, `.block()`, or `.await` to initiate execution.
+    ///
+    /// # One-sided Operation
+    /// The active message executes only on the calling PE; remote PEs are not involved.
+    pub fn exec_am_local_thread<F>(&self, am: F, thread: usize) -> TaskGroupLocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        let mut handle = self.exec_am_local_inner(am);
+        handle.thread = Some(thread);
+        handle
     }
 }
 

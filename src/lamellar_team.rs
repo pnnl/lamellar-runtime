@@ -1926,6 +1926,8 @@ impl Darc<LamellarTeamRT> {
         // trace!("[{:?}] team exec am all request", self.world_pe);
         // event!(Level::TRACE, "team exec am all request");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
+            task_group_cnts.inc_outstanding(self.num_pes);
+            task_group_cnts.inc_launched(self.num_pes);
             task_group_cnts.inc_send_req(1);
         }
         let req = Arc::new(MultiAmHandleInner {
@@ -2001,6 +2003,8 @@ impl Darc<LamellarTeamRT> {
         // trace!("[{:?}] team exec am all request", self.world_pe);
         // event!(Level::TRACE, "team exec am all request");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
+            task_group_cnts.inc_outstanding(self.num_pes);
+            task_group_cnts.inc_launched(self.num_pes);
             task_group_cnts.inc_send_req(1);
         }
 
@@ -2568,6 +2572,8 @@ impl Darc<LamellarTeamRT> {
     {
         // println!("team exec am local");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
+            task_group_cnts.inc_outstanding(1);
+            task_group_cnts.inc_launched(1);
             task_group_cnts.inc_send_req(1);
         }
         let req = Arc::new(AmHandleInner {
