@@ -601,7 +601,6 @@ impl UcxWorld {
             inner: mem_handle.clone(),
         };
 
-        let my_pe = pes.iter().position(|p| *p == self.my_pe).unwrap();
         #[cfg(feature = "enable-on-node-shmem")]
         let (same_node_bases, same_node_segments) = if self.disable_on_node_shmem {
             (vec![None; pes.len()], vec![None; pes.len()])
@@ -614,7 +613,7 @@ impl UcxWorld {
             mem,
             data_size,
             padding,
-            my_pe,
+            self.my_pe,
             pes.len(),
             #[cfg(feature = "enable-on-node-shmem")]
             Arc::new(self.same_node_pes.clone()),
@@ -1298,7 +1297,8 @@ impl UcxAlloc {
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         trace!(target: "ucx",
-            "put_inner pe {} offset {} src_addr len {} * size_of T {} total bytes {}, alloc local size {}",
+            "put_inner my_pe {} pe {} offset {} src_addr len {} * size_of T {} total bytes {}, alloc local size {}",
+            self.my_pe,
             pe,
             offset,
             src_addr.len(),
@@ -1307,12 +1307,14 @@ impl UcxAlloc {
             self.num_bytes(),
         );
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        trace!(target: "ucx", "put_inner pe {} offset {} src_addr {:p} local addr {:p}", pe, offset, src_addr.as_ptr(), (self.start() + offset) as *mut u8);
         if pe == self.my_pe {
             std::ptr::copy(
                 src_addr.as_ptr() as *const u8,
                 (self.start() + offset) as *mut u8,
                 src_addr.len() * std::mem::size_of::<T>(),
             );
+            trace!(target: "ucx", "Completed local put to pe {} at offset {}", pe, offset);
             return None;
         }
         #[cfg(feature = "enable-on-node-shmem")]
@@ -1322,11 +1324,14 @@ impl UcxAlloc {
                 addr.as_ptr::<u8>() as *mut u8,
                 src_addr.len() * std::mem::size_of::<T>(),
             );
+            trace!(target: "ucx", "Completed same-node put to pe {} at offset {}", pe, offset);
             return None;
         }
         let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
+            trace!(target: "ucx", "Found remote key for pe {}: addr {:x} rkey {:?}", pe, remote_info.addr, remote_info.rkey);
             (remote_info.addr, &remote_info.rkey)
         } else {
+            trace!(target: "ucx", "Missing remote key for pe {}", pe);
             panic!("put_inner missing remote key for pe {}", pe);
         };
         trace!(target: "ucx",
