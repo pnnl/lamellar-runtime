@@ -143,8 +143,9 @@ impl LamellaeShutdown for LibfabricMt {
             Ordering::SeqCst,
         );
         // println!("set active to 0");
-        while self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8
-            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
+        while (self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8
+            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8)
+            || !self.cq.background_tasks_done()
         {
             self.cq.scheduler.exec_task();
         }

@@ -1077,6 +1077,7 @@ enum CQVariant {
 pub(crate) struct CommandQueue {
     pub(crate) scheduler: Arc<Scheduler>,
     inner: CQVariant,
+    background_done: Arc<AtomicUsize>, // counts down from 2 as alloc_task and panic_task exit
 }
 
 impl CommandQueue {
@@ -1114,7 +1115,7 @@ impl CommandQueue {
                 comm, scheduler.clone(), my_pe, num_pes, active,
             )),
         };
-        CommandQueue { scheduler, inner }
+        CommandQueue { scheduler, inner, background_done: Arc::new(AtomicUsize::new(2)) }
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -1197,6 +1198,7 @@ impl CommandQueue {
             CQVariant::Put2N(cq) => cq.alloc_task().await,
             CQVariant::Put3(cq) => cq.alloc_task().await,
         }
+        self.background_done.fetch_sub(1, Ordering::Release);
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -1211,6 +1213,11 @@ impl CommandQueue {
             CQVariant::Put2N(cq) => cq.panic_task().await,
             CQVariant::Put3(cq) => cq.panic_task().await,
         }
+        self.background_done.fetch_sub(1, Ordering::Release);
+    }
+
+    pub(crate) fn background_tasks_done(&self) -> bool {
+        self.background_done.load(Ordering::Acquire) == 0
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
