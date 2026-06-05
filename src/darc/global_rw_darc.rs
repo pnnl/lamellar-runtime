@@ -468,10 +468,10 @@ impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcCollectiveWriteGuard<T> {
 /// A global read-write `Darc`
 ///
 /// A single global read-write lock is associated with the `GlobalRwDarc`.
-/// Whenever the interior object is accessed (on any PE) the global lock is required to be aquired.
-/// When a thread aquires a Write lock it is guaranteed to the only thread with access to
-/// the interior object across the entire distributed environment. When a thread aquires a Read lock
-/// it may be one of many threads accross the distributed envrionment with access, but none of them will have mutable access.
+/// Whenever the interior object is accessed (on any PE) the global lock is required to be acquired.
+/// When a thread acquires a Write lock it is guaranteed to the only thread with access to
+/// the interior object across the entire distributed environment. When a thread acquires a Read lock
+/// it may be one of many threads across the distributed environment with access, but none of them will have mutable access.
 /// NOTE: Grabbing the lock is a distributed operation and can come with a significant performance penalty
 /// - Contrast with a `LocalRwDarc`, where each local PE has a local lock.
 /// - Contrast with a `Darc`, which also has local ownership but does not
@@ -579,9 +579,9 @@ impl<T> GlobalRwDarc<T> {
     /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the read access of the wrlock when dropped
     ///
     /// # One-sided Operation
-    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
-    /// Once aquired this specific instance of the read lock will only be held by the calling PE (until it is dropped)
-    /// Other PEs may have separately aquired read locks as well.
+    /// The calling PE is responsible for creating and transferring the active message which acquires the lock.
+    /// Once acquired this specific instance of the read lock will only be held by the calling PE (until it is dropped)
+    /// Other PEs may have separately acquired read locks as well.
     ///
     /// # Examples
     ///
@@ -597,7 +597,7 @@ impl<T> GlobalRwDarc<T> {
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
-    ///         let counter = self.counter.read().await; // await until we get the write lock
+    ///         let counter = self.counter.read().await; // await until we get the read lock
     ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,*counter);
     ///     }
     ///  }
@@ -645,8 +645,8 @@ impl<T> GlobalRwDarc<T> {
     /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the write access of the wrlock when dropped
     ///
     /// # One-sided Operation
-    /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
-    /// Once aquired the lock will only be held by the calling PE (until it is dropped)
+    /// The calling PE is responsible for creating and transferring the active message which acquires the lock.
+    /// Once acquired the lock will only be held by the calling PE (until it is dropped)
     ///
     /// # Examples
     ///
@@ -817,7 +817,7 @@ impl<T: Send> GlobalRwDarc<T> {
     /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
     /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
+    /// pointed to object to wrapped by both a Darc and a GlobalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)

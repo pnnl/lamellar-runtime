@@ -45,13 +45,13 @@ pub(crate) mod private {
     use std::pin::Pin;
     use std::task::{Context, Poll};
     pub trait OneSidedIteratorInner {
-        /// The type of item self distributed iterator produces
+        /// The type of item this distributed iterator produces
         type Item: Send;
 
-        /// The underlying element type of the Array self iterator belongs to
+        /// The underlying element type of the Array this iterator belongs to
         type ElemType: Dist + 'static;
 
-        /// The orgininal array that created self iterator
+        /// The original array that created this iterator
         type Array: LamellarRdmaGet<Self::ElemType>
             + LamellarArray<Self::ElemType>
             + LamellarEnv
@@ -63,12 +63,12 @@ pub(crate) mod private {
 
         fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
 
-        /// advance the internal iterator localtion by count elements
+        /// advance the internal iterator location by count elements
         fn advance_index(&mut self, count: usize);
 
         fn advance_index_pin(self: Pin<&mut Self>, count: usize);
 
-        /// Return the original array self distributed iterator belongs too
+        /// Return the original array this distributed iterator belongs too
         fn array(&self) -> Self::Array;
 
         /// The size of the returned Item
@@ -79,9 +79,9 @@ pub(crate) mod private {
 }
 /// An interface for dealing with one sided iterators of LamellarArrays
 ///
-/// The functions in self trait are available on all [one-sided iterators](crate::array::iterator::one_sided_iterator)
+/// The functions in this trait are available on all [one-sided iterators](crate::array::iterator::one_sided_iterator)
 /// (which run over the data of a distributed array on a single PE).  Typically
-/// the provided iterator functions are optimized versions of the standard Iterator equivalents to reduce data movement assoicated with handling distributed arrays
+/// the provided iterator functions are optimized versions of the standard Iterator equivalents to reduce data movement associated with handling distributed arrays
 ///
 /// Additonaly functionality can be found by converting these iterators into Standard Iterators (with potential loss in data movement optimizations)
 ///
@@ -191,8 +191,8 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
         StepBy::new(self, step_size)
     }
 
-    /// Iterates over tuples `(A,B)` where the `A` items are from self iterator and the `B` items are from the iter in the argument.
-    /// If the two iterators or of unequal length, the returned iterator will be equal in length to the shorter of the two.
+    /// Iterates over tuples `(A,B)` where the `A` items are from this iterator and the `B` items are from the iter in the argument.
+    /// If the two iterators are of unequal length, the returned iterator will be equal in length to the shorter of the two.
     ///
     /// # Examples
     ///```
@@ -654,7 +654,7 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
 ///
 /// This object iterates over data serially on a single PE ; compare with [distributed iterators](crate::array::iterator::distributed_iterator), which iterate over data on all PEs associate with the array.
 ///
-/// This struct is created by calling [into_stream][OneSidedIterator::into_iter] a OneSidedIterator
+/// This struct is created by calling [into_stream][OneSidedIterator::into_stream] a OneSidedIterator
 ///
 /// # Examples
 ///```

@@ -70,7 +70,7 @@ impl LamellarRequestAddResult for AmHandleInner {
         }
     }
 }
-/// A handle to an active messaging request that executes on a singe PE
+/// A handle to an active messaging request that executes on a single PE
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 #[must_use = "active messaging handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
@@ -177,7 +177,7 @@ impl<T: AmDist> AmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters
     }
-    /// This method will block the calling thread until the associated Array Operation completes
+    /// This method will block the calling thread until the associated Active Message completes
     pub fn block(mut self) -> T {
         RuntimeWarning::BlockingCall("AmHandle::block", "<handle>.spawn() or <handle>.await")
             .print();
@@ -311,7 +311,7 @@ impl<T: 'static> LocalAmHandle<T> {
 
 impl<T: Send + 'static> LocalAmHandle<T> {
     /// This method will spawn the associated Active Message on the work queue,
-    /// initiating the remote operation.
+    /// initiating the local operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -319,7 +319,7 @@ impl<T: Send + 'static> LocalAmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters)
     }
-    /// This method will block the calling thread until the associated Array Operation completes
+    /// This method will block the calling thread until the associated Active Message completes
     pub fn block(mut self) -> T {
         RuntimeWarning::BlockingCall("LocalAmHandle::block", "<handle>.spawn() or <handle>.await")
             .print();
@@ -409,7 +409,7 @@ pub(crate) struct MultiAmHandleInner {
     pub(crate) user_handle: AtomicU8, //we can use this flag to optimize what happens when the request returns
 }
 
-/// A handle to an active messaging request that executes on multiple PEs, returned from a call to [exec_am_all][crate::ActiveMessaging::exec_am_all]
+/// A handle to an active messaging request that executes on multiple PEs, returned from a call to [exec_am_all][crate::ActiveMessaging::exec_am_all] or `spawn_am_all`
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 #[must_use = "active messaging handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
@@ -538,7 +538,7 @@ impl<T: AmDist> MultiAmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters
     }
-    /// This method will block the calling thread until the associated Array Operation completes
+    /// This method will block the calling thread until the associated Active Message completes
     pub fn block(mut self) -> Vec<T> {
         RuntimeWarning::BlockingCall("MultiAmHandle::block", "<handle>.spawn() or <handle>.await")
             .print();

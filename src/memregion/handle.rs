@@ -15,7 +15,7 @@ use pin_project::{pin_project, pinned_drop};
 #[pin_project(PinnedDrop)]
 #[doc(alias = "Collective")]
 /// This is a handle representing the operation of creating a new [SharedMemoryRegion].
-/// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
+/// This handle must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
 /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the SharedMemoryRegion's team, only returning once every PE in the team has completed the call.
 ///
 /// # Collective Operation
@@ -27,7 +27,7 @@ use pin_project::{pin_project, pinned_drop};
 ///
 /// let world = LamellarWorldBuilder::new().build();
 ///
-/// let memregion: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
+/// let memregion: Result<SharedMemoryRegion<usize>, anyhow::Error> = world.try_alloc_shared_mem_region(100).block();
 /// ```
 pub struct FallibleSharedMemoryRegionHandle<T: Remote> {
     pub(crate) team: Darc<LamellarTeamRT>,
@@ -54,7 +54,7 @@ impl<T: Remote> FallibleSharedMemoryRegionHandle<T> {
     /// use lamellar::memregion::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let memregion: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
+    /// let memregion: Result<SharedMemoryRegion<usize>, anyhow::Error> = world.try_alloc_shared_mem_region(100).block();
     pub fn block(mut self) -> Result<SharedMemoryRegion<T>, anyhow::Error> {
         self.launched = true;
         RuntimeWarning::BlockingCall(
@@ -74,7 +74,7 @@ impl<T: Remote> FallibleSharedMemoryRegionHandle<T> {
     /// use lamellar::memregion::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let memregion_task = world.alloc_shared_mem_region::<usize>(100).spawn();
+    /// let memregion_task = world.try_alloc_shared_mem_region::<usize>(100).spawn();
     /// // do some other work
     /// let memregion = memregion_task.block();
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
@@ -97,7 +97,7 @@ impl<T: Remote> Future for FallibleSharedMemoryRegionHandle<T> {
 #[pin_project(PinnedDrop)]
 #[doc(alias = "Collective")]
 /// This is a handle representing the operation of creating a new [SharedMemoryRegion].
-/// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
+/// This handle must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
 /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the SharedMemoryRegion's team, only returning once every PE in the team has completed the call.
 ///
 /// # Collective Operation

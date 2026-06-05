@@ -372,7 +372,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
     /// # One-sided Operation
-    /// This is a one-sided call and does not redistribute the modify actual data, it simply changes how the array is indexed for this particular handle.
+    /// This is a one-sided call and does not redistribute or modify the actual data, it simply changes how the array is indexed for this particular handle.
     ///
     /// # Examples
     ///```
@@ -684,7 +684,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_local_lock" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
-    /// // Given the ordering of these calls we will get stuck in "iinto_local_lock" as it
+    /// // Given the ordering of these calls we will get stuck in "into_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
     /// let local_lock_array = array.into_local_lock().block();
     /// local_lock_array.print();

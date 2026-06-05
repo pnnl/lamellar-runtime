@@ -21,7 +21,7 @@
 //! - Lamellar AM return types
 //!     - returning plain old data
 //!     - returning active messages
-//!     - returning active messages that reutrn data
+//!     - returning active messages that return data
 //! - Nested Active Messages
 //! - Active Message Groups
 //!     - Generic Active Message Groups
@@ -39,7 +39,7 @@
 //! }
 //!```
 //! This looks like a pretty normal (if simple) struct, we next have to let the runtime know we would like this data
-//! to be used in an active message, so we need to apply the [AmGroup](crate::lamellar_task_group::AmGroup) macro, this is done by replacing the `derive` macro:
+//! to be used in an active message, so we need to use the [AmData] attribute macro, this is done by replacing the `derive` macro:
 //!```
 //! use lamellar::active_messaging::prelude::*;
 //! #[AmData(Debug,Clone)]
@@ -115,7 +115,7 @@
 //! Hello World, I'm from PE 1
 //!```
 //!
-//! What if we wanted to actuall know where we are currently executing?
+//! What if we wanted to actually know where we are currently executing?
 
 //! # Lamellar AM DSL
 //! This lamellar [am] macro also parses the provided code block for the presence of keywords from a small DSL, specifically searching for the following token streams:
@@ -257,7 +257,7 @@
 //! }
 //!
 //! #[lamellar::am]
-//! impl LamellarAm for ReturnAm{
+//! impl LamellarAM for ReturnAm{
 //!     async fn exec(self) {
 //!         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
 //!     }
@@ -273,7 +273,7 @@
 //! #     remote_pe: usize,
 //! # }
 //! # #[lamellar::am]
-//! # impl LamellarAm for ReturnAm{
+//! # impl LamellarAM for ReturnAm{
 //! #     async fn exec(self) {
 //! #         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
 //! #     }
@@ -339,7 +339,7 @@
 //! # }
 //!
 //! #[lamellar::am]
-//! impl LamellarAm for ReturnAm{
+//! impl LamellarAM for ReturnAm{
 //!     async fn exec(self) -> (usize,usize) {
 //!         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
 //!         (self.original_pe,self.remote_pe)
@@ -356,7 +356,7 @@
 //! #     remote_pe: usize,
 //! # }
 //! # #[lamellar::am]
-//! # impl LamellarAm for ReturnAm{
+//! # impl LamellarAM for ReturnAm{
 //! #     async fn exec(self) -> (usize,usize) {
 //! #         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
 //! #         (self.original_pe,self.remote_pe)
@@ -422,14 +422,14 @@
 //!    original_pe: usize, //this will be are recursion terminating condition
 //! }
 //! #[lamellar::am]
-//! impl LamellarAm for RingAm{
+//! impl LamellarAM for RingAm{
 //!     async fn exec(self) -> Vec<usize>{
 //!         let cur_pe = lamellar::current_pe;
 //!         if self.original_pe ==  cur_pe{ //terminate the recursion!
 //!             vec![cur_pe] //return a new path with the current_pe as the start
 //!         }
 //!         else { //launch another active message
-//!             let next_pe = (cur_pe + 1 ) % lamellar::num_pes; //account for wrap arround
+//!             let next_pe = (cur_pe + 1 ) % lamellar::num_pes; //account for wrap around
 //!             let req = lamellar::team.exec_am_pe(next_pe, RingAm{original_pe: self.original_pe});//we can clone self because we don't need to modify any data
 //!             let mut path = req.await; // exec_am_*() calls return a future we used to get the result from
 //!             path.push(cur_pe); //update the path with the PE and return
@@ -443,7 +443,7 @@
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
 //!     //Send initial message to right neighbor
-//!     let next_pe = (my_pe + 1) % num_pes; //account for wrap arround
+//!     let next_pe = (my_pe + 1) % num_pes; //account for wrap around
 //!     let request = world.exec_am_pe(
 //!         next_pe,
 //!         RingAm {
@@ -478,7 +478,7 @@
 //!     ams: Vec<impl LamellarAm>
 //! }
 //! #[lamellar::am]
-//! impl LamellarAm for MetaAm{
+//! impl LamellarAM for MetaAm{
 //!     async fn exec(self) {
 //!         for am in self.ams{
 //!             am.exec().await
@@ -500,7 +500,7 @@
 //!    foo: usize,
 //! }
 //! #[lamellar::am]
-//! impl LamellarAm for Am1{
+//! impl LamellarAM for Am1{
 //!     async fn exec(self) {
 //!         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
 //!     }
@@ -511,7 +511,7 @@
 //!    bar: String,
 //! }
 //! #[lamellar::am]
-//! impl LamellarAm for Am2{
+//! impl LamellarAM for Am2{
 //!     async fn exec(self) {
 //!         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
 //!     }
@@ -564,7 +564,7 @@
 //!    cnt: Darc<AtomicUsize>,
 //! }
 //! #[lamellar::am]
-//! impl LamellarAm for ExampleAm{
+//! impl LamellarAM for ExampleAm{
 //!     async fn exec(self) -> usize{
 //!         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
 //!     }
@@ -611,7 +611,7 @@
 //! [2,2] on all PEs
 //! ```
 //! ### Static Members
-//! In the above code, the `ExampleAm` stuct contains a member that is a [Darc](crate::darc::Darc) (Distributed Arc).
+//! In the above code, the `ExampleAm` struct contains a member that is a [`Darc`] (Distributed Arc).
 //! In order to properly calculate distributed reference counts Darcs implements specialized Serialize and Deserialize operations.
 //! While, the cost to any single serialization/deserialization operation is small, doing this for every active message containing
 //! a Darc can become expensive.
@@ -620,7 +620,7 @@
 //! that every Active Message in the group is using a reference to the same Darc. In this case, we simply would only need
 //! to serialize the Darc once for each PE it gets sent to.
 //!
-//! This can be accomplished by using the [AmData] attribute macro with the `static` keyword passed in as an argument as illustrated below:
+//! This can be accomplished by using the [AmGroup](crate::lamellar_task_group::AmGroup) attribute macro with the `static` keyword passed in as an argument as illustrated below:
 //! ```
 //! use lamellar::active_messaging::prelude::*;
 //! use lamellar::darc::prelude::*;
@@ -631,7 +631,7 @@
 //!    cnt: Darc<AtomicUsize>,
 //! }
 //!```
-//! Other than the addition of `#[AmData(static)]` the rest of the code as the previous example would be the same.
+//! Other than the addition of `#[AmGroup(static)]` the rest of the code as the previous example would be the same.
 
 use crate::barrier::BarrierHandle;
 use crate::darc::Darc;
@@ -679,9 +679,9 @@ pub use handle::*;
 ///```
 ///
 /// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits
-/// that are provided as well as those require by Lamellar for active messaging.
+/// that are provided as well as those required by Lamellar for active messaging.
 ///
-/// Generally this is paired with the [lamellar::am][am] macro on an implementation of the [LamellarAM], to associate a remote function with this data.
+/// Generally this is paired with the [`lamellar::am`] macro on an implementation of the [`LamellarAM`], to associate a remote function with this data.
 /// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
 ///
 /// When used to specify the data type of an AMit must be applied to the top of the struct definition.
@@ -693,11 +693,11 @@ pub use lamellar_impl::AmData;
 /// This macro is used to setup the attributed type so that it can be used within local active messages.
 ///
 /// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits
-/// that are provided as well as those require by Lamellar for active messaging.
+/// that are provided as well as those required by Lamellar for active messaging.
 ///
 /// This macro relaxes the Serialize/Deserialize trait bounds required by the [AmData] macro
 ///
-/// Generally this is paired with the [lamellar::local_am][local_am] macro on an implementation of the [LamellarAM], to associate a local function with this data.
+/// Generally this is paired with the [`lamellar::local_am`] macro on an implementation of the [`LamellarAM`], to associate a local function with this data.
 /// (if you simply want this type to able to be included in other active messages, implementing [LamellarAM] can be omitted )
 ///
 pub use lamellar_impl::AmLocalData;
@@ -709,13 +709,13 @@ pub use lamellar_impl::AmLocalData;
 /// that are provided as well as those required by Lamellar for AM-group active messaging.
 ///
 /// This macro is similar to [`AmData`] but is intended for types that will be used specifically within
-/// heterogeneous AM groups (see the [`typed_am_group!`] macro and the [`AmGroup`] type).
+/// heterogeneous AM groups (see the [`typed_am_group!`] macro and the [`AmGroup`][crate::AmGroup] type).
 /// It derives serialization/deserialization traits needed for the AM group batching mechanism.
 ///
-/// Generally this is paired with the [lamellar::am][am] macro on an implementation of the [LamellarAM] trait.
+/// Generally this is paired with the [`lamellar::am`] macro on an implementation of the [`LamellarAM`] trait.
 pub use lamellar_impl::AmGroupData;
 
-/// This macro is used to associate an implemenation of [LamellarAM] for type that has used the [AmData] attribute macro
+/// This macro is used to associate an implementation of [LamellarAM] for a type that has used the [AmData] attribute macro
 ///
 /// This essentially constructs and registers the Active Message with the runtime. It is responsible for ensuring all data
 /// within the active message is properly serialize and deserialized, including any returned results.
@@ -728,7 +728,7 @@ pub use lamellar_impl::AmGroupData;
 ///
 pub use lamellar_impl::am;
 
-/// This macro is used to associate an implemenation of [LamellarAM] for a data structure that has used the [AmLocalData] attribute macro
+/// This macro is used to associate an implementation of [LamellarAM] for a data structure that has used the [AmLocalData] attribute macro
 ///
 /// This essentially constructs and registers the Active Message with the runtime. (LocalAms *do not* perform any serialization/deserialization)
 ///
@@ -1078,7 +1078,7 @@ pub trait ActiveMessaging {
     /// //----------------
     ///
     /// let world = lamellar::LamellarWorldBuilder::new().build();
-    /// let request = world.exec_am_pe(world.num_pes()-1, MyAm{val: world.my_pe()}); //launch am on all pes
+    /// let request = world.exec_am_pe(world.num_pes()-1, MyAm{val: world.my_pe()}); //launch am on a specific pe
     /// let result = request.block(); //block until am has executed
     /// assert_eq!(world.num_pes()-1,result);
     ///```
@@ -1276,7 +1276,7 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.spawn_am_all(MyAm{val: world.my_pe()}); //launch am locally
+    /// let request = world.spawn_am_all(MyAm{val: world.my_pe()}); //launch am on all pes
     /// let _result = request.block(); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();
@@ -1329,7 +1329,7 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.spawn_am_all(MyAm{val: world.my_pe()}); //launch am locally
+    /// let request = world.spawn_am_all(MyAm{val: world.my_pe()}); //launch am on all pes
     /// let _result = request.block(); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();

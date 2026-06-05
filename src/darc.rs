@@ -6,7 +6,7 @@
 //! - `Darc`'s have global lifetime tracking and management, meaning that the pointed to objects remain valid and accessible
 //!   as long as one reference exists on any PE.
 //! - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
-//!   types. Alternatively, you can also use a [`LocalRwDarc`][crate::darc::local_rw_darc::LocalRwDarc] or [`GlobalRwDarc`][crate::darc::global_rw_darc::GlobalRwDarc].
+//!   types. Alternatively, you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`].
 //!
 //! `Darc`'s are intended to be passed via active messages.
 //! - They allow distributed
@@ -200,7 +200,7 @@ unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without goin
 /// - `Darc`'s have global lifetime, meaning that the pointed to objects remain valid and accessible
 ///   as long as one reference exists on any PE.
 /// - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
-///   types. Alternatively you can also use a [`LocalRwDarc`][crate::darc::local_rw_darc::LocalRwDarc] or [`GlobalRwDarc`][crate::darc::global_rw_darc::GlobalRwDarc].
+///   types. Alternatively you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`].
 ///
 /// `Darc`'s are intended to be passed via active messages.
 /// - They allow distributed
@@ -290,15 +290,15 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 }
 
 //#[doc(hidden)]
-/// `WeakDarc`` is a version of Darc that holds a non-owning reference to the managed object.
+/// `WeakDarc` is a version of Darc that holds a non-owning reference to the managed object.
 /// (similar to [`Weak`](std::sync::Weak)).
-/// The managed object can be accessed by calling [`upgrade`](WeakDarc::upgrade), wich returns and ``Option<Darc<T>>``
+/// The managed object can be accessed by calling [`upgrade`](WeakDarc::upgrade), which returns an `Option<Darc<T>>`
 ///
 /// A `WeakDarc` does not count toward ownership, thus it will not prevent the value stored in the allocation from being dropped,
 /// and it makes no guarantees itself about the value still being present, and thus can return `None` from `upgrade()`.
 /// Note that a `WeakDarc` does prevent the allocation itself from being deallocated.
 ///
-/// The typical way to obtian a `WeakDarc` is to call [`Darc::downgrade`](Darc::downgrade).
+/// The typical way to obtain a `WeakDarc` is to call [`Darc::downgrade`](Darc::downgrade).
 ///
 /// # Examples
 ///```
@@ -1519,7 +1519,7 @@ impl<T: Send + Sync> Darc<T> {
     /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
     /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
+    /// pointed to object to wrapped by both a Darc and a GlobalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -1556,7 +1556,7 @@ impl<T: Send + Sync> Darc<T> {
     /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
     /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
+    /// pointed to object to wrapped by both a Darc and a GlobalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)

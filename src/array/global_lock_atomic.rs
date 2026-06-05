@@ -28,14 +28,14 @@ use pin_project::pin_project;
 use std::ops::{Deref, DerefMut};
 use std::task::{Context, Poll};
 
-/// A safe abstraction of a distributed array, providing read/write access protected by locks.
+/// A safe abstraction of a distributed array, providing read/write access protected by a single global lock.
 ///
-/// This array type protects access to its data by mainitaining a `RwLock` on each PE that contains data.
+/// This array type protects access to its data by maintaining a single `RwLock` that is shared across all PEs.
 ///
-/// Whenever a thread wants access to the arrays data it must first grab the either a read lock or the write lock (depending on the access type), before being able to proceed.
+/// Whenever a thread wants access to the array's data it must first acquire either a read lock or the write lock (depending on the access type), before being able to proceed.
 ///
-/// An important characteristic of the array type is that each PE manages access to its own data and has no knowledge of the state of the other PEs.
-/// This means that while there can only ever be a single 'writer' at a time on each PE, there may exist multiple 'writers' at any given time globally.
+/// Because the lock is global, at most one writer can hold the lock at any point in time across the entire distributed array.
+/// Multiple concurrent readers are permitted, but a writer has exclusive access globally.
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message.
 /// Direct RDMA operations can occur if the appropriate lock is held.
@@ -679,12 +679,12 @@ impl<T: Dist> GlobalLockArray<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Convert this GlobalLockArray into a (safe) [ReadOnlyArray]
+    /// Convert this GlobalLockArray into a (safe) [LocalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
     ///
-    /// When it returns, it is gauranteed that there are only `ReadOnlyArray` handles to the underlying data
+    /// When it returns, it is gauranteed that there are only `LocalLockArray` handles to the underlying data
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -709,9 +709,9 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let array1 = array.clone();
     /// let slice = array1.read_local_data().block();
     ///
-    /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
+    /// // no borrows to this specific instance (array) so it can enter the "into_local_lock" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
-    /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
+    /// // Given the ordering of these calls we will get stuck in "into_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
     /// let local_lock_array = array.into_local_lock().block();
     /// local_lock_array.print();
@@ -1138,7 +1138,7 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
     /// # Safety
     /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][GlobalLockArrayReduceHandle::spawn] or [blocked on][GlobalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1172,7 +1172,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// # Safety
     /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][GlobalLockArrayReduceHandle::spawn] or [blocked on][GlobalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1201,7 +1201,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// # Safety
     /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][GlobalLockArrayReduceHandle::spawn] or [blocked on][GlobalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1231,7 +1231,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     /// # Safety
     /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][GlobalLockArrayReduceHandle::spawn] or [blocked on][GlobalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1260,7 +1260,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     /// # Safety
     /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][GlobalLockArrayReduceHandle::spawn] or [blocked on][GlobalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;

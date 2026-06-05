@@ -7,7 +7,7 @@
 //! **Features**  include
 //!  - [Safety](#safety)
 //!  - [Multiple array types](#multiple-array-types)
-//!  - RDMA like [put][crate::array::LamellarArrayPut] and  [get][crate::array::LamellarArrayGet] APIs
+//!  - RDMA like `put` and `get` APIs
 //!  - [Block][crate::array::Distribution::Block] or [Cyclic][crate::array::Distribution::Cyclic] data layouts
 //!
 //! **Tools to work with arrays** include
@@ -195,8 +195,8 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, isize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, isize);
@@ -207,25 +207,25 @@ lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 // lamellar_impl::generate_reductions_for_type_rt!(true, i64);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, i64);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, f32);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32);
+// lamellar_impl::generate_reductions_for_type_rt!(false, f32);
+// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 // // //------------------------------------
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
 lamellar_impl::generate_ops_for_bool_rt!();
 
@@ -1453,7 +1453,7 @@ pub trait LamellarArray<T: Dist>:
     fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>;
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Given a PE, return the global index of the first element on that PE
+    /// Given a PE, return the global index of the last element on that PE
     /// Returns None if no data exists on that PE
     ///
     /// # One-sided Operation
@@ -1505,7 +1505,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     #[doc(hidden)]
     type Array: LamellarArray<T>;
     #[doc(alias("One-sided", "onesided"))]
-    /// Create a sub array of this UnsafeArray which consists of the elements specified by the range
+    /// Create a sub array of this array which consists of the elements specified by the range
     ///
     /// Note: it is possible that the subarray does not contain any data on this PE
     ///
@@ -1987,7 +1987,7 @@ where
 /// ```register_reduction!(name,closure,type1,type2,...)```
 /// - `name` is how the reduction will be registered with runtime and used to launch the reduction
 /// - `closure` is the user defined reduction and takes the form of:
-///     - ```FnMut(T, T -> T```
+///     - ```FnMut(T, T) -> T```
 /// - `type1`, `type2`,... are the types for which we would like this reduction to work for
 ///     - reductions get implemented as [Active Messages][crate::active_messaging] and as such must use concrete types (no generics) to register correctly
 ///

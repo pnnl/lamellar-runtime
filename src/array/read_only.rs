@@ -258,7 +258,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
+    /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_local_lock" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -320,7 +320,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
+    /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_global_lock" call
     /// // but array1 will not be dropped until after mut_slice is dropped.

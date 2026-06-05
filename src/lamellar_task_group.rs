@@ -722,7 +722,7 @@ impl<T: 'static> Future for TaskGroupLocalAmHandle<T> {
 /// }
 ///
 /// #[lamellar::am]
-/// impl LamellarAm for MyAm{
+/// impl LamellarAM for MyAm{
 ///     async fn exec(self) {
 ///         println!("Hello from world PE{:?}, team PE{:?}",self.world_pe, self.team_pe);
 ///     }
@@ -983,7 +983,7 @@ impl LamellarTaskGroup {
                     self.counters.launched_req_cnt.load(Ordering::SeqCst)
                 );
                 RuntimeWarning::UnspawnedTask(
-                            "`wait_all` on an active message group before all tasks/active messages create by the group have been spawned",
+                            "`wait_all` on an active message group before all tasks/active messages created by the group have been spawned",
                         )
                         .print();
             }
@@ -1041,7 +1041,7 @@ impl LamellarTaskGroup {
                     self.counters.launched_req_cnt.load(Ordering::SeqCst)
                 );
                 RuntimeWarning::UnspawnedTask(
-                            "`wait_all` on an active message group before all tasks/active messages create by the group have been spawned",
+                            "`wait_all` on an active message group before all tasks/active messages created by the group have been spawned",
                         )
                         .print();
             }
@@ -1652,7 +1652,7 @@ impl LamellarResultDarcSerde for AmGroupAmReturn {}
 ///    foo: usize,
 /// }
 /// #[lamellar::am]
-/// impl LamellarAm for Am1{
+/// impl LamellarAM for Am1{
 ///     async fn exec(self) {
 ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
 ///     }
@@ -1663,7 +1663,7 @@ impl LamellarResultDarcSerde for AmGroupAmReturn {}
 ///    bar: String,
 /// }
 /// #[lamellar::am]
-/// impl LamellarAm for Am2{
+/// impl LamellarAM for Am2{
 ///     async fn exec(self) {
 ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
 ///     }
@@ -1737,7 +1737,7 @@ impl AmGroup {
     ///    foo: usize,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for Am1{
+    /// impl LamellarAM for Am1{
     ///     async fn exec(self) {
     ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
     ///     }
@@ -1748,7 +1748,7 @@ impl AmGroup {
     ///    bar: String,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for Am2{
+    /// impl LamellarAM for Am2{
     ///     async fn exec(self) {
     ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
     ///     }
@@ -1793,7 +1793,7 @@ impl AmGroup {
     ///    foo: usize,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for Am1{
+    /// impl LamellarAM for Am1{
     ///     async fn exec(self){
     ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
     ///     }
@@ -1804,7 +1804,7 @@ impl AmGroup {
     ///    bar: String,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for Am2{
+    /// impl LamellarAM for Am2{
     ///     async fn exec(self) {
     ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
     ///     }
@@ -1845,7 +1845,7 @@ impl AmGroup {
     ///    foo: usize,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for Am1{
+    /// impl LamellarAM for Am1{
     ///     async fn exec(self) {
     ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
     ///     }
@@ -1856,7 +1856,7 @@ impl AmGroup {
     ///    bar: String,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for Am2{
+    /// impl LamellarAM for Am2{
     ///     async fn exec(self){
     ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
     ///     }

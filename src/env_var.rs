@@ -1,11 +1,11 @@
 //! Lamellar uses a number of environment variables to configure its behavior
-//! the following variables are supported along with a breif description and default value
+//! the following variables are supported along with a brief description and default value
 //!
 //! - `LAMELLAR_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
 //!     - possible values
-//!         - `local` -- default (if `enable-local` feature is not active)
+//!         - `local` -- default (if none of `enable-rofi-c`, `enable-libfabric`, `enable-libfabric-async`, or `enable-ucx` features are active)
 //!         - `shmem`
-//!         - `rofi`  -- only available with the `enable-rofi` feature in which case it is the default backend
+//!         - `rofi`  -- only available with the `enable-rofi-c` feature in which case it is the default backend
 //! - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
 //!     - possible values
 //!         - `lamellar` -- default, work stealing backend
@@ -15,7 +15,7 @@
 //!     - possible values
 //!         - `simple` -- default, active messages are only batched based on the PE they are sent to
 //!         - `direct` -- stages batched messages into a local Vec before copying into transport buffers at flush time
-//!         - `team_am` -- active messages are batched heirarchically based on the remote PE, team sending the message, and AM id
+//!         - `team_am` -- active messages are batched hierarchically based on the remote PE, team sending the message, and AM id
 //! - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE, defaults to [std::thread::available_parallelism] if available or else 4
 //! - `LAMELLAR_HEAP_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 4GB
 //!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc],
@@ -38,7 +38,7 @@
 //! - `LAMELLAR_ARRAY_INDEX_SIZE` - specify static or dynamic array index size
 //!     - possible values
 //!         - `static` -- constant usize indices
-//!         - `dynamic` -- default, only uses as large an int as necessary to index the array, bounded by themax number of elements on any PE.
+//!         - `dynamic` -- default, only uses as large an int as necessary to index the array, bounded by the max number of elements on any PE.
 //! - `LAMELLAR_AM_SIZE_THRESHOLD` - the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated, default: 100000
 //! - `LAMELLAR_ROFI_PROVIDER` - the provider for the rofi backend (only used with the rofi backend), default: "verbs"
 //! - `LAMELLAR_ROFI_DOMAIN` - the domain for the rofi backend (only used with the rofi backend), default: ""
@@ -46,9 +46,13 @@
 //! - `LAMELLAR_CMD_QUEUE` - selects the command queue protocol variant
 //!     - possible values
 //!         - `get` -- default, receiver issues RDMA GET for data
-//!         - `old` -- the original command queue protocol 
+//!         - `get2` -- GET-based protocol with eager send for small messages
+//!         - `getn` -- GET-based protocol with multiple in-flight slots per PE pair
+//!         - `old` -- the original command queue protocol
 //!         - `put` -- receiver allocates a buffer and sender PUTs data directly
 //!         - `put2` -- an optimized version of the PUT-based protocol
+//!         - `put2n` -- PUT2-based protocol with multiple in-flight slots per PE pair
+//!         - `put3` -- an alternative PUT-based protocol variant
 use serde::Deserialize;
 use std::sync::OnceLock;
 
@@ -249,7 +253,7 @@ pub struct Config {
     //used internally by the command queues
     #[serde(default = "default_cmd_buf_cnt")]
     pub cmd_buf_cnt: usize,
-    /// Command queue protocol variant: `old`, `get` (default) or `put`
+    /// Command queue protocol variant: `old`, `get` (default), `get2`, `getn`, `put`, `put2`, `put2n`, or `put3`
     #[serde(default = "default_cmd_queue")]
     pub cmd_queue: CmdQueue,
 

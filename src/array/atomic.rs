@@ -350,7 +350,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
             AtomicElement::NetworkAtomicElement(array) => array.fetch_and(val),
         }
     }
-    /// Atomically performs a bitwise and of `val` and the current value, returning the previous value
+    /// Atomically performs a bitwise or of `val` and the current value, returning the previous value
     ///
     /// Note: for native atomic types, [SeqCst][std::sync::atomic::Ordering::SeqCst] ordering is used
     ///
@@ -1242,7 +1242,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
+    /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -1308,7 +1308,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
+    /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_local_lock" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -1374,7 +1374,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
+    /// let slice = array1.local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_global_lock" call
     /// // but array1 will not be dropped until after mut_slice is dropped.

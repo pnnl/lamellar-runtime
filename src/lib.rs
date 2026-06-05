@@ -8,7 +8,7 @@
 //! # Some Nomenclature
 //! Throughout this documentation and APIs there are a few terms we end up reusing a lot, those terms and brief descriptions are provided below:
 //! - `PE` - a processing element, typically a multi threaded process, for those familiar with MPI, it corresponds to a Rank.
-//!     - Commonly you will create 1 PE per psychical CPU socket on your system, but it is just as valid to have multiple PE's per CPU
+//!     - Commonly you will create 1 PE per physical CPU socket on your system, but it is just as valid to have multiple PE's per CPU
 //!     - There may be some instances where `Node` (meaning a compute node) is used instead of `PE` in these cases they are interchangeable
 //! - `World` - an abstraction representing your distributed computing system
 //!     - consists of N PEs all capable of communicating with one another
@@ -51,12 +51,14 @@
 //! # Network Backends
 //!
 //! Lamellar relies on network providers called Lamellae to perform the transfer of data throughout the system.
-//! Currently three such Lamellae exist:
+//! Currently several such Lamellae exist (some require feature flags to enable):
 //! - `local` -  used for single-PE (single system, single process) development (this is the default),
 //! - `shmem` -  used for multi-PE (single system, multi-process) development, useful for emulating distributed environments (communicates through shared memory)
-//! - `rofi` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
-//!     - By default support for Rofi is disabled as using it relies on both the Rofi C-library and the libfabrics library, which may not be installed on your system.
-//!     - It can be enabled by adding ```features = ["enable-rofi-c"] or `features = ["enable-rofi-c-shared"]``` to the lamellar entry in your `Cargo.toml` file
+//! - `rofi-c` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
+//!     - Requires the Rofi C-library and libfabrics; enable with `features = ["enable-rofi-c"]` in your `Cargo.toml`
+//! - `libfabric` - multi-PE distributed backend using libfabrics directly; enable with `features = ["enable-libfabric"]`
+//! - `libfabric-async` - async variant of the libfabric backend; enable with `features = ["enable-libfabric-async"]`
+//! - `ucx` - multi-PE distributed backend using UCX; enable with `features = ["enable-ucx"]`
 //!
 //! The long term goal for lamellar is that you can develop using the `local` backend and then when you are ready to run distributed switch to the `rofi` backend with no changes to your code.
 //! Currently the inverse is true, if it compiles and runs using `rofi` it will compile and run when using `local` and `shmem` with no changes.
@@ -82,14 +84,14 @@
 //! fn main(){
 //!  let mut world = lamellar::LamellarWorldBuilder::new()
 //!         .with_lamellae( Default::default() ) //if "enable-rofi-c" feature is active default is rofi, otherwise  default is `Local`
-//!         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi,
+//!         //.with_lamellae( Backend::RofiC ) //explicity set the lamellae backend to rofi,
 //!         //.with_lamellae( Backend::Local ) //explicity set the lamellae backend to local
 //!         //.with_lamellae( Backend::Shmem ) //explicity set the lamellae backend to use shared memory
 //!         .build();
 //! }
 //! ```
 //! or by setting the following environment variable:
-//!```LAMELLAE_BACKEND="lamellae"``` where lamellae is one of `local`, `shmem`, or `rofi`.
+//!```LAMELLAR_BACKEND="lamellae"``` where lamellae is one of `local`, `shmem`, or `rofi`.
 //!
 //! # Creating and executing a Registered Active Message
 //! Please refer to the [Active Messaging][crate::active_messaging] documentation for more details and examples
@@ -124,7 +126,7 @@
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other PEs
 //!     let request = world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
-//!     request.block(); //both exec_am_all and exec_am_pe return futures that can be used to wait for completion and access any returned result
+//!     request.block(); //exec_am_all returns a future that can be used to wait for completion and access any returned result
 //! }
 //! ```
 //!

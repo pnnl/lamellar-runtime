@@ -1,6 +1,6 @@
 //! Distributed (and parallel) iteration of a LamellarArray
 //!
-//! This module provides distriubuted iteration capabilities for lamellar arrays,
+//! This module provides distributed iteration capabilities for lamellar arrays,
 //! where iteration over sub slices of the LamellarArray occurs in parallel on each PE.
 //!
 //! We try to minimize data movement as much as possible, but the runtime will manage remote transfers
@@ -147,7 +147,7 @@ pub trait DistIteratorLauncher: InnerArray {
 /// An interface for dealing with distributed iterators (intended as a parallel and distributed version of the standard iterator trait)
 ///
 /// The functions in this trait are available on all distributed iterators.
-/// Additonaly functionality can be found in the [IndexedDistributedIterator] trait:
+/// Additionally functionality can be found in the [IndexedDistributedIterator] trait:
 /// these methods are only available for distributed iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
 pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// The type of item this distributed iterator produces
@@ -177,7 +177,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     // /// given a local index return the corresponding global subarray index ( or None otherwise)
     // fn subarray_index(&self, index: usize) -> Option<usize>;
 
-    /// advance the internal iterator localtion by count elements
+    /// advance the internal iterator location by count elements
     fn advance_index(&mut self, count: usize);
 
     /// Applies `op` on each element of this iterator, producing a new iterator with only the elements that gave `true` results
@@ -278,7 +278,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
         Map::new(self, op)
     }
 
-    /// Similar to the Enumerate iterator (which can only be applied to `IndexedLocalIterators`), but the yielded indicies are only
+    /// Similar to the Enumerate iterator (which can only be applied to `IndexedDistributedIterators`), but the yielded indicies are only
     /// guaranteed to be unique and monotonically increasing, they should not be considered to have any relation to the underlying
     /// location of data in the local array.
     ///
@@ -290,8 +290,8 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let array = LocalLockArray::<usize>::new(&world,16,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter_mut().for_each(move|e| *e = my_pe).block();
-    /// let filter_iter = array.local_iter()
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block();
+    /// let filter_iter = array.dist_iter()
     ///                        .enumerate() //we can call enumerate before the filter
     ///                        .filter_map(|(i,e)| {
     ///                             if *e%2 == 0{ Some((i,*e as f32)) }
@@ -319,7 +319,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterForEachHandle::spawn] or [blocked on][DistIterForEachHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -350,7 +350,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterForEachHandle::spawn] or [blocked on][DistIterForEachHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -379,13 +379,13 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
         self.array().for_each_async(self, op)
     }
 
-    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule] policy.
+    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specified [Schedule] policy.
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterForEachHandle::spawn] or [blocked on][DistIterForEachHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -403,7 +403,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
         self.array().for_each_with_schedule(sched, self, op)
     }
 
-    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule] policy.
+    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specified [Schedule] policy.
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
     /// as each PE will only process elements local to itself
@@ -414,7 +414,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterForEachHandle::spawn] or [blocked on][DistIterForEachHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     ///
     /// # Examples
     ///```
@@ -444,7 +444,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///
     /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterReduceHandle::spawn] or [blocked on][DistIterReduceHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -469,7 +469,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the  reduced value.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterReduceHandle::spawn] or [blocked on][DistIterReduceHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     ///
     /// # Examples
     ///```
@@ -498,13 +498,13 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
     /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
     ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no guarantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
     ///
     /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCollectHandle::spawn] or [blocked on][DistIterCollectHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -535,11 +535,11 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
     /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
     ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no guarantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCollectHandle::spawn] or [blocked on][DistIterCollectHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -578,11 +578,11 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
     /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
     ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no guarantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCollectHandle::spawn] or [blocked on][DistIterCollectHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -626,11 +626,11 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// This function returns a future which needs to be driven to completion to retrieve the new LamellarArray.
     /// Calling await on the future will invoke an implicit barrier (allocating the resources for a new array).
     ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no guarantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCollectHandle::spawn] or [blocked on][DistIterCollectHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -667,13 +667,13 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
         self.array().collect_async_with_schedule(sched, self, d)
     }
 
-    /// Counts the number of the elements of the distriubted iterator
+    /// Counts the number of the elements of the distributed iterator
     ///
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve count.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCountHandle::spawn] or [blocked on][DistIterCountHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -689,13 +689,13 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
         self.array().count(self)
     }
 
-    /// Counts the number of the elements of the distriubted iterator, using the provided [Schedule] policy
+    /// Counts the number of the elements of the distributed iterator, using the provided [Schedule] policy
     ///
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve count.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCountHandle::spawn] or [blocked on][DistIterCountHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -720,7 +720,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the sum
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterSumHandle::spawn] or [blocked on][DistIterSumHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -749,7 +749,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the sum
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterSumHandle::spawn] or [blocked on][DistIterSumHandle::block]
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;

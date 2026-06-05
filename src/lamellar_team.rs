@@ -73,7 +73,7 @@ use std::marker::PhantomData;
 /// }
 ///
 /// #[lamellar::am]
-/// impl LamellarAm for MyAm{
+/// impl LamellarAM for MyAm{
 ///     async fn exec(self) {
 ///         println!("Hello from world PE{:?}, team PE{:?}",self.world_pe, self.team_pe);
 ///     }
@@ -211,7 +211,7 @@ impl LamellarTeam {
     }
 
     // #[doc(alias("One-sided", "onesided"))]
-    /// Returns nummber of threads on this PE (including the main thread)
+    /// Returns number of threads on this PE (including the main thread)
     ///
     /// # One-sided Operation
     /// The result is returned only on the calling PE
@@ -306,7 +306,7 @@ impl LamellarTeam {
     /// create a subteam containing any number of pe's from this team using the provided LamellarArch (layout)
     ///
     /// # Collective Operation
-    /// Requrires all PEs present within `parent` to enter the call otherwise deadlock will occur.
+    /// Requires all PEs present within `parent` to enter the call otherwise deadlock will occur.
     /// Note that this *does* include the PEs that will not exist within the new subteam.
     ///
     /// # Examples
@@ -407,7 +407,7 @@ impl LamellarTeam {
     #[doc(alias = "Collective")]
     /// EXPERIMENTAL: team wide synchronization method which blocks the calling task until all PEs in team have entered.
     /// This function allows for calling barrier in an async context without blocking the worker thread.
-    /// Care should be taken when using this function to avoid deadlocks,as it is easy to mismatch barrier calls accross threads and PEs.
+    /// Care should be taken when using this function to avoid deadlocks, as it is easy to mismatch barrier calls across threads and PEs.
     ///
     /// # Collective Operation
     /// Requires all PEs present within the team to enter the barrier otherwise deadlock will occur.
@@ -418,7 +418,8 @@ impl LamellarTeam {
     ///
     /// let world = lamellar::LamellarWorldBuilder::new().build();
     /// //do some work
-    /// world.barrier(); //block until all PEs have entered the barrier
+    /// let handle = world.async_barrier();
+    /// world.block_on(handle);
     ///```
     //#[tracing::instrument(skip_all, level = "debug")]
     pub fn async_barrier(&self) -> BarrierHandle {

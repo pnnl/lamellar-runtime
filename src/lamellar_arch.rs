@@ -7,7 +7,7 @@ pub trait LamellarArch: Send + Sync {
     fn num_pes(&self) -> usize;
     /// The id of the first (lowest numbered) PE in the team
     fn start_pe(&self) -> usize; //with respect to parent (maybe this should be min possible pe?)
-    /// The id of the first (highest numbered) PE in the team
+    /// The id of the last (highest numbered) PE in the team
     fn end_pe(&self) -> usize; //with respect to parent (maybe this should be max possible pe?)
                                //TODO expand example
     /// Converts a (sub)team PE id into the id space of the Parent team
@@ -301,6 +301,7 @@ impl LamellarArch for GlobalArch {
 ///    2,                                      // stride
 ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
 /// ));
+///```
 #[derive(Copy, Clone, std::hash::Hash, Debug)]
 pub struct StridedArch {
     pub(crate) num_pes: usize,
@@ -310,7 +311,7 @@ pub struct StridedArch {
 }
 
 impl StridedArch {
-    /// Construct a new StrideArch using a starting PE, the stride length, and the number of PEs to include in the Block
+    /// Construct a new StridedArch using a starting PE, the stride length, and the number of PEs to include in the strided team
     ///
     /// # Examples
     ///
@@ -323,6 +324,7 @@ impl StridedArch {
     ///    5, //num_pes in team
     /// );
     /// // the team will consist of the 5 pes => 0,4,8,12,16
+    ///```
     pub fn new(start_pe: usize, stride: usize, num_team_pes: usize) -> StridedArch {
         let mut end_pe = start_pe;
         for _i in 1..num_team_pes {
@@ -383,7 +385,7 @@ impl LamellarArch for StridedArch {
 
 /// A grouping of PE's forming a team using a "block" based distribution pattern.
 ///
-/// PEs in the group are contiguous (with respect to their PE id, not necessarily their pyhsical location in the distributed envrionment).
+/// PEs in the group are contiguous (with respect to their PE id, not necessarily their physical location in the distributed environment).
 ///
 /// # examples
 ///
@@ -398,6 +400,7 @@ impl LamellarArch for StridedArch {
 ///    0,                                      //start pe
 ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
 /// ));
+///```
 #[derive(Copy, Clone, std::hash::Hash, Debug)]
 pub struct BlockedArch {
     pub(crate) num_pes: usize,

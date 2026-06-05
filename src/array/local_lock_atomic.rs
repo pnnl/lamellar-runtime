@@ -1015,7 +1015,7 @@ impl<T: Dist + AmDist> LocalLockArrayReduceHandle<T> {
         self.lock_guard.array.clone().spawn(self)
     }
 
-    /// This method will block the caller until the associated Array Reduce Operation completesRuntimeWarning::BlockingCall("LocalLockArrayReduceHandle::block", "\<handle\>.spawn() or \<handle\>.await").print();
+    /// This method will block the caller until the associated Array Reduce Operation completes.
     pub fn block(self) -> Option<T> {
         RuntimeWarning::BlockingCall(
             "LocalLockArrayReduceHandle::block",
@@ -1070,7 +1070,7 @@ impl<T: Dist + AmDist + 'static> LocalLockReadGuard<T> {
     ///
     /// Lamellar converting to a [ReadOnlyArray] or [GlobalLockArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][LocalLockArrayReduceHandle::spawn] or [blocked on][LocalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1106,7 +1106,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LocalLockReadGuard<T> {
     /// Atomicity of data on remote PEs is only guaranteed while the remote operation is executing on the remote PE (once it has captured that PEs local lock).
     /// Remote data can change before and after the overall operation has completed.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][LocalLockArrayReduceHandle::spawn] or [blocked on][LocalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1137,7 +1137,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LocalLockReadGuard<T> {
     /// Atomicity of data on remote PEs is only guaranteed while the remote operation is executing on the remote PE (once it has captured that PEs local lock).
     /// Remote data can change before and after the overall operation has completed.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][LocalLockArrayReduceHandle::spawn] or [blocked on][LocalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1169,7 +1169,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LocalLockReadGuard
     /// Atomicity of data on remote PEs is only guaranteed while the remote operation is executing on the remote PE (once it has captured that PEs local lock).
     /// Remote data can change before and after the overall operation has completed.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][LocalLockArrayReduceHandle::spawn] or [blocked on][LocalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;
@@ -1200,7 +1200,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LocalLockReadGuard
     /// Atomicity of data on remote PEs is only guaranteed while the remote operation is executing on the remote PE (once it has captured that PEs local lock).
     /// Remote data can change before and after the overall operation has completed.
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][LocalLockArrayReduceHandle::spawn] or [blocked on][LocalLockArrayReduceHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
     /// # Examples
     /// ```
     /// use lamellar::array::prelude::*;

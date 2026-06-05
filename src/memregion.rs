@@ -365,7 +365,7 @@ pub(crate) trait RegisteredMemoryRegion<T: Remote> {
     /// let world = LamellarWorldBuilder::new().build();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
-    /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
+    /// let slice = unsafe { mem_region.as_slice() };
     ///```
     unsafe fn as_slice(&self) -> &[T];
 
@@ -387,7 +387,7 @@ pub(crate) trait RegisteredMemoryRegion<T: Remote> {
     /// let world = LamellarWorldBuilder::new().build();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
-    /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
+    /// let slice = unsafe { mem_region.as_mut_slice() };
     ///```
     unsafe fn as_mut_slice(&self) -> &mut [T];
 
@@ -569,7 +569,7 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     ///
     /// for pe in 0..num_pes{
-    ///    unsafe{dst_mem_region.put_unmanaged(pe,my_pe*src_mem_region.len(),&src_mem_region)};
+    ///    unsafe{dst_mem_region.put_buffer_unmanaged(pe,my_pe*src_mem_region.len(),&src_mem_region)};
     /// }
     /// dst_mem_region.wait_all();
     ///```
@@ -606,7 +606,7 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     ///
-    /// unsafe{dst_mem_region.put_all(my_pe*src_mem_region.len(),&src_mem_region)};
+    /// unsafe{dst_mem_region.put_all_buffer(my_pe*src_mem_region.len(),&src_mem_region)};
     ///
     /// unsafe {
     ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
@@ -632,7 +632,7 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     );
 
     #[doc(alias("One-sided", "onesided"))]
-    /// "At" (copies) data from remote memory location on the specified PE and returns it.
+    /// "Gets" (copies) data from remote memory location on the specified PE and returns it.
     /// After calling this function, a handle is returned that the user can use to retrieve the result.
     ///
     /// # Safety
@@ -654,7 +654,7 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     ///
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     ///
-    /// let result = src_mem_region.at(1,5).block();
+    /// let result = src_mem_region.get(1,5).block();
     ///```
     unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T>;
 
@@ -687,7 +687,7 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     /// for pe in 0..num_pes{
     ///     let start_i = pe*src_mem_region.len();
     ///     let end_i = start_i+src_mem_region.len();
-    ///     unsafe{src_mem_region.get(pe,0,dst_mem_region.sub_region(start_i..end_i))};
+    ///     unsafe{src_mem_region.get_buffer(pe, 0, src_mem_region.len())};
     /// }
     ///
     /// unsafe {
@@ -1435,7 +1435,7 @@ pub trait RemoteMemoryRegion {
     /// a `Result` and allows you to handle the error case when there is not enough memory.
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    /// Requires all PEs associated with the `team` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     fn alloc_shared_mem_region<T: Remote + std::marker::Sized>(
         &self,
@@ -1447,7 +1447,7 @@ pub trait RemoteMemoryRegion {
     /// There will be `size` number of `T` elements on each PE.
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    /// Requires all PEs associated with the `team` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     fn try_alloc_shared_mem_region<T: Remote + std::marker::Sized>(
         &self,

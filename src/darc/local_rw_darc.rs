@@ -91,10 +91,10 @@ impl<T> std::ops::DerefMut for LocalRwDarcWriteGuard<T> {
 /// A local read-write `Darc`
 ///
 /// Each PE maintains its own local read-write lock associated with the `LocalRwDarc`.
-/// Whenever the interior object is accessed on a PE the local lock is required to be aquired.
+/// Whenever the interior object is accessed on a PE the local lock is required to be acquired.
 /// When a thread acquires a Write lock it is guaranteed to the only thread with access to
 /// the interior object with respect to the PE it is executing on (no guarantees are made about what is occurring on other PEs).
-/// When a thread aquires a Read lock it may be one of many threads on the PE with access, but none of them will have mutable access.
+/// When a thread acquires a Read lock it may be one of many threads on the PE with access, but none of them will have mutable access.
 /// - Contrast with a `GlobalRwDarc`, which has a single global lock.
 /// - Contrast with a `Darc`, which also has local ownership but does not
 ///   allow modification unless the wrapped object itself provides it, e.g.
@@ -210,7 +210,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
     ///
     /// # Note
-    /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
+    /// the acquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
     ///
     /// # Examples
     ///
@@ -225,7 +225,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
-    ///         let counter = self.counter.read().await; //block until we get the write lock
+    ///         let counter = self.counter.read().await; //block until we get the read lock
     ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,counter);
     ///     }
     ///  }
