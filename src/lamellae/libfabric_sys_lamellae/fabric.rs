@@ -2438,7 +2438,7 @@ impl LibfabricSysAlloc {
             AtomicOp::Sub(_) => unsafe { Self::negate_atomic_value(src) },
             _ => src,
         };
-        let buf = std::slice::from_ref(&src);
+        let buf = std::slice::from_ref(src);
         // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
         let cg = &self.ofi.comm_group;
         let data_type = rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation");
@@ -2494,7 +2494,7 @@ impl LibfabricSysAlloc {
                     AtomicOp::Sub(_) => unsafe { Self::negate_atomic_value(src) },
                     _ => src,
                 };
-                let buf = std::slice::from_ref(&src);
+                let buf = std::slice::from_ref(src);
                 cg.post_get(blocking, || {
                     unsafe {
                         libfabric_sys::inlined_fi_fetch_atomic(
