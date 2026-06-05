@@ -686,15 +686,15 @@ impl Ofi {
 
     pub(crate) fn atomic_op_avail<T: 'static>(&self, op: AtomicOp<T>) -> bool {
         let op_kind = match op {
-            AtomicOp::Min(_) => AtomicOpKind::Min,
-            AtomicOp::Max(_) => AtomicOpKind::Max,
-            AtomicOp::Sum(_) => AtomicOpKind::Sum,
-            AtomicOp::Sub(_) => AtomicOpKind::Sum, // Sub can be implemented as Add with negative value
-            AtomicOp::Prod(_) => AtomicOpKind::Prod,
-            AtomicOp::BitOr(_) => AtomicOpKind::BitOr,
-            AtomicOp::BitXor(_) => AtomicOpKind::BitXor,
-            AtomicOp::BitAnd(_) => AtomicOpKind::BitAnd,
-            AtomicOp::Read => AtomicOpKind::Read,
+            AtomicOp::Min(_)| AtomicOp::FetchMin(_) => AtomicOpKind::Min,
+            AtomicOp::Max(_)| AtomicOp::FetchMax(_) => AtomicOpKind::Max,
+            AtomicOp::Sum(_)| AtomicOp::FetchSum(_) => AtomicOpKind::Sum,
+            AtomicOp::Sub(_)| AtomicOp::FetchSub(_) => AtomicOpKind::Sum, // Sub can be implemented as Add with negative value
+            AtomicOp::Prod(_)| AtomicOp::FetchProd(_) => AtomicOpKind::Prod,
+            AtomicOp::BitOr(_)| AtomicOp::FetchBitOr(_) => AtomicOpKind::BitOr,
+            AtomicOp::BitXor(_)| AtomicOp::FetchBitXor(_) => AtomicOpKind::BitXor,
+            AtomicOp::BitAnd(_)| AtomicOp::FetchBitAnd(_) => AtomicOpKind::BitAnd,
+            AtomicOp::Read(_) => AtomicOpKind::Read,
             AtomicOp::Write(_) => AtomicOpKind::Write,
             AtomicOp::Cas(_, _) => AtomicOpKind::Cas,
         };
@@ -1418,15 +1418,15 @@ impl Ofi {
 
 fn atomic_op_to_fi_atomic_op<T: 'static>(op: &AtomicOp<T>) -> u32 {
     match op {
-        AtomicOp::Min(_) => libfabric_sys::fi_op_FI_MIN,
-        AtomicOp::Max(_) => libfabric_sys::fi_op_FI_MAX,
-        AtomicOp::Sum(_) => libfabric_sys::fi_op_FI_SUM, 
-        AtomicOp::Sub(_) => libfabric_sys::fi_op_FI_SUM, // Sub can be implemented as Add with negative value
-        AtomicOp::Prod(_) => libfabric_sys::fi_op_FI_PROD,
-        AtomicOp::BitOr(_) => libfabric_sys::fi_op_FI_BOR,
-        AtomicOp::BitXor(_) => libfabric_sys::fi_op_FI_BXOR,
-        AtomicOp::BitAnd(_) => libfabric_sys::fi_op_FI_BAND,
-        AtomicOp::Read => libfabric_sys::fi_op_FI_ATOMIC_READ,
+        AtomicOp::Min(_) | AtomicOp::FetchMin(_) => libfabric_sys::fi_op_FI_MIN,
+        AtomicOp::Max(_) | AtomicOp::FetchMax(_) => libfabric_sys::fi_op_FI_MAX,
+        AtomicOp::Sum(_) | AtomicOp::FetchSum(_) => libfabric_sys::fi_op_FI_SUM, 
+        AtomicOp::Sub(_) | AtomicOp::FetchSub(_) => libfabric_sys::fi_op_FI_SUM, // Sub can be implemented as Add with negative value
+        AtomicOp::Prod(_) | AtomicOp::FetchProd(_) => libfabric_sys::fi_op_FI_PROD,
+        AtomicOp::BitOr(_) | AtomicOp::FetchBitOr(_) => libfabric_sys::fi_op_FI_BOR,
+        AtomicOp::BitXor(_) | AtomicOp::FetchBitXor(_) => libfabric_sys::fi_op_FI_BXOR,
+        AtomicOp::BitAnd(_) | AtomicOp::FetchBitAnd(_) => libfabric_sys::fi_op_FI_BAND,
+        AtomicOp::Read(_) => libfabric_sys::fi_op_FI_ATOMIC_READ,
         AtomicOp::Write(_) => libfabric_sys::fi_op_FI_ATOMIC_WRITE,
         AtomicOp::Cas(_, _) => libfabric_sys::fi_op_FI_CSWAP,
     }
@@ -1827,14 +1827,10 @@ static ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
 
 
 impl LibfabricSysAlloc {
-    unsafe fn negate_atomic_value<OFI: Copy>(value: OFI) -> OFI {
+  unsafe fn negate_atomic_value<OFI>(value: *mut OFI) {
         let num_bytes = std::mem::size_of::<OFI>();
         let mut bytes = vec![0u8; num_bytes];
-        std::ptr::copy_nonoverlapping(
-            (&value as *const OFI).cast::<u8>(),
-            bytes.as_mut_ptr(),
-            num_bytes,
-        );
+        std::ptr::copy(value.cast::<u8>(), bytes.as_mut_ptr(), num_bytes);
         for byte in bytes.iter_mut() {
             *byte = !*byte;
         }
@@ -1859,9 +1855,8 @@ impl LibfabricSysAlloc {
             }
         }
 
-        let mut result = std::mem::MaybeUninit::<OFI>::uninit();
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
-        result.assume_init()
+        // let mut result = std::mem::MaybeUninit::<OFI>::uninit();
+        std::ptr::copy(bytes.as_ptr(), value.cast::<u8>(), num_bytes);
     }
 
     pub(crate) fn new(
@@ -2413,7 +2408,7 @@ impl LibfabricSysAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &AtomicOp<T>,
+        op: &mut AtomicOp<T>,
         blocking: bool,
     ) {
         #[cfg(feature = "enable-on-node-shmem")]
@@ -2433,12 +2428,28 @@ impl LibfabricSysAlloc {
         let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
-        let src = op.src().expect("Atomic operation has no source");
-        let src = match op {
-            AtomicOp::Sub(_) => unsafe { Self::negate_atomic_value(src) },
-            _ => src,
+        
+        match op {
+            AtomicOp::Sub(src) => {
+                unsafe { Self::negate_atomic_value(src.as_mut().get_unchecked_mut()) }
+            }
+            AtomicOp::FetchMin(_)
+            | AtomicOp::FetchMax(_)
+            | AtomicOp::FetchSum(_)
+            | AtomicOp::FetchSub(_)
+            | AtomicOp::FetchProd(_)
+            | AtomicOp::FetchBitOr(_)
+            | AtomicOp::FetchBitXor(_)
+            | AtomicOp::FetchBitAnd(_) => {
+                panic!("Fetch atomic ops must use the fetch path")
+            }
+            AtomicOp::Cas(_, _) => {
+                panic!("Compare atomic ops must use the compare path")
+            }
+            _ => {}
         };
-        let buf = std::slice::from_ref(src);
+        let src = op.src();
+        let buf = unsafe { std::slice::from_raw_parts(src, 1) };
         // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
         let cg = &self.ofi.comm_group;
         let data_type = rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation");
@@ -2464,7 +2475,7 @@ impl LibfabricSysAlloc {
         &self,
         pe: usize,
         offset: usize,
-        op: &AtomicOp<T>,
+        op: &mut AtomicOp<T>,
         result: &mut [T],
         blocking: bool,
     ) {
@@ -2473,7 +2484,7 @@ impl LibfabricSysAlloc {
             let offset_bytes = offset * std::mem::size_of::<T>();
             if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
                 crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
-                return Ok(());
+                return;
             }
         }
 
@@ -2488,63 +2499,53 @@ impl LibfabricSysAlloc {
 
         let cg = &self.ofi.comm_group;
         let data_type = rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation");
-        match op.src() {
-            Some(src) => {
-                let src = match op {
-                    AtomicOp::Sub(_) => unsafe { Self::negate_atomic_value(src) },
-                    _ => src,
-                };
-                let buf = std::slice::from_ref(src);
-                cg.post_get(blocking, || {
-                    unsafe {
-                        libfabric_sys::inlined_fi_fetch_atomic(
-                            cg.ep,
-                            buf.as_ptr().cast(),
-                            buf.len(),
-                            self.mr_desc,
-                            result.as_mut_ptr().cast(),
-                            std::ptr::null_mut(),
-                            cg.mapped_addresses[pe],
-                            remote_dst_addr as u64,
-                            remote_key,
-                            data_type,
-                            atomic_op_to_fi_atomic_op(op),
-                            std::ptr::null_mut(),
-                        )
-                    }
-                });
+        match op {
+            AtomicOp::FetchSub(src) => {
+                unsafe { Self::negate_atomic_value(src.as_mut().get_unchecked_mut()) }
             }
-            None => {
-                let ptr = result.as_mut_ptr();
-                let buf_val = &result[0];
-                cg.post_get(blocking, || {
-                    unsafe {
-                        libfabric_sys::inlined_fi_fetch_atomic(
-                            cg.ep,
-                            std::slice::from_ref(buf_val).as_ptr().cast(),
-                            1,
-                            self.mr_desc,
-                            ptr.cast(),
-                            std::ptr::null_mut(),
-                            cg.mapped_addresses[pe],
-                            remote_dst_addr as u64,
-                            remote_key,
-                            data_type,
-                            atomic_op_to_fi_atomic_op(op),
-                            std::ptr::null_mut(),
-                        )
-                    }
-                });
+            AtomicOp::Min(_)
+            | AtomicOp::Max(_)
+            | AtomicOp::Sum(_)
+            | AtomicOp::Sub(_)
+            | AtomicOp::Prod(_)
+            | AtomicOp::BitOr(_)
+            | AtomicOp::BitXor(_)
+            | AtomicOp::BitAnd(_) => {
+                panic!("Non-fetch atomic ops must use the non-fetch path")
             }
+            AtomicOp::Cas(_, _) => {
+                panic!("Compare atomic ops must use the compare path")
+            }
+            _ => {}
         };
+        let src = op.src();
+        let buf = unsafe { std::slice::from_raw_parts(src, 1) };
+        cg.post_get(blocking, || {
+            unsafe {
+                libfabric_sys::inlined_fi_fetch_atomic(
+                    cg.ep,
+                    buf.as_ptr().cast(),
+                    buf.len(),
+                    self.mr_desc,
+                    result.as_mut_ptr().cast(),
+                    std::ptr::null_mut(),
+                    cg.mapped_addresses[pe],
+                    remote_dst_addr as u64,
+                    remote_key,
+                    data_type,
+                    atomic_op_to_fi_atomic_op(op),
+                    std::ptr::null_mut(),
+                )
+            }
+        });
     }
 
-    pub(crate) fn atomic_compare_exchange_op_inner<T: 'static>(
+ pub(crate) fn atomic_compare_exchange_op_inner<T: 'static + Copy>(
         &self,
         pe: usize,
         offset: usize,
-        current: T,
-        new: T,
+        current: *const T,
+        new: *const T,
         result: &mut [T],
         blocking: bool,
     ) {
@@ -2581,10 +2582,10 @@ impl LibfabricSysAlloc {
             unsafe {
                 libfabric_sys::inlined_fi_compare_atomic(
                     cg.ep,
-                    std::slice::from_ref(&new).as_ptr().cast(),
+                    new.cast(),
                     1,
                     std::ptr::null_mut(),
-                    std::slice::from_ref(&current).as_ptr().cast(),
+                    current.cast(),
                     std::ptr::null_mut(),
                     result.as_mut_ptr().cast(),
                     std::ptr::null_mut(),

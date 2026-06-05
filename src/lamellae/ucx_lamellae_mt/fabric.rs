@@ -19,7 +19,6 @@ use crate::{
 
 use pmi::{pmi::Pmi, PmiBuilder};
 use lamellar_ucx_sys::ucp_atomic_op_t;
-use pmi::{pmi::Pmi, pmix::PmiX};
 
 use std::sync::{
     atomic::{AtomicUsize, Ordering},

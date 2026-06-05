@@ -475,14 +475,6 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
         });
         compare_exchange_result(result, current)
     }
-    
-    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        async_std::task::block_on(async {
-            LibfabricAsyncAlloc::atomic_op_inner(self, pe, offset, op)
-                .await
-                .unwrap();
-        });
-    }
 }
 
 impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
@@ -662,13 +654,5 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
                 .unwrap();
         });
         compare_exchange_result(result, current)
-    }
-    
-    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        async_std::task::block_on(async {
-            LibfabricAsyncAlloc::atomic_op_inner(&self.alloc, pe, offset, op)
-                .await
-                .unwrap();
-        });
     }
 }

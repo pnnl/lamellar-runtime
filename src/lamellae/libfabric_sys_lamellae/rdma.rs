@@ -386,9 +386,15 @@ impl CommAllocRdma for LibfabricSysAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         unsafe {
-            LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), true);
+            LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), true)
         };
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -504,20 +510,20 @@ impl CommAllocRdma for LibfabricSysAlloc {
             scheduler: scheduler.clone(),
             counters,
             result: Box::new(T::default()),
+            // local_op: pe == self.ofi.my_pe,
         }
         .into()
     }
-
-    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+    fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
         let mut val = T::default();
         let val_slice = std::slice::from_mut(&mut val);
         unsafe {
-            LibfabricSysAlloc::inner_get_small(self, pe, offset, val_slice, true);
+            LibfabricSysAlloc::inner_get_small(self, pe, offset, val_slice, true)
         };
         val
         // let mut result = T::default();
         // let mut_result_slice = std::slice::from_mut(&mut result);
-        // LibfabricSysAlloc::atomic_fetch_op_inner(
+        // LibfabricAlloc::atomic_fetch_op_inner(
         //     self,
         //     pe,
         //     offset,
@@ -548,10 +554,16 @@ impl CommAllocRdma for LibfabricSysAlloc {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         let mut dst = vec![T::default(); len];
         unsafe {
-            self.inner_get(pe, offset, &mut dst, true);
+            self.inner_get(pe, offset, &mut dst, true)
         };
         dst
     }
@@ -577,12 +589,13 @@ impl CommAllocRdma for LibfabricSysAlloc {
     }
     fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         pe: usize,
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            LibfabricSysAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), true);
+            LibfabricSysAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), true)
         };
     }
 
@@ -624,14 +637,20 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
         assert_eq!(
             pe, self.remote_pe,
-            "put_blocking called on OneSidedLibfabricSysAlloc with incorrect pe: {} expected pe: {}",
+            "put_blocking called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
         unsafe {
-            LibfabricSysAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src), true);
+            LibfabricSysAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src), true)
         };
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
@@ -737,16 +756,16 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
         }
         .into()
     }
-    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+    fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
         assert_eq!(
             pe, self.remote_pe,
-            "blocking_get called on OneSidedLibfabricSysAlloc with incorrect pe: {} expected pe: {}",
+            "blocking_get called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
         let mut val = T::default();
         let val_slice = std::slice::from_mut(&mut val);
         unsafe {
-            LibfabricSysAlloc::inner_get_small(&self.alloc, pe, offset, val_slice, true);
+            LibfabricSysAlloc::inner_get_small(&self.alloc, pe, offset, val_slice, true)
         };
         val
     }
@@ -775,7 +794,13 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
         assert_eq!(
             pe, self.remote_pe,
             "blocking_get_buffer called on OneSidedLibfabricSysAlloc with incorrect pe: {} expected pe: {}",
@@ -784,7 +809,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
         let mut dst = vec![T::default(); len];
         unsafe {
             self.alloc
-                .inner_get(pe, offset, &mut dst, true);
+                .inner_get(pe, offset, &mut dst, true)
         };
         dst
     }
@@ -815,17 +840,18 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
     }
     fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         pe: usize,
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
     ) {
         assert_eq!(
             pe, self.remote_pe,
-            "blocking_get_into_buffer called on OneSidedLibfabricSysAlloc with incorrect pe: {} expected pe: {}",
+            "blocking_get_into_buffer called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
         unsafe {
-            LibfabricSysAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), true);
+            LibfabricSysAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), true)
         };
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
