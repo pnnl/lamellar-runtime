@@ -519,7 +519,7 @@ pub struct __GenericAtomicByteArray {
 }
 
 impl __GenericAtomicByteArray {
-    //#[doc(hidden)]
+    #[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<'_, ()> {
         let index = self
             .array
@@ -551,6 +551,7 @@ pub struct __GenericAtomicLocalDataIter<'a, T: Dist> {
 }
 
 impl<T: Dist> __GenericAtomicLocalData<T> {
+    #[doc(hidden)]
     pub fn at(&self, index: usize) -> GenericAtomicElementRef<'_, T> {
         GenericAtomicElementRef {
             array: &self.array,
@@ -558,6 +559,7 @@ impl<T: Dist> __GenericAtomicLocalData<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn get_mut(&self, index: usize) -> Option<GenericAtomicElementRef<'_, T>> {
         Some(GenericAtomicElementRef {
             array: &self.array,
@@ -565,10 +567,12 @@ impl<T: Dist> __GenericAtomicLocalData<T> {
         })
     }
 
+    #[doc(hidden)]
     pub fn len(&self) -> usize {
         unsafe { self.array.__local_as_mut_slice().len() }
     }
 
+    #[doc(hidden)]
     pub fn iter(&self) -> __GenericAtomicLocalDataIter<'_, T> {
         __GenericAtomicLocalDataIter {
             array: &self.array,
@@ -577,6 +581,7 @@ impl<T: Dist> __GenericAtomicLocalData<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn sub_data(&self, start_index: usize, end_index: usize) -> __GenericAtomicLocalData<T> {
         __GenericAtomicLocalData {
             array: self.array.clone(),

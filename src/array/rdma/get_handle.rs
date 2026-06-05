@@ -20,6 +20,11 @@ use crate::{
     AmHandle, AtomicFetchOpHandle, Dist, LamellarTask, OneSidedMemoryRegion,
 };
 
+/// Handle returned by single-element array RDMA get operations.
+///
+/// Resolves to `T` when driven to completion via `spawn()`, `block()`, or `.await`.
+/// Dropping this handle without doing so will only ensure completion if
+/// [`wait_all`][crate::LamellarArray::wait_all] or a barrier is subsequently called.
 pub struct ArrayRdmaGetHandle<T: Dist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) state: ArrayRdmaGetState<T>,
@@ -35,10 +40,28 @@ pub(crate) enum ArrayRdmaGetState<T: Dist> {
 }
 
 impl<T: Dist> ArrayRdmaGetHandle<T> {
-    /// This method will spawn the associated Array RDMA Operation on the work queue,
-    /// initiating the remote operation.
+    /// Enqueues the get operation on the runtime work queue and returns a [`LamellarTask<T>`]
+    /// that resolves to the retrieved element when the transfer is complete.
     ///
-    /// This function returns a handle that can be used to wait for the operation to complete
+    /// Prefer `spawn()` or `.await` over `block()` inside async contexts to avoid stalling
+    /// the executor.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world, num_pes, Distribution::Block).block();
+    ///
+    /// let handle = array.get(0);
+    /// let task = handle.spawn();
+    /// // do other work …
+    /// let val = task.block();
+    /// println!("PE{my_pe} got array[0] = {val}");
+    ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<T> {
         let task = match self.state {
@@ -65,6 +88,25 @@ impl<T: Dist> ArrayRdmaGetHandle<T> {
         self.spawned = true;
         task
     }
+    /// Blocks the current thread until the get transfer is complete and returns the retrieved
+    /// element.
+    ///
+    /// Emits a [`RuntimeWarning`][crate::warnings::RuntimeWarning] when called inside an async
+    /// context; use `spawn()` or `.await` there instead.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world, num_pes, Distribution::Block).block();
+    ///
+    /// let val = array.get(0).block();
+    /// println!("PE{my_pe} got array[0] = {val}");
+    ///```
     pub fn block(mut self) -> T {
         RuntimeWarning::BlockingCall(
             "ArrayRdmaHandle::block",
@@ -114,6 +156,11 @@ impl<T: Dist> Future for ArrayRdmaGetHandle<T> {
     }
 }
 
+/// Handle returned by multi-element array RDMA get operations that allocate their own output buffer.
+///
+/// Resolves to `Vec<T>` when driven to completion via `spawn()`, `block()`, or `.await`.
+/// Dropping this handle without doing so will only ensure completion if
+/// [`wait_all`][crate::LamellarArray::wait_all] or a barrier is subsequently called.
 #[pin_project]
 pub struct ArrayRdmaGetBufferHandle<T: Dist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
@@ -132,10 +179,29 @@ pub(crate) enum ArrayRdmaGetBufferState<T: Dist> {
 }
 
 impl<T: Dist> ArrayRdmaGetBufferHandle<T> {
-    /// This method will spawn the associated Array RDMA Operation on the work queue,
-    /// initiating the remote operation.
+    /// Enqueues the get operation on the runtime work queue and returns a
+    /// [`LamellarTask<Vec<T>>`] that resolves to the retrieved elements when the transfer is
+    /// complete.
     ///
-    /// This function returns a handle that can be used to wait for the operation to complete
+    /// Prefer `spawn()` or `.await` over `block()` inside async contexts to avoid stalling
+    /// the executor.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world, num_pes * 10, Distribution::Block).block();
+    ///
+    /// let handle = array.get_buffer(0, 5);
+    /// let task = handle.spawn();
+    /// // do other work …
+    /// let data = task.block();
+    /// println!("PE{my_pe} elements[0..5]: {:?}", data);
+    ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         let task = match self.state {
@@ -177,6 +243,25 @@ impl<T: Dist> ArrayRdmaGetBufferHandle<T> {
         self.spawned = true;
         task
     }
+    /// Blocks the current thread until the get transfer is complete and returns the retrieved
+    /// elements as `Vec<T>`.
+    ///
+    /// Emits a [`RuntimeWarning`][crate::warnings::RuntimeWarning] when called inside an async
+    /// context; use `spawn()` or `.await` there instead.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world, num_pes * 10, Distribution::Block).block();
+    ///
+    /// let data = array.get_buffer(0, 5).block();
+    /// println!("PE{my_pe} elements[0..5]: {:?}", data);
+    ///```
     pub fn block(mut self) -> Vec<T> {
         RuntimeWarning::BlockingCall(
             "ArrayRdmaHandle::block",
@@ -265,6 +350,13 @@ impl<T: Dist> Future for ArrayRdmaGetBufferHandle<T> {
     }
 }
 
+/// Handle returned by multi-element array RDMA get operations that write into a caller-supplied
+/// [`LamellarBuffer`].
+///
+/// Resolves to `()` when driven to completion via `spawn()`, `block()`, or `.await`; the
+/// transferred data is available in the original buffer afterwards.
+/// Dropping this handle without doing so will only ensure completion if
+/// [`wait_all`][crate::LamellarArray::wait_all] or a barrier is subsequently called.
 #[pin_project]
 pub struct ArrayRdmaGetIntoBufferHandle<T: Dist, B: AsLamellarBuffer<T>> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
@@ -287,10 +379,32 @@ pub(crate) enum ArrayRdmaGetIntoBufferState<T: Dist, B: AsLamellarBuffer<T>> {
 }
 
 impl<T: Dist, B: AsLamellarBuffer<T> + 'static> ArrayRdmaGetIntoBufferHandle<T, B> {
-    /// This method will spawn the associated Array RDMA Operation on the work queue,
-    /// initiating the remote operation.
+    /// Enqueues the get operation on the runtime work queue and returns a [`LamellarTask<()>`]
+    /// that resolves when the transfer into the caller-supplied buffer is complete.
     ///
-    /// This function returns a handle that can be used to wait for the operation to complete
+    /// The buffer passed to the originating `get_into_buffer*` call will contain the results
+    /// after this task completes. Prefer `spawn()` or `.await` over `block()` inside async
+    /// contexts to avoid stalling the executor.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world, num_pes * 10, Distribution::Block).block();
+    ///
+    /// let dst: Vec<usize> = vec![0usize; 5];
+    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let handle = array.get_into_buffer(0, buf);
+    /// let task = handle.spawn();
+    /// // do other work …
+    /// let buf = task.block();
+    /// // buf is the LamellarBuffer returned from the inner task — use try_unwrap to recover the Vec
+    ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
@@ -337,6 +451,30 @@ impl<T: Dist, B: AsLamellarBuffer<T> + 'static> ArrayRdmaGetIntoBufferHandle<T, 
         self.spawned = true;
         task
     }
+    /// Blocks the current thread until the get transfer into the caller-supplied buffer is
+    /// complete.
+    ///
+    /// The buffer passed to the originating `get_into_buffer*` call will contain the results
+    /// after this returns. Emits a [`RuntimeWarning`][crate::warnings::RuntimeWarning] when
+    /// called inside an async context; use `spawn()` or `.await` there instead.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world, num_pes * 10, Distribution::Block).block();
+    ///
+    /// let dst: Vec<usize> = vec![0usize; 5];
+    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = array.get_into_buffer(0, buf).block();
+    /// let result = buf.try_unwrap().expect("no other references exist");
+    /// println!("PE{my_pe} elements[0..5]: {:?}", result);
+    ///```
     pub fn block(mut self) {
         RuntimeWarning::BlockingCall(
             "ArrayRdmaHandle::block",

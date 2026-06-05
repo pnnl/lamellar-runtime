@@ -958,6 +958,7 @@ pub struct __NativeAtomicLocalDataIter<'a, T: Dist> {
 }
 
 impl<T: Dist> __NativeAtomicLocalData<T> {
+    #[doc(hidden)]
     pub fn at(&self, index: usize) -> NativeAtomicElementRef<'_, T> {
         NativeAtomicElementRef {
             array: &self.array,
@@ -965,6 +966,7 @@ impl<T: Dist> __NativeAtomicLocalData<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn get_mut(&self, index: usize) -> Option<NativeAtomicElementRef<'_, T>> {
         Some(NativeAtomicElementRef {
             array: &self.array,
@@ -972,10 +974,12 @@ impl<T: Dist> __NativeAtomicLocalData<T> {
         })
     }
 
+    #[doc(hidden)]
     pub fn len(&self) -> usize {
         self.end_index - self.start_index
     }
 
+    #[doc(hidden)]
     pub fn iter(&self) -> __NativeAtomicLocalDataIter<'_, T> {
         __NativeAtomicLocalDataIter {
             array: &self.array,
@@ -984,6 +988,7 @@ impl<T: Dist> __NativeAtomicLocalData<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn sub_data(&self, start_index: usize, end_index: usize) -> __NativeAtomicLocalData<T> {
         __NativeAtomicLocalData {
             array: self.array.clone(),
@@ -992,6 +997,7 @@ impl<T: Dist> __NativeAtomicLocalData<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn as_slice<A>(&self) -> Option<&[A]> {
         unsafe {
             let slice = self.array.__local_as_slice();

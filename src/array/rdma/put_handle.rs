@@ -11,6 +11,13 @@ use crate::{
     AmHandle, AtomicOpHandle, Dist, LamellarTask, RdmaHandle,
 };
 
+/// Handle returned by array RDMA put operations.
+///
+/// Represents a pending remote write. The transfer is not guaranteed to be
+/// complete until `spawn()`, `block()`, or `.await` is used to drive it to
+/// completion. Dropping this handle without doing so will only ensure
+/// completion if [`wait_all`][crate::LamellarArray::wait_all] or a barrier is
+/// subsequently called on the owning array or world.
 pub struct ArrayRdmaPutHandle<T: Dist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) state: ArrayRdmaPutState<T>,
@@ -28,10 +35,31 @@ pub(crate) enum ArrayRdmaPutState<T: Dist> {
 }
 
 impl<T: Dist> ArrayRdmaPutHandle<T> {
-    /// This method will spawn the associated Array RDMA Operation on the work queue,
-    /// initiating the remote operation.
+    /// Enqueues the put operation on the runtime work queue and returns a [`LamellarTask`]
+    /// that resolves to `()` when the transfer is complete.
     ///
-    /// This function returns a handle that can be used to wait for the operation to complete
+    /// Prefer `spawn()` or `.await` over `block()` inside async contexts to avoid stalling
+    /// the executor.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes, Distribution::Block).block();
+    ///
+    /// if my_pe == 0 {
+    ///     let handle = unsafe { array.put(0, my_pe) };
+    ///     let task = handle.spawn();
+    ///     // do other work …
+    ///     task.block();
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
@@ -58,6 +86,27 @@ impl<T: Dist> ArrayRdmaPutHandle<T> {
         self.spawned = true;
         task
     }
+    /// Blocks the current thread until the put transfer is complete.
+    ///
+    /// Emits a [`RuntimeWarning`][crate::warnings::RuntimeWarning] when called inside an async
+    /// context; use `spawn()` or `.await` there instead.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes, Distribution::Block).block();
+    ///
+    /// if my_pe == 0 {
+    ///     unsafe { array.put(0, my_pe) }.block();
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub fn block(mut self) {
         RuntimeWarning::BlockingCall(
             "ArrayRdmaHandle::block",

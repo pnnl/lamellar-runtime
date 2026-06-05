@@ -773,6 +773,7 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
 /// reconstruct the payload without knowing the generic parameters upfront. It remains public
 /// solely for generated runtime code while application logic should use the public
 /// `AtomicArray`/`AtomicLocalData` APIs.
+#[doc(hidden)]
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum __AtomicByteArray {
@@ -952,6 +953,16 @@ impl<'a, T: Dist + 'static> Iterator for AtomicLocalDataIter<'a, T> {
 }
 
 impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
+    /// Prints a summary of which atomic operations on this array are backed by NIC hardware atomics
+    /// vs. software (CPU atomic or Active Message) fallbacks.
+    ///
+    /// Useful for diagnosing performance: NIC-backed atomics avoid round-trip Active Messages,
+    /// while software fallbacks incur higher latency.
+    ///
+    /// # Output format
+    /// Each operation is listed with either:
+    /// - `[Comm: NIC RDMA, Op: NIC Atomic]` — the NIC handles the operation natively
+    /// - `[Comm: AM, Op: CPU atomic]` — the operation is performed via an Active Message on the target PE
     pub fn print_network_atomic_avail(&self) {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {

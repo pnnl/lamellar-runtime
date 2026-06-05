@@ -7,8 +7,15 @@ use crate::{
     memregion::{LamellarMemoryRegion, OneSidedMemoryRegion, SharedMemoryRegion},
 };
 
+/// Trait implemented by types that can serve as the backing store for a [`LamellarBuffer`].
+///
+/// Implementors include [`Vec<T>`], [`OneSidedMemoryRegion<T>`][crate::memregion::OneSidedMemoryRegion],
+/// [`SharedMemoryRegion<T>`][crate::memregion::SharedMemoryRegion], and internal
+/// [`CommSlice<T>`][crate::lamellae::CommSlice].
 pub trait AsLamellarBuffer<T: Remote>: Send + 'static {
+    /// Returns a shared slice of the backing data.
     fn as_slice(&self) -> &[T];
+    /// Returns a mutable slice of the backing data.
     fn as_mut_slice(&mut self) -> &mut [T];
 }
 
@@ -79,6 +86,39 @@ impl<T> BufferInner<T> {
     // }
 }
 
+/// A reference-counted, possibly sub-sliced wrapper around a buffer used as the destination
+/// for RDMA get operations.
+///
+/// `LamellarBuffer<T, B>` is the type returned by and passed into `get_into_buffer` /
+/// `get_into_buffer_unmanaged` methods on arrays and memory regions. It tracks the number of
+/// outstanding references so that the runtime can determine when the backing store is safe to
+/// reclaim or inspect.
+///
+/// # Constructors
+///
+/// | Method | Backing store | Safety |
+/// |--------|---------------|--------|
+/// | [`from_vec`][Self::from_vec] | `Vec<T>` | safe — takes ownership |
+/// | [`from_one_sided_memory_region`][Self::from_one_sided_memory_region] | [`OneSidedMemoryRegion<T>`][crate::memregion::OneSidedMemoryRegion] | `unsafe` |
+/// | [`from_shared_memory_region`][Self::from_shared_memory_region] | [`SharedMemoryRegion<T>`][crate::memregion::SharedMemoryRegion] | `unsafe` |
+///
+/// # Examples
+///```
+/// use lamellar::memregion::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+/// let my_pe = world.my_pe();
+/// let num_pes = world.num_pes();
+///
+/// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
+/// unsafe {
+///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+///         *elem = i;
+///     }
+///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+///     mem_region.get_into_buffer(my_pe * 10, buf).block();
+/// }
+///```
 pub struct LamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
     data: NonNull<BufferInner<B>>,
     range: Range<usize>,
@@ -127,9 +167,30 @@ impl<T: Remote, B: AsLamellarBuffer<T>> std::fmt::Debug for LamellarBuffer<T, B>
 // }
 
 impl<T: Remote> LamellarBuffer<T, SharedMemoryRegion<T>> {
-    /// unsafe because multiple handles to the same memory region can be created,
-    /// thus user must ensure that nothing else is mutating the memory region
-    /// while this buffer exists
+    /// Wraps a [`SharedMemoryRegion`] as a [`LamellarBuffer`] for use with RDMA get operations.
+    ///
+    /// # Safety
+    /// Multiple [`LamellarBuffer`] handles to the same region can be created. The caller must
+    /// ensure that no other reference mutates the memory region while this buffer exists.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
+    /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
+    /// unsafe {
+    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = i;
+    ///     }
+    ///     let buf = LamellarBuffer::from_shared_memory_region(dst);
+    ///     src.get_into_buffer(0, buf).block();
+    /// }
+    ///```
     pub unsafe fn from_shared_memory_region(mem_region: SharedMemoryRegion<T>) -> Self {
         let len = mem_region.len();
 
@@ -149,9 +210,33 @@ impl<T: Remote> From<SharedMemoryRegion<T>> for LamellarBuffer<T, SharedMemoryRe
 }
 
 impl<T: Remote> LamellarBuffer<T, OneSidedMemoryRegion<T>> {
-    /// unsafe because multiple handles to the same memory region can be created,
-    /// thus user must ensure that nothing else is mutating the memory region
-    /// while this buffer exists
+    /// Wraps a [`OneSidedMemoryRegion`] as a [`LamellarBuffer`] for use with RDMA get operations.
+    ///
+    /// Using an RDMA-registered one-sided region as the destination avoids an extra copy compared
+    /// to [`from_vec`][LamellarBuffer::<T, Vec<T>>::from_vec].
+    ///
+    /// # Safety
+    /// Multiple [`LamellarBuffer`] handles to the same region can be created. The caller must
+    /// ensure that no other reference mutates the memory region while this buffer exists.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
+    /// let dst: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
+    /// unsafe {
+    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = i;
+    ///     }
+    ///     let buf = LamellarBuffer::from_one_sided_memory_region(dst);
+    ///     src.get_into_buffer(my_pe * 10, buf).block();
+    /// }
+    ///```
     pub unsafe fn from_one_sided_memory_region(mem_region: OneSidedMemoryRegion<T>) -> Self {
         let len = mem_region.len();
         LamellarBuffer {
@@ -191,7 +276,30 @@ impl<T: Remote> From<CommSlice<T>> for LamellarBuffer<T, CommSlice<T>> {
 }
 
 impl<T: Remote> LamellarBuffer<T, Vec<T>> {
-    /// safe because the buffer takes ownership of the vec
+    /// Wraps a `Vec<T>` as a [`LamellarBuffer`] for use with RDMA get operations.
+    ///
+    /// This is the simplest way to create a destination buffer. The [`LamellarBuffer`] takes
+    /// ownership of the `Vec`, so no additional safety requirements apply. Retrieve the
+    /// `Vec` back with [`try_unwrap`][Self::try_unwrap] or [`async_unwrap`][Self::async_unwrap]
+    /// once the transfer is complete.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
+    /// unsafe {
+    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = i;
+    ///     }
+    ///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+    ///     mem_region.get_into_buffer(my_pe * 10, buf).block();
+    /// }
+    ///```
     pub fn from_vec(vec: Vec<T>) -> Self {
         let len = vec.len();
         LamellarBuffer {
@@ -209,14 +317,23 @@ impl<T: Remote> From<Vec<T>> for LamellarBuffer<T, Vec<T>> {
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
+    /// Returns the number of elements in the (possibly sub-sliced) buffer.
     pub fn len(&self) -> usize {
         self.range.end - self.range.start
     }
 
+    /// Returns `true` if the buffer contains no elements.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Splits the buffer at `at`, consuming `self` and returning two sub-buffers that share
+    /// the same backing store.
+    ///
+    /// Both halves must be driven to completion (or dropped) before the backing store is reclaimed.
+    ///
+    /// # Panics
+    /// Panics if `at > self.len()`.
     pub fn split(self, at: usize) -> (Self, Self) {
         unsafe {
             self.data
@@ -238,6 +355,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         (left, right)
     }
 
+    /// Splits off the tail of this buffer starting at `at`, returning it as a new sub-buffer.
+    /// `self` is truncated to `[0, at)` in-place.
+    ///
+    /// # Panics
+    /// Panics if `at > self.len()`.
     pub fn split_off(&mut self, at: usize) -> Self {
         unsafe {
             self.data
@@ -256,6 +378,10 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         right
     }
 
+    /// Attempts to reclaim ownership of the backing store.
+    ///
+    /// Succeeds (returns `Ok(B)`) when this is the sole remaining reference; otherwise
+    /// returns `Err(self)` so the caller can retry.
     pub fn try_unwrap(self) -> Result<B, Self> {
         if unsafe {
             self.data
@@ -272,6 +398,10 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         }
     }
 
+    /// Asynchronously waits until this is the sole remaining reference, then reclaims the
+    /// backing store.
+    ///
+    /// Yields via `async_std::task::yield_now` while other references exist.
     pub async fn async_unwrap(self) -> B {
         while unsafe {
             self.data
@@ -289,6 +419,10 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         data.data
     }
 
+    /// Resets the active slice window back to the full backing buffer, if this is the sole
+    /// remaining reference.
+    ///
+    /// Returns `true` on success; `false` if other references still exist.
     pub fn try_reset(&mut self) -> bool {
         if unsafe {
             self.data
@@ -305,10 +439,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         }
     }
 
+    /// Returns a shared slice of the active window of the buffer.
     pub fn as_slice(&self) -> &[T] {
         unsafe { &self.data.as_ref().data.as_slice()[self.range.clone()] }
     }
 
+    /// Returns a mutable slice of the active window of the buffer.
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { &mut self.data.as_mut().data.as_mut_slice()[self.range.clone()] }
     }

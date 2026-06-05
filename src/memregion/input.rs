@@ -10,6 +10,7 @@ use crate::{
     LamellarTeam,
 };
 
+#[doc(hidden)]
 #[derive(Clone)]
 pub enum MemregionRdmaInput<T: Remote> {
     LamellarMemRegion(LamellarMemoryRegion<T>),

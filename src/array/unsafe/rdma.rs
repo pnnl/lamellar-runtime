@@ -581,12 +581,111 @@ impl<T: Dist> UnsafeArray<T> {
 // }
 
 impl<T: Dist> UnsafeArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA put of a single element into the array at the given global `index`.
+    ///
+    /// The element is written to whichever PE owns that index according to the array's [`Distribution`].
+    /// Returns an [`ArrayRdmaPutHandle`] that must be `spawn()`ed or `block()`ed to drive the transfer.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced; concurrent reads or writes to the same location invoke
+    /// undefined behaviour. `index` must be within bounds of the global array.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes, Distribution::Block).block();
+    ///
+    /// // PE 0 writes its PE index into every element of the array
+    /// if my_pe == 0 {
+    ///     for i in 0..array.len() {
+    ///         unsafe { array.put(i, my_pe).block(); }
+    ///     }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put(&self, index: usize, data: T) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put(self, index, data, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a fire-and-forget one-sided RDMA put of a single element at the given global `index`.
+    ///
+    /// No completion handle is returned; use [`UnsafeArray::wait_all`] or a barrier to ensure
+    /// the transfer is complete before accessing the destination.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `index` must be within bounds of the global array.
+    /// The data value must remain valid until the NIC completes the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes, Distribution::Block).block();
+    ///
+    /// if my_pe == 0 {
+    ///     for i in 0..array.len() {
+    ///         unsafe { array.put_unmanaged(i, my_pe); }
+    ///     }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_unmanaged(&self, index: usize, data: T) {
         <Self as LamellarRdmaPut<T>>::put_unmanaged(self, index, data, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA put of a buffer into the array starting at global `index`.
+    ///
+    /// The buffer length determines how many elements are transferred; the runtime automatically
+    /// distributes writes across PEs according to the array's [`Distribution`].
+    /// Returns an [`ArrayRdmaPutHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. The index range `index..index+buf.len()` must be within
+    /// bounds of the global array.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let src = world.alloc_one_sided_mem_region::<usize>(10);
+    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    ///
+    /// // PE 0 writes its 10-element buffer into the first 10 elements of the array
+    /// if my_pe == 0 {
+    ///     unsafe { array.put_buffer(0, &src).block(); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
         index: usize,
@@ -594,6 +693,40 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put_buffer(self, index, buf.into(), Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a fire-and-forget one-sided RDMA put of a buffer starting at global `index`.
+    ///
+    /// No completion handle is returned; use [`UnsafeArray::wait_all`] or a barrier to ensure
+    /// all transfers are complete before accessing the destination.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. The index range `index..index+buf.len()` must be within
+    /// bounds of the global array. The source buffer must remain valid until the NIC completes
+    /// the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let src = world.alloc_one_sided_mem_region::<usize>(10);
+    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    ///
+    /// if my_pe == 0 {
+    ///     unsafe { array.put_buffer_unmanaged(0, &src); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
         index: usize,
@@ -601,12 +734,107 @@ impl<T: Dist> UnsafeArray<T> {
     ) {
         <Self as LamellarRdmaPut<T>>::put_buffer_unmanaged(self, index, buf.into(), Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA put of a single element directly to PE `pe` at `offset` within
+    /// that PE's local segment of the array.
+    ///
+    /// Unlike [`put`][UnsafeArray::put], this bypasses the global-index distribution logic and
+    /// addresses the target PE and offset directly.
+    /// Returns an [`ArrayRdmaPutHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and `offset` must be within
+    /// bounds of that PE's local memory region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    ///
+    /// // PE 0 writes 42 directly into PE 1's local offset 0
+    /// if my_pe == 0 && num_pes > 1 {
+    ///     unsafe { array.put_pe(1, 0, 42).block(); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_pe(&self, pe: usize, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put_pe(self, pe, offset, data, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a fire-and-forget one-sided RDMA put of a single element directly to PE `pe`
+    /// at `offset`.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and `offset` must be within
+    /// bounds of that PE's local memory region. The data value must remain valid until the NIC
+    /// completes the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    ///
+    /// if my_pe == 0 && num_pes > 1 {
+    ///     unsafe { array.put_pe_unmanaged(1, 0, 42); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T) {
         <Self as LamellarRdmaPut<T>>::put_pe_unmanaged(self, pe, offset, data, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA put of a buffer directly to PE `pe` starting at `offset` within
+    /// that PE's local segment of the array.
+    ///
+    /// Returns an [`ArrayRdmaPutHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and
+    /// `offset..offset+buf.len()` must be within bounds of that PE's local memory region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let src = world.alloc_one_sided_mem_region::<usize>(5);
+    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    ///
+    /// if my_pe == 0 && num_pes > 1 {
+    ///     unsafe { array.put_pe_buffer(1, 0, &src).block(); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_pe_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
         pe: usize,
@@ -615,6 +843,37 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put_pe_buffer(self, pe, offset, buf.into(), Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a fire-and-forget one-sided RDMA put of a buffer directly to PE `pe` at `offset`.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and
+    /// `offset..offset+buf.len()` must be within bounds of that PE's local memory region.
+    /// The source buffer must remain valid until the NIC completes the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let src = world.alloc_one_sided_mem_region::<usize>(5);
+    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    ///
+    /// if my_pe == 0 && num_pes > 1 {
+    ///     unsafe { array.put_pe_buffer_unmanaged(1, 0, &src); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_pe_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
         pe: usize,
@@ -623,12 +882,102 @@ impl<T: Dist> UnsafeArray<T> {
     ) {
         <Self as LamellarRdmaPut<T>>::put_pe_buffer_unmanaged(self, pe, offset, buf.into(), Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Broadcasts a single element to all PEs at `offset` within each PE's local segment of the array.
+    ///
+    /// Returns an [`ArrayRdmaPutHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `offset` must be within bounds of every PE's local
+    /// memory region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    ///
+    /// // PE 0 writes 42 into offset 0 on every PE's local segment
+    /// if my_pe == 0 {
+    ///     unsafe { array.put_all(0, 42).block(); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_all(&self, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put_all(self, offset, data, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Fire-and-forget broadcast of a single element to all PEs at `offset`.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `offset` must be within bounds of every PE's local
+    /// memory region. The data value must remain valid until all NIC transfers complete.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    ///
+    /// if my_pe == 0 {
+    ///     unsafe { array.put_all_unmanaged(0, 42); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_all_unmanaged(&self, offset: usize, data: T) {
         <Self as LamellarRdmaPut<T>>::put_all_unmanaged(self, offset, data, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Broadcasts a buffer to all PEs starting at `offset` within each PE's local segment of the array.
+    ///
+    /// Returns an [`ArrayRdmaPutHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `offset..offset+buf.len()` must be within bounds of
+    /// every PE's local memory region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let src = world.alloc_one_sided_mem_region::<usize>(5);
+    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    ///
+    /// // PE 0 broadcasts src into offset 0 on every PE's local segment
+    /// if my_pe == 0 {
+    ///     unsafe { array.put_all_buffer(0, &src).block(); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_all_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
         offset: usize,
@@ -636,6 +985,37 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put_all_buffer(self, offset, buf.into(), Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Fire-and-forget broadcast of a buffer to all PEs starting at `offset`.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `offset..offset+buf.len()` must be within bounds of
+    /// every PE's local memory region. The source buffer must remain valid until all NIC transfers
+    /// complete.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let src = world.alloc_one_sided_mem_region::<usize>(5);
+    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    ///
+    /// if my_pe == 0 {
+    ///     unsafe { array.put_all_buffer_unmanaged(0, &src); }
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    ///```
     pub unsafe fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
         offset: usize,
@@ -644,10 +1024,67 @@ impl<T: Dist> UnsafeArray<T> {
         <Self as LamellarRdmaPut<T>>::put_all_buffer_unmanaged(self, offset, buf.into(), Sealed)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA get of a single element at the given global `index`.
+    ///
+    /// Returns an [`ArrayRdmaGetHandle`] that resolves to `T` when `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced; concurrent writes to the same location invoke undefined
+    /// behaviour. `index` must be within bounds of the global array.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// // Every PE reads the element owned by PE 0
+    /// let val = unsafe { array.get(0).block() };
+    /// println!("PE{my_pe} got array[0] = {val}");
+    ///```
     pub unsafe fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
         <Self as LamellarRdmaGet<T>>::get(self, index, Sealed)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously gets a single element at the given global `index`, blocking until the
+    /// transfer completes.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `index` must be within bounds of the global array.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// let val = unsafe { array.blocking_get(0) };
+    /// println!("PE{my_pe} got array[0] = {val}");
+    ///```
     pub unsafe fn blocking_get(&self, index: usize) -> T {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             let res = self.mem_region.blocking_get(pe, offset);
@@ -657,9 +1094,78 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA get of `num_elems` elements starting at global `index`.
+    ///
+    /// The runtime handles cross-PE distribution automatically. Returns an
+    /// [`ArrayRdmaGetBufferHandle`] that resolves to `Vec<T>` when `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. The range `index..index+num_elems` must be within
+    /// bounds of the global array.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// // Fetch the first 10 elements of the global array into a Vec
+    /// let data = unsafe { array.get_buffer(0, 10).block() };
+    /// println!("PE{my_pe} first 10 elements: {:?}", data);
+    ///```
     pub unsafe fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA get of elements starting at global `index` into the provided
+    /// pre-allocated [`LamellarBuffer`].
+    ///
+    /// The number of elements transferred equals `data.len()`. Returns an
+    /// [`ArrayRdmaGetIntoBufferHandle`] that must be `spawn()`ed or `block()`ed.
+    /// Use [`LamellarBuffer::from_vec`] to wrap an owned `Vec` as the destination buffer.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. The range `index..index+data.len()` must be within
+    /// bounds of the global array and `data` must be large enough to hold all results.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// // Use a Vec as the destination buffer
+    /// let dst: Vec<usize> = vec![0usize; 10];
+    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = unsafe { array.get_into_buffer(0, buf).block() };
+    /// let result = buf.try_unwrap().expect("no other references exist");
+    /// println!("PE{my_pe} first 10 elements: {:?}", result);
+    ///```
     pub unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
@@ -667,6 +1173,41 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a fire-and-forget one-sided RDMA get into the provided [`LamellarBuffer`].
+    ///
+    /// No completion handle is returned; use [`UnsafeArray::wait_all`] or a barrier to determine
+    /// when the transfer is complete before reading from `data`.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. The range `index..index+data.len()` must be within
+    /// bounds of the global array. `data` must remain valid until the transfer completes.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// let dst: Vec<usize> = vec![0usize; 10];
+    /// let buf = LamellarBuffer::from_vec(dst);
+    /// unsafe { array.get_into_buffer_unmanaged(0, buf); }
+    /// world.wait_all();
+    /// world.barrier();
+    ///```
     pub unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
@@ -675,12 +1216,104 @@ impl<T: Dist> UnsafeArray<T> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged(self, index, data, Sealed)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA get of a single element directly from PE `pe` at `offset` within
+    /// that PE's local segment of the array.
+    ///
+    /// Unlike [`get`][UnsafeArray::get], this bypasses the global-index distribution logic.
+    /// Returns an [`ArrayRdmaGetHandle`] that resolves to `T` when `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and `offset` must be within
+    /// bounds of that PE's local memory region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// // Read PE 0's first local element directly
+    /// let val = unsafe { array.get_pe(0, 0).block() };
+    /// println!("PE{my_pe} read PE0[0] = {val}");
+    ///```
     pub unsafe fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously gets a single element from PE `pe` at `offset`, blocking until the transfer
+    /// completes.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and `offset` must be within
+    /// bounds of that PE's local memory region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// let val = unsafe { array.blocking_get_pe(0, 0) };
+    /// println!("PE{my_pe} read PE0[0] = {val}");
+    ///```
     pub unsafe fn blocking_get_pe(&self, pe: usize, offset: usize) -> T {
         self.mem_region.blocking_get(pe, offset)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA get of `num_elems` elements from PE `pe` starting at `offset`.
+    ///
+    /// Returns an [`ArrayRdmaGetBufferHandle`] that resolves to `Vec<T>` when `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and
+    /// `offset..offset+num_elems` must be within bounds of that PE's local memory region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// // Fetch 5 elements starting at PE 0's local offset 0
+    /// let data = unsafe { array.get_buffer_pe(0, 0, 5).block() };
+    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", data);
+    ///```
     pub unsafe fn get_buffer_pe(
         &self,
         pe: usize,
@@ -689,6 +1322,43 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a one-sided RDMA get from PE `pe` at `offset` into the provided pre-allocated
+    /// [`LamellarBuffer`].
+    ///
+    /// The number of elements transferred equals `data.len()`. Returns an
+    /// [`ArrayRdmaGetIntoBufferHandle`] that must be `spawn()`ed or `block()`ed.
+    /// Use [`LamellarBuffer::from_one_sided_memory_region`] or [`LamellarBuffer::from_vec`] to
+    /// construct the destination buffer.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and
+    /// `offset..offset+data.len()` must be within bounds of that PE's local memory region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// let dst = world.alloc_one_sided_mem_region::<usize>(5);
+    /// let buf = unsafe { LamellarBuffer::from_one_sided_memory_region(dst.clone()) };
+    /// unsafe { array.get_into_buffer_pe(0, 0, buf).block(); }
+    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", unsafe { dst.as_slice() });
+    ///```
     pub unsafe fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
@@ -697,6 +1367,43 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Performs a fire-and-forget one-sided RDMA get from PE `pe` at `offset` into the provided
+    /// [`LamellarBuffer`].
+    ///
+    /// No completion handle is returned; use [`UnsafeArray::wait_all`] or a barrier to determine
+    /// when the transfer is complete before reading from `data`.
+    ///
+    /// # Safety
+    /// Mutual exclusivity is not enforced. `pe` must be a valid PE index and
+    /// `offset..offset+data.len()` must be within bounds of that PE's local memory region.
+    /// `data` must remain valid until the transfer completes.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// unsafe {
+    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    /// }
+    /// array.barrier();
+    ///
+    /// let dst: Vec<usize> = vec![0usize; 5];
+    /// let buf = LamellarBuffer::from_vec(dst);
+    /// unsafe { array.get_into_buffer_unmanaged_pe(0, 0, buf); }
+    /// world.wait_all();
+    /// world.barrier();
+    ///```
     pub unsafe fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,

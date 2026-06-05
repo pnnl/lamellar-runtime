@@ -1,4 +1,4 @@
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 #![warn(unreachable_pub)]
 #![doc(test(attr(deny(unused_must_use))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]

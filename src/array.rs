@@ -640,10 +640,15 @@ where
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarReadArray<T: Dist + 'static> {
+    /// An [`UnsafeArray`] that supports read operations.
     UnsafeArray(UnsafeArray<T>),
+    /// A [`ReadOnlyArray`] — all elements are immutable by construction.
     ReadOnlyArray(ReadOnlyArray<T>),
+    /// An [`AtomicArray`] whose elements support atomic read operations.
     AtomicArray(AtomicArray<T>),
+    /// A [`LocalLockArray`] protected by a per-PE read/write lock.
     LocalLockArray(LocalLockArray<T>),
+    /// A [`GlobalLockArray`] protected by a single global read/write lock.
     GlobalLockArray(GlobalLockArray<T>),
 }
 

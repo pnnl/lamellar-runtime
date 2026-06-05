@@ -43,6 +43,7 @@ pub struct __ReadOnlyByteArray {
     pub(crate) array: __UnsafeByteArray,
 }
 impl __ReadOnlyByteArray {
+    #[doc(hidden)]
     pub fn local_data<T: Dist>(&self) -> &[T] {
         self.array.local_data()
     }

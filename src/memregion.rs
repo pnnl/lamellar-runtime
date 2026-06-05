@@ -58,7 +58,9 @@ use tracing::trace;
 /// In both these cases the solution would be to use the memregion handle to perfrom a `get` operation, transferring the data from a remote node into a local buffer.
 #[derive(Debug, Clone, Copy)]
 pub enum MemRegionError {
+    /// The memory region is not local to this PE; use a `get` operation to transfer data first.
     MemNotLocalError,
+    /// The memory region's address or size is not properly aligned for the requested element type.
     MemNotAlignedError,
 }
 

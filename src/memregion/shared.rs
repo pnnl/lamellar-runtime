@@ -296,18 +296,141 @@ impl<T: Remote> SharedMemoryRegion<T> {
         self.sub_region_size
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Initiates a remote write of a single element to the given `pe` at `index` in this shared memory region.
+    ///
+    /// Returns an [`RdmaHandle`] representing the in-flight transfer. The transfer is not
+    /// guaranteed complete until the handle is driven via `.await`, `spawn()`, or `block()`.
+    ///
+    /// # Safety
+    /// This call is always unsafe because mutual exclusivity is not enforced — other PEs
+    /// may read or write overlapping locations concurrently. The fabric provider may not
+    /// have copied `data` by the time this call returns.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.put(my_pe, my_pe, my_pe).block();
+    /// }
+    /// world.wait_all();
+    /// world.barrier();
+    ///```
     pub unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
         RTMemoryRegionRDMA::<T>::put(self, pe, index, data)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Writes a single element to the given `pe` at `index` and **blocks** until the transfer is complete.
+    ///
+    /// Unlike [`put`][Self::put], this call does not return until the data has been delivered;
+    /// no handle is needed for completion detection.
+    ///
+    /// # Safety
+    /// This call is always unsafe because mutual exclusivity is not enforced — other PEs
+    /// may read or write overlapping locations concurrently.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.put_blocking(my_pe, my_pe, my_pe);
+    /// }
+    /// world.barrier();
+    ///```
     pub unsafe fn put_blocking(&self, pe: usize, index: usize, data: T) {
         RTMemoryRegionRDMA::<T>::put_blocking(self, pe, index, data)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Initiates a remote write of a single element to the given `pe` **without** tracking the
+    /// transfer in the runtime's completion bookkeeping.
+    ///
+    /// The caller is entirely responsible for ensuring the transfer is complete before accessing
+    /// the destination. [`wait_all`][Self::wait_all] and [`barrier`][crate::LamellarEnv::barrier]
+    /// do **not** track unmanaged operations.
+    ///
+    /// # Safety
+    /// This call is always unsafe because mutual exclusivity is not enforced and there is no
+    /// runtime-tracked handle for completion detection.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.put_unmanaged(my_pe, my_pe, my_pe);
+    /// }
+    /// // caller is responsible for ensuring completion
+    /// world.barrier();
+    ///```
     pub unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
         RTMemoryRegionRDMA::<T>::put_unmanaged(self, pe, index, data)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Initiates a remote write of a contiguous buffer to the given `pe` at `index` in this shared memory region.
+    ///
+    /// Accepts any type that implements `Into<MemregionRdmaInput<T>>`, including
+    /// [`OneSidedMemoryRegion<T>`], [`SharedMemoryRegion<T>`], and slices thereof.
+    ///
+    /// Returns an [`RdmaHandle`] representing the in-flight transfer. The data buffer must
+    /// not be dropped or mutated until the transfer completes.
+    ///
+    /// # Safety
+    /// This call is always unsafe because:
+    /// * Mutual exclusivity is not enforced — other PEs may concurrently access the destination.
+    /// * Multi-element transfers are not collectively atomic.
+    /// * The fabric provider may not have copied the source by the time this call returns.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
+    /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
+    /// unsafe {
+    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = my_pe * 10 + i;
+    ///     }
+    ///     dst.put_buffer(my_pe, my_pe * 10, src).block();
+    /// }
+    /// world.wait_all();
+    /// world.barrier();
+    ///```
     pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
         pe: usize,
@@ -317,6 +440,40 @@ impl<T: Remote> SharedMemoryRegion<T> {
         RTMemoryRegionRDMA::<T>::put_buffer(self, pe, index, data.into())
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Initiates a remote write of a contiguous buffer to the given `pe` **without** tracking
+    /// the transfer in the runtime's completion bookkeeping.
+    ///
+    /// The caller is entirely responsible for ensuring the transfer is complete before accessing
+    /// either the source or destination.
+    ///
+    /// # Safety
+    /// This call is always unsafe because:
+    /// * Mutual exclusivity is not enforced — other PEs may concurrently access the destination.
+    /// * Multi-element transfers are not collectively atomic.
+    /// * There is no runtime-tracked handle; the caller must arrange for completion detection.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
+    /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
+    /// unsafe {
+    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = my_pe * 10 + i;
+    ///     }
+    ///     dst.put_buffer_unmanaged(my_pe, my_pe * 10, src);
+    /// }
+    /// world.barrier();
+    ///```
     pub unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
         pe: usize,
@@ -326,12 +483,100 @@ impl<T: Remote> SharedMemoryRegion<T> {
         RTMemoryRegionRDMA::<T>::put_buffer_unmanaged(self, pe, index, data.into())
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Broadcasts a single element to **all** PEs at `index` in this shared memory region.
+    ///
+    /// Returns an [`RdmaHandle`] representing the in-flight transfer.
+    ///
+    /// # Safety
+    /// This call is always unsafe because mutual exclusivity is not enforced — other PEs
+    /// may read or write overlapping locations concurrently.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates transfers to all PEs; remote PEs are not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1).block();
+    /// if my_pe == 0 {
+    ///     unsafe { mem_region.put_all(0, 42usize).block(); }
+    /// }
+    /// world.wait_all();
+    /// world.barrier();
+    ///```
     pub unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T> {
         RTMemoryRegionRDMA::<T>::put_all(self, index, data)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Broadcasts a single element to **all** PEs at `index` **without** tracking the transfers
+    /// in the runtime's completion bookkeeping.
+    ///
+    /// The caller is entirely responsible for ensuring all transfers are complete.
+    ///
+    /// # Safety
+    /// This call is always unsafe because mutual exclusivity is not enforced and there is no
+    /// runtime-tracked handle for completion detection.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates transfers to all PEs; remote PEs are not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1).block();
+    /// if my_pe == 0 {
+    ///     unsafe { mem_region.put_all_unmanaged(0, 42usize); }
+    /// }
+    /// world.barrier();
+    ///```
     pub unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
         RTMemoryRegionRDMA::<T>::put_all_unmanaged(self, index, data)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Broadcasts a contiguous buffer to **all** PEs at `index` in this shared memory region.
+    ///
+    /// Returns an [`RdmaHandle`] representing the in-flight transfers.
+    ///
+    /// # Safety
+    /// This call is always unsafe because:
+    /// * Mutual exclusivity is not enforced — other PEs may concurrently access the destination.
+    /// * Multi-element transfers are not collectively atomic.
+    /// * The fabric provider may not have copied the source by the time this call returns.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates transfers to all PEs; remote PEs are not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
+    /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
+    /// unsafe {
+    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = i;
+    ///     }
+    ///     if my_pe == 0 {
+    ///         dst.put_all_buffer(0, src).block();
+    ///     }
+    /// }
+    /// world.wait_all();
+    /// world.barrier();
+    ///```
     pub unsafe fn put_all_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
         index: usize,
@@ -339,6 +584,41 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ) -> RdmaHandle<T> {
         RTMemoryRegionRDMA::<T>::put_all_buffer(self, index, data.into())
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Broadcasts a contiguous buffer to **all** PEs at `index` **without** tracking the transfers
+    /// in the runtime's completion bookkeeping.
+    ///
+    /// The caller is entirely responsible for ensuring all transfers are complete.
+    ///
+    /// # Safety
+    /// This call is always unsafe because:
+    /// * Mutual exclusivity is not enforced — other PEs may concurrently access the destination.
+    /// * Multi-element transfers are not collectively atomic.
+    /// * There is no runtime-tracked handle; the caller must arrange for completion detection.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates transfers to all PEs; remote PEs are not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
+    /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
+    /// unsafe {
+    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = i;
+    ///     }
+    ///     if my_pe == 0 {
+    ///         dst.put_all_buffer_unmanaged(0, src);
+    ///     }
+    /// }
+    /// world.barrier();
+    ///```
     pub unsafe fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
         index: usize,
@@ -347,12 +627,106 @@ impl<T: Remote> SharedMemoryRegion<T> {
         RTMemoryRegionRDMA::<T>::put_all_buffer_unmanaged(self, index, data.into());
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Fetches a single element from the given `pe` at `index` in this shared memory region.
+    ///
+    /// Returns an [`RdmaGetHandle`] whose `block()` / `.await` resolves to `T`.
+    ///
+    /// # Safety
+    /// This call is always unsafe because mutual exclusivity is not enforced — other PEs
+    /// may be writing to the source location concurrently.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.put(my_pe, my_pe, my_pe).block();
+    ///     world.barrier();
+    ///     let val = mem_region.get(my_pe, my_pe).block();
+    ///     assert_eq!(val, my_pe);
+    /// }
+    ///```
     pub unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
         RTMemoryRegionRDMA::<T>::get(self, pe, index)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Fetches a contiguous slice of `len` elements from the given `pe` at `index`.
+    ///
+    /// Returns an [`RdmaGetBufferHandle`] whose `block()` / `.await` resolves to a `Vec<T>`.
+    ///
+    /// # Safety
+    /// This call is always unsafe because:
+    /// * Mutual exclusivity is not enforced — other PEs may concurrently write to the source.
+    /// * Multi-element transfers are not collectively atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
+    /// unsafe {
+    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = i;
+    ///     }
+    ///     let data: Vec<usize> = mem_region.get_buffer(my_pe, my_pe * 10, 10).block();
+    ///     assert_eq!(data.len(), 10);
+    /// }
+    ///```
     pub unsafe fn get_buffer(&self, pe: usize, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
         RTMemoryRegionRDMA::<T>::get_buffer(self, pe, index, len)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Fetches data from the given `pe` at `index` into a caller-supplied [`LamellarBuffer`].
+    ///
+    /// Returns an [`RdmaGetIntoBufferHandle`] whose `block()` / `.await` resolves to `()`;
+    /// the fetched data is available through the [`LamellarBuffer`] after completion.
+    ///
+    /// Use [`LamellarBuffer::from_vec`] to wrap a `Vec<T>` as the destination, or
+    /// [`LamellarBuffer::from_one_sided_memory_region`] to use a pinned RDMA-registered buffer.
+    ///
+    /// # Safety
+    /// This call is always unsafe because:
+    /// * Mutual exclusivity is not enforced — other PEs may concurrently write to the source.
+    /// * Multi-element transfers are not collectively atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
+    /// unsafe {
+    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = i;
+    ///     }
+    ///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+    ///     mem_region.get_into_buffer(my_pe, my_pe * 10, buf).block();
+    /// }
+    ///```
     pub unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
@@ -361,6 +735,42 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ) -> RdmaGetIntoBufferHandle<T, B> {
         RTMemoryRegionRDMA::<T>::get_into_buffer(self, pe, index, data)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Fetches data from the given `pe` into a caller-supplied [`LamellarBuffer`] **without**
+    /// tracking the transfer in the runtime's completion bookkeeping.
+    ///
+    /// The caller is entirely responsible for ensuring the transfer is complete before reading
+    /// the buffer.
+    ///
+    /// # Safety
+    /// This call is always unsafe because:
+    /// * Mutual exclusivity is not enforced — other PEs may concurrently write to the source.
+    /// * Multi-element transfers are not collectively atomic.
+    /// * There is no runtime-tracked handle; the caller must arrange for completion detection.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
+    /// unsafe {
+    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///         *elem = i;
+    ///     }
+    ///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+    ///     mem_region.get_into_buffer_unmanaged(my_pe, my_pe * 10, buf);
+    /// }
+    /// // caller is responsible for ensuring completion before reading the buffer
+    /// world.barrier();
+    ///```
     pub unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
@@ -370,6 +780,33 @@ impl<T: Remote> SharedMemoryRegion<T> {
         RTMemoryRegionRDMA::<T>::get_into_buffer_unmanaged(self, pe, index, data);
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically stores `val` at `index` on the given `pe` using a network-level atomic write.
+    ///
+    /// Returns an [`AtomicOpHandle`] representing the in-flight operation.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds and that
+    /// the surrounding memory access pattern does not violate invariants.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, my_pe).block();
+    /// }
+    /// world.wait_all();
+    /// world.barrier();
+    ///```
     pub unsafe fn atomic_store(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
         self.mr.as_base::<T>().atomic_op(
             pe,
@@ -377,6 +814,35 @@ impl<T: Remote> SharedMemoryRegion<T> {
             AtomicOp::Write(Box::pin(val)),
         )
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically stores `val` at `index` on the given `pe` **without** tracking the operation
+    /// in the runtime's completion bookkeeping.
+    ///
+    /// The caller is entirely responsible for ensuring the operation is complete before
+    /// reading the destination.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds and there
+    /// is no runtime-tracked handle for completion detection.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store_unmanaged(my_pe, my_pe, my_pe);
+    /// }
+    /// world.barrier();
+    ///```
     pub unsafe fn atomic_store_unmanaged(&self, pe: usize, index: usize, val: T) {
         //we need to do the offsetting here since we are going directly through the inner alloc
 
@@ -386,6 +852,33 @@ impl<T: Remote> SharedMemoryRegion<T> {
             AtomicOp::Write(Box::pin(val)),
         );
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically loads the element at `index` on the given `pe`.
+    ///
+    /// Returns an [`AtomicFetchOpHandle`] whose `block()` / `.await` resolves to the fetched `T`.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, my_pe).block();
+    ///     let val = mem_region.atomic_load(my_pe, my_pe).block();
+    ///     assert_eq!(val, my_pe);
+    /// }
+    ///```
     pub unsafe fn atomic_load(&self, pe: usize, index: usize) -> AtomicFetchOpHandle<T> {
         // let res = MaybeUninit::uninit().assume_init();
         self.mr.as_base::<T>().atomic_fetch_op(
@@ -394,6 +887,34 @@ impl<T: Remote> SharedMemoryRegion<T> {
             AtomicOp::Read(Box::pin(std::mem::zeroed())),
         )
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically swaps the element at `index` on the given `pe` with `val`, returning the
+    /// previous value.
+    ///
+    /// Returns an [`AtomicFetchOpHandle`] whose `block()` / `.await` resolves to the old `T`.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, my_pe).block();
+    ///     let old = mem_region.atomic_swap(my_pe, my_pe, 0usize).block();
+    ///     assert_eq!(old, my_pe);
+    /// }
+    ///```
     pub unsafe fn atomic_swap(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
         // let res = MaybeUninit::uninit().assume_init();
         self.mr.as_base::<T>().atomic_fetch_op(
@@ -402,6 +923,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
             AtomicOp::Write(Box::pin(val)),
         )
     }
+
+    /// Blocks until all outstanding RDMA operations issued by this PE on this memory region
+    /// have completed.
     pub fn wait_all(&self) {
         self.mr.wait_all();
     }

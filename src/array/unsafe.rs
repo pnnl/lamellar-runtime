@@ -159,6 +159,7 @@ pub struct __UnsafeByteArray {
 }
 
 impl __UnsafeByteArray {
+    #[doc(hidden)]
     pub fn mut_local_data<T: Dist>(&self) -> &mut [T] {
         unsafe {
             let u8_slice = self.inner.local_as_mut_slice();
@@ -169,6 +170,7 @@ impl __UnsafeByteArray {
             )
         }
     }
+    #[doc(hidden)]
     pub fn local_data<T: Dist>(&self) -> &[T] {
         self.mut_local_data()
     }

@@ -926,6 +926,7 @@ pub struct __NetworkAtomicLocalDataIter<'a, T: Dist> {
 }
 
 impl<T: Dist> __NetworkAtomicLocalData<T> {
+    #[doc(hidden)]
     pub fn at(&self, index: usize) -> NetworkAtomicElementRef<'_, T> {
         NetworkAtomicElementRef {
             array: &self.array,
@@ -933,6 +934,7 @@ impl<T: Dist> __NetworkAtomicLocalData<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn get_mut(&self, index: usize) -> Option<NetworkAtomicElementRef<'_, T>> {
         Some(NetworkAtomicElementRef {
             array: &self.array,
@@ -940,10 +942,12 @@ impl<T: Dist> __NetworkAtomicLocalData<T> {
         })
     }
 
+    #[doc(hidden)]
     pub fn len(&self) -> usize {
         self.end_index - self.start_index
     }
 
+    #[doc(hidden)]
     pub fn iter(&self) -> __NetworkAtomicLocalDataIter<'_, T> {
         __NetworkAtomicLocalDataIter {
             array: &self.array,
@@ -952,6 +956,7 @@ impl<T: Dist> __NetworkAtomicLocalData<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn sub_data(&self, start_index: usize, end_index: usize) -> __NetworkAtomicLocalData<T> {
         __NetworkAtomicLocalData {
             array: self.array.clone(),
@@ -960,6 +965,7 @@ impl<T: Dist> __NetworkAtomicLocalData<T> {
         }
     }
 
+    #[doc(hidden)]
     pub fn as_slice<A>(&self) -> Option<&[A]> {
         unsafe {
             let slice = self.array.__local_as_slice();
