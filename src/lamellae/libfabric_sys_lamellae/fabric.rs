@@ -148,7 +148,10 @@ impl CommGroup{
 
             self.progress();
             unsafe {
-                let _ = libfabric_sys::inlined_fi_cntr_wait(cntr, prev_expected_cnt as u64, -1);
+                let ret = libfabric_sys::inlined_fi_cntr_wait(cntr, prev_expected_cnt as u64, -1);
+                if ret != 0 {
+                    panic!("Error waiting on {} counter: {}", _dir, ret);
+                }
             }
 
             cur_cnt = unsafe { libfabric_sys::inlined_fi_cntr_read(cntr) as u64 };
@@ -192,7 +195,7 @@ impl CommGroup{
         self.put_cnt.fetch_max(old_put_cntr, Ordering::SeqCst);
         loop {
             let ret = fun();
-            if ret >= 0 {
+            if ret == 0 {
                 break;
             } else if ret == -(libfabric_sys::FI_EAGAIN as isize) {
                 self.progress();
@@ -598,7 +601,7 @@ impl Ofi {
         avail &= if ret != 0 {
             false
         } else {
-            count > 0
+            true
         };
 
         let ret = unsafe {libfabric_sys::inlined_fi_fetch_atomicvalid(
@@ -610,7 +613,7 @@ impl Ofi {
         avail &= if ret != 0 {
             false
         } else {
-            count > 0
+            true
         };
 
         let ret = unsafe {libfabric_sys::inlined_fi_compare_atomicvalid(
@@ -622,7 +625,7 @@ impl Ofi {
         avail &= if ret != 0 {
             false
         } else {
-            count > 0
+            true
         };
         avail
     }
@@ -649,7 +652,7 @@ impl Ofi {
 
         };
 
-        let mut avail = false;
+        let mut avail = true;
         let ret = unsafe {libfabric_sys::inlined_fi_atomicvalid(
             cg.ep,
             data_type, 
@@ -659,7 +662,7 @@ impl Ofi {
         avail &= if ret != 0 {
             false
         } else {
-            count > 0
+            true
         };
 
         let ret = unsafe {libfabric_sys::inlined_fi_fetch_atomicvalid(
@@ -672,7 +675,7 @@ impl Ofi {
             false        
         } 
         else {
-            count > 0
+            true
         };
         avail
     }
@@ -812,7 +815,7 @@ impl Ofi {
         mem: &[u8],
         mr: *mut libfabric_sys::fid_mr,
     ) -> HashMap<usize, RemoteMemAddressInfo> {
-        let (mc, av_set_addr) = self.create_mc_group(pes);
+        let (_mc, av_set_addr) = self.create_mc_group(pes);
         let cg = &self.comm_group;
         let addr = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode } & (libfabric_sys::FI_MR_VIRT_ADDR | libfabric_sys::fi_mr_mode_FI_MR_BASIC) as i32 != 0 {
             mem.as_ptr() as u64
@@ -1417,7 +1420,8 @@ fn atomic_op_to_fi_atomic_op<T: 'static>(op: &AtomicOp<T>) -> u32 {
     match op {
         AtomicOp::Min(_) => libfabric_sys::fi_op_FI_MIN,
         AtomicOp::Max(_) => libfabric_sys::fi_op_FI_MAX,
-        AtomicOp::Sum(_) | AtomicOp::Sub(_) => libfabric_sys::fi_op_FI_SUM, // Sub can be implemented as Add with negative value
+        AtomicOp::Sum(_) => libfabric_sys::fi_op_FI_SUM, 
+        AtomicOp::Sub(_) => libfabric_sys::fi_op_FI_SUM, // Sub can be implemented as Add with negative value
         AtomicOp::Prod(_) => libfabric_sys::fi_op_FI_PROD,
         AtomicOp::BitOr(_) => libfabric_sys::fi_op_FI_BOR,
         AtomicOp::BitXor(_) => libfabric_sys::fi_op_FI_BXOR,
@@ -1438,6 +1442,15 @@ fn rust_type_to_fi_type<T: 'static>() -> Option<u32> {
         Some(libfabric_sys::fi_datatype_FI_UINT32)
     } else if tid == std::any::TypeId::of::<u64>() {
         Some(libfabric_sys::fi_datatype_FI_UINT64)
+    } else if tid == std::any::TypeId::of::<usize>() {
+        #[cfg(target_pointer_width = "64")]
+        {
+            Some(libfabric_sys::fi_datatype_FI_UINT64)
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            Some(libfabric_sys::fi_datatype_FI_UINT32)
+        }
     } else if tid == std::any::TypeId::of::<u128>() {
         Some(libfabric_sys::fi_datatype_FI_UINT128)
     } else if tid == std::any::TypeId::of::<i8>() {
@@ -1448,6 +1461,15 @@ fn rust_type_to_fi_type<T: 'static>() -> Option<u32> {
         Some(libfabric_sys::fi_datatype_FI_INT32)
     } else if tid == std::any::TypeId::of::<i64>() {
         Some(libfabric_sys::fi_datatype_FI_INT64)
+    } else if tid == std::any::TypeId::of::<isize>() {
+        #[cfg(target_pointer_width = "64")]
+        {
+            Some(libfabric_sys::fi_datatype_FI_INT64)
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            Some(libfabric_sys::fi_datatype_FI_INT32)
+        }
     } else if tid == std::any::TypeId::of::<i128>() {
         Some(libfabric_sys::fi_datatype_FI_INT128)
     } else if tid == std::any::TypeId::of::<f32>() {
