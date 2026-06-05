@@ -19,7 +19,6 @@ use crate::{
 
 use pmi::{pmi::Pmi, PmiBuilder};
 use lamellar_ucx_sys::ucp_atomic_op_t;
-use pmi::{pmi::Pmi, pmix::PmiX};
 
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -105,7 +104,7 @@ impl UcxWorld {
         )
         .unwrap();
         Self::warmup_peer_puts(
-            &my_pmi,
+            my_pmi.clone(),
             &utility_comm_group.worker,
             &exchange_buffer,
             my_pe,
@@ -281,7 +280,7 @@ impl UcxWorld {
     // Found this was necessary in the offchance that the first call to a intranode PE
     // happened simultaneously (in a MT environment) with other operations like progress or flush
     fn warmup_peer_puts(
-        pmi: &Arc<PmiX>,
+        pmi: Arc<dyn Pmi>,
         worker: &Arc<Worker>,
         exchange_buffer: &UcxMtAlloc,
         my_pe: usize,

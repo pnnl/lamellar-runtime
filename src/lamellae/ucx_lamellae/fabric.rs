@@ -31,7 +31,6 @@ use pmi::pmi::{Pmi, PmiBuilder};
 use std::ffi::c_void;
 
 use lamellar_ucx_sys::ucp_atomic_op_t;
-use pmi::{pmi::Pmi, pmix::PmiX};
 
 use std::{
     collections::HashMap,
@@ -83,7 +82,7 @@ impl UcxBarrier {
         let my_barrier = self.sub_counter.fetch_add(1, Ordering::SeqCst);
         let phase_offset = (my_barrier as usize & 1) * self.num_pes;
         let barrier_alloc = &self.sub_buffer;
-        let barrier_vec = barrier_alloc.as_mut_slice::<u32>();
+        let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<u32>() };
         let mut last_seen_guard = self.sub_last_seen.lock().unwrap();
         let last_seen_vec = last_seen_guard.as_mut_slice();
         trace!(target: "ucx", "PE {} entering sub barrier id: {my_barrier} with pes: {:?} ", self.my_pe, pes);
@@ -171,7 +170,7 @@ impl UcxBarrier {
                 // let _recv_pe = (my_pe as i64
                 //     - i as i64 * (n as i64 + 1).pow(round as u32))
                 // .rem_euclid(num_pes as i64);
-                let barrier_vec = barrier_alloc.as_mut_slice::<usize>();
+                let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
 
                 while my_barrier > barrier_vec[round * n + i - 1] {
                     barrier_alloc.worker.progress();
@@ -280,7 +279,7 @@ impl UcxWorld {
         )
         .unwrap();
 
-        Self::warmup_peer_puts(&my_pmi, &worker, &exchange_buffer, my_pe, num_pes);
+        Self::warmup_peer_puts(my_pmi.clone(), &worker, &exchange_buffer, my_pe, num_pes);
 
 
         let barrier_buffer = Self::initial_alloc(
@@ -349,7 +348,7 @@ impl UcxWorld {
     // happened simultaneously (in a MT environment) with other operations like progress or flush
     // if this becomes a bottleneck it may be sufficient to just do a put to each node instead of each PE, but for now we will do it to each PE to be safe
     fn warmup_peer_puts(
-        pmi: &Arc<PmiX>,
+        pmi: Arc<dyn Pmi>,
         worker: &Arc<Worker>,
         exchange_buffer: &UcxAlloc,
         my_pe: usize,
