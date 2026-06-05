@@ -2,7 +2,7 @@ use crate::{
     lamellae::{
         comm::atomic::atomic_type_supported,
         comm::{AtomicOp, CommInfo, CommProgress, CommShutdown},
-        AllocError, AllocResult, CommAlloc, CommAllocAddr, CommAllocInner,
+        AllocError, AllocResult, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner,
     },
     Backend,
 };

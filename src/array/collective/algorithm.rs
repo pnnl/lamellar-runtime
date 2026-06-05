@@ -2,6 +2,7 @@ use std::sync::{Arc, atomic::AtomicUsize};
 
 use async_std::task::yield_now;
 use crate::Distribution;
+use crate::scheduler::Scheduler;
 use crate::{ActiveMessaging, AsLamellarBuffer, BroadcastInput, Dist, ElementArithmeticOps, ElementBitWiseOps, GenericAtomicArray, GlobalLockArray, LamellarArray, LamellarBuffer, NativeAtomicArray, ReadOnlyOps, array::NetworkAtomicArray, lamellae::{CommAlloc, CommAllocRdma, collective::{ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer}}};
 
 pub(crate) trait AtomicArrayOpsForCollectiveOps<T: Dist>: LamellarArray<T> + ActiveMessaging + ReadOnlyOps<T> {
@@ -342,17 +343,19 @@ impl<T: Dist + ElementArithmeticOps> AtomicArrayOpsForCollectiveOpsUpdate<T> for
 
 pub(crate) async fn do_scatter<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
     root: usize,
 ) -> Vec<T>
 {
-    do_scatter_impl(array, sync_alloc, index, local_length, root).await
+    do_scatter_impl(array, &scheduler, sync_alloc, index, local_length, root).await
 }
 
 pub(crate) async fn do_scatter_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -360,7 +363,7 @@ pub(crate) async fn do_scatter_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + 
     mut result: LamellarBuffer<T, B>,
 )
 {
-    let res = do_scatter_impl(array, sync_alloc, index, local_length, root).await;
+    let res = do_scatter_impl(array, &scheduler, sync_alloc, index, local_length, root).await;
     result.as_mut_slice().iter_mut().zip(res.iter()).for_each(|(dst, src)| {
         *dst = *src;
     });
@@ -368,6 +371,7 @@ pub(crate) async fn do_scatter_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + 
 
 pub(crate) async fn do_scatter_impl<A, T>(
     array: A,
+    scheduler: &Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -395,7 +399,7 @@ where
     let start = if local == root {
         index + local_offset
     } else {
-        let remote_index: usize = sync_alloc.blocking_get(root, 0);
+        let remote_index: usize = sync_alloc.blocking_get(scheduler, root, 0);
         remote_index + local_offset
     };
     // let indices = array.get_global_indices(root, num_pes, start, count);
@@ -407,6 +411,7 @@ where
 
 pub(crate) async fn do_gather_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -416,12 +421,12 @@ pub(crate) async fn do_gather_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + C
     let my_pe = array.my_pe();
     match target {
         RootOrLamellarBuffer::Root(mut buffer) => {
-            do_gather_impl(array, sync_alloc, index, local_length, my_pe, buffer.as_mut_slice()).await;
+            do_gather_impl(array, &scheduler, sync_alloc, index, local_length, my_pe, buffer.as_mut_slice()).await;
         },
         RootOrLamellarBuffer::NotRoot(root) => {
             // Some(vec![T::default(); array.num_pes() * local_length]) // allocate temporary buffer for gather
             let mut buf = Vec::new(); // non-root PEs don't need to allocate a result buffer
-            do_gather_impl(array, sync_alloc, index, local_length, root, buf.as_mut_slice()).await;
+            do_gather_impl(array, &scheduler, sync_alloc, index, local_length, root, buf.as_mut_slice()).await;
         }
     };
 }
@@ -429,6 +434,7 @@ pub(crate) async fn do_gather_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + C
 
 pub(crate) async fn do_gather<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -442,7 +448,7 @@ pub(crate) async fn do_gather<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: D
     } else {
         Vec::new() // non-root PEs don't need to allocate a result buffer
     };
-    do_gather_impl(array, sync_alloc, index, local_length, root, &mut res).await;
+    do_gather_impl(array, &scheduler, sync_alloc, index, local_length, root, &mut res).await;
 
     if my_pe == root {
         Some(res)
@@ -454,6 +460,7 @@ pub(crate) async fn do_gather<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: D
 
 pub(crate) async fn do_gather_impl<A, T>(
     array: A,
+    scheduler:  &Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -480,7 +487,7 @@ where
 
     if local == root {
         for i in 0..num_pes{
-            let remote_index: usize = sync_alloc.blocking_get(i, 0);
+            let remote_index: usize = sync_alloc.blocking_get(scheduler, i, 0);
             // let indices = array.get_global_indices(i, num_pes, remote_index, count);
             let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, i, num_pes, remote_index, count).await;
             // let tmp = array.batch_load(indices).await;
@@ -495,6 +502,7 @@ where
 
 pub(crate) async fn do_all_to_all_impl<A, T>(
     array: A,
+    scheduler: &Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -516,7 +524,7 @@ where
     array.async_barrier().await; // ensure all PEs have initialized their sync array
 
     for i in 0..num_pes {
-        let remote_index: usize = sync_alloc.blocking_get(i, 0);
+        let remote_index: usize = sync_alloc.blocking_get(scheduler, i, 0);
         // let indices = array.get_global_indices(i, num_pes, remote_index, count);
         let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, i, num_pes, remote_index, count).await;
 
@@ -532,6 +540,7 @@ where
 
 pub(crate) async fn do_all_to_all<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -539,24 +548,26 @@ pub(crate) async fn do_all_to_all<A: AtomicArrayOpsForCollectiveOps<T> + Clone, 
 {
     let num_pes = array.num_pes();
     let mut res = vec![T::default(); num_pes * local_length]; // allocate result buffer
-    do_all_to_all_impl(array, sync_alloc, index, local_length, &mut res).await;
+    do_all_to_all_impl(array, &scheduler, sync_alloc, index, local_length, &mut res).await;
     res
 }
 
 pub(crate) async fn do_all_to_all_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
     mut result: LamellarBuffer<T, B>,
 )
 {
-    do_all_to_all_impl(array, sync_alloc, index, local_length, &mut result.as_mut_slice()).await;
+    do_all_to_all_impl(array, &scheduler, sync_alloc, index, local_length, &mut result.as_mut_slice()).await;
 }
 
 
 pub(crate) async fn do_broadcast_impl<A, T>(
     array: A,
+    scheduler: &Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -579,7 +590,7 @@ where
     array.async_barrier().await; // ensure all PEs have initialized their sync array
 
     if local != root {
-        let remote_index: usize = sync_alloc.blocking_get(root, 0);
+        let remote_index: usize = sync_alloc.blocking_get(scheduler, root, 0);
         // let indices = array.get_global_indices(root, array.num_pes(), remote_index, count);
         let res = Some(AtomicArrayOpsForCollectiveOps::batch_load(&array, root, array.num_pes(), remote_index, count).await);
         array.async_barrier().await; // ensure all PEs have received their data before returning
@@ -594,17 +605,19 @@ where
 
 pub(crate) async fn do_broadcast<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
     root: usize,
 ) -> Option<Vec<T>>
 {
-    do_broadcast_impl(array, sync_alloc, index, local_length, root).await
+    do_broadcast_impl(array, &scheduler, sync_alloc, index, local_length, root).await
 }
 
 pub(crate) async fn do_broadcast_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     local_length: usize,
     target: RootSrcOrLamellarBuffer<T, B>,
@@ -612,10 +625,10 @@ pub(crate) async fn do_broadcast_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> 
     let my_pe = array.my_pe();
     match target {
         RootSrcOrLamellarBuffer::Root(index) =>  {
-            do_broadcast_impl(array, sync_alloc, index, local_length, my_pe).await;
+            do_broadcast_impl(array, &scheduler, sync_alloc, index, local_length, my_pe).await;
         },
         RootSrcOrLamellarBuffer::NotRoot(mut result, root) => {
-            let res = do_broadcast_impl(array, sync_alloc, 0, local_length, root).await;
+            let res = do_broadcast_impl(array, &scheduler, sync_alloc, 0, local_length, root).await;
 
             if let Some(data) = res {
                 result.as_mut_slice().iter_mut().zip(data.iter()).for_each(|(dst, src)| {
@@ -629,6 +642,7 @@ pub(crate) async fn do_broadcast_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> 
 
 pub(crate) async fn do_all_gather<A, T>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -638,12 +652,13 @@ where
     T: Dist,
 {
     let mut result = vec![T::default(); array.num_pes() * local_length];
-    do_all_gather_impl(array, sync_alloc, index, local_length, &mut result).await;
+    do_all_gather_impl(array, &scheduler, sync_alloc, index, local_length, &mut result).await;
     result
 }
 
 pub(crate) async fn do_all_gather_in_buffer<A, T, B: AsLamellarBuffer<T> >(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -653,11 +668,12 @@ where
     A: AtomicArrayOpsForCollectiveOps<T> + Clone,
     T: Dist,
 {
-    do_all_gather_impl(array, sync_alloc, index, local_length, result.as_mut_slice()).await;
+    do_all_gather_impl(array, &scheduler, sync_alloc, index, local_length, result.as_mut_slice()).await;
 }
 
 pub(crate) async fn do_all_gather_impl<A, T>(
     array: A,
+    scheduler: &Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -685,7 +701,7 @@ where
     array.async_barrier().await; // ensure all PEs have published their offsets before starting the gather
     
     for i in 0..num_pes{
-        let remote_index: usize = sync_alloc.blocking_get(i, 0);
+        let remote_index: usize = sync_alloc.blocking_get(scheduler, i, 0);
         let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, i, num_pes, remote_index, count).await;
 
         res[i*count..i*count + count].iter_mut().zip(tmp.iter()).for_each(|(dst, src)| {
@@ -725,6 +741,7 @@ fn round_down_power_of_two(val: usize) -> usize {
 
 async fn do_all_reduce_impl<A, T, F>(
     array: A,
+    scheduler: &Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -773,7 +790,7 @@ where
             while sync_slice[2 + local - 1].load(std::sync::atomic::Ordering::SeqCst) != round {
                 yield_now().await; // wait for data to arrive
             }
-            let remote_index: usize = sync_alloc.blocking_get(local - 1, 0);
+            let remote_index: usize = sync_alloc.blocking_get(scheduler, local - 1, 0);
             // let first_global_index = array.first_global_index_for_pe(local - 1).unwrap();
             // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
             // let indices = array.get_global_indices(local - 1, num_pes, remote_index, count);
@@ -813,7 +830,7 @@ where
             round += 1;
             
             // receive data from partner
-            let remote_index: usize = sync_alloc.blocking_get(partner, 0);
+            let remote_index: usize = sync_alloc.blocking_get(scheduler, partner, 0);
             let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, partner, num_pes, remote_index, count).await;
 
             sync_alloc.put_unmanaged(round, partner_pe, 2 + my_pe); // signal partner PE that I'm done processing their data
@@ -843,7 +860,7 @@ where
             while sync_slice[2 + local + 1].load(std::sync::atomic::Ordering::SeqCst) != round {
                 yield_now().await; // wait for reduced data to arrive
             }
-            let remote_index: usize = sync_alloc.blocking_get(local + 1, 0);
+            let remote_index: usize = sync_alloc.blocking_get(scheduler, local + 1, 0);
             // let first_global_index = array.first_global_index_for_pe(local + 1).unwrap();
             // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
             // let indices = array.get_global_indices(local + 1, array.num_pes(), remote_index, count);
@@ -863,13 +880,14 @@ where
 
 pub(crate) async fn do_all_reduce<A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, T: Dist + ElementArithmeticOps>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
 ) -> Vec<T> {
     let mut result = vec![T::default(); local_length];
-    do_all_reduce_impl(array, sync_alloc, index, local_length, |dst, val| {
+    do_all_reduce_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
         dst.update_local_data(index, local_length, val, op.clone());
     }, &mut result)
     .await;
@@ -879,6 +897,7 @@ pub(crate) async fn do_all_reduce<A: AtomicArrayOpsForCollectiveOpsUpdate<T> + C
 
 pub(crate) async fn do_all_reduce_bitwise<A, T>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -889,7 +908,7 @@ where
     T: Dist + ElementBitWiseOps,
 {
     let mut result = vec![T::default(); local_length];
-    do_all_reduce_impl(array, sync_alloc, index, local_length, |dst, val| {
+    do_all_reduce_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
         dst.update_local_data_bitwise(index, local_length, &val, op.clone());
     }, &mut result)
     .await;
@@ -899,13 +918,14 @@ where
 
 pub(crate) async fn do_all_reduce_in_buffer<A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, T: Dist + ElementArithmeticOps, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
     mut result: LamellarBuffer<T, B>,
 )  {
-    do_all_reduce_impl(array, sync_alloc, index, local_length, |dst, val| {
+    do_all_reduce_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
         dst.update_local_data(index, local_length, val, op.clone());
     }, result.as_mut_slice())
     .await
@@ -913,6 +933,7 @@ pub(crate) async fn do_all_reduce_in_buffer<A: AtomicArrayOpsForCollectiveOpsUpd
 
 pub(crate) async fn do_all_reduce_bitwise_in_buffer<A, T, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -923,7 +944,7 @@ where
     A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone,
     T: Dist + ElementBitWiseOps,
 {
-    do_all_reduce_impl(array, sync_alloc, index, local_length, |dst, val| {
+    do_all_reduce_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
         dst.update_local_data_bitwise(index, local_length, &val, op.clone());
     }, &mut result.as_mut_slice())
     .await
@@ -933,6 +954,7 @@ where
 
 async fn do_reduce_impl<A, T, F>(
     array: A,
+    scheduler: &Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -973,7 +995,7 @@ where
                 while sync_slice[2 + partner].load(std::sync::atomic::Ordering::SeqCst) != step {
                     yield_now().await; // wait for remote PE to signal that data is ready to move on to the next round
                 }
-                let remote_index: usize = sync_alloc.blocking_get(partner, 0);
+                let remote_index: usize = sync_alloc.blocking_get(&scheduler, partner, 0);
                 let tmp = AtomicArrayOpsForCollectiveOps::batch_load(&array, partner, num_pes, remote_index, count).await;
 
                 apply_op(&array, tmp.as_slice());
@@ -1004,6 +1026,7 @@ where
 
 pub(crate) async fn do_reduce<T: ElementArithmeticOps, A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1017,7 +1040,7 @@ pub(crate) async fn do_reduce<T: ElementArithmeticOps, A: AtomicArrayOpsForColle
     } else {
         Vec::new() // non-root PEs don't need to allocate a result buffer
     };
-    do_reduce_impl(array, sync_alloc, index, local_length, root, |dst, val| {
+    do_reduce_impl(array, &scheduler, sync_alloc, index, local_length, root, |dst, val| {
         dst.update_local_data(index, local_length, val, op.clone());
     }, &mut res)
     .await;
@@ -1031,6 +1054,7 @@ pub(crate) async fn do_reduce<T: ElementArithmeticOps, A: AtomicArrayOpsForColle
 
 pub(crate) async fn do_reduce_bitwise<T: ElementBitWiseOps, A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1044,7 +1068,7 @@ pub(crate) async fn do_reduce_bitwise<T: ElementBitWiseOps, A: AtomicArrayOpsFor
     } else {
         Vec::new() // non-root PEs don't need to allocate a result buffer
     };
-    do_reduce_impl(array, sync_alloc, index, local_length, root, |dst, val| {
+    do_reduce_impl(array, &scheduler, sync_alloc, index, local_length, root, |dst, val| {
         dst.update_local_data_bitwise(index, local_length, val, op.clone());
     }, &mut res)
     .await;
@@ -1058,6 +1082,7 @@ pub(crate) async fn do_reduce_bitwise<T: ElementBitWiseOps, A: AtomicArrayOpsFor
 
 pub(crate) async fn do_reduce_in_buffer<T: ElementArithmeticOps, A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1067,12 +1092,12 @@ pub(crate) async fn do_reduce_in_buffer<T: ElementArithmeticOps, A: AtomicArrayO
     match target {
         RootOrLamellarBuffer::Root(mut result) => {
             let root = array.my_pe();
-            do_reduce_impl(array, sync_alloc, index, local_length, root, |dst, val| {
+            do_reduce_impl(array, &scheduler, sync_alloc, index, local_length, root, |dst, val| {
                 dst.update_local_data(index, local_length, val, op.clone());
             }, &mut result.as_mut_slice()).await
         },
         RootOrLamellarBuffer::NotRoot(root) => {
-            do_reduce_impl(array, sync_alloc, index, local_length, root, |dst, val| {
+            do_reduce_impl(array, &scheduler, sync_alloc, index, local_length, root, |dst, val| {
                 dst.update_local_data(index, local_length, val, op.clone());
             }, &mut Vec::new()).await
         },
@@ -1081,6 +1106,7 @@ pub(crate) async fn do_reduce_in_buffer<T: ElementArithmeticOps, A: AtomicArrayO
 
 pub(crate) async fn do_reduce_bitwise_in_buffer<T: ElementBitWiseOps, A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1090,12 +1116,12 @@ pub(crate) async fn do_reduce_bitwise_in_buffer<T: ElementBitWiseOps, A: AtomicA
     match target {
         RootOrLamellarBuffer::Root(mut result) => {
             let root = array.my_pe();
-            do_reduce_impl(array, sync_alloc, index, local_length, root, |dst, val| {
+            do_reduce_impl(array, &scheduler, sync_alloc, index, local_length, root, |dst, val| {
                 dst.update_local_data_bitwise(index, local_length, val, op.clone());
             }, &mut result.as_mut_slice())
         }.await,
         RootOrLamellarBuffer::NotRoot(root) => {
-            do_reduce_impl(array, sync_alloc, index, local_length, root, |dst, val| {
+            do_reduce_impl(array, &scheduler, sync_alloc, index, local_length, root, |dst, val| {
                 dst.update_local_data_bitwise(index, local_length, val, op.clone());
             }, &mut Vec::new())
         }.await,
@@ -1105,6 +1131,7 @@ pub(crate) async fn do_reduce_bitwise_in_buffer<T: ElementBitWiseOps, A: AtomicA
 
 async fn do_reduce_scatter_impl<T, A, F>(
     array: A,
+    scheduler: &Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1143,7 +1170,7 @@ where
                 while sync_slice[2 + partner].load(std::sync::atomic::Ordering::SeqCst) != step {
                     yield_now().await; // wait for remote PE to signal that data is ready to move on to the next round
                 }
-                let remote_index: usize = sync_alloc.blocking_get(partner, 0);
+                let remote_index: usize = sync_alloc.blocking_get(scheduler, partner, 0);
                 // let first_global_index = array.first_global_index_for_pe(partner).unwrap();
                 // let indices = ((remote_index+first_global_index)..(remote_index+first_global_index+count)).collect::<Vec<_>>();
                 // let indices = array.get_global_indices(partner, num_pes, remote_index, count);
@@ -1164,7 +1191,7 @@ where
         step *= 2;
     }
     
-    let res = do_scatter(array.clone(), sync_alloc, index, count/num_pes, 0).await; // scatter the reduced data to all PEs
+    let res = do_scatter_impl(array.clone(), scheduler, sync_alloc, index, count/num_pes, 0).await; // scatter the reduced data to all PEs
 
 
     // let res = if local == root {
@@ -1180,6 +1207,7 @@ where
 
 pub(crate) async fn do_reduce_scatter<T, A>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1189,7 +1217,7 @@ where
     A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone,
     T: Dist + ElementArithmeticOps,
 {
-    do_reduce_scatter_impl(array, sync_alloc, index, local_length, |dst, data| {
+    do_reduce_scatter_impl(array, &scheduler, sync_alloc, index, local_length, |dst, data| {
         dst.update_local_data(index, local_length, data, op.clone());
     })
     .await
@@ -1197,6 +1225,7 @@ where
 
 pub(crate) async fn do_reduce_scatter_bitwise<T, A>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1207,7 +1236,7 @@ where
     T: Dist + ElementBitWiseOps,
 {
     
-    do_reduce_scatter_impl(array, sync_alloc, index, local_length, |dst, val| {
+    do_reduce_scatter_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
         dst.update_local_data_bitwise(index, local_length, val, op.clone());
     })
     .await
@@ -1215,6 +1244,7 @@ where
 
 pub(crate) async fn do_reduce_scatter_in_buffer<T, A, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1225,7 +1255,7 @@ where
     A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone,
     T: Dist + ElementArithmeticOps,
 {
-    let res = do_reduce_scatter_impl(array, sync_alloc, index, local_length, |dst, data| {
+    let res = do_reduce_scatter_impl(array, &scheduler, sync_alloc, index, local_length, |dst, data| {
         dst.update_local_data(index, local_length, data, op.clone());
     })
     .await;
@@ -1237,6 +1267,7 @@ where
 
 pub(crate) async fn do_reduce_scatter_bitwise_in_buffer<T, A, B: AsLamellarBuffer<T>>(
     array: A,
+    scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     index: usize,
     local_length: usize,
@@ -1248,8 +1279,8 @@ where
     T: Dist + ElementBitWiseOps,
 {
 
-    
-    let res = do_reduce_scatter_impl(array, sync_alloc, index, local_length, |dst, val| {
+
+    let res = do_reduce_scatter_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
         dst.update_local_data_bitwise(index, local_length, val, op.clone());
     })
     .await;

@@ -23,7 +23,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce(self.clone(), sync_alloc, index, len, ReduceOp::Sum)),
+                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, index, len, ReduceOp::Sum)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -49,7 +49,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce(self.clone(), sync_alloc, index, len, ReduceOp::Max)),
+                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, index, len, ReduceOp::Max)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -74,7 +74,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce(self.clone(), sync_alloc, index, len, ReduceOp::Min)),
+                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, index, len, ReduceOp::Min)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -99,7 +99,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce(self.clone(), sync_alloc, index, len, ReduceOp::Prod)),
+                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, index, len, ReduceOp::Prod)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -128,7 +128,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise(self.clone(), sync_alloc, index, len, ReduceOp::BitAnd)),
+                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -154,7 +154,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise(self.clone(), sync_alloc, index, len, ReduceOp::BitXor)),
+                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -180,7 +180,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise(self.clone(), sync_alloc, index, len, ReduceOp::BitOr)),
+                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -207,7 +207,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Sum, buffer)),
+                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Sum, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -232,7 +232,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Max, buffer)),
+                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Max, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -257,7 +257,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Min, buffer)),
+                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Min, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -282,7 +282,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Prod, buffer)),
+                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Prod, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -309,7 +309,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitAnd, buffer)),
+                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -334,7 +334,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitXor, buffer)),
+                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -359,7 +359,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitOr, buffer)),
+                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -426,7 +426,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce(self.clone(), sync_alloc, index, len, pe, ReduceOp::Sum)),
+                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::Sum)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -451,7 +451,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce(self.clone(), sync_alloc, index, len, pe, ReduceOp::Max)),
+                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::Max)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -476,7 +476,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce(self.clone(), sync_alloc, index, len, pe, ReduceOp::Min)),
+                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::Min)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -501,7 +501,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce(self.clone(), sync_alloc, index, len, pe, ReduceOp::Prod)),
+                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::Prod)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -529,7 +529,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise(self.clone(), sync_alloc, index, len, pe, ReduceOp::BitAnd)),
+                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::BitAnd)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -555,7 +555,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise(self.clone(), sync_alloc, index, len, pe, ReduceOp::BitXor)),
+                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::BitXor)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -581,7 +581,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise(self.clone(), sync_alloc.clone(), index, len, pe, ReduceOp::BitOr)),
+                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc.clone(), index, len, pe, ReduceOp::BitOr)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -608,7 +608,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Sum, target)),
+                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Sum, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -633,7 +633,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Max, target)),
+                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Max, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -658,7 +658,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Min, target)),
+                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Min, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -683,7 +683,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Prod, target)),
+                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Prod, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -710,7 +710,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitAnd, target)),
+                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -735,7 +735,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitXor, target)),
+                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -760,7 +760,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitOr, target)),
+                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -867,7 +867,7 @@ impl<T: Dist> NativeAtomicArray<T> {
             ArrayCollectiveAllGatherHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllGatherState::CollectiveAllGatherManual(CollectiveAllGatherManualOpHandle {
-                    future: Box::pin(do_all_gather(self.clone(), alloc.clone(), index, len)),
+                    future: Box::pin(do_all_gather(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -893,7 +893,7 @@ impl<T: Dist> NativeAtomicArray<T> {
             ArrayCollectiveAllGatherIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllGatherIntoBufferState::CollectiveAllGatherIntoBufferManual(CollectiveAllGatherIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_gather_in_buffer(self.clone(), alloc.clone(), index, len, buffer)),
+                    future: Box::pin(do_all_gather_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -920,7 +920,7 @@ impl<T: Dist> NativeAtomicArray<T> {
             ArrayCollectiveGatherHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveGatherState::CollectiveGatherManual(CollectiveGatherManualOpHandle {
-                    future: Box::pin(do_gather(self.clone(), alloc.clone(), index, len, pe)),
+                    future: Box::pin(do_gather(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, pe)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -945,7 +945,7 @@ impl<T: Dist> NativeAtomicArray<T> {
                     ArrayCollectiveGatherIntoBufferHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveGatherIntoBufferState::CollectiveGatherIntoBufferManual(CollectiveGatherIntoBufferManualOpHandle {
-                            future: Box::pin(do_gather_in_buffer(self.clone(), alloc.clone(), index, len, target)),
+                            future: Box::pin(do_gather_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, target)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -972,7 +972,7 @@ impl<T: Dist> NativeAtomicArray<T> {
             ArrayCollectiveAllToAllHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllToAllState::CollectiveAllToAllManual(CollectiveAllToAllManualOpHandle {
-                    future: Box::pin(do_all_to_all(self.clone(), alloc.clone(), index, len)),
+                    future: Box::pin(do_all_to_all(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -997,7 +997,7 @@ impl<T: Dist> NativeAtomicArray<T> {
             ArrayCollectiveAllToAllIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllToAllIntoBufferState::CollectiveAllToAllIntoBufferManual(CollectiveAllToAllIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_to_all_in_buffer(self.clone(), alloc.clone(), index, len, buffer)),
+                    future: Box::pin(do_all_to_all_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1028,7 +1028,7 @@ impl<T: Dist> NativeAtomicArray<T> {
                     ArrayCollectiveBroadcastHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveBroadcastState::CollectiveBroadcastManual(CollectiveBroadcastManualOpHandle {
-                            future: Box::pin(do_broadcast(self.clone(), alloc.clone(), index, len, self.my_pe())),
+                            future: Box::pin(do_broadcast(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, self.my_pe())),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1039,7 +1039,7 @@ impl<T: Dist> NativeAtomicArray<T> {
                     ArrayCollectiveBroadcastHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveBroadcastState::CollectiveBroadcastManual(CollectiveBroadcastManualOpHandle {
-                            future: Box::pin(do_broadcast(self.clone(), alloc.clone(), 0, len, root)),
+                            future: Box::pin(do_broadcast(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), 0, len, root)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1066,7 +1066,7 @@ impl<T: Dist> NativeAtomicArray<T> {
             ArrayCollectiveBroadcastIntoBufferHandle{
                     array: self.array.as_lamellar_byte_array(),
                     state: ArrayCollectiveBroadcastIntoBufferState::CollectiveBroadcastIntoBufferManual(CollectiveBroadcastIntoBufferManualOpHandle {
-                        future: Box::pin(do_broadcast_in_buffer(self.clone(), alloc.clone(), len, target)),
+                        future: Box::pin(do_broadcast_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), len, target)),
                         scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                         counters: self.array.inner.data.mem_region.counters.clone(),
                     }),
@@ -1097,7 +1097,7 @@ impl<T: Dist> NativeAtomicArray<T> {
                     ArrayCollectiveScatterHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveScatterState::CollectiveScatterManual(CollectiveScatterManualOpHandle {
-                            future: Box::pin(do_scatter(self.clone(), alloc.clone(), index, len, self.my_pe())),
+                            future: Box::pin(do_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, self.my_pe())),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1108,7 +1108,7 @@ impl<T: Dist> NativeAtomicArray<T> {
                     ArrayCollectiveScatterHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveScatterState::CollectiveScatterManual(CollectiveScatterManualOpHandle {
-                            future: Box::pin(do_scatter(self.clone(), alloc.clone(), 0, len, root)),
+                            future: Box::pin(do_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), 0, len, root)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1138,7 +1138,7 @@ impl<T: Dist> NativeAtomicArray<T> {
                     ArrayCollectiveScatterIntoBufferHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBufferManual(CollectiveScatterIntoBufferManualOpHandle {
-                            future: Box::pin(do_scatter_in_buffer(self.clone(), alloc.clone(), index, len, self.my_pe(), buf)),
+                            future: Box::pin(do_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, self.my_pe(), buf)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1149,7 +1149,7 @@ impl<T: Dist> NativeAtomicArray<T> {
                     ArrayCollectiveScatterIntoBufferHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBufferManual(CollectiveScatterIntoBufferManualOpHandle {
-                            future: Box::pin(do_scatter_in_buffer(self.clone(), alloc.clone(), 0, len, root, buf)),
+                            future: Box::pin(do_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), 0, len, root, buf)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1179,7 +1179,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter(self.clone(), sync_alloc, index, len, ReduceOp::Sum)),
+                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Sum)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1204,7 +1204,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter(self.clone(), sync_alloc, index, len, ReduceOp::Max)),
+                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Max)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1229,7 +1229,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter(self.clone(), sync_alloc, index, len, ReduceOp::Min)),
+                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Min)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1254,7 +1254,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter(self.clone(), sync_alloc, index, len, ReduceOp::Prod)),
+                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Prod)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1283,7 +1283,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), sync_alloc, index, len, ReduceOp::BitAnd)),
+                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1309,7 +1309,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), sync_alloc, index, len, ReduceOp::BitXor)),
+                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1335,7 +1335,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), sync_alloc, index, len, ReduceOp::BitOr)),
+                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1362,7 +1362,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Sum, buffer)),
+                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Sum, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1387,7 +1387,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Max, buffer)),
+                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Max, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1412,7 +1412,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Min, buffer)),
+                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Min, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1437,7 +1437,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::Prod, buffer)),
+                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Prod, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1464,7 +1464,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitAnd, buffer)),
+                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1489,7 +1489,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitXor, buffer)),
+                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1514,7 +1514,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), sync_alloc, index, len, ReduceOp::BitOr, buffer)),
+                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
