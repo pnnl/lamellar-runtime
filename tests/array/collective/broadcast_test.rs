@@ -2,20 +2,6 @@ use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 use lamellar::BroadcastInput;
 
-fn initialize_mem_region<T: Dist + std::ops::AddAssign + std::ops::Mul<Output = T>>(
-    memregion: &LamellarMemoryRegion<T>,
-    init_val: T,
-    inc_val: T,
-    my_pe: T,
-) {
-    unsafe {
-        let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice() {
-            *elem = i * my_pe;
-            i += inc_val;
-        }
-    }
-}
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -46,14 +32,6 @@ macro_rules! initialize_array {
     };
 }
 
-macro_rules! onesided_iter {
-    (GlobalLockArray,$array:ident) => {
-        $array.read_lock().block().onesided_iter()
-    };
-    ($arraytype:ident,$array:ident) => {
-        $array.onesided_iter()
-    };
-}
 
 macro_rules! array_or_lock {
     (GlobalLockArray, $array: ident, $lock:ident) => {

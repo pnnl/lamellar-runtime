@@ -1,19 +1,6 @@
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 
-fn initialize_mem_region<T: Dist + std::ops::AddAssign + std::ops::Mul<Output = T>>(
-    memregion: &LamellarMemoryRegion<T>,
-    init_val: T,
-    inc_val: T,
-) {
-    unsafe {
-        let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice() {
-            *elem = i;
-            i += inc_val;
-        }
-    }
-}
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -102,7 +89,7 @@ macro_rules! bit_xor_scatter_test{
                 }
                 for req in reqs.drain(..){
                     let buf =req.0.block();
-                    for (i, elem) in buf.as_slice().iter().enumerate(){
+                    for elem in buf.as_slice().iter(){
                         if ((final_val as $t  - *elem) as f32).abs() > 0.0001 {
                             eprintln!("expected {:?} got {:?}", final_val, elem);
                             success = false;

@@ -1,20 +1,6 @@
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 
-fn initialize_mem_region<T: Dist + std::ops::AddAssign + std::ops::Mul<Output = T>>(
-    memregion: &LamellarMemoryRegion<T>,
-    init_val: T,
-    inc_val: T,
-) {
-    unsafe {
-        let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice() {
-            *elem = i;
-            i += inc_val;
-        }
-    }
-}
-
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
@@ -91,11 +77,7 @@ macro_rules! gather_to_pe_test{
                 let num_txs = mem_seg_len/tx_size;
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
-                    #[allow(unused_unsafe)]
-                    if my_pe == root_pe {
-                        let first_global_index = array.first_global_index_for_pe(1).unwrap();
-                    }
-                    reqs.push((unsafe { array_or_lock!($array, array, _lock).gather_at_pe(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size, root_pe).spawn()}, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
+                    reqs.push((unsafe { array_or_lock!($array, array, _lock).gather_at_pe(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size, root_pe).spawn() }, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
                 }
                 for req in reqs.drain(..){
                     let maybe_buf = req.0.block();
