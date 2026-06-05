@@ -3551,8 +3551,8 @@ impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::FetchBitXor(_) => FetchAtomicOp::Bxor,
             LamellarAtomicOp::FetchBitAnd(_) => FetchAtomicOp::Band,
             LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
-            LamellarAtomicOp::Read => FetchAtomicOp::AtomicRead,
-            _ => panic!("unexpected atomic op"),
+            LamellarAtomicOp::Read(_) => FetchAtomicOp::AtomicRead,
+            _ => panic!("Non-fetch atomic ops must use non-fetch path"),
         }
     }
 }

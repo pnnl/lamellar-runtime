@@ -10,6 +10,7 @@ use crate::array::native_atomic::NativeAtomicType;
 use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::UnsafeAtomicOpSupport;
 use crate::array::r#unsafe::__UnsafeByteArray;
+use crate::array::r#unsafe::UnsafeCollectiveSupport;
 use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
