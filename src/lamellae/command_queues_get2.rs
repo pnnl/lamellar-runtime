@@ -334,7 +334,7 @@ impl InnerCQ {
                 continue;
             }
             let buf = self.send_buffer[dst].lock().await;
-            if buf[0].cmd == Cmd::Tx {
+            if buf[0].cmd == Cmd::Tx || buf[0].cmd == Cmd::Free {
                 return false;
             }
         }
@@ -960,8 +960,9 @@ impl CQGet2 {
             }
         }
         let hash = calc_hash(data.ser_data_bytes.usize_addr(), data.len());
-        self.cq.send(data.ser_data_bytes.clone(), dst, hash).await;
+        let data_slice = data.ser_data_bytes.clone();
         data.leak_alloc().leak().expect("failed to leak alloc in send_data");
+        self.cq.send(data_slice, dst, hash).await;
     }
 
     pub(crate) async fn send_vec(&self, vec_data: Vec<u8>, dst: usize) {

@@ -1513,10 +1513,9 @@ impl CQOld {
         //         .as_slice()
         //         .get(data.len().saturating_sub(32)..data.len())
         // );
-        self.cq.send(data.ser_data_bytes.clone(), dst, hash).await;
-        data.leak_alloc()
-            .leak()
-            .expect("failed to leak alloc in send_data");
+        let data_slice = data.ser_data_bytes.clone();
+        data.leak_alloc().leak().expect("failed to leak alloc in send_data");
+        self.cq.send(data_slice, dst, hash).await;
     }
 
     pub(crate) async fn send_vec(&self,  vec_data: Vec<u8>, dst: usize)  {
@@ -1538,8 +1537,6 @@ impl CQOld {
        let hash = calc_hash(data_slice.usize_addr(), data_slice.len());
        data.leak().expect("failed to leak alloc in send_vec");
        self.cq.send(data_slice, dst, hash).await;
-       
-       // data.unwrap().leak().expect
     }
 
     pub(crate) fn wait_all_print(&self) {

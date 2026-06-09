@@ -1,6 +1,8 @@
 use crate::active_messaging::batching::simple_batcher::SimpleBatcher;
 use crate::active_messaging::batching::direct_batcher::DirectBatcher;
+use crate::active_messaging::batching::vec_simple_batcher::VecSimpleBatcher;
 use crate::active_messaging::batching::team_am_batcher::TeamAmBatcher;
+use crate::active_messaging::batching::vec_team_am_batcher::VecTeamAmBatcher;
 use crate::active_messaging::batching::BatcherType;
 use crate::active_messaging::registered_active_message::RegisteredActiveMessages;
 use crate::active_messaging::*;
@@ -684,12 +686,24 @@ impl Scheduler {
                 am_stall_mark.clone(),
                 executor.clone(),
             )),
+            "vec_simple" => BatcherType::VecSimple(VecSimpleBatcher::new(
+                num_pes,
+                my_pe,
+                am_stall_mark.clone(),
+                executor.clone(),
+            )),
             "team_am" => BatcherType::TeamAm(TeamAmBatcher::new(
                 num_pes,
                 am_stall_mark.clone(),
                 executor.clone(),
             )),
-            _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple', 'direct', or 'team_am'")
+            "vec_team_am" => BatcherType::VecTeamAm(VecTeamAmBatcher::new(
+                num_pes,
+                my_pe,
+                am_stall_mark.clone(),
+                executor.clone(),
+            )),
+            _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple', 'direct', 'vec_simple', 'team_am', or 'vec_team_am'")
         };
 
         Scheduler::new(
