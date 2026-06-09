@@ -66,18 +66,23 @@ lazy_static! {
 pub enum Backend {
     #[cfg(feature = "enable-rofi-c")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-rofi-c")))]
+    /// The RofiC backend for communication
     RofiC,
     #[cfg(feature = "enable-libfabric")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric")))]
+    /// The Libfabric backend for communication
     Libfabric,
     #[cfg(feature = "enable-libfabric-mt")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric-mt")))]
-    LibfabricMt, // Updated feature
+    /// The multi-threaded Libfabric backend for communication
+    LibfabricMt,
     #[cfg(feature = "enable-libfabric-async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric-async")))]
+    /// The async Libfabric backend for communication
     LibfabricAsync,
     #[cfg(feature = "enable-ucx")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-ucx")))]
+    /// The UCX backend for communication
     Ucx,
     #[cfg(feature = "enable-ucx-mt")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-ucx-mt")))]
@@ -476,8 +481,8 @@ pub(crate) trait LamellaeUtil: Send {
 
     async fn send_vec_to_team_pes_async(
         &self,
-        team: Arc<LamellarArchRT>,
-        data: Vec<u8>,
+        _team: Arc<LamellarArchRT>,
+        _data: Vec<u8>,
     ){
         unimplemented!()
     }
@@ -488,7 +493,7 @@ pub(crate) trait LamellaeUtil: Send {
 }
 
 //#[tracing::instrument(skip_all, level = "debug")]
-pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeBuilder {
+pub(crate) fn create_lamellae(backend: Backend, _num_threads: usize) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "enable-rofi-c")]
         Backend::RofiC => {

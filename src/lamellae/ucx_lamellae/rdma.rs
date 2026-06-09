@@ -148,7 +148,7 @@ impl<T: Remote> From<UcxPutFuture<T>> for RdmaHandle<T> {
 
 impl<T: Remote> Future for UcxPutFuture<T> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
@@ -235,7 +235,7 @@ impl<T: Remote> From<UcxGetFuture<T>> for RdmaGetHandle<T> {
 
 impl<T: Remote> Future for UcxGetFuture<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_at();
         }
@@ -321,7 +321,7 @@ impl<T: Remote> From<UcxGetBufferFuture<T>> for RdmaGetBufferHandle<T> {
 
 impl<T: Remote> Future for UcxGetBufferFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_get();
         }
@@ -415,7 +415,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> From<UcxGetIntoBufferFuture<T, B>>
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxGetIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }

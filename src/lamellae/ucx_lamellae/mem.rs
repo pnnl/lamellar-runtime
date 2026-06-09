@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use tracing::{trace,debug};
+use tracing::trace;
 
 use crate::{
     config,
@@ -10,7 +10,7 @@ use crate::{
         comm::{
             calc_alloc_padding_size_align,
             error::{AllocError, AllocResult},
-            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
+            CommAlloc, CommAllocAddr, CommAllocInner, CommMem,
         },
         AllocationType,
     },

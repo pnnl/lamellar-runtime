@@ -6,7 +6,7 @@ use tracing::trace;
 use crate::lamellae::{
     comm::{error::AllocResult, CommMem},
     local_lamellae::comm::LocalAlloc,
-    AllocError, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType,
+    AllocError, CommAlloc, CommAllocAddr, CommAllocInner,
 };
 
 use super::{comm::LocalComm, AllocationType};

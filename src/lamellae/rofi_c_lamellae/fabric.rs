@@ -5,19 +5,15 @@ use crate::lamellae::FabricError;
 use crate::lamellae::{
     calc_alloc_padding_size_align, decode_padding, decode_ref_count, decrement_ref_count,
     encode_ref_count_and_padding, increment_ref_count, AllocError, AllocResult, AllocationType,
-    CommAlloc, CommAllocInner, CommAllocType, FabricResult, RdmaError, RdmaResult,
+    CommAlloc, CommAllocInner, FabricResult, RdmaResult,
 };
 use crate::lamellar_alloc::BTreeAlloc;
 
 use crate::lamellar_alloc::LamellarAlloc;
-use std::any::type_name;
 use std::any::TypeId;
-use std::collections::HashSet;
-use std::ffi::CString;
-use std::os::raw::c_ulong;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tracing::{debug, error, trace};
+use tracing::{error, trace};
 
 #[derive(Debug)]
 pub(crate) struct RofiC {

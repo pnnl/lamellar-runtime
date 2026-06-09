@@ -1054,11 +1054,12 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         }
     }
 
-    /// Return the length of the memory region
+    /// Returns the length of the memory region
     pub fn len(&self) -> usize {
         self.sub_region_size
     }
 
+    /// Returns the original processing element (PE) where this memory region was created
     pub fn orig_pe(&self) -> usize {
         self.pe
     }

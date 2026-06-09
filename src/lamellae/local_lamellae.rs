@@ -105,13 +105,13 @@ impl LamellaeUtil for Local {
     
     async fn send_vec_to_pe_async(
         &self,
-        pe: usize,
-        vec_data: Vec<u8>,
+        _pe: usize,
+        _vec_data: Vec<u8>,
     ) {
        panic!("should never request new alloc in local")
     }
-    
-    fn available_to_send(&self, pe: usize) -> bool {
+
+    fn available_to_send(&self, _pe: usize) -> bool {
         true
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     lamellae::{
         comm::atomic::AtomicOp,
         comm::{
-            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommInfo, CommMem,
+            CommInfo, CommMem,
             CommProgress, CommShutdown,
         },
         AllocationType,
@@ -17,8 +17,6 @@ use super::{fabric::*, rofi::*, CommandQueue};
 use parking_lot::RwLock;
 use tracing::trace;
 
-use std::collections::HashMap;
-use std::env;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -47,7 +45,7 @@ impl RofiCComm {
             RofiC::new(Some(provider), Some(domain)).expect("Rofi-C initialization failed");
         trace!("rofi-c initialized: {:?}", rofi_c);
 
-        rofi_c.barrier();
+        let _ = rofi_c.barrier();
         let num_pes = rofi_c.num_pes;
         let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
         let total_mem = cmd_q_mem + RT_MEM + HEAP_SIZE.load(Ordering::SeqCst);
@@ -87,14 +85,14 @@ impl CommShutdown for RofiCComm {
 
 impl CommProgress for RofiCComm {
     fn flush_all(&self) {
-        self.rofi_c.progress_all();
+        let _ = self.rofi_c.progress_all();
     }
     fn wait_all(&self) {
-        self.rofi_c.wait_all();
+        let _ = self.rofi_c.wait_all();
     }
     //#[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
-        self.rofi_c.barrier();
+        let _ = self.rofi_c.barrier();
     }
 }
 
@@ -138,7 +136,7 @@ impl Drop for RofiCComm {
             "dropping rofi_c comm, rofi_c world ref count {:?}",
             world_ref_count
         );
-        self.rofi_c.barrier();
-        rofi_c_finit().expect("rofi-c finalization failed");
+        let _ = self.rofi_c.barrier();
+        let _ = rofi_c_finit();
     }
 }

@@ -10,7 +10,7 @@ use crate::{
 };
 use batching::*;
 
-use tracing::{debug,trace};
+use tracing::trace;
 
 use async_trait::async_trait;
 

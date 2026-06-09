@@ -9,7 +9,7 @@ use crate::{
         calc_alloc_padding_size_align,
         comm::{
             error::{AllocError, AllocResult},
-            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
+            CommAlloc, CommAllocAddr, CommAllocInner, CommMem,
         },
         AllocationType,
     },

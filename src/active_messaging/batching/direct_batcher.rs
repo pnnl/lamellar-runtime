@@ -1,15 +1,12 @@
 use crate::{
     active_messaging::{registered_active_message::*, *},
     lamellar_arch::LamellarArchRT,
-    lamellae::{Lamellae,LamellaeUtil,SerializeHeader,CommInfo},
+    lamellae::{Lamellae,SerializeHeader},
     scheduler::Scheduler,
 };
 use batching::*;
 
 use zerocopy_derive::*;
-use zerocopy::*;
-
-use async_trait::async_trait;
 
 use parking_lot::{Mutex, MutexGuard};
 
@@ -55,14 +52,14 @@ struct DirectBatcherInner{
 }
 
 #[derive(Debug, Clone)]
-pub struct DirectBatcher {
+pub(crate) struct DirectBatcher {
     inner: Arc<DirectBatcherInner>,
     executor: Arc<Executor>,
 }
 
 #[lamellar_prof::prof]
 impl DirectBatcher {
-    pub fn new(num_pes: usize, my_pe: usize, stall_mark: Arc<AtomicUsize>, executor: Arc<Executor>) -> Self {
+    pub(crate) fn new(num_pes: usize, my_pe: usize, stall_mark: Arc<AtomicUsize>, executor: Arc<Executor>) -> Self {
         let mut batch = Vec::with_capacity(num_pes + 1);
         let header = Some(SerializeHeader{msg: Msg{
             src: my_pe as u16,
@@ -102,7 +99,6 @@ impl DirectBatcher {
 
     pub(crate) fn init_batcher_task(&self,scheduler: Arc<Scheduler>, lamellae: &Arc<Lamellae>) { 
         let inner = self.inner.clone();
-        let executor = self.executor.clone();
         let stall_mark = self.inner.stall_mark.clone();
         let lamellae = lamellae.clone();
         let header_bytes_len = self.inner.header_bytes.len();
@@ -175,11 +171,11 @@ impl Batcher for DirectBatcher {
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
-        am_size: usize,
-        stall_mark: usize,
+        _am_size: usize,
+        _stall_mark: usize,
     ){
         trace!("Adding remote AM to batch for req_id: {:?}, sub_id: {:?}, dst: {:?}, team: {:?}", req_data.id.id, req_data.id.sub_id, req_data.dst, req_data.team.darc_addr());
-        let mut bytes = am.serialize();
+        let bytes = am.serialize();
         let cmd_bytes = Cmd::Am.as_bytes();
         let am_header = MyAmHeader {
             am_id: I32::new(am_id),
@@ -235,11 +231,11 @@ impl Batcher for DirectBatcher {
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
-        am_size: usize,
-        stall_mark: usize,
+        _am_size: usize,
+        _stall_mark: usize,
     ){
         trace!("Adding return AM to batch for req_id: {:?}, sub_id: {:?}, dst: {:?}, team: {:?}", req_data.id.id, req_data.id.sub_id, req_data.dst, req_data.team.darc_addr());
-        let mut bytes = am.serialize();
+        let bytes = am.serialize();
         let cmd_bytes = Cmd::ReturnAm.as_bytes();
         let am_header = MyAmHeader {
             am_id: I32::new(am_id),
@@ -290,14 +286,14 @@ impl Batcher for DirectBatcher {
         &self,
         req_data: ReqMetaData,
         data: LamellarResultArc,
-        data_size: usize,
-        stall_mark: usize,
+        _data_size: usize,
+        _stall_mark: usize,
     ){
         trace!("Adding data AM to batch for req_id: {:?}, sub_id: {:?}, dst: {:?}, team: {:?}", req_data.id.id, req_data.id.sub_id, req_data.dst, req_data.team.darc_addr());
         let mut darcs = Vec::new();
         data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
-        let mut serialized_darcs = crate::serialize(&darcs,false).unwrap();
-        let mut bytes = data.serialize();
+        let serialized_darcs = crate::serialize(&darcs,false).unwrap();
+        let bytes = data.serialize();
         let cmd_bytes = Cmd::Data.as_bytes();
 
         let data_header = MyDataHeader {
@@ -339,7 +335,7 @@ impl Batcher for DirectBatcher {
         // batch_lock.append(&mut serialized_darcs);
         // batch_lock.append(&mut bytes);
     }
-    async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, stall_mark: usize){
+    async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, _stall_mark: usize){
             trace!("Adding unit AM to batch for req_id: {:?}, sub_id: {:?}, dst: {:?}, team: {:?}", req_data.id.id, req_data.id.sub_id, req_data.dst, req_data.team.darc_addr());
         let unit_header = MyUnitHeader {
             req_id: U64::new(req_data.id.id as u64),
@@ -379,7 +375,7 @@ impl Batcher for DirectBatcher {
     async fn exec_batched_msg(
         &self,
         msg: Msg,
-        mut ser_data: SerializedData,
+        ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ){

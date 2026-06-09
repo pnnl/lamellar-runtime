@@ -14,7 +14,7 @@ use crate::{
     lamellae::{
         calc_alloc_padding_size_align, decode_padding, decode_ref_count, decrement_ref_count,
         encode_ref_count_and_padding, increment_ref_count, AllocError, AllocResult, CommAlloc,
-        CommAllocAddr, CommAllocInner, CommAllocType,
+        CommAllocAddr, CommAllocInner,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };

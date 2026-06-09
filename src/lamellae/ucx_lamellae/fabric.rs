@@ -16,7 +16,7 @@ use crate::config;
 use crate::{
     lamellae::{
         comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
-        CommAllocAddr, CommAllocInner, CommAllocType, FabricError,
+        CommAllocAddr, CommAllocInner, FabricError,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -275,7 +275,7 @@ impl UcxWorld {
         )
         .unwrap();
 
-        Self::warmup_peer_puts(&my_pmi, &worker, &exchange_buffer, my_pe, num_pes);
+        Self::warmup_peer_puts( &worker, &exchange_buffer, my_pe, num_pes);
 
         let barrier_buffer = Self::initial_alloc(
             false,
@@ -323,7 +323,6 @@ impl UcxWorld {
     // happened simultaneously (in a MT environment) with other operations like progress or flush
     // if this becomes a bottleneck it may be sufficient to just do a put to each node instead of each PE, but for now we will do it to each PE to be safe
     fn warmup_peer_puts(
-        pmi: &Arc<PmiX>,
         worker: &Arc<Worker>,
         exchange_buffer: &UcxAlloc,
         my_pe: usize,

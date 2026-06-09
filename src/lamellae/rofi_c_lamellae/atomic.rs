@@ -5,9 +5,6 @@ use crate::lamellae::comm::atomic::{
     AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
     AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle, CommAllocAtomic,
 };
-use crate::lamellae::{
-    net_atomic_compare_exchange, net_atomic_fetch_op, net_atomic_op, CommAllocAddr,
-};
 use crate::warnings::RuntimeWarning;
 use crate::LamellarTask;
 use crate::Remote;
@@ -134,7 +131,7 @@ impl<T: Remote + Copy + 'static> Future for RofiCAtomicFuture<T> {
         let mut wait_cnt = self.wait_cnt;
         self.alloc.try_wait(&mut wait_cnt);
         self.wait_cnt = wait_cnt;
-        if let Some(my_cnt) = self.wait_cnt {
+        if let Some(_my_cnt) = self.wait_cnt {
             cx.waker().wake_by_ref();
             return Poll::Pending;
         }
@@ -207,7 +204,7 @@ impl<T: Remote + Copy + 'static> Future for RofiCAtomicFetchFuture<T> {
         let mut wait_cnt = self.wait_cnt;
         self.alloc.try_wait(&mut wait_cnt);
         self.wait_cnt = wait_cnt;
-        if let Some(my_cnt) = self.wait_cnt {
+        if let Some(_my_cnt) = self.wait_cnt {
             cx.waker().wake_by_ref();
             return Poll::Pending;
         }
@@ -290,7 +287,7 @@ impl<T: Remote + Copy + PartialEq + 'static> Future for RofiCAtomicCompareExchan
         let mut wait_cnt = self.wait_cnt;
         self.alloc.try_wait(&mut wait_cnt);
         self.wait_cnt = wait_cnt;
-        if let Some(my_cnt) = self.wait_cnt {
+        if let Some(_my_cnt) = self.wait_cnt {
             cx.waker().wake_by_ref();
             return Poll::Pending;
         }

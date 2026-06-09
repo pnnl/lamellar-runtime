@@ -333,7 +333,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         .position(|stmt| quote!(#stmt).to_string().contains("LamellarWorldBuilder"));
 
 
-    let (init_prof,fini_prof) = if cfg!(feature = "enable-prof") {
+    let (_init_prof,fini_prof) = if cfg!(feature = "enable-prof") {
         (quote! {
             lamellar::init_prof_bt!();
         }, quote! {

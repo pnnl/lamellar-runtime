@@ -3,7 +3,7 @@ use std::sync::atomic::AtomicUsize;
 
 use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS};
 use crate::active_messaging::*;
-use crate::lamellae::{Lamellae, LamellaeUtil, Ser, SerializedData, SerializeHeader, comm::{CommInfo, error::AllocError}};
+use crate::lamellae::{Lamellae, LamellaeUtil, Ser, SerializedData, SerializeHeader, comm::{error::AllocError,CommInfo}};
 use direct_batcher::{MyAmHeader, MyDataHeader, MyUnitHeader};
 use zerocopy::*;
 
@@ -182,7 +182,7 @@ pub(crate) trait Batcher {
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
-        am_size: usize,
+        _am_size: usize,
         cmd: Cmd,
     ) {
         send_am_zerocopy(req_data, am, am_id, cmd).await;

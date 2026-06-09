@@ -19,7 +19,6 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use bytemuck::{Pod, Zeroable};
 use zerocopy_derive::*;
 use tracing::trace;
 

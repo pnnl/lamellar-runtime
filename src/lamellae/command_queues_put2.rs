@@ -3,7 +3,6 @@ use super::{
     Comm, Lamellae, SerializedData,
 };
 use crate::{
-    active_messaging::AMCounters,
     env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
 };
 use core::panic;
@@ -952,7 +951,7 @@ impl CQPut2 {
 
     pub(crate) async fn alloc_task(&self) {
         // let mut timer = std::time::Instant::now();
-        let mut print = false;
+        let print = false;
         while self.scheduler.active(0)
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {

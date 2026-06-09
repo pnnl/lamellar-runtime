@@ -1,8 +1,7 @@
-use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, Mutex};
-use std::{collections::HashMap, sync::atomic::Ordering};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
-use tracing::{debug, trace};
+use tracing::trace;
 
 use crate::{
     config,
@@ -11,18 +10,14 @@ use crate::{
         comm::{
             alloc::calc_alloc_padding_size_align,
             error::{AllocError, AllocResult},
-            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
+            CommAlloc, CommAllocAddr, CommAllocInner, CommMem,
         },
         AllocationType,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
 
-use super::{
-    comm::{RofiCComm, HEAP_SIZE},
-    fabric::*,
-    rofi::*,
-};
+use super::comm::{RofiCComm, HEAP_SIZE};
 
 impl CommMem for RofiCComm {
     //#[tracing::instrument(skip(self), level = "debug")]

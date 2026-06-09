@@ -8,7 +8,7 @@ use std::task::{Context, Poll};
 
 use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus};
 
-use tracing::{debug, trace};
+use tracing::debug;
 
 static TASK_ID: AtomicUsize = AtomicUsize::new(0);
 
@@ -174,7 +174,7 @@ impl LamellarExecutor for SingleThread {
         };
         let (runnable, mut task) = unsafe {
             Builder::new().metadata(task_id).spawn_unchecked(
-                move |task_id| async move {
+                move |_task_id| async move {
                     // trace!(
                     //     "[{:?}] block on Running task {:?} on single thread executor",
                     //     std::thread::current().id(),

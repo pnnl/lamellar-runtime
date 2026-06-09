@@ -1646,7 +1646,7 @@ impl CQOld {
 
    pub(crate) async fn alloc_task(&self) {
         // let mut timer = std::time::Instant::now();
-        let mut print = false;
+        let print = false;
         while self.scheduler.active(0)
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {

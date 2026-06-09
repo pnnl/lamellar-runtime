@@ -7,7 +7,6 @@ use parking_lot::Mutex;
 
 use crate::{
     array::{
-        generic_atomic::GenericAtomicElement,
         iterator::{
             distributed_iterator::DistIteratorLauncher,
             local_iterator::LocalIteratorLauncher,
