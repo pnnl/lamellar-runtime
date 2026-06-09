@@ -10,6 +10,8 @@ use crate::{
 };
 use batching::*;
 
+use tracing::{debug,trace};
+
 use async_trait::async_trait;
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
@@ -447,14 +449,75 @@ impl Batcher for TeamAmBatcher {
                 Cmd::Am | Cmd::ReturnAm => {
                     panic!("should not encounter individual am cmds in TeamAmBatcher")
                 }
-                Cmd::Data => ame.exec_data_am(&msg, &mut i, &mut ser_data).await,
-                Cmd::Unit => ame.exec_unit_am(&msg, &ser_data, &mut i).await,
+                Cmd::Data => {
+                    let data = ser_data.data_as_bytes();
+                    exec_data_am_serde(msg.src as usize, &data, &mut i, ame);
+                }
+                Cmd::Unit => {
+                    let data = ser_data.data_as_bytes();
+                    exec_unit_am_serde(msg.src as usize, &data, &mut i, ame);
+                }
                 Cmd::BatchedMsg => {
                     self.exec_batched_am(&msg, batch.cnt, &mut ser_data, &mut i, &lamellae, &ame)
                         .await;
                 }
             }
         }
+    }
+
+    async fn send_am(
+        &self,
+        req_data: ReqMetaData,
+        am: LamellarArcAm,
+        am_id: AmId,
+        _am_size: usize,
+        cmd: Cmd,
+    ) {
+        send_am_serde(req_data, am, am_id, cmd).await;
+    }
+
+    async fn send_data_am(
+        &self,
+        req_data: ReqMetaData,
+        data: LamellarResultArc,
+        data_size: usize,
+    ) {
+        send_data_am_serde(req_data, data, data_size).await;
+    }
+
+    async fn send_unit_am(&self, req_data: ReqMetaData) {
+        send_unit_am_serde(req_data).await;
+    }
+
+    async fn exec_am(
+        &self,
+        src: usize,
+        data: &[u8],
+        i: &mut usize,
+        lamellae: &Arc<Lamellae>,
+        ame: &RegisteredActiveMessages,
+        _executor: &Arc<Executor>,
+    ) {
+        exec_am_serde(src, data, i, lamellae, ame, &ame.executor);
+    }
+
+    async fn exec_return_am(
+        &self,
+        src: usize,
+        data: &[u8],
+        i: &mut usize,
+        lamellae: &Arc<Lamellae>,
+        ame: &RegisteredActiveMessages,
+    ) {
+        exec_return_am_serde(src, data, i, lamellae, ame).await;
+    }
+
+    fn exec_data_am(&self, src: usize, data: &[u8], i: &mut usize, ame: &RegisteredActiveMessages) {
+        exec_data_am_serde(src, data, i, ame);
+    }
+
+    fn exec_unit_am(&self, src: usize, data: &[u8], i: &mut usize, ame: &RegisteredActiveMessages) {
+        exec_unit_am_serde(src, data, i, ame);
     }
 }
 
@@ -492,9 +555,13 @@ impl TeamAmBatcher {
             if return_am_batch.len() > 0 {
                 size += *BATCH_HEADER_LEN
             }
+            
             let header = TeamAmBatcher::create_header(my_pe);
+            trace!(target: "ucx","create_tx_task creating data_buf for {:?}",batch.pe);
             let mut data_buf = TeamAmBatcher::create_data_buf(header, size, &lamellae).await;
+            trace!(target: "ucx","create_tx_task creating data_slice for {:?}",batch.pe);
             let data_slice = data_buf.data_as_bytes_mut();
+            let data_slice_addr = data_slice.usize_addr();
 
             // println!(
             //     "[{:?}] total batch size: {}",
@@ -502,20 +569,26 @@ impl TeamAmBatcher {
             //     size
             // );
             let mut i = 0;
+            trace!(target: "ucx","create_tx_task creating sub_slice1 for {:?} addr: 0x{:x}",batch.pe, data_slice_addr);
             i += TeamAmBatcher::serialize_am_batch(
                 am_batch,
                 data_slice.sub_slice(i..),
                 Cmd::Am,
                 batch.pe,
             );
+            trace!(target: "ucx","create_tx_task creating sub_slice2 for {:?} addr: 0x{:x}",batch.pe, data_slice_addr);
             i += TeamAmBatcher::serialize_am_batch(
                 return_am_batch,
                 data_slice.sub_slice(i..),
                 Cmd::ReturnAm,
                 batch.pe,
             );
+            trace!(target: "ucx","create_tx_task creating sub_slice3 for {:?} addr: 0x{:x}",batch.pe, data_slice_addr);
             TeamAmBatcher::serialize_non_am_batch(non_am_batch, data_slice.sub_slice(i..));
+            trace!(target: "ucx","create_tx_task sending to pes for {:?} addr: 0x{:x}",batch.pe, data_slice_addr);
+            
             lamellae.send_to_pes_async(batch.pe, arch, data_buf).await;
+            trace!(target: "ucx","create_tx_task done sending to pes for {:?} addr: 0x{:x}",batch.pe, data_slice_addr);
         }
     }
 

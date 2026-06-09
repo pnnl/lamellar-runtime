@@ -2,7 +2,7 @@ use crate::env_var::config;
 
 use core::marker::PhantomData;
 use indexmap::IndexSet;
-// use log::trace;
+use tracing::trace;
 use parking_lot::{Condvar, Mutex};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -362,6 +362,12 @@ impl LamellarAlloc for BTreeAlloc {
             let &(ref lock, ref _cvar) = &*self.allocated_addrs;
             let mut allocated_addrs = lock.lock();
             allocated_addrs.insert(a + padding, (size, padding));
+
+            trace!(target: "ucx",
+                "alloc addr 0x{:x} = 0x{a:x} + padding 0x{padding:x} ({padding}) (size: {size}, align: {align}) {:?}",
+                a + padding,
+                self.free_space.load(Ordering::SeqCst)
+            );
             // println!("allocated_addrs: {:?}", allocated_addrs);
             self.free_space.fetch_sub(full_size, Ordering::SeqCst);
             // println!(
@@ -506,6 +512,11 @@ impl LamellarAlloc for BTreeAlloc {
         let allocated_addrs = lock.lock();
         // println!("trying to free: {:x?} {:?}", addr, addr);
         if let Some((size, _padding)) = allocated_addrs.get(&addr) {
+            trace!(target: "ucx",
+                "find addr 0x:{:x} size: {size} padding: {_padding} free_space: {}",
+                 addr,
+                self.free_space.load(Ordering::SeqCst)
+            );
             return Some(*size);
         }
         None

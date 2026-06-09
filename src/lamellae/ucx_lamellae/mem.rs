@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use tracing::trace;
+use tracing::{trace,debug};
 
 use crate::{
     config,
@@ -50,13 +50,16 @@ impl CommMem for UcxComm {
         let allocs = self.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
-                // trace!(
-                //     "new rt alloc: {:x} {} {}",
-                //     addr,
-                //     addr - inner_alloc.start(),
-                //     size
-                // );
-                let alloc = inner_alloc.rt_alloc(
+                trace!(target: "ucx",
+                    "creating new rt alloc: 0x{:x} size: {}  align: {} padding: {} inner_alloc start: 0x{:x} addr-inner_alloc_start: 0x{:x}",
+                    addr,
+                    size,
+                    align,
+                    padding,
+                    inner_alloc.start(),
+                    addr - inner_alloc.start(),
+                );
+                let alloc_new = inner_alloc.rt_alloc(
                     alloc.clone(),
                     addr - inner_alloc.start(),
                     padding,
@@ -67,7 +70,7 @@ impl CommMem for UcxComm {
                 // }
 
                 return Ok(CommAlloc {
-                    inner_alloc: Arc::new(CommAllocInner::UcxAlloc(alloc)),
+                    inner_alloc: Arc::new(CommAllocInner::UcxAlloc(alloc_new)),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }

@@ -20,30 +20,30 @@ const MAX_BATCH_SIZE: usize = 100_000;
 #[repr(C)]
 // #[derive( Debug, Copy, Clone,CheckedBitPattern, NoUninit, Zeroable)]
 #[derive( Debug, Copy, Clone,IntoBytes, FromBytes, KnownLayout,Immutable,Unaligned)]
-struct MyAmHeader {
-    req_id: U64<NativeEndian>,
-    req_sub_id: U64<NativeEndian>,
-    team_addr: U64<NativeEndian>,
-    data_len: U64<NativeEndian>,
-    am_id: I32<NativeEndian>,
+pub(crate) struct MyAmHeader {
+    pub(crate) req_id: U64<NativeEndian>,
+    pub(crate) req_sub_id: U64<NativeEndian>,
+    pub(crate) team_addr: U64<NativeEndian>,
+    pub(crate) data_len: U64<NativeEndian>,
+    pub(crate) am_id: I32<NativeEndian>,
 }
 
 #[repr(C)]
 // #[derive( Debug, Copy, Clone,Pod, Zeroable)]
 #[derive( Debug, Copy, Clone,IntoBytes,FromBytes,KnownLayout,Immutable,Unaligned)]
-struct MyDataHeader {
-    req_id: U64<NativeEndian>,
-    req_sub_id: U64<NativeEndian>,
-    size: U64<NativeEndian>,
-    darc_list_size: U64<NativeEndian>,
+pub(crate) struct MyDataHeader {
+    pub(crate) req_id: U64<NativeEndian>,
+    pub(crate) req_sub_id: U64<NativeEndian>,
+    pub(crate) size: U64<NativeEndian>,
+    pub(crate) darc_list_size: U64<NativeEndian>,
 }
 
 #[repr(C)]
 // #[derive( Debug, Copy, Clone,Pod, Zeroable)]
 #[derive( Debug, Copy, Clone,IntoBytes,FromBytes,KnownLayout,Immutable,Unaligned)]
-struct MyUnitHeader {
-    req_id: U64<NativeEndian>,
-    req_sub_id: U64<NativeEndian>,
+pub(crate) struct MyUnitHeader {
+    pub(crate) req_id: U64<NativeEndian>,
+    pub(crate) req_sub_id: U64<NativeEndian>,
 }
 
 #[derive(Debug)]

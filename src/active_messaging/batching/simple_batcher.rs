@@ -555,7 +555,8 @@ impl Batcher for SimpleBatcher {
             match cmd {
                 Cmd::Am => {
                     *cnts.entry(Cmd::Am).or_insert(0) += 1;
-                    self.exec_am(&msg, &ser_data, &mut i, &lamellae, ame);
+                    let data = ser_data.data_as_bytes();
+                    self.exec_am_serde(msg.src as usize, &data, &mut i, &lamellae, ame);
                     stats!(
                         BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)]
                             [&StatCmd::Am]
@@ -569,8 +570,8 @@ impl Batcher for SimpleBatcher {
                 }
                 Cmd::ReturnAm => {
                     *cnts.entry(Cmd::ReturnAm).or_insert(0) += 1;
-                    self.exec_return_am(&msg, &ser_data, &mut i, &lamellae, ame)
-                        .await;
+                    let data = ser_data.data_as_bytes();
+                    self.exec_return_am_serde(msg.src as usize, &data, &mut i, &lamellae, ame).await;
                     stats!(
                         BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
                             [&StatCmd::Return]
@@ -584,7 +585,8 @@ impl Batcher for SimpleBatcher {
                 }
                 Cmd::Data => {
                     *cnts.entry(Cmd::Data).or_insert(0) += 1;
-                    ame.exec_data_am(&msg, &mut i, &mut ser_data).await;
+                    let data = ser_data.data_as_bytes();
+                    exec_data_am_serde(msg.src as usize, &data, &mut i, ame);
                     stats!(
                         BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
                             [&StatCmd::Data]
@@ -598,7 +600,8 @@ impl Batcher for SimpleBatcher {
                 }
                 Cmd::Unit => {
                     *cnts.entry(Cmd::Unit).or_insert(0) += 1;
-                    ame.exec_unit_am(&msg, &ser_data, &mut i).await;
+                    let data = ser_data.data_as_bytes();
+                    exec_unit_am_serde(msg.src as usize, &data, &mut i, ame);
                     stats!(
                         BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
                             [&StatCmd::Unit]
@@ -621,6 +624,61 @@ impl Batcher for SimpleBatcher {
             cnts,
             ser_data.data_len(),
         );
+    }
+
+    async fn send_am(
+        &self,
+        req_data: ReqMetaData,
+        am: LamellarArcAm,
+        am_id: AmId,
+        _am_size: usize,
+        cmd: Cmd,
+    ) {
+        send_am_serde(req_data, am, am_id, cmd).await;
+    }
+
+    async fn send_data_am(
+        &self,
+        req_data: ReqMetaData,
+        data: LamellarResultArc,
+        data_size: usize,
+    ) {
+        send_data_am_serde(req_data, data, data_size).await;
+    }
+
+    async fn send_unit_am(&self, req_data: ReqMetaData) {
+        send_unit_am_serde(req_data).await;
+    }
+
+    async fn exec_am(
+        &self,
+        src: usize,
+        data: &[u8],
+        i: &mut usize,
+        lamellae: &Arc<Lamellae>,
+        ame: &RegisteredActiveMessages,
+        _executor: &Arc<Executor>,
+    ) {
+        self.exec_am_serde(src, data, i, lamellae, ame);
+    }
+
+    async fn exec_return_am(
+        &self,
+        src: usize,
+        data: &[u8],
+        i: &mut usize,
+        lamellae: &Arc<Lamellae>,
+        ame: &RegisteredActiveMessages,
+    ) {
+        self.exec_return_am_serde(src, data, i, lamellae, ame).await;
+    }
+
+    fn exec_data_am(&self, src: usize, data: &[u8], i: &mut usize, ame: &RegisteredActiveMessages) {
+        exec_data_am_serde(src, data, i, ame);
+    }
+
+    fn exec_unit_am(&self, src: usize, data: &[u8], i: &mut usize, ame: &RegisteredActiveMessages) {
+        exec_unit_am_serde(src, data, i, ame);
     }
 }
 
@@ -881,125 +939,25 @@ impl SimpleBatcher {
         data.unwrap()
     }
 
-    // //#[tracing::instrument(skip_all)]
-    // async
-    //#[tracing::instrument(skip_all, level = "debug")]
-    fn exec_am(
+    fn exec_am_serde(
         &self,
-        msg: &Msg,
-        // data: &[u8],
-        ser_data: &SerializedData,
+        src: usize,
+        data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
-        trace!("exec_am");
-        let data = ser_data.data_as_bytes();
-        let am_header: AmHeader = crate::deserialize(
-            &data[*i..*i + *AM_HEADER_LEN.get().expect("am header size not calculated")],
-            false,
-        )
-        .unwrap();
-        trace!(
-            "deserialized am header for {:?} from msg: {:?}",
-            am_header,
-            msg
-        );
-        // am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
-        let (team, world) =
-            ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
-        // ame.get_team_and_world(&am_header.team);
-        *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
-
-        let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
-        *i += am.serialized_size();
-
-        let req_data = ReqMetaData {
-            src: team.team.world_pe,
-            dst: Some(msg.src as usize),
-            id: am_header.req_id,
-            lamellae: lamellae.clone(),
-            world: world.team.clone(),
-            team: team.team.clone(),
-            // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
-        };
-        // println!(
-        //     "[{:?}] simple batcher exec_am submit task",
-        //     std::thread::current().id()
-        // );
-        let ame = ame.clone();
-        world.team.world_counters.inc_outstanding(1);
-        team.team.team_counters.inc_outstanding(1);
-        self.executor.submit_task(async move {
-            trace!("simple batcher exec_am submit task");
-            let am = match am
-                .exec(
-                    team.team.world_pe,
-                    team.team.num_world_pes,
-                    false,
-                    world.clone(),
-                    team.clone(),
-                )
-                .await
-            {
-                LamellarReturn::Unit => Am::Unit(req_data),
-                LamellarReturn::RemoteData(data) => Am::Data(req_data, data),
-                LamellarReturn::RemoteAm(am) => Am::Return(req_data, am),
-                LamellarReturn::LocalData(_) | LamellarReturn::LocalAm(_) => {
-                    panic!("Should not be returning local data or AM from remote  am");
-                }
-            };
-            world.team.world_counters.dec_outstanding(1);
-            team.team.team_counters.dec_outstanding(1);
-            ame.process_msg(am, 0, false).await;
-        });
+        exec_am_serde(src, data, i, lamellae, ame, &self.executor);
     }
 
-    //#[tracing::instrument(skip_all, level = "debug")]
-    async fn exec_return_am(
+    async fn exec_return_am_serde(
         &self,
-        msg: &Msg,
-        // data: &[u8],
-        ser_data: &SerializedData,
+        src: usize,
+        data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
-        trace!("exec_return_am");
-        let data = ser_data.data_as_bytes();
-        let am_header: AmHeader = crate::deserialize(
-            &data[*i..*i + *AM_HEADER_LEN.get().expect("am header size not calculated")],
-            false,
-        )
-        .unwrap();
-        trace!(
-            "deserialized am header for {:?} from msg: {:?}",
-            am_header,
-            msg
-        );
-        let (team, world) =
-            ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
-        // ame.get_team_and_world(&am_header.team);
-
-        *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
-        let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
-        *i += am.serialized_size();
-
-        let req_data = ReqMetaData {
-            src: msg.src as usize,
-            dst: Some(team.team.world_pe),
-            id: am_header.req_id,
-            lamellae: lamellae.clone(),
-            world: world.team.clone(),
-            team: team.team.clone(),
-            // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
-        };
-        // println!(
-        //     "[{:?}] exec_return_am submit task",
-        //     std::thread::current().id()
-        // );
-        ame.clone()
-            .exec_local_am(req_data, am.as_local(), world, team)
-            .await;
+        exec_return_am_serde(src, data, i, lamellae, ame).await;
     }
 }
