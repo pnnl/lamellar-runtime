@@ -381,6 +381,12 @@ impl<T: Remote> LamellarEnv for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Remote> OneSidedMemoryRegion<T> {
+    pub(crate) fn lamellae(
+        &self,
+    ) -> Arc<crate::lamellae::Lamellae> {
+        self.mr.inner.team.lamellae.clone()
+    }
+
     pub(crate) fn try_new(
         size: usize,
         team: &Darc<LamellarTeamRT>,

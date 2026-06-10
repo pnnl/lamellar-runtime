@@ -906,7 +906,7 @@ impl<T: Dist> LamellarRdmaGet<T> for GlobalLockArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed);
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).spawn();
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {

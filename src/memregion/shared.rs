@@ -78,6 +78,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     // ) -> SharedMemoryRegionHandle<T> {
     //     SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
     // }
+    pub(crate) fn lamellae(
+        &self,
+    ) -> Arc<crate::lamellae::Lamellae> {
+        self.mr.rdma.clone()
+    }
 
     pub(crate) fn new(
         size: usize,

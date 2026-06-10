@@ -664,11 +664,13 @@ impl InnerCQ {
         cmd: CmdMsg,
         ser_data: &mut SerializedData,
         msg_id: usize,
+        lamellae: &Arc<Lamellae>,
     ) {
         let len = ser_data.len();
         let mut buffer = unsafe {
             LamellarBuffer::<u8, CommSlice<u8>>::from_comm_slice(
                 ser_data.header_and_data_as_bytes_mut(),
+                    lamellae.clone(),
             )
         };
         trace!("get_serialized_data {:?} {:?} {:x}", src, cmd, cmd.daddr);
@@ -725,7 +727,7 @@ impl InnerCQ {
         );
     }
 
-    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> SerializedData {
+    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> SerializedData {
         trace!("getting cmd from {} of size {}", src, cmd.dsize);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut print = true;
@@ -740,7 +742,7 @@ impl InnerCQ {
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         }
         let mut ser_data = ser_data.unwrap();
-        self.get_serialized_data(src, cmd, &mut ser_data, msg_id)
+        self.get_serialized_data(src, cmd, &mut ser_data, msg_id, lamellae)
             .await;
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
         ser_data
@@ -1143,7 +1145,7 @@ impl CQGet2 {
                                 let task = async move {
                                     let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
                                     debug!("getting cmd from {src} {:?} msg_id: {msg_id}", cmd);
-                                    let work_data = cq.get_cmd(src, cmd, msg_id).await;
+                                    let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae).await;
                                     debug!("msg_id: {msg_id} submitting remote am from {src}");
                                     scheduler1.submit_remote_am(work_data, lamellae.clone());
                                     cq.send_free(src, cmd);

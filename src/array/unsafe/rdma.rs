@@ -154,6 +154,47 @@ impl<T: Dist> UnsafeArray<T> {
         rdma_requests
     }
 
+    fn rdma_block_get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize, //relative to inner
+        mut dst: LamellarBuffer<T, B>,
+    )  {
+        let global_index = index + self.inner.offset;
+        let start_pe = match self.inner.pe_for_dist_index(index) {
+            Some(pe) => pe,
+            None => panic!("index out of bounds {:?} len {:?}", index, self.len()),
+        };
+        let end_pe = match self.inner.pe_for_dist_index(index + dst.len() - 1) {
+            Some(pe) => pe,
+            None => panic!(
+                "index out of bounds {:?} len {:?}",
+                index + dst.len() - 1,
+                self.len()
+            ),
+        };
+        let mut dist_index = global_index;
+        let mut buf_index = 0;
+        let orig_len = dst.len();
+        for pe in start_pe..=end_pe {
+            let mut full_num_elems_on_pe = self.inner.orig_elem_per_pe;
+            if pe < self.inner.orig_remaining_elems {
+                full_num_elems_on_pe += 1;
+            }
+            let pe_full_start_index = self.inner.global_start_index_for_pe(pe);
+            let offset = dist_index - pe_full_start_index;
+            let len = std::cmp::min(full_num_elems_on_pe - offset, orig_len - buf_index);
+            if len > 0 {
+                let dsts = dst.split(len);
+                dst = dsts.1;
+                unsafe {
+                    self.mem_region.get_into_buffer_unmanaged(pe, offset, dsts.0)
+                };
+                buf_index += len;
+                dist_index += len;
+            }
+        }
+    }
+
     fn rdma_cyclic_put<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
         index: usize, //global_index
@@ -1608,7 +1649,7 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
         }
     }
 
-    //TODO update so we don't just call get_into_buffer and block
+    
     unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
@@ -1618,14 +1659,28 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).block()
     }
 
-    //TODO update so we don't just call get_into_buffer and spawn
+    
     unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed);
+        let num_elems = data.len();
+        match self.inner.distribution {
+            Distribution::Block => 
+                    self.rdma_block_get_into_buffer_unmanaged(index, data),
+            Distribution::Cyclic => {
+                let _ = ArrayRdmaGetIntoBufferHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayRdmaGetIntoBufferState::MultiRdmaCyclicGet(
+                        data,
+                        self.rdma_cyclic_get_buffer(index, num_elems).collect(),
+                    ),
+                    spawned: false,
+                }.spawn();
+            },
+        }
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
@@ -1693,7 +1748,8 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = self.mem_region.get_into_buffer(pe, offset, data).spawn();
+        // let _ = self.mem_region.get_into_buffer(pe, offset, data).spawn();
+        self.mem_region.get_into_buffer_unmanaged(pe, offset, data);
     }
 }
 

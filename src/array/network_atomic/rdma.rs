@@ -965,7 +965,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = self.get_into_buffer(index, data);
+        let _ =  <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).spawn();
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
@@ -1054,7 +1054,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = self.get_into_buffer_pe(pe, offset, data).spawn();
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed).spawn();
     }
 }
 

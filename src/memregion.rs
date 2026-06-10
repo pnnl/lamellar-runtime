@@ -806,7 +806,7 @@ pub(crate) struct MemoryRegion<T: Remote> {
     backend: Backend,
     scheduler: Arc<Scheduler>,
     counters: Option<Arc<[Arc<AMCounters>]>>,
-    rdma: Arc<Lamellae>,
+    pub(crate) rdma: Arc<Lamellae>,
     mode: Mode,
     // freeable: bool, //indicates if this object is responsible for freeing the underlying data -- calling as_base creates a new object that shares the same underlying data but we don't want to free it twice
     phantom: PhantomData<T>,

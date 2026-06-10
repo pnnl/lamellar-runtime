@@ -1100,7 +1100,7 @@ impl InnerCQ {
 
     //update cmdbuffers to include a hash the wait on that here
     // //#[tracing::instrument(skip(self), level = "debug")]
-    async fn get_data(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> Vec<CmdMsg> {
+    async fn get_data(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> Vec<CmdMsg> {
         let (local_daddr_alloc, offset) = self
             .comm
             .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
@@ -1122,6 +1122,7 @@ impl InnerCQ {
             let mut buffer = unsafe {
                 LamellarBuffer::<CmdMsg, CommSlice<CmdMsg>>::from_comm_slice(
                     data.as_comm_slice(),
+                    lamellae.clone()
                 )
             };
             remote_cmd_buffer
@@ -1159,7 +1160,7 @@ impl InnerCQ {
             data_vec
         } else {
             let data = vec![CmdMsg::default(); num_cmds];
-            let mut buffer = LamellarBuffer::<CmdMsg, Vec<CmdMsg>>::from_vec(data);
+            let mut buffer = LamellarBuffer::<CmdMsg, Vec<CmdMsg>>::from_vec_with_lamellae(data, lamellae.clone());
 
             remote_cmd_buffer
                 .get_into_buffer(&self.scheduler, None, src, 0, buffer.split_off(0)).await;
@@ -1208,12 +1209,14 @@ impl InnerCQ {
         cmd: CmdMsg,
         ser_data: &mut SerializedData,
         msg_id: usize,
+        lamellae: &Arc<Lamellae>,
     ) {
         let len = ser_data.len();
         // let vec = vec![0u8; len];
         let mut buffer = unsafe {
             LamellarBuffer::<u8, CommSlice<u8>>::from_comm_slice(
                 ser_data.header_and_data_as_bytes_mut(),
+                lamellae.clone()
             )
         };
         // let mut buffer = LamellarBuffer::<u8, Vec<u8>>::from_vec(vec);
@@ -1287,7 +1290,7 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> SerializedData {
+    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> SerializedData {
         trace!("getting cmd from {} of size {}", src, cmd.dsize);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut print = true;
@@ -1302,16 +1305,16 @@ impl InnerCQ {
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         }
         let mut ser_data = ser_data.unwrap();
-        self.get_serialized_data(src, cmd, &mut ser_data, msg_id)
+        self.get_serialized_data(src, cmd, &mut ser_data, msg_id,lamellae)
             .await;
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
         ser_data
     }
 
     // //#[tracing::instrument(skip_all, level = "debug")]
-    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> Vec<CmdMsg> {
+    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> Vec<CmdMsg> {
         // trace!("getting cmd buf from {}", src);
-        let data = self.get_data(src, cmd, msg_id).await;
+        let data = self.get_data(src, cmd, msg_id,lamellae).await;
         data
     }
 }
@@ -1713,7 +1716,7 @@ impl CQOld {
                                 let task = async move {
                                     trace!("going to get cmd_buf {:?} from {:?}", cmd_buf_cmd, src);
                                     let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
-                                    let data = cq.get_cmd_buf(src, cmd_buf_cmd, msg_id).await;
+                                    let data = cq.get_cmd_buf(src, cmd_buf_cmd, msg_id,&lamellae).await;
                                     let mut i = 0;
                                     let len = data.len();
                                     let cmd_cnt: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(len));
@@ -1728,7 +1731,7 @@ impl CQOld {
                                             let scheduler2 = scheduler1.clone();
                                             let cmd_cnt_clone = cmd_cnt.clone();
                                             let task = async move {
-                                                let work_data = cq.get_cmd(src, cmd, msg_id).await;
+                                                let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae).await;
                                                 debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
                                                 scheduler2
                                                     .submit_remote_am(work_data, lamellae.clone());
