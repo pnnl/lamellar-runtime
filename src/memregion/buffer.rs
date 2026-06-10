@@ -1,10 +1,11 @@
-use std::{marker::PhantomData, ops::Range, ptr::NonNull, sync::atomic::AtomicUsize};
+use std::{marker::PhantomData, ops::Range, ptr::NonNull, sync::{Arc,atomic::AtomicUsize}};
 
 use tracing::trace;
 
 use crate::{
-    lamellae::{CommSlice, Remote},
+    lamellae::{CommSlice, Remote,Lamellae,CommProgress},
     memregion::{LamellarMemoryRegion, OneSidedMemoryRegion, SharedMemoryRegion},
+    lamellar_team::{IntoLamellarTeam},
 };
 
 /// Trait implemented by types that can serve as the backing store for a [`LamellarBuffer`].
@@ -122,6 +123,7 @@ impl<T> BufferInner<T> {
 pub struct LamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
     data: NonNull<BufferInner<B>>,
     range: Range<usize>,
+    lamellae: Arc<Lamellae>,
     _phantom: PhantomData<T>,
 }
 unsafe impl<T: Remote, B: AsLamellarBuffer<T>> Send for LamellarBuffer<T, B> {}
@@ -193,11 +195,12 @@ impl<T: Remote> LamellarBuffer<T, SharedMemoryRegion<T>> {
     ///```
     pub unsafe fn from_shared_memory_region(mem_region: SharedMemoryRegion<T>) -> Self {
         let len = mem_region.len();
-
+        let lamellae = mem_region.lamellae();
         LamellarBuffer {
             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(mem_region))).into())
                 .unwrap(),
             range: 0..len,
+            lamellae,
             _phantom: PhantomData,
         }
     }
@@ -239,10 +242,12 @@ impl<T: Remote> LamellarBuffer<T, OneSidedMemoryRegion<T>> {
     ///```
     pub unsafe fn from_one_sided_memory_region(mem_region: OneSidedMemoryRegion<T>) -> Self {
         let len = mem_region.len();
+        let lamellae = mem_region.lamellae();
         LamellarBuffer {
             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(mem_region))).into())
                 .unwrap(),
             range: 0..len,
+            lamellae,
             _phantom: PhantomData,
         }
     }
@@ -258,22 +263,23 @@ impl<T: Remote> LamellarBuffer<T, CommSlice<T>> {
     /// unsafe because multiple handles to the same memory region can be created,
     /// thus user must ensure that nothing else is mutating the memory region
     /// while this buffer exists
-    pub(crate) unsafe fn from_comm_slice(comm_slice: CommSlice<T>) -> Self {
+    pub(crate) unsafe fn from_comm_slice(comm_slice: CommSlice<T>,lamellae: Arc<Lamellae>) -> Self {
         let len = comm_slice.len();
         LamellarBuffer {
             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(comm_slice))).into())
                 .unwrap(),
             range: 0..len,
+            lamellae,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<T: Remote> From<CommSlice<T>> for LamellarBuffer<T, CommSlice<T>> {
-    fn from(comm_slice: CommSlice<T>) -> Self {
-        unsafe { LamellarBuffer::from_comm_slice(comm_slice) }
-    }
-}
+// impl<T: Remote> From<CommSlice<T>> for LamellarBuffer<T, CommSlice<T>> {
+//     fn from(comm_slice: CommSlice<T>) -> Self {
+//         unsafe { LamellarBuffer::from_comm_slice(comm_slice) }
+//     }
+// }
 
 impl<T: Remote> LamellarBuffer<T, Vec<T>> {
     /// Wraps a `Vec<T>` as a [`LamellarBuffer`] for use with RDMA get operations.
@@ -300,21 +306,32 @@ impl<T: Remote> LamellarBuffer<T, Vec<T>> {
     ///     mem_region.get_into_buffer(my_pe * 10, buf).block();
     /// }
     ///```
-    pub fn from_vec(vec: Vec<T>) -> Self {
+    pub fn from_vec<U: Into<IntoLamellarTeam>>(team: U,vec: Vec<T>) -> Self {
+        let len = vec.len();
+        let lamellae = team.into().team.lamellae.clone();
+        LamellarBuffer {
+            data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(vec))).into()).unwrap(),
+            range: 0..len,
+            lamellae,
+            _phantom: PhantomData,
+        }
+    }
+    pub(crate) fn from_vec_with_lamellae(vec: Vec<T>,lamellae: Arc<Lamellae>) -> Self {
         let len = vec.len();
         LamellarBuffer {
             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(vec))).into()).unwrap(),
             range: 0..len,
+            lamellae,
             _phantom: PhantomData,
         }
     }
 }
 
-impl<T: Remote> From<Vec<T>> for LamellarBuffer<T, Vec<T>> {
-    fn from(vec: Vec<T>) -> Self {
-        LamellarBuffer::from_vec(vec)
-    }
-}
+// impl<T: Remote> From<Vec<T>> for LamellarBuffer<T, Vec<T>> {
+//     fn from(vec: Vec<T>) -> Self {
+//         LamellarBuffer::from_vec(vec)
+//     }
+// }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     /// Returns the number of elements in the (possibly sub-sliced) buffer.
@@ -345,11 +362,13 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         let left = LamellarBuffer {
             data: self.data.clone(),
             range: self.range.start..(self.range.start + at),
+            lamellae: self.lamellae.clone(),
             _phantom: PhantomData,
         };
         let right = LamellarBuffer {
             data: self.data,
             range: (self.range.start + at)..self.range.end,
+            lamellae: self.lamellae.clone(),
             _phantom: PhantomData,
         };
         (left, right)
@@ -372,6 +391,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         let right = LamellarBuffer {
             data: self.data,
             range: (self.range.start + at)..self.range.end,
+            lamellae: self.lamellae.clone(),
             _phantom: PhantomData,
         };
         self.range = self.range.start..(self.range.start + at);
@@ -449,9 +469,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         unsafe { &mut self.data.as_mut().data.as_mut_slice()[self.range.clone()] }
     }
 
+    #[allow(dead_code)]
     pub(crate) unsafe fn orig_as_slice(&self) -> &[T] {
         unsafe { self.data.as_ref().data.as_slice() }
     }
+    #[allow(dead_code)]
     pub(crate) unsafe fn orig_as_casted_slice<P>(&self) -> &[P] {
         unsafe {
             std::slice::from_raw_parts(
@@ -462,14 +484,17 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) unsafe fn orig_as_ptr(&self) -> *const T {
         unsafe { self.data.as_ref().data.as_slice().as_ptr() as *const T }
     }
 
+    #[allow(dead_code)]
     pub(crate) unsafe fn orig_as_casted_ptr<P>(&self) -> *const P {
         unsafe { self.data.as_ref().data.as_slice().as_ptr() as *const P }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn orig_num_bytes(&self) -> usize {
         unsafe { &self.data.as_ref().data.as_slice().len() * std::mem::size_of::<T>() }
     }
@@ -485,7 +510,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Drop for LamellarBuffer<T, B> {
                 .fetch_sub(1, std::sync::atomic::Ordering::SeqCst)
         } == 1
         {
-            // println!("Dropping last reference to LamellarBuffer: {:?}", self);
+            // ensure all pending RDMA operations using this buffer are flushed before we drop the backing store
+            self.lamellae.comm().flush_all();
             trace!("Dropping LamellarBuffer: {:?}", self);
             unsafe {
                 let _ = Box::from_raw(self.data.as_ptr());
