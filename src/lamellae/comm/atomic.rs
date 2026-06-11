@@ -424,10 +424,13 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
 }
 
 // we need to pin box the values in the AtomicOp because these will be passed as input to the remote operation, and their address need to remain stable for the duration of the operation,
+// #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) enum AtomicOp<T> {
     // Non-fetch operations
+    #[allow(dead_code)]
     Min(Pin<Box<T>>),
+    #[allow(dead_code)]
     Max(Pin<Box<T>>),
     Sum(Pin<Box<T>>),
     Sub(Pin<Box<T>>), // backends only expose a sum/add op, we expose subtraction via negating the value and using sum/add
@@ -437,7 +440,9 @@ pub(crate) enum AtomicOp<T> {
     BitAnd(Pin<Box<T>>),
     Write(Pin<Box<T>>),
     // Fetch operations (return the old value)
+    #[allow(dead_code)]
     FetchMin(Pin<Box<T>>),
+    #[allow(dead_code)]
     FetchMax(Pin<Box<T>>),
     FetchSum(Pin<Box<T>>),
     FetchSub(Pin<Box<T>>),
@@ -446,8 +451,8 @@ pub(crate) enum AtomicOp<T> {
     FetchBitXor(Pin<Box<T>>),
     FetchBitAnd(Pin<Box<T>>),
     Read(Pin<Box<T>>), // ucx requires us to do a fetch-add with an addend of 0 in order to do a remote read, so we can use the FetchSum variant with an addend of 0 for that case, but we want to be able to distinguish that from an actual fetch-add operation where the addend is 0, so we have a separate Read variant for that case
-    // Compare-and-swap
-    Cas(Pin<Box<T>>, Pin<Box<T>>),
+    // Compare-and-swap  we have a CAS variant to report if the backend supports native CAS, but the actual old and new values will be passed directly to the CommAllocAtomic::atomic_compare_exchange method rather than being stored in the AtomicOp variant
+    Cas,
 }
 
 impl<T> std::fmt::Debug for AtomicOp<T> {
@@ -471,12 +476,13 @@ impl<T> std::fmt::Debug for AtomicOp<T> {
             AtomicOp::FetchBitXor(_) => write!(f, "FetchBitXor"),
             AtomicOp::FetchBitAnd(_) => write!(f, "FetchBitAnd"),
             AtomicOp::Read(_) => write!(f, "Read"),
-            AtomicOp::Cas(_, _) => write!(f, "Cas"),
+            AtomicOp::Cas => write!(f, "Cas"),
         }
     }
 }
 
 impl<T> AtomicOp<T> {
+    #[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async"))]
     pub(crate) fn src(&self) -> *const T {
         match self {
             AtomicOp::Min(val)
@@ -496,8 +502,8 @@ impl<T> AtomicOp<T> {
             | AtomicOp::FetchBitOr(val)
             | AtomicOp::FetchBitXor(val)
             | AtomicOp::FetchBitAnd(val)
-            | AtomicOp::Read(val)
-            | AtomicOp::Cas(val, _) => val.as_ref().get_ref(),
+            | AtomicOp::Read(val) =>val.as_ref().get_ref(),
+            AtomicOp::Cas => panic!("CAS operations do not have a source value"),
         }
     }
 }
@@ -821,7 +827,7 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
         AtomicOp::Read(_) => {
             panic!("Read atomic op not supported in this context");
         }
-        AtomicOp::Cas(_, _) => {
+        AtomicOp::Cas => {
             panic!("Cas atomic op not supported in this context");
         }
         AtomicOp::Min(_) | AtomicOp::Max(_) => {
@@ -853,7 +859,7 @@ unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A,
         AtomicOp::FetchBitAnd(val) => (&mut *(dst as *mut A)).fetch_and(**val),
         AtomicOp::Read(_) => (&*dst).load(),
         AtomicOp::Write(val) => (&mut *(dst as *mut A)).swap(**val),
-        AtomicOp::Cas(_, _) => panic!("Cas atomic op not supported in this context"),
+        AtomicOp::Cas => panic!("Cas atomic op not supported in this context"),
         // Reject non-fetch variants in fetch path
         AtomicOp::Min(_)
         | AtomicOp::Max(_)

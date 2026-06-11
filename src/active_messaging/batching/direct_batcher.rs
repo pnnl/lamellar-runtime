@@ -1,6 +1,5 @@
 use crate::{
     active_messaging::{registered_active_message::*, *},
-    lamellar_arch::LamellarArchRT,
     lamellae::{Lamellae,SerializeHeader},
     scheduler::Scheduler,
 };
@@ -8,7 +7,7 @@ use batching::*;
 
 use zerocopy_derive::*;
 
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::{Mutex};
 
 use tracing::{debug, trace};
 
@@ -46,7 +45,7 @@ pub(crate) struct MyUnitHeader {
 #[derive(Debug)]
 struct DirectBatcherInner{
     pe_batch: Vec<Mutex<Vec<u8>>>,
-    team_all_batch: Mutex<HashMap<Arc<LamellarArchRT>, Vec<u8>>>,
+    // team_all_batch: Mutex<HashMap<Arc<LamellarArchRT>, Vec<u8>>>,
     header_bytes: Vec<u8>,
     stall_mark: Arc<AtomicUsize>,
 }
@@ -72,7 +71,7 @@ impl DirectBatcher {
         }
         let inner = Arc::new(DirectBatcherInner {
             pe_batch: batch,
-            team_all_batch: Mutex::new(HashMap::new()),
+            // team_all_batch: Mutex::new(HashMap::new()),
             header_bytes: header_bytes,
             stall_mark,
         });
@@ -83,18 +82,19 @@ impl DirectBatcher {
         }
     }
 
-    pub(crate) fn send_batch_if_needed(&self, lamellae: &Arc<Lamellae>, pe: usize, batch: &mut MutexGuard<Vec<u8>>) {
-        if batch.len() > self.inner.header_bytes.len() {
-            trace!("Checking if need to send batch for PE {:?}, batch size: {:?}, stall_mark: {:?} available_to_send: {:?}", pe, batch.len(), self.inner.stall_mark.load(Ordering::Relaxed), lamellae.available_to_send(pe));
-        }
-       if batch.len() > self.inner.header_bytes.len() && batch.len() > MAX_BATCH_SIZE && lamellae.available_to_send(pe) {
+    // #[allow(dead_code)]
+    // pub(crate) fn send_batch_if_needed(&self, lamellae: &Arc<Lamellae>, pe: usize, batch: &mut MutexGuard<Vec<u8>>) {
+    //     if batch.len() > self.inner.header_bytes.len() {
+    //         trace!("Checking if need to send batch for PE {:?}, batch size: {:?}, stall_mark: {:?} available_to_send: {:?}", pe, batch.len(), self.inner.stall_mark.load(Ordering::Relaxed), lamellae.available_to_send(pe));
+    //     }
+    //    if batch.len() > self.inner.header_bytes.len() && batch.len() > MAX_BATCH_SIZE && lamellae.available_to_send(pe) {
             
-            let mut new_batch = self.inner.header_bytes.clone();
-            std::mem::swap(&mut new_batch, batch);
-            trace!("Sending batch if neededto PE {:?} with size {:?}", pe, new_batch.len());
-            self.executor.block_on(lamellae.send_vec_to_pe_async(pe, new_batch));
-        }
-    }
+    //         let mut new_batch = self.inner.header_bytes.clone();
+    //         std::mem::swap(&mut new_batch, batch);
+    //         trace!("Sending batch if neededto PE {:?} with size {:?}", pe, new_batch.len());
+    //         self.executor.block_on(lamellae.send_vec_to_pe_async(pe, new_batch));
+    //     }
+    // }
     
 
     pub(crate) fn init_batcher_task(&self,scheduler: Arc<Scheduler>, lamellae: &Arc<Lamellae>) { 

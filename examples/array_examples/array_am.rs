@@ -8,7 +8,6 @@
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 
 const ARRAY_LEN: usize = 100;
 
@@ -71,7 +70,7 @@ impl LamellarAM for RdmaAM {
 // as part of a LamellarAM
 #[lamellar::main]
 fn main() {
-    let subscriber = tracing_subscriber::registry()
+    let _subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(
             tracing_subscriber::fmt::layer()
@@ -120,7 +119,7 @@ fn main() {
         println!("------------------------------------------------------------");
     }
     world.barrier();
-    let mut index = 0;
+    let index = 0;
     // while index < ARRAY_LEN / num_pes {
     if my_pe == 0 {
         let _ = world
@@ -131,7 +130,6 @@ fn main() {
                     index: index,
                 },
             );
-        index += 1;
     }
 
     world.wait_all();

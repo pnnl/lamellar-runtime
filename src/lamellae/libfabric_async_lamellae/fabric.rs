@@ -13,7 +13,6 @@ use crate::lamellae::AtomicOp as LamellarAtomicOp;
 use crate::lamellae::CommAlloc;
 use crate::lamellae::CommAllocAddr;
 use crate::lamellae::CommAllocInner;
-use crate::lamellae::CommAllocType;
 use crate::lamellae::FabricError;
 use crate::lamellae::FabricResult;
 use crate::lamellar_alloc::BTreeAlloc;
@@ -426,7 +425,7 @@ impl OfiAsync {
             LamellarAtomicOp::BitAnd(_) => AtomicOpKind::BitAnd,
             LamellarAtomicOp::Read(_) => AtomicOpKind::Read,
             LamellarAtomicOp::Write(_) => AtomicOpKind::Write,
-            LamellarAtomicOp::Cas(_, _) => AtomicOpKind::Cas,
+            LamellarAtomicOp::Cas => AtomicOpKind::Cas,
             LamellarAtomicOp::FetchMin(_) => AtomicOpKind::Min,
             LamellarAtomicOp::FetchMax(_) => AtomicOpKind::Max,
             LamellarAtomicOp::FetchSum(_) | LamellarAtomicOp::FetchSub(_) => AtomicOpKind::Sum,
@@ -2049,7 +2048,7 @@ impl LibfabricAsyncAlloc {
             | LamellarAtomicOp::FetchBitAnd(_) => {
                 panic!("Fetch atomic ops must use the fetch path")
             }
-            LamellarAtomicOp::Cas(_, _) => {
+            LamellarAtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => {}
@@ -2098,7 +2097,7 @@ impl LibfabricAsyncAlloc {
             | LamellarAtomicOp::FetchBitAnd(_) => {
                 panic!("Fetch atomic ops must use the fetch path")
             }
-            LamellarAtomicOp::Cas(_, _) => {
+            LamellarAtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => {}
@@ -2298,7 +2297,7 @@ impl LibfabricAsyncAlloc {
             | LamellarAtomicOp::BitAnd(_) => {
                 panic!("Non-fetch atomic ops must use the non-fetch path")
             }
-            LamellarAtomicOp::Cas(_, _) => {
+            LamellarAtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => {}
@@ -2351,7 +2350,7 @@ impl LibfabricAsyncAlloc {
             | LamellarAtomicOp::BitAnd(_) => {
                 panic!("Non-fetch atomic ops must use the non-fetch path")
             }
-            LamellarAtomicOp::Cas(_, _) => {
+            LamellarAtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => {}

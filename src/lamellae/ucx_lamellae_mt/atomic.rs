@@ -510,7 +510,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
     ) -> AtomicOpHandle<T> {
         self.atomic_op(scheduler, counters, op, self.remote_pe, offset)
     }
-    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, offset: usize) {
+    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, offset: usize) {
         self.atomic_op_unmanaged(op, self.remote_pe, offset);
     }
 

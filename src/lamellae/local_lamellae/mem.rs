@@ -91,6 +91,7 @@ impl CommMem for LocalComm {
     }
 
     fn alloc_pool(&self, _min_size: usize) {
+        self.print_pools();
         panic!("should never alloc a pool in local")
     }
     fn num_pool_allocs(&self) -> usize {

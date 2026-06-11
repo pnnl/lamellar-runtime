@@ -44,6 +44,8 @@ pub(crate) fn encode_ref_count_and_padding(ref_count: usize, padding: usize) -> 
     (ref_count & COUNT_MASK) | ((padding << (usize::BITS - 8)) & PADDING_MASK)
 }
 
+
+#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async"))]
 pub(crate) fn decode_ref_count_and_padding(encoded: usize) -> (usize, usize) {
     let ref_count = encoded & COUNT_MASK;
     let padding = (encoded & PADDING_MASK) >> (usize::BITS - 8);
@@ -72,6 +74,7 @@ pub(crate) fn decrement_ref_count(counter: &AtomicUsize) -> usize {
 //     decode_padding(counter.load(Ordering::SeqCst))
 // }
 
+#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async"))]
 pub(crate) fn get_ref_count(counter: &AtomicUsize) -> usize {
     decode_ref_count(counter.load(Ordering::SeqCst))
 }
@@ -2366,12 +2369,13 @@ impl CommAllocRdma for CommAlloc {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
-pub(crate) enum CommAllocType {
-    RtHeap,
-    Fabric,
-    Remote,
-}
+// #[allow(dead_code)]
+// #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
+// pub(crate) enum CommAllocType {
+//     RtHeap,
+//     Fabric,
+//     Remote,
+// }
 // unsafe impl Send for CommAllocType {}
 // unsafe impl Sync for CommAllocType {}
 

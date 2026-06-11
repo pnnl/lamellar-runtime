@@ -4,14 +4,14 @@ use lamellar::array::prelude::*;
 use rand::{distr::Distribution, rngs::StdRng, SeedableRng};
 use std::time::Instant;
 
-use tracing_subscriber::fmt::{self, SubscriberBuilder};
+use tracing_subscriber::fmt;
 
 const ARRAY_SIZE: usize = 100000000;
 const NUM_UPDATES_PER_PE: usize = 1000000;
 
 #[lamellar::main]
 fn main() {
-    let subscriber = fmt::init();
+    let _subscriber = fmt::init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let array =
         AtomicArray::<usize>::new(&world, ARRAY_SIZE, lamellar::Distribution::Block).block();

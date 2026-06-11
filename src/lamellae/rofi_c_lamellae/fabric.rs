@@ -96,12 +96,14 @@ impl RofiC {
         }
         Err(AllocError::LocalNotFound(addr))
     }
+    #[allow(dead_code)]
     pub(crate) fn clear_allocs(&self) -> Result<(), ()> {
         let mut allocs = self.mem_regions.lock().unwrap();
         // RofiCAlloc's Drop impl will handle freeing
         allocs.clear();
         Ok(())
     }
+
     pub(crate) fn barrier(&self) -> Result<(), ()> {
         crate::lamellae::rofi_c_lamellae::rofi::rofi_c_barrier();
         Ok(())
@@ -173,6 +175,7 @@ impl RofiC {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn thread_wait(&self) -> Result<(), ()> {
         let my_cnt = self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst);
         while let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
@@ -191,6 +194,7 @@ impl RofiC {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn thread_progress(&self) -> Result<(), ()> {
         let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_flush();
         Ok(())
@@ -198,7 +202,7 @@ impl RofiC {
 }
 
 #[derive(Clone)]
-enum AllocTable {
+pub(crate) enum AllocTable {
     Fabric(Arc<Mutex<Vec<RofiCAlloc>>>),
     Runtime(BTreeAlloc, usize, Arc<Mutex<Vec<RofiCAlloc>>>),
 }
@@ -315,6 +319,7 @@ impl RofiCAlloc {
         self.sub_data as usize
     }
 
+    // #[allow(private_interfaces)]
     pub(crate) fn new(
         base_data: *mut u8,
         data_num_bytes: usize,
@@ -560,6 +565,7 @@ impl RofiCAlloc {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) unsafe fn zeroize_bytes(&self) {
         let u8_slice = std::slice::from_raw_parts_mut(self.sub_data, self.sub_data_num_bytes);
         u8_slice.fill(0);
@@ -593,11 +599,9 @@ impl Drop for RofiCAlloc {
                         error!("RofiCAlloc::drop failed to free alloc: {:?}", self);
                         panic!("failed to free alloc: {:?}", self);
                     }
-                    unsafe {
-                        crate::lamellae::rofi_c_lamellae::rofi::rofi_c_release(
-                            self.base_data as usize,
-                        )
-                    };
+                    crate::lamellae::rofi_c_lamellae::rofi::rofi_c_release(
+                        self.base_data as usize,
+                    );
                 }
             }
             AllocTable::Runtime(rt_alloc_table, addr, allocs) => {
@@ -658,9 +662,11 @@ impl OneSidedRofiCAlloc {
             .ok()
             .map(|a| OneSidedRofiCAlloc { alloc: a })
     }
+    #[allow(dead_code)]
     pub(crate) fn wait(&self) {
         self.alloc.wait().expect("rofi-c wait failed");
     }
+    #[allow(dead_code)]
     pub(crate) fn try_wait(&self, my_cnt: &mut Option<usize>) {
         self.alloc.try_wait(my_cnt);
     }

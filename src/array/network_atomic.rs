@@ -24,113 +24,115 @@ use std::ops::{
     AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
     ShrAssign, SubAssign,
 };
+use std::sync::atomic::{AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
-macro_rules! impl_atomic_ops{
-    { $A:ty, $B:ty , $C:ident} => {
-        pub(crate) struct $C<'a>(pub(crate) &'a $B);
-        impl AddAssign<$A> for $C<'_>{
-            fn add_assign(&mut self, val: $A) {
-               self.0.fetch_add(val,Ordering::SeqCst);
-            }
-        }
-        impl SubAssign<$A> for $C<'_>{
-            fn sub_assign(&mut self, val: $A) {
-               self.0.fetch_sub(val,Ordering::SeqCst);
-            }
-        }
-        impl MulAssign<$A> for $C<'_>{
-            fn mul_assign(&mut self, val: $A) {
-                let mut cur = self.0.load(Ordering::SeqCst);
-                let mut new = cur*val;
-                while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
-                    std::thread::yield_now();
-                    cur = self.0.load(Ordering::SeqCst);
-                    new = cur*val;
-                }
-            }
-        }
-        impl DivAssign<$A> for $C<'_>{
-            fn div_assign(&mut self, val: $A) {
-                let mut cur = self.0.load(Ordering::SeqCst);
-                let mut new = cur/val;
-                while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
-                    std::thread::yield_now();
-                    cur = self.0.load(Ordering::SeqCst);
-                    new = cur/val;
-                }
-            }
-        }
-        impl RemAssign<$A> for $C<'_>{
-            fn rem_assign(&mut self, val: $A) {
-                let mut cur = self.0.load(Ordering::SeqCst);
-                let mut new = cur%val;
-                while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
-                    std::thread::yield_now();
-                    cur = self.0.load(Ordering::SeqCst);
-                    new = cur%val;
-                }
-            }
-        }
-        impl BitAndAssign<$A> for $C<'_>{
-            fn bitand_assign(&mut self, val: $A) {
-                self.0.fetch_and(val,Ordering::SeqCst);
-            }
-        }
-        impl BitOrAssign<$A> for $C<'_>{
-            fn bitor_assign(&mut self, val: $A) {
-                self.0.fetch_or(val,Ordering::SeqCst);
-            }
-        }
-        impl BitXorAssign<$A> for $C<'_>{
-            fn bitxor_assign(&mut self, val: $A) {
-                self.0.fetch_xor(val,Ordering::SeqCst);
-            }
-        }
-        impl ShlAssign<$A> for $C<'_> {
-            fn shl_assign(&mut self, val: $A ) {
-                let mut cur = self.0.load(Ordering::SeqCst);
-                let mut new = cur<<val;
-                while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
-                    std::thread::yield_now();
-                    cur = self.0.load(Ordering::SeqCst);
-                    new = cur>>val;
-                }
-            }
-        }
-        impl ShrAssign<$A> for $C<'_> {
-            fn shr_assign(&mut self, val: $A )  {
-                let mut cur = self.0.load(Ordering::SeqCst);
-                let mut new = cur<<val;
-                while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
-                    std::thread::yield_now();
-                    cur = self.0.load(Ordering::SeqCst);
-                    new = cur>>val;
-                }
-            }
-        }
-    }
-}
+// macro_rules! impl_atomic_ops{
+//     { $A:ty, $B:ty , $C:ident} => {
+//         // #[allow(dead_code)]
+//         pub(crate) struct $C<'a>(pub(crate) &'a $B);
+//         impl AddAssign<$A> for $C<'_>{
+//             fn add_assign(&mut self, val: $A) {
+//                self.0.fetch_add(val,Ordering::SeqCst);
+//             }
+//         }
+//         impl SubAssign<$A> for $C<'_>{
+//             fn sub_assign(&mut self, val: $A) {
+//                self.0.fetch_sub(val,Ordering::SeqCst);
+//             }
+//         }
+//         impl MulAssign<$A> for $C<'_>{
+//             fn mul_assign(&mut self, val: $A) {
+//                 let mut cur = self.0.load(Ordering::SeqCst);
+//                 let mut new = cur*val;
+//                 while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+//                     std::thread::yield_now();
+//                     cur = self.0.load(Ordering::SeqCst);
+//                     new = cur*val;
+//                 }
+//             }
+//         }
+//         impl DivAssign<$A> for $C<'_>{
+//             fn div_assign(&mut self, val: $A) {
+//                 let mut cur = self.0.load(Ordering::SeqCst);
+//                 let mut new = cur/val;
+//                 while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+//                     std::thread::yield_now();
+//                     cur = self.0.load(Ordering::SeqCst);
+//                     new = cur/val;
+//                 }
+//             }
+//         }
+//         impl RemAssign<$A> for $C<'_>{
+//             fn rem_assign(&mut self, val: $A) {
+//                 let mut cur = self.0.load(Ordering::SeqCst);
+//                 let mut new = cur%val;
+//                 while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+//                     std::thread::yield_now();
+//                     cur = self.0.load(Ordering::SeqCst);
+//                     new = cur%val;
+//                 }
+//             }
+//         }
+//         impl BitAndAssign<$A> for $C<'_>{
+//             fn bitand_assign(&mut self, val: $A) {
+//                 self.0.fetch_and(val,Ordering::SeqCst);
+//             }
+//         }
+//         impl BitOrAssign<$A> for $C<'_>{
+//             fn bitor_assign(&mut self, val: $A) {
+//                 self.0.fetch_or(val,Ordering::SeqCst);
+//             }
+//         }
+//         impl BitXorAssign<$A> for $C<'_>{
+//             fn bitxor_assign(&mut self, val: $A) {
+//                 self.0.fetch_xor(val,Ordering::SeqCst);
+//             }
+//         }
+//         impl ShlAssign<$A> for $C<'_> {
+//             fn shl_assign(&mut self, val: $A ) {
+//                 let mut cur = self.0.load(Ordering::SeqCst);
+//                 let mut new = cur<<val;
+//                 while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+//                     std::thread::yield_now();
+//                     cur = self.0.load(Ordering::SeqCst);
+//                     new = cur>>val;
+//                 }
+//             }
+//         }
+//         impl ShrAssign<$A> for $C<'_> {
+//             fn shr_assign(&mut self, val: $A )  {
+//                 let mut cur = self.0.load(Ordering::SeqCst);
+//                 let mut new = cur<<val;
+//                 while self.0.compare_exchange(cur,new,Ordering::SeqCst,Ordering::SeqCst).is_err(){
+//                     std::thread::yield_now();
+//                     cur = self.0.load(Ordering::SeqCst);
+//                     new = cur>>val;
+//                 }
+//             }
+//         }
+//     }
+// }
 
-use std::sync::atomic::AtomicI8;
-impl_atomic_ops! {i8,AtomicI8,MyAtomicI8}
-use std::sync::atomic::AtomicI16;
-impl_atomic_ops! {i16,AtomicI16,MyAtomicI16}
-use std::sync::atomic::AtomicI32;
-impl_atomic_ops! {i32,AtomicI32,MyAtomicI32}
-use std::sync::atomic::AtomicI64;
-impl_atomic_ops! {i64,AtomicI64,MyAtomicI64}
-use std::sync::atomic::AtomicIsize;
-impl_atomic_ops! {isize,AtomicIsize,MyAtomicIsize}
-use std::sync::atomic::AtomicU8;
-impl_atomic_ops! {u8,AtomicU8,MyAtomicU8}
-use std::sync::atomic::AtomicU16;
-impl_atomic_ops! {u16,AtomicU16,MyAtomicU16}
-use std::sync::atomic::AtomicU32;
-impl_atomic_ops! {u32,AtomicU32,MyAtomicU32}
-use std::sync::atomic::AtomicU64;
-impl_atomic_ops! {u64,AtomicU64,MyAtomicU64}
-use std::sync::atomic::AtomicUsize;
-impl_atomic_ops! {usize,AtomicUsize,MyAtomicUsize}
+// use std::sync::atomic::AtomicI8;
+// impl_atomic_ops! {i8,AtomicI8,MyAtomicI8}
+// use std::sync::atomic::AtomicI16;
+// impl_atomic_ops! {i16,AtomicI16,MyAtomicI16}
+// use std::sync::atomic::AtomicI32;
+// impl_atomic_ops! {i32,AtomicI32,MyAtomicI32}
+// use std::sync::atomic::AtomicI64;
+// impl_atomic_ops! {i64,AtomicI64,MyAtomicI64}
+// use std::sync::atomic::AtomicIsize;
+// impl_atomic_ops! {isize,AtomicIsize,MyAtomicIsize}
+// use std::sync::atomic::AtomicU8;
+// impl_atomic_ops! {u8,AtomicU8,MyAtomicU8}
+// use std::sync::atomic::AtomicU16;
+// impl_atomic_ops! {u16,AtomicU16,MyAtomicU16}
+// use std::sync::atomic::AtomicU32;
+// impl_atomic_ops! {u32,AtomicU32,MyAtomicU32}
+// use std::sync::atomic::AtomicU64;
+// impl_atomic_ops! {u64,AtomicU64,MyAtomicU64}
+// use std::sync::atomic::AtomicUsize;
+// impl_atomic_ops! {usize,AtomicUsize,MyAtomicUsize}
 // use std::sync::atomic::AtomicBool;
 // impl_atomic_ops! {bool,AtomicBool,MyAtomicBool}
 
@@ -1132,7 +1134,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
                 .atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
             store: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(dummy_val))),
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(dummy_val))),
-            cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(Box::pin(dummy_val), Box::pin(dummy_val))),
+            cas: comm.atomic_op_avail::<T>(AtomicOp::Cas),
             add: comm.atomic_op_avail::<T>(AtomicOp::Sum(Box::pin(dummy_val))),
             fetch_add: comm.atomic_op_avail::<T>(AtomicOp::Sum(Box::pin(dummy_val))),
             prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(Box::pin(dummy_val))),

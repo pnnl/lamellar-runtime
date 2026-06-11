@@ -459,7 +459,7 @@ fn test_shr<T: std::fmt::Debug + ElementShiftOps + 'static>(
 #[lamellar::main]
 fn main() {
     // let args: Vec<String> = std::env::args().collect();
-    let subscriber = fmt::init();
+    let _subscriber = fmt::init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();

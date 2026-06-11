@@ -8,7 +8,7 @@ use crate::{
         comm::{
             calc_alloc_padding_size_align,
             error::{AllocError, AllocResult},
-            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
+            CommAlloc, CommAllocAddr, CommAllocInner, CommMem,
         },
         AllocationType,
     },
@@ -33,7 +33,7 @@ impl CommMem for LibfabricMtComm {
         // }
         let comm_alloc = CommAlloc {
             inner_alloc: Arc::new(CommAllocInner::LibfabricMtAlloc(inner_alloc)),
-            alloc_type: CommAllocType::Fabric,
+            // alloc_type: CommAllocType::Fabric,
         };
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
         Ok(comm_alloc)
@@ -85,7 +85,7 @@ impl CommMem for LibfabricMtComm {
                 // }
                 return Ok(CommAlloc {
                     inner_alloc: Arc::new(CommAllocInner::LibfabricMtAlloc(alloc)),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 });
             }
         }
@@ -268,7 +268,7 @@ impl CommMem for LibfabricMtComm {
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
                     )),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 };
                 return Ok(comm_alloc);
             }
@@ -287,7 +287,7 @@ impl CommMem for LibfabricMtComm {
         if let Ok(alloc) = self.ofi.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
                 inner_alloc: Arc::new(CommAllocInner::LibfabricMtAlloc(alloc)),
-                alloc_type: CommAllocType::Fabric,
+                // alloc_type: CommAllocType::Fabric,
             });
         }
 
@@ -298,7 +298,7 @@ impl CommMem for LibfabricMtComm {
                     inner_alloc: Arc::new(CommAllocInner::LibfabricMtAlloc(
                         inner_alloc.sub_alloc(addr.0, size)?,
                     )),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 });
             }
         }

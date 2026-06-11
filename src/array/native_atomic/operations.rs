@@ -5,6 +5,11 @@ use crate::array::operations::read_only::LocalReadOnlyOps;
 use crate::array::*;
 // use std::collections::VecDeque;
 
+use std::sync::atomic::{
+    AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64,
+    AtomicU8, AtomicUsize,
+};
+
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for NativeAtomicArray<T> {
     // fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
     //     if self.array.team_rt().lamellae.atomic_avail::<T>() {

@@ -378,7 +378,7 @@ impl UcxWorld {
             op,
             AtomicOp::Read(_)
                 | AtomicOp::Write(_)
-                | AtomicOp::Cas(_, _)
+                | AtomicOp::Cas
                 | AtomicOp::Sum(_)
                 | AtomicOp::Sub(_)
                 | AtomicOp::BitOr(_)
@@ -1453,7 +1453,7 @@ impl UcxAlloc {
             | AtomicOp::FetchBitAnd(_) => {
                 panic!("Fetch atomic ops must use the fetch path")
             }
-            AtomicOp::Cas(_, _) => {
+            AtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => panic!("Unsupported atomic operation"),
@@ -1525,7 +1525,7 @@ impl UcxAlloc {
             | AtomicOp::BitXor(_) => {
                 panic!("Non-fetch atomic ops must use the non-fetch path")
             }
-            AtomicOp::Cas(_, _) => {
+            AtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => panic!("Unsupported atomic operation"),

@@ -15,7 +15,6 @@ use pin_project::{pin_project, pinned_drop};
 use tracing::{trace, warn};
 
 use crate::{
-    lamellae::Des,
     lamellar_request::{InternalResult, LamellarRequest, LamellarRequestAddResult},
     memregion::one_sided::MemRegionHandleInner,
     scheduler::{LamellarTask, Scheduler},
@@ -100,30 +99,30 @@ impl<T: AmDist> AmHandle<T> {
                     panic!("unexpected local result  of type ");
                 }
             }
-            InternalResult::Remote(x, darcs) => {
-                if let Ok(result) = x.deserialize_data::<T>() {
-                    // we need to appropraiately set the reference counts if the returned data contains any Darcs
-                    // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
-                    // that the reference count is updated.
-                    for darc in darcs {
-                        match darc {
-                            RemotePtr::NetworkDarc(darc) => {
-                                let temp: Darc<()> = darc.into();
-                                // temp.des(Ok(0));
-                                temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
-                            }
-                            RemotePtr::NetMemRegionHandle(mr) => {
-                                let temp: Arc<MemRegionHandleInner> = mr.into();
-                                temp.local_ref.fetch_add(2, Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
-                            }
-                        }
-                    }
+            // InternalResult::Remote(x, darcs) => {
+            //     if let Ok(result) = x.deserialize_data::<T>() {
+            //         // we need to appropraiately set the reference counts if the returned data contains any Darcs
+            //         // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+            //         // that the reference count is updated.
+            //         for darc in darcs {
+            //             match darc {
+            //                 RemotePtr::NetworkDarc(darc) => {
+            //                     let temp: Darc<()> = darc.into();
+            //                     // temp.des(Ok(0));
+            //                     temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
+            //                 }
+            //                 RemotePtr::NetMemRegionHandle(mr) => {
+            //                     let temp: Arc<MemRegionHandleInner> = mr.into();
+            //                     temp.local_ref.fetch_add(2, Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
+            //                 }
+            //             }
+            //         }
 
-                    result
-                } else {
-                    panic!("unexpected remote result  of type ");
-                }
-            }
+            //         result
+            //     } else {
+            //         panic!("unexpected remote result  of type ");
+            //     }
+            // }
             InternalResult::Unit => {
                 if let Ok(result) = (Box::new(()) as Box<dyn std::any::Any>).downcast::<T>() {
                     *result
@@ -275,9 +274,9 @@ impl<T: 'static> LocalAmHandle<T> {
                     panic!("unexpected local result  of type ");
                 }
             }
-            InternalResult::Remote(_x, _darcs) => {
-                panic!("unexpected remote result  of type within local am handle");
-            }
+            // InternalResult::Remote(_x, _darcs) => {
+            //     panic!("unexpected remote result  of type within local am handle");
+            // }
             InternalResult::NewRemote(_, _) => {
                 panic!("unexpected remote result  of type within local am handle");
             }
@@ -463,29 +462,29 @@ impl<T: AmDist> MultiAmHandle<T> {
                     panic!("unexpected local result  of type ");
                 }
             }
-            InternalResult::Remote(x, darcs) => {
-                if let Ok(result) = x.deserialize_data::<T>() {
-                    // we need to appropraiately set the reference counts if the returned data contains any Darcs
-                    // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
-                    // that the reference count is updated.
-                    for darc in darcs {
-                        match darc {
-                            RemotePtr::NetworkDarc(darc) => {
-                                let temp: Darc<()> = darc.into();
-                                // temp.des(Ok(0));
-                                temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
-                            }
-                            RemotePtr::NetMemRegionHandle(mr) => {
-                                let temp: Arc<MemRegionHandleInner> = mr.into();
-                                temp.local_ref.fetch_add(2, Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
-                            }
-                        }
-                    }
-                    result
-                } else {
-                    panic!("unexpected remote result  of type ");
-                }
-            }
+            // InternalResult::Remote(x, darcs) => {
+            //     if let Ok(result) = x.deserialize_data::<T>() {
+            //         // we need to appropraiately set the reference counts if the returned data contains any Darcs
+            //         // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+            //         // that the reference count is updated.
+            //         for darc in darcs {
+            //             match darc {
+            //                 RemotePtr::NetworkDarc(darc) => {
+            //                     let temp: Darc<()> = darc.into();
+            //                     // temp.des(Ok(0));
+            //                     temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
+            //                 }
+            //                 RemotePtr::NetMemRegionHandle(mr) => {
+            //                     let temp: Arc<MemRegionHandleInner> = mr.into();
+            //                     temp.local_ref.fetch_add(2, Ordering::SeqCst); // Need to increase by two, 1 for temp, 1 for result
+            //                 }
+            //             }
+            //         }
+            //         result
+            //     } else {
+            //         panic!("unexpected remote result  of type ");
+            //     }
+            // }
             InternalResult::Unit => {
                 if let Ok(result) = (Box::new(()) as Box<dyn std::any::Any>).downcast::<T>() {
                     *result

@@ -8,8 +8,6 @@ use std::time::Instant;
 
 use rand::distr::{Distribution, Uniform};
 
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 
 // const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
@@ -55,17 +53,6 @@ impl LamellarAM for DataAM {
 
 #[lamellar::main]
 fn main() {
-    // std::thread::sleep(std::time::Duration::from_secs(60));
-    let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_thread_ids(true)
-                .with_file(true)
-                .with_line_number(true)
-                .with_level(true),
-        )
-        .init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -95,7 +82,7 @@ fn main() {
             (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
         ))
         .unwrap(); //okay to unwrap because we are creating a sub_team of the world (i.e. my_pe guaranteed to be in the parent or the subteam)
-
+    println!("first half team {:?} my pe {:?} team pe id {:?}", first_half_team, my_pe, first_half_team.team_pe_id());
     let odd_team = world
         .create_team_from_arch(StridedArch::new(
             1,                                      // start pe
@@ -103,6 +90,7 @@ fn main() {
             (num_pes as f64 / 2.0).ceil() as usize, //num pes in team
         ))
         .unwrap(); //okay to unwrap because we are creating a sub_team of the world (i.e. my_pe guaranteed to be in the parent or the subteam)
+    println!("odd team {:?} my pe {:?} team pe id {:?}", odd_team, my_pe, odd_team.team_pe_id());
     let s = Instant::now();
     let width = 2;
     if my_pe == 0 {
@@ -116,7 +104,7 @@ fn main() {
                 world.num_pes()
             );
             let _ = first_half_team
-                .exec_am_pe(
+                .spawn_am_pe(
                     pe,
                     DataAM {
                         array: array.clone(),

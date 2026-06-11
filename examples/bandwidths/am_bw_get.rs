@@ -9,7 +9,6 @@
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 
 use std::time::Instant;
 
@@ -37,7 +36,7 @@ impl LamellarAM for DataAM {
 
 #[lamellar::main]
 fn main() {
-    let subscriber = tracing_subscriber::registry()
+    let _subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(
             tracing_subscriber::fmt::layer()

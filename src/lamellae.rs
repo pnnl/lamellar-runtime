@@ -86,7 +86,8 @@ pub enum Backend {
     Ucx,
     #[cfg(feature = "enable-ucx-mt")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-ucx-mt")))]
-    UcxMt, // Updated feature
+    /// The multi-threaded UCX backend for communication
+    UcxMt,
     /// The Local backend -- intended for single process environments
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
@@ -192,7 +193,7 @@ impl SerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
         let alloc_size = size; //+ ser_data_size_size;
-        let mut alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
+        let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
 
         let ser_data_bytes = alloc.comm_slice_at_byte_offset(0, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
@@ -479,13 +480,14 @@ pub(crate) trait LamellaeUtil: Send {
         data: Vec<u8>,
     );
 
-    async fn send_vec_to_team_pes_async(
-        &self,
-        _team: Arc<LamellarArchRT>,
-        _data: Vec<u8>,
-    ){
-        unimplemented!()
-    }
+    // #[allow(dead_code)]
+    // async fn send_vec_to_team_pes_async(
+    //     &self,
+    //     _team: Arc<LamellarArchRT>,
+    //     _data: Vec<u8>,
+    // ){
+    //     unimplemented!()
+    // }
 
     async fn request_new_alloc(&self, min_size: usize);
 
@@ -514,7 +516,7 @@ pub(crate) fn create_lamellae(backend: Backend, _num_threads: usize) -> Lamellae
             LamellaeBuilder::LibfabricMtBuilder(LibfabricMtBuilder::new(
                 &provider,
                 &domain,
-                num_threads,
+                _num_threads,
             ))
         }
         #[cfg(feature = "enable-libfabric-async")]
@@ -526,7 +528,7 @@ pub(crate) fn create_lamellae(backend: Backend, _num_threads: usize) -> Lamellae
         #[cfg(feature = "enable-ucx")]
         Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),
         #[cfg(feature = "enable-ucx-mt")]
-        Backend::UcxMt => LamellaeBuilder::UcxMtBuilder(UcxMtBuilder::new(num_threads)),
+        Backend::UcxMt => LamellaeBuilder::UcxMtBuilder(UcxMtBuilder::new(_num_threads)),
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::LocalBuilder(LocalBuilder::new()),
     }

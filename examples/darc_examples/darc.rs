@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 
 #[lamellar::AmData(Clone)]
 struct DarcAm {
@@ -49,7 +48,7 @@ struct WrappedWrappedWrappedDarc {
 
 #[lamellar::main]
 fn main() {
-    let subscriber = tracing_subscriber::registry()
+    let _subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(
             tracing_subscriber::fmt::layer()

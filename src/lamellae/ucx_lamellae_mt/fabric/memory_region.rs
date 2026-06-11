@@ -296,10 +296,10 @@ impl RKey {
         }
     }
 
-    /// Expose packed bytes for exchange debug/use.
-    pub(crate) fn as_packed_slice(&self) -> &[u8] {
-        &self.packed
-    }
+    // /// Expose packed bytes for exchange debug/use.
+    // pub(crate) fn as_packed_slice(&self) -> &[u8] {
+    //     &self.packed
+    // }
 }
 
 impl Drop for RKey {

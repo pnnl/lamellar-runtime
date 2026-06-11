@@ -127,6 +127,7 @@ impl Drop for UcxComm {
         // self.exchange_buffer.take();
         if self.runtime_allocs.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, HEAP_SIZE.load(Ordering::SeqCst));
+            self.print_pools();
         }
 
         self.runtime_allocs.write().clear();

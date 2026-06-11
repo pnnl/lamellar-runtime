@@ -56,7 +56,7 @@ fn main() {
         let timer = Instant::now();
         let mut sub_time = 0f64;
         if my_pe == 0 {
-            for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
+            for _j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 // let sub_reg = data.sub_region(j..(j + num_bytes as usize));
                 let remaining_buffer = buffer.split_off(num_bytes as usize);

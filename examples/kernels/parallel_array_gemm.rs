@@ -78,7 +78,7 @@ fn main() {
                 .local_chunks(n)
                 .enumerate()
                 .for_each(move |(i, row)| {
-                    let sum = unsafe { col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>() }; // dot product using rust iters... but MatrixMultiply is faster
+                    let sum = col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>(); // dot product using rust iters... but MatrixMultiply is faster
                                                                                                      // let _lock = LOCK.lock(); //this lock is to protect writes into c, is c was an AtomicArray or LocalLockArray we could remove this
                     c.mut_local_data().at(j + (i % rows_pe) * m).fetch_add(sum);
                     //we know all updates to c are local so directly update the raw data

@@ -56,7 +56,6 @@ impl<T: Remote + Send + 'static> AtomicFetchOpFutureData<T> {
             self.op,
             self.offset
         );
-        unsafe {
             LibfabricAsyncAlloc::atomic_fetch_op_inner(
                 &self.alloc,
                 self.remote_pe,
@@ -65,8 +64,8 @@ impl<T: Remote + Send + 'static> AtomicFetchOpFutureData<T> {
                 std::slice::from_mut(self.result.as_mut()),
             )
             .await
-            .unwrap()
-        };
+            .unwrap();
+        
         *self.result
     }
     pub(crate) fn block(self) -> T {
@@ -76,7 +75,7 @@ impl<T: Remote + Send + 'static> AtomicFetchOpFutureData<T> {
             .block_on(async move { self.exec_op().await })
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<T> {
+    pub(crate) fn spawn(self) -> LamellarTask<T> {
         // self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler
@@ -169,13 +168,13 @@ impl<T: Remote + Send + 'static> AtomicOpFutureData<T> {
                 .unwrap();
         }
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         // self.spawned = true;
         self.scheduler.clone().block_on(async move {
             self.exec_op().await;
         });
     }
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         // self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
@@ -243,7 +242,6 @@ pub(crate) struct LibfabricAsyncAtomicCompareExchangeFuture<T> {
 
 impl<T: Remote + Send + PartialEq + 'static> AtomicCompareExchangeFutureData<T> {
     async fn exec_op(mut self) -> Result<T, T> {
-        unsafe {
             LibfabricAsyncAlloc::atomic_compare_exchange_op_inner(
                 &self.alloc,
                 self.remote_pe,
@@ -254,7 +252,6 @@ impl<T: Remote + Send + PartialEq + 'static> AtomicCompareExchangeFutureData<T> 
             )
             .await
             .unwrap();
-        }
         compare_exchange_result(*self.result, *self.current)
     }
     pub(crate) fn block(self) -> Result<T, T> {
@@ -262,7 +259,7 @@ impl<T: Remote + Send + PartialEq + 'static> AtomicCompareExchangeFutureData<T> 
             .clone()
             .block_on(async move { self.exec_op().await })
     }
-    pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
+    pub(crate) fn spawn( self) -> LamellarTask<Result<T, T>> {
         let counters = self.counters.clone();
         self.scheduler
             .clone()
@@ -430,7 +427,6 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
     ) -> T {
         let mut result = T::default();
         scheduler.clone().block_on(async {
-            unsafe {
                 LibfabricAsyncAlloc::atomic_fetch_op_inner(
                     self,
                     pe,
@@ -440,7 +436,6 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
                 )
                 .await
                 .unwrap();
-            }
         });
         result
     }
@@ -467,7 +462,6 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
     ) -> Result<T, T> {
         let mut result = T::default();
         scheduler.clone().block_on(async {
-            unsafe {
                 LibfabricAsyncAlloc::atomic_compare_exchange_op_inner(
                     self,
                     pe,
@@ -478,7 +472,6 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
                 )
                 .await
                 .unwrap();
-            }
         });
         compare_exchange_result(result, current)
     }
@@ -622,7 +615,6 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
         assert_eq!(pe, self.remote_pe, "atomic_fetch_op_blocking called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
         let mut result = T::default();
         scheduler.clone().block_on(async {
-            unsafe {
                 LibfabricAsyncAlloc::atomic_fetch_op_inner(
                     &self.alloc,
                     pe,
@@ -632,7 +624,6 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
                 )
                 .await
                 .unwrap();
-            }
         });
         result
     }
@@ -651,7 +642,6 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
         );
         let mut result = T::default();
         scheduler.clone().block_on(async {
-            unsafe {
                 LibfabricAsyncAlloc::atomic_compare_exchange_op_inner(
                     &self.alloc,
                     pe,
@@ -662,7 +652,6 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
                 )
                 .await
                 .unwrap();
-            }
         });
         compare_exchange_result(result, current)
     }

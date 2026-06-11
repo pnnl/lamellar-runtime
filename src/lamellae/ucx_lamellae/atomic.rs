@@ -70,7 +70,7 @@ impl<T: Remote + Send + 'static> UcxAtomicFuture<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
-                if let Some(mut request) = self.request.take() {
+                if let Some(request) = self.request.take() {
                     request.wait().expect("Failed to wait for UcxRequest");
                 } else {
                     self.alloc.wait_all();
@@ -105,7 +105,7 @@ impl<T: Remote + Send + 'static> Future for UcxAtomicFuture<T> {
             self.exec_op();
             self.spawned = true;
         }
-        if let Some(mut request) = self.request.take() {
+        if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
         } else {
             self.alloc.wait_all();
@@ -159,7 +159,7 @@ impl<T: Remote + Send + 'static> UcxAtomicFetchFuture<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
-                if let Some(mut request) = self.request.take() {
+                if let Some(request) = self.request.take() {
                     request.wait().expect("Failed to wait for UcxRequest");
                 } else {
                     self.alloc.wait_all();
@@ -194,7 +194,7 @@ impl<T: Remote + Send + 'static> Future for UcxAtomicFetchFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        if let Some(mut request) = self.request.take() {
+        if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
         } else {
             self.alloc.wait_all();
@@ -249,7 +249,7 @@ impl<T: Remote + Send + PartialEq + 'static> UcxAtomicCompareExchangeFuture<T> {
         let alloc = self.alloc.clone();
         self.scheduler.clone().spawn_task(
             async move {
-                if let Some(mut request) = self.request.take() {
+                if let Some(request) = self.request.take() {
                     request.wait().expect("Failed to wait for UcxRequest");
                 } else {
                     alloc.wait_all();
@@ -284,7 +284,7 @@ impl<T: Remote + Send + PartialEq + 'static> Future for UcxAtomicCompareExchange
         if !self.spawned {
             self.exec_op();
         }
-        if let Some(mut request) = self.request.take() {
+        if let Some(request) = self.request.take() {
             request.wait().expect("Failed to wait for UcxRequest");
         } else {
             self.alloc.wait_all();

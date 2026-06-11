@@ -4,8 +4,6 @@ use std::time::Instant;
 
 use lamellar::active_messaging::prelude::*;
 
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 // use lamellar::{Backend, SchedulerType};
 
 // use tracing_flame::FlameLayer;

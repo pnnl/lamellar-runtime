@@ -71,6 +71,7 @@ fn main() {
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
+        // we can use exec_am_pe which returns a lazy future that we can block on to get the result
         let res = world.exec_am_pe(my_pe, AmNoReturn {
             my_pe: my_pe,
             test_var: 0,
@@ -78,7 +79,8 @@ fn main() {
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
-        let res = world.exec_am_pe(num_pes - 1, AmNoReturn {
+        // we can also use spawn_am_pe which eagerly executes the am and returns a future that we can block on to get the result
+        let res = world.spawn_am_pe(num_pes - 1, AmNoReturn {
             my_pe: my_pe,
             test_var: 1,
         }).block();
@@ -88,6 +90,15 @@ fn main() {
         println!("Testing all am no return");
         println!("[{:?}] exec on all", my_pe);
         let res = world.exec_am_all(AmNoReturn {
+            my_pe: my_pe,
+            test_var: 2,
+        }).block();
+        assert!(res.iter().all(|x| *x == ()));
+        println!("no return result: {:?}", res);
+        println!("-----------------------------------");
+        println!("Testing spawn all am no return");
+        println!("[{:?}] spawn on all", my_pe);
+        let res = world.spawn_am_all(AmNoReturn {
             my_pe: my_pe,
             test_var: 2,
         }).block();
@@ -110,15 +121,27 @@ fn main() {
                 )
                 .block();
             task_group
+                .spawn_am_pe(
+                    i % num_pes,
+                    AmNoReturn {
+                        my_pe: i,
+                        test_var: 10 * (i as u32),
+                    },
+                )
+                .block();
+            task_group
                 .exec_am_all(AmNoReturn {
                     my_pe: i,
                     test_var: 100 * (i as u32),
                 })
                 .block();
+            task_group
+                .spawn_am_all(AmNoReturn {
+                    my_pe: i,
+                    test_var: 100 * (i as u32),
+                })
+                .block();
             println!("[{:?}] finished task group loop {}", my_pe, i);
-        }
-        for r in res.iter() {
-            println!("PE[{:?}] return result: {:?}", my_pe, r);
         }
         println!("Typed Am Group---------------------------------------------------------------");
 

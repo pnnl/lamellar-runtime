@@ -172,7 +172,7 @@ fn rofi_c_op<T: 'static>(op: &AtomicOp<T>) -> Option<rofisys::rofi_atomic_op_t> 
             Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BAND)
         }
         AtomicOp::Read(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_READ),
-        AtomicOp::Cas(_, _) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP),
+        AtomicOp::Cas => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP),
         AtomicOp::Write(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_WRITE),
     }
 }
@@ -238,7 +238,7 @@ fn operand_ptr<T: Copy + 'static>(op: &mut AtomicOp<T>) -> *const T {
         | AtomicOp::FetchBitXor(val)
         | AtomicOp::FetchBitAnd(val)
         | AtomicOp::Read(val) => val.as_ref().get_ref(),
-        AtomicOp::Cas(val, _) => val.as_ref().get_ref(),
+        AtomicOp::Cas => unreachable!("CAS operations do not have a source value"),
         AtomicOp::Sub(val) | AtomicOp::FetchSub(val) => {
             unsafe {
                 negate_atomic_value(val.as_mut().get_unchecked_mut());
@@ -258,7 +258,7 @@ pub(crate) fn rofi_c_atomic_op_avail<T: 'static>(op: &AtomicOp<T>) -> bool {
     }
     if let Some(dt) = get_rofi_c_dt::<T>() {
         match op {
-            AtomicOp::Cas(_, _) => unsafe {
+            AtomicOp::Cas => unsafe {
                 rofisys::rofi_query_compare_atomic(
                     dt,
                     rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP,

@@ -10,7 +10,7 @@ use crate::{
         comm::{
             calc_alloc_padding_size_align,
             error::{AllocError, AllocResult},
-            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
+            CommAlloc, CommAllocAddr, CommAllocInner, CommMem,
         },
         AllocationType,
     },
@@ -34,7 +34,7 @@ impl CommMem for UcxMtComm {
         // println!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
             inner_alloc: Arc::new(CommAllocInner::UcxMtAlloc(inner_alloc)),
-            alloc_type: CommAllocType::Fabric,
+            // alloc_type: CommAllocType::Fabric,
         };
 
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
@@ -85,7 +85,7 @@ impl CommMem for UcxMtComm {
 
                 return Ok(CommAlloc {
                     inner_alloc: Arc::new(CommAllocInner::UcxMtAlloc(alloc)),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 });
             }
         }
@@ -223,7 +223,7 @@ impl CommMem for UcxMtComm {
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
                     )),
-                    alloc_type: CommAllocType::RtHeap,
+                    // alloc_type: CommAllocType::RtHeap,
                 };
                 return Ok(comm_alloc);
             }
@@ -245,7 +245,7 @@ impl CommMem for UcxMtComm {
         if let Ok(inner_alloc) = self.ucx.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
                 inner_alloc: Arc::new(CommAllocInner::UcxMtAlloc(inner_alloc)),
-                alloc_type: CommAllocType::Fabric,
+                // alloc_type: CommAllocType::Fabric,
             });
         }
 
@@ -254,7 +254,7 @@ impl CommMem for UcxMtComm {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
                     inner_alloc: Arc::new(CommAllocInner::UcxMtAlloc(inner_alloc.sub_alloc(addr.0, size)?)),
-                    alloc_type: CommAllocType::RtHeap,
+                    //alloc_type: CommAllocType::RtHeap,
                 });
             }
         }

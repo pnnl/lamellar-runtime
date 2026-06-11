@@ -14,7 +14,7 @@ use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::*;
 use crate::array::{LamellarRead, LamellarWrite};
 use crate::barrier::BarrierHandle;
-use crate::darc::{Darc, DarcMode, WeakDarc};
+use crate::darc::{Darc, DarcMode};
 use crate::env_var::config;
 use crate::lamellae::{AllocationType, AtomicOp, CommInfo, CommProgress};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
@@ -194,17 +194,17 @@ pub(crate) mod private {
 }
 use private::UnsafeArrayInner;
 
-#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub(crate) struct UnsafeArrayInnerWeak {
-    pub(crate) data: WeakDarc<UnsafeArrayData>,
-    pub(crate) distribution: Distribution,
-    orig_elem_per_pe: usize,
-    orig_remaining_elems: usize, // the number of elements that can't be evenly divided amongst all PES
-    elem_size: usize,            //for bytes array will be size of T, for T array will be 1
-    offset: usize,               //relative to size of T
-    size: usize,                 //relative to size of T
-    sub: bool,
-}
+// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
+// pub(crate) struct UnsafeArrayInnerWeak {
+//     pub(crate) data: WeakDarc<UnsafeArrayData>,
+//     pub(crate) distribution: Distribution,
+//     orig_elem_per_pe: usize,
+//     orig_remaining_elems: usize, // the number of elements that can't be evenly divided amongst all PES
+//     elem_size: usize,            //for bytes array will be size of T, for T array will be 1
+//     offset: usize,               //relative to size of T
+//     size: usize,                 //relative to size of T
+//     sub: bool,
+// }
 
 impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
     #[doc(alias = "Collective")]
@@ -356,7 +356,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
                 .atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
             store: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(sample))),
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(sample))),
-            cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(Box::pin(sample), Box::pin(sample))),
+            cas: comm.atomic_op_avail::<T>(AtomicOp::Cas),
             add: comm.atomic_op_avail::<T>(AtomicOp::Sum(Box::pin(sample))),
             fetch_add: comm.atomic_op_avail::<T>(AtomicOp::FetchSum(Box::pin(sample))),
             prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(Box::pin(sample))),
@@ -1601,24 +1601,25 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     }
 }
 
-impl UnsafeArrayInnerWeak {
-    pub(crate) fn upgrade(&self) -> Option<UnsafeArrayInner> {
-        if let Some(data) = self.data.upgrade() {
-            Some(UnsafeArrayInner {
-                data,
-                distribution: self.distribution.clone(),
-                orig_elem_per_pe: self.orig_elem_per_pe,
-                orig_remaining_elems: self.orig_remaining_elems,
-                elem_size: self.elem_size,
-                offset: self.offset,
-                size: self.size,
-                sub: self.sub,
-            })
-        } else {
-            None
-        }
-    }
-}
+// impl UnsafeArrayInnerWeak {
+//     #[allow(dead_code)]
+//     pub(crate) fn upgrade(&self) -> Option<UnsafeArrayInner> {
+//         if let Some(data) = self.data.upgrade() {
+//             Some(UnsafeArrayInner {
+//                 data,
+//                 distribution: self.distribution.clone(),
+//                 orig_elem_per_pe: self.orig_elem_per_pe,
+//                 orig_remaining_elems: self.orig_remaining_elems,
+//                 elem_size: self.elem_size,
+//                 offset: self.offset,
+//                 size: self.size,
+//                 sub: self.sub,
+//             })
+//         } else {
+//             None
+//         }
+//     }
+// }
 
 impl UnsafeArrayInner {
     pub(crate) fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
@@ -1634,18 +1635,19 @@ impl UnsafeArrayInner {
     pub(crate) fn block_on<F: Future>(&self, f: F) -> F::Output {
         self.data.team.scheduler.block_on(f)
     }
-    pub(crate) fn downgrade(array: &UnsafeArrayInner) -> UnsafeArrayInnerWeak {
-        UnsafeArrayInnerWeak {
-            data: Darc::downgrade(&array.data),
-            distribution: array.distribution.clone(),
-            orig_elem_per_pe: array.orig_elem_per_pe,
-            orig_remaining_elems: array.orig_remaining_elems,
-            elem_size: array.elem_size,
-            offset: array.offset,
-            size: array.size,
-            sub: array.sub,
-        }
-    }
+    // #[allow(dead_code)]
+    // pub(crate) fn downgrade(array: &UnsafeArrayInner) -> UnsafeArrayInnerWeak {
+    //     UnsafeArrayInnerWeak {
+    //         data: Darc::downgrade(&array.data),
+    //         distribution: array.distribution.clone(),
+    //         orig_elem_per_pe: array.orig_elem_per_pe,
+    //         orig_remaining_elems: array.orig_remaining_elems,
+    //         elem_size: array.elem_size,
+    //         offset: array.offset,
+    //         size: array.size,
+    //         sub: array.sub,
+    //     }
+    // }
 
     pub(crate) fn full_pe_and_offset_for_global_index(
         &self,

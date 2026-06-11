@@ -266,7 +266,8 @@ pub(crate) trait LamellarExecutor {
     fn num_workers(&self) -> usize;
     fn shutdown(&self);
     fn force_shutdown(&self);
-    fn active(&self) -> bool;
+    // #[allow(dead_code)]
+    // fn active(&self) -> bool;
 }
 
 #[enum_dispatch(LamellarExecutor)]

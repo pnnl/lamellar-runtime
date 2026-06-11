@@ -1,14 +1,15 @@
-use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus};
+use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
 use tokio::runtime::Runtime;
 
 use futures_util::Future;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8};
 use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct TokioRt {
     max_num_threads: usize,
     rt: Runtime,
+    #[allow(dead_code)]
     status: Arc<AtomicU8>,
 }
 
@@ -95,9 +96,9 @@ impl LamellarExecutor for TokioRt {
         self.max_num_threads
     }
 
-    fn active(&self) -> bool {
-        self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
-    }
+    // fn active(&self) -> bool {
+    //     self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
+    // }
 }
 
 impl TokioRt {

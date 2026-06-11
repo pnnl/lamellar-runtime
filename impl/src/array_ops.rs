@@ -39,164 +39,164 @@ fn type_to_string(ty: &syn::Type) -> String {
     }
 }
 
-fn native_atomic_slice(
-    typeident: &syn::Type,
-    lamellar: &proc_macro2::Ident,
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let ident = match typeident {
-        syn::Type::Path(path) => path
-            .path
-            .get_ident()
-            .expect("unexpected type for native atomic"),
-        _ => panic!("unexpected type for native atomic"),
-    };
-    match ident.to_string().as_str() {
-        "i8" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI8;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicI8(&slice[index]);
-                a_val
-            },
-        ),
-        "i16" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI16;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicI16(&slice[index]);
-                a_val
-            },
-        ),
-        "i32" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI32;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicI32(&slice[index]);
-                a_val
-            },
-        ),
-        "i64" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI64;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicI64(&slice[index]);
-                a_val
-            },
-        ),
-        "isize" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicIsize;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicIsize(&slice[index]);
-                a_val
-            },
-        ),
-        "u8" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU8;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicU8(&slice[index]);
-                a_val
-            },
-        ),
-        "u16" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU16;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicU16(&slice[index]);
-                a_val
-            },
-        ),
-        "u32" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU32;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicU32(&slice[index]);
-                a_val
-            },
-        ),
-        "u64" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU64;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicU64(&slice[index]);
-                a_val
-            },
-        ),
-        "usize" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicUsize;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicUsize(&slice[index]);
-                a_val
-            },
-        ),
-        "bool" => (
-            quote! {
-                let slice = unsafe {
-                    let slice = self.data.__local_as_mut_slice();
-                    let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicBool;
-                    std::slice::from_raw_parts_mut(slice_ptr,slice.len())
-                };
-            },
-            quote! {
-                let mut a_val = #lamellar::array::native_atomic::MyAtomicBool(&slice[index]);
-                a_val
-            },
-        ),
-        _ => panic!("this should never happen {:?}", ident.to_string().as_str()),
-    }
-}
+// fn native_atomic_slice(
+//     typeident: &syn::Type,
+//     lamellar: &proc_macro2::Ident,
+// ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+//     let ident = match typeident {
+//         syn::Type::Path(path) => path
+//             .path
+//             .get_ident()
+//             .expect("unexpected type for native atomic"),
+//         _ => panic!("unexpected type for native atomic"),
+//     };
+//     match ident.to_string().as_str() {
+//         "i8" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI8;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicI8(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "i16" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI16;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicI16(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "i32" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI32;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicI32(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "i64" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicI64;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicI64(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "isize" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicIsize;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicIsize(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "u8" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU8;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicU8(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "u16" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU16;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicU16(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "u32" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU32;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicU32(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "u64" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicU64;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicU64(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "usize" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicUsize;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicUsize(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         "bool" => (
+//             quote! {
+//                 let slice = unsafe {
+//                     let slice = self.data.__local_as_mut_slice();
+//                     let slice_ptr = slice.as_mut_ptr() as *mut std::sync::atomic::AtomicBool;
+//                     std::slice::from_raw_parts_mut(slice_ptr,slice.len())
+//                 };
+//             },
+//             quote! {
+//                 let mut a_val = #lamellar::array::native_atomic::MyAtomicBool(&slice[index]);
+//                 a_val
+//             },
+//         ),
+//         _ => panic!("this should never happen {:?}", ident.to_string().as_str()),
+//     }
+// }
 
 fn gen_multi_val_multi_idx(
     op_type: proc_macro2::TokenStream,
@@ -324,137 +324,138 @@ fn create_buf_ops(
         shr,
         fetch_shr,
     ) = if array_type == "NativeAtomicArray" {
-        let (_slice, val) = native_atomic_slice(&typeident, &lamellar);
-        (
-            quote! { #val },                                    //lhs
-            quote! {slice[index].store(val, Ordering::SeqCst)}, //assign
-            quote! {
-                // println!("old value: {:?}, index: {:?}",slice[index].load(Ordering::SeqCst),index);
-                res.push(slice[index].fetch_add(val, Ordering::SeqCst));
-            }, //fetch_add
-            quote! {
-                res.push(slice[index].fetch_sub(val, Ordering::SeqCst));
-            }, //fetch_sub
-            quote! { //fetch_mul
-                let mut old = slice[index].load(Ordering::SeqCst);
-                let mut new = old * val;
-                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    std::thread::yield_now();
-                    old = slice[index].load(Ordering::SeqCst);
-                    new = old * val;
-                }
-                res.push(old);
-            },
-            quote! { //fetch_div
-                let mut old = slice[index].load(Ordering::SeqCst);
-                let mut new = old / val;
-                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    std::thread::yield_now();
-                    old = slice[index].load(Ordering::SeqCst);
-                    new = old / val;
-                }
-                res.push(old);
-            },
-            quote! { //fetch_rem
-                let mut old = slice[index].load(Ordering::SeqCst);
-                let mut new = old % val;
-                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    std::thread::yield_now();
-                    old = slice[index].load(Ordering::SeqCst);
-                    new = old % val;
-                }
-                res.push(old);
-            },
-            quote! {
-                res.push(slice[index].fetch_and(val, Ordering::SeqCst));
-            }, //fetch_and
-            quote! {
-                res.push(slice[index].fetch_or(val, Ordering::SeqCst));
-            }, //fetch_or
-            quote! {
-                res.push(slice[index].fetch_xor(val, Ordering::SeqCst));
-            }, //fetch_xor
-            quote! {slice[index].load(Ordering::SeqCst)}, //load
-            quote! { //swap
-                let mut old = slice[index].load(Ordering::SeqCst);
-                while slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    std::thread::yield_now();
-                    old = slice[index].load(Ordering::SeqCst);
-                }
-                res.push(old);
-            },
-            quote! { //compare_exchange
-                let t_res = slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst);
-                res.push(t_res);
-            },
-            quote! { //compare exchange epsilon
-                let t_res = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
-                    Ok(orig) => { //woohoo dont need to do worry about the epsilon
-                        Ok(val)
-                    },
-                    Err(orig) => { //we dont match exactly, so we need to do the epsilon check
-                        let mut done = false;
-                        let mut orig = orig;
-                        while (orig.abs_diff(old) as #typeident) < eps && !done{ //keep trying while under epsilon
-                            orig = match slice[index].compare_exchange(orig, val, Ordering::SeqCst, Ordering::SeqCst) {
-                                Ok(old_val) => { //we did it!
-                                    done = true;
-                                    old_val
-                                },
-                                Err(old_val) => { //someone else exchanged first!
-                                    old_val
-                                },
-                            }
-                        }
-                        if done{
-                            Ok(orig)
-                        }
-                        else{
-                            Err(orig)
-                        }
-                    },
-                };
-                res.push(t_res);
-            },
-            quote! { //shl
-                let mut old = slice[index].load(Ordering::SeqCst);
-                let mut new = old << val;
-                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    std::thread::yield_now();
-                    old = slice[index].load(Ordering::SeqCst);
-                    new = old << val;
-                }
-            },
-            quote! { //fetch_shl
-                let mut old = slice[index].load(Ordering::SeqCst);
-                let mut new = old << val;
-                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    std::thread::yield_now();
-                    old = slice[index].load(Ordering::SeqCst);
-                    new = old << val;
-                }
-                res.push(old);
-            },
-            quote! { //shr
-                let mut old = slice[index].load(Ordering::SeqCst);
-                let mut new = old >> val;
-                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    std::thread::yield_now();
-                    old = slice[index].load(Ordering::SeqCst);
-                    new = old >> val;
-                }
-            },
-            quote! { //fetch_shr
-                let mut old = slice[index].load(Ordering::SeqCst);
-                let mut new = old >> val;
-                while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-                    std::thread::yield_now();
-                    old = slice[index].load(Ordering::SeqCst);
-                    new = old >> val;
-                }
-                res.push(old);
-            },
-        )
+        // let (_slice, val) = native_atomic_slice(&typeident, &lamellar);
+        // (
+        //     quote! { #val },                                    //lhs
+        //     quote! {slice[index].store(val, Ordering::SeqCst)}, //assign
+        //     quote! {
+        //         // println!("old value: {:?}, index: {:?}",slice[index].load(Ordering::SeqCst),index);
+        //         res.push(slice[index].fetch_add(val, Ordering::SeqCst));
+        //     }, //fetch_add
+        //     quote! {
+        //         res.push(slice[index].fetch_sub(val, Ordering::SeqCst));
+        //     }, //fetch_sub
+        //     quote! { //fetch_mul
+        //         let mut old = slice[index].load(Ordering::SeqCst);
+        //         let mut new = old * val;
+        //         while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        //             std::thread::yield_now();
+        //             old = slice[index].load(Ordering::SeqCst);
+        //             new = old * val;
+        //         }
+        //         res.push(old);
+        //     },
+        //     quote! { //fetch_div
+        //         let mut old = slice[index].load(Ordering::SeqCst);
+        //         let mut new = old / val;
+        //         while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        //             std::thread::yield_now();
+        //             old = slice[index].load(Ordering::SeqCst);
+        //             new = old / val;
+        //         }
+        //         res.push(old);
+        //     },
+        //     quote! { //fetch_rem
+        //         let mut old = slice[index].load(Ordering::SeqCst);
+        //         let mut new = old % val;
+        //         while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        //             std::thread::yield_now();
+        //             old = slice[index].load(Ordering::SeqCst);
+        //             new = old % val;
+        //         }
+        //         res.push(old);
+        //     },
+        //     quote! {
+        //         res.push(slice[index].fetch_and(val, Ordering::SeqCst));
+        //     }, //fetch_and
+        //     quote! {
+        //         res.push(slice[index].fetch_or(val, Ordering::SeqCst));
+        //     }, //fetch_or
+        //     quote! {
+        //         res.push(slice[index].fetch_xor(val, Ordering::SeqCst));
+        //     }, //fetch_xor
+        //     quote! {slice[index].load(Ordering::SeqCst)}, //load
+        //     quote! { //swap
+        //         let mut old = slice[index].load(Ordering::SeqCst);
+        //         while slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        //             std::thread::yield_now();
+        //             old = slice[index].load(Ordering::SeqCst);
+        //         }
+        //         res.push(old);
+        //     },
+        //     quote! { //compare_exchange
+        //         let t_res = slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst);
+        //         res.push(t_res);
+        //     },
+        //     quote! { //compare exchange epsilon
+        //         let t_res = match slice[index].compare_exchange(old, val, Ordering::SeqCst, Ordering::SeqCst) {
+        //             Ok(orig) => { //woohoo dont need to do worry about the epsilon
+        //                 Ok(val)
+        //             },
+        //             Err(orig) => { //we dont match exactly, so we need to do the epsilon check
+        //                 let mut done = false;
+        //                 let mut orig = orig;
+        //                 while (orig.abs_diff(old) as #typeident) < eps && !done{ //keep trying while under epsilon
+        //                     orig = match slice[index].compare_exchange(orig, val, Ordering::SeqCst, Ordering::SeqCst) {
+        //                         Ok(old_val) => { //we did it!
+        //                             done = true;
+        //                             old_val
+        //                         },
+        //                         Err(old_val) => { //someone else exchanged first!
+        //                             old_val
+        //                         },
+        //                     }
+        //                 }
+        //                 if done{
+        //                     Ok(orig)
+        //                 }
+        //                 else{
+        //                     Err(orig)
+        //                 }
+        //             },
+        //         };
+        //         res.push(t_res);
+        //     },
+        //     quote! { //shl
+        //         let mut old = slice[index].load(Ordering::SeqCst);
+        //         let mut new = old << val;
+        //         while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        //             std::thread::yield_now();
+        //             old = slice[index].load(Ordering::SeqCst);
+        //             new = old << val;
+        //         }
+        //     },
+        //     quote! { //fetch_shl
+        //         let mut old = slice[index].load(Ordering::SeqCst);
+        //         let mut new = old << val;
+        //         while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        //             std::thread::yield_now();
+        //             old = slice[index].load(Ordering::SeqCst);
+        //             new = old << val;
+        //         }
+        //         res.push(old);
+        //     },
+        //     quote! { //shr
+        //         let mut old = slice[index].load(Ordering::SeqCst);
+        //         let mut new = old >> val;
+        //         while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        //             std::thread::yield_now();
+        //             old = slice[index].load(Ordering::SeqCst);
+        //             new = old >> val;
+        //         }
+        //     },
+        //     quote! { //fetch_shr
+        //         let mut old = slice[index].load(Ordering::SeqCst);
+        //         let mut new = old >> val;
+        //         while slice[index].compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        //             std::thread::yield_now();
+        //             old = slice[index].load(Ordering::SeqCst);
+        //             new = old >> val;
+        //         }
+        //         res.push(old);
+        //     },
+        // )
+        panic!("native atomics should be handled differently, this should never happen")
     } else if array_type == "ReadOnlyArray" {
         (
             quote! { panic!("assign a valid op for Read Only Arrays");}, //lhs
@@ -548,11 +549,12 @@ fn create_buf_ops(
             quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
         )
     } else if array_type == "NativeAtomicArray" {
-        let (slice, _val) = native_atomic_slice(&typeident, &lamellar);
-        (
-            quote! {}, //no lock since its native atomic
-            quote! { #slice },
-        )
+        // let (slice, _val) = native_atomic_slice(&typeident, &lamellar);
+        // (
+        //     quote! {}, //no lock since its native atomic
+        //     quote! { #slice },
+        // )
+            panic!("native atomics should be handled differently, this should never happen")
     } else if array_type == "LocalLockArray" || array_type == "GlobalLockArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
@@ -1731,6 +1733,138 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         }
     }
 
+    let result_mv_mi_struct_impl = if result_ops_mv_mi.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            #[allow(non_camel_case_types)]
+            #[#am_data(AmGroup(false))]
+            struct #multi_val_multi_idx_result_name{
+                data: LamellarByteArray,
+                op: ArrayOpCmd<#typeident>,
+                idxs_vals: Vec<u8>,
+                index_size: u8,
+            }
+
+            #[#am(AmGroup(false))]
+            impl LamellarAm for #multi_val_multi_idx_result_name{
+                async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
+                    let mut data = self.data.clone();
+                    match self.op {
+                        #result_ops_mv_mi
+                        _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
+                    }
+                }
+            }
+        }
+    };
+    let result_mv_mi_create_arm = if result_ops_mv_mi.is_empty() {
+        quote! {
+            #lamellar::array::BatchReturnType::Result => {
+                panic!("Result ops not supported for this type")
+            }
+        }
+    } else {
+        quote! {
+            #lamellar::array::BatchReturnType::Result => {
+                Arc::new(#multi_val_multi_idx_result_name{
+                    data: Into::into(array),
+                    op: op.into(),
+                    idxs_vals: idx_vals,
+                    index_size,
+                })
+            }
+        }
+    };
+
+    let result_sv_mi_struct_impl = if result_ops_sv_mi.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            #[lamellar_impl::AmDataRT(AmGroup(false))]
+            struct #single_val_multi_idx_result_name{
+                data: LamellarByteArray,
+                op: ArrayOpCmd<#typeident>,
+                val: #typeident,
+                idxs: Vec<u8>,
+                index_size: u8,
+            }
+            #[lamellar_impl::rt_am]
+            impl LamellarAm for #single_val_multi_idx_result_name{
+                async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
+                    let mut data = self.data.clone();
+                    match self.op {
+                        #result_ops_sv_mi
+                        _ => panic!("Invalid op: {:#?}", self.op)
+                    }
+                }
+            }
+        }
+    };
+    let result_sv_mi_create_arm = if result_ops_sv_mi.is_empty() {
+        quote! {
+            #lamellar::array::BatchReturnType::Result => {
+                panic!("Result ops not supported for this type")
+            }
+        }
+    } else {
+        quote! {
+            #lamellar::array::BatchReturnType::Result => {
+                Arc::new(#single_val_multi_idx_result_name{
+                    data: Into::into(array),
+                    op: op.into(),
+                    val: unsafe{*(val_bytes.as_ptr() as *const #typeident)},
+                    idxs: idxs,
+                    index_size,
+                })
+            }
+        }
+    };
+
+    let result_mv_si_struct_impl = if result_ops_mv_si.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            #[allow(non_camel_case_types)]
+            #[#am_data(AmGroup(false))]
+            struct #multi_val_single_idx_result_name{
+                data: LamellarByteArray,
+                op: ArrayOpCmd<#typeident>,
+                idx: usize,
+                vals: Vec<#typeident>,
+            }
+
+            #[#am(AmGroup(false))]
+            impl LamellarAm for #multi_val_single_idx_result_name{
+                async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
+                    let mut data = self.data.clone();
+                    match self.op {
+                        #result_ops_mv_si
+                        _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
+                    }
+                }
+            }
+        }
+    };
+    let result_mv_si_create_arm = if result_ops_mv_si.is_empty() {
+        quote! {
+            #lamellar::array::BatchReturnType::Result => {
+                panic!("Result ops not supported for this type")
+            }
+        }
+    } else {
+        quote! {
+            #lamellar::array::BatchReturnType::Result => {
+                Arc::new(#multi_val_single_idx_result_name{
+                    data: Into::into(array),
+                    op: op.into(),
+                    idx,
+                    vals,
+                })
+            }
+        }
+    };
+
     quote! {
         #[allow(non_camel_case_types)]
         #[#am_data(AmGroup(false))]
@@ -1774,27 +1908,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                 }
             }
         }
-        #[allow(non_camel_case_types)]
-        #[#am_data(AmGroup(false))]
-        struct #multi_val_multi_idx_result_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            idxs_vals: Vec<u8>,
-            index_size: u8,
-        }
-
-        #[#am(AmGroup(false))]
-        impl LamellarAm for #multi_val_multi_idx_result_name{
-            async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
-                match self.op {
-                    #result_ops_mv_mi
-                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
-                }
-            }
-        }
+        #result_mv_mi_struct_impl
         fn #create_multi_val_multi_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>, index_size: u8, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
             match return_type {
                 #lamellar::array::BatchReturnType::None => {
@@ -1813,14 +1927,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                         index_size,
                     })
                 }
-                #lamellar::array::BatchReturnType::Result => {
-                    Arc::new(#multi_val_multi_idx_result_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        idxs_vals: idx_vals,
-                        index_size,
-                    })
-                }
+                #result_mv_mi_create_arm
             }
         }
         fn #multi_val_multi_idx_id_new_name() -> std::any::TypeId {
@@ -1873,26 +1980,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                 }
             }
         }
-        #[lamellar_impl::AmDataRT(AmGroup(false))]
-        struct #single_val_multi_idx_result_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            val: #typeident,
-            idxs: Vec<u8>,
-            index_size: u8,
-        }
-        #[lamellar_impl::rt_am]
-        impl LamellarAm for #single_val_multi_idx_result_name{
-            async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // #single_val_multi_idx_idx_vals
-                match self.op {
-                    #result_ops_sv_mi
-                    _ => panic!("Invalid op: {:#?}", self.op)
-                }
-            }
-        }
+        #result_sv_mi_struct_impl
         fn #create_single_val_multi_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, val_bytes: Vec<u8>, idxs: Vec<u8>, index_size: u8, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
             match return_type {
                 #lamellar::array::BatchReturnType::None => {
@@ -1913,15 +2001,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                         index_size,
                     })
                 }
-                #lamellar::array::BatchReturnType::Result => {
-                    Arc::new(#single_val_multi_idx_result_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)},
-                        idxs: idxs,
-                        index_size,
-                    })
-                }
+                #result_sv_mi_create_arm
             }
         }
         fn #single_val_multi_idx_id_new_name() -> std::any::TypeId {
@@ -1976,27 +2056,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                 }
             }
         }
-        #[allow(non_camel_case_types)]
-        #[#am_data(AmGroup(false))]
-        struct #multi_val_single_idx_result_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            idx: usize,
-            vals: Vec<#typeident>,
-        }
-
-        #[#am(AmGroup(false))]
-        impl LamellarAm for #multi_val_single_idx_result_name{
-            async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
-                match self.op {
-                    #result_ops_mv_si
-                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
-                }
-            }
-        }
+        #result_mv_si_struct_impl
         fn #create_multi_val_single_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: (*const u8,usize,usize), idx: usize, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
             let vals = unsafe {Vec::from_raw_parts(vals.0 as *mut #typeident,vals.1,vals.2)};
             match return_type {
@@ -2016,14 +2076,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                         vals,
                     })
                 }
-                #lamellar::array::BatchReturnType::Result => {
-                    Arc::new(#multi_val_single_idx_result_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        idx,
-                        vals,
-                    })
-                }
+                #result_mv_si_create_arm
             }
         }
         fn #multi_val_single_idx_id_new_name() -> std::any::TypeId {

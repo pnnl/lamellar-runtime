@@ -14,7 +14,7 @@ use worker::Worker;
 use crate::{
     lamellae::{
         comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
-        CommAllocAddr, CommAllocInner, CommAllocType, FabricError,
+        CommAllocAddr, CommAllocInner, FabricError,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
     LAMELLAR_THREAD_ID,
@@ -96,7 +96,6 @@ impl UcxWorld {
         )
         .unwrap();
         Self::warmup_peer_puts(
-            &my_pmi,
             &utility_comm_group.worker,
             &exchange_buffer,
             my_pe,
@@ -151,7 +150,7 @@ impl UcxWorld {
             op,
             AtomicOp::Read(_)
                 | AtomicOp::Write(_)
-                | AtomicOp::Cas(_, _)
+                | AtomicOp::Cas
                 | AtomicOp::Sum(_)
                 | AtomicOp::Sub(_)
                 | AtomicOp::BitOr(_)
@@ -216,7 +215,6 @@ impl UcxWorld {
     // Found this was necessary in the offchance that the first call to a intranode PE
     // happened simultaneously (in a MT environment) with other operations like progress or flush
     fn warmup_peer_puts(
-        pmi: &Arc<PmiX>,
         worker: &Arc<Worker>,
         exchange_buffer: &UcxMtAlloc,
         my_pe: usize,
@@ -486,7 +484,7 @@ impl From<UcxMtAlloc> for CommAlloc {
     fn from(alloc: UcxMtAlloc) -> Self {
         CommAlloc {
             inner_alloc: Arc::new(CommAllocInner::UcxMtAlloc(alloc)),
-            alloc_type: CommAllocType::Fabric,
+            // alloc_type: CommAllocType::Fabric,
         }
     }
 }
@@ -956,7 +954,7 @@ impl UcxMtAlloc {
             | AtomicOp::FetchBitAnd(_) => {
                 panic!("Fetch atomic ops must use the fetch path")
             }
-            AtomicOp::Cas(_, _) => {
+            AtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => panic!("Unsupported atomic operation"),
@@ -1022,7 +1020,7 @@ impl UcxMtAlloc {
             | AtomicOp::BitXor(_) => {
                 panic!("Non-fetch atomic ops must use the non-fetch path")
             }
-            AtomicOp::Cas(_, _) => {
+            AtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => panic!("Unsupported atomic operation"),
@@ -1073,12 +1071,12 @@ impl UcxMtAlloc {
         }
     }
 
-    pub(crate) fn thread_wait(&self) {
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
-            .worker
-            .wait_all()
-            .expect("UcxMtAlloc::thread_wait failed waiting on UCX requests");
-    }
+    // pub(crate) fn thread_wait(&self) {
+    //     self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+    //         .worker
+    //         .wait_all()
+    //         .expect("UcxMtAlloc::thread_wait failed waiting on UCX requests");
+    // }
 
     pub(crate) fn wait(&self) {
         for comm_group in self.comm_groups.iter() {
@@ -1180,7 +1178,7 @@ impl From<OneSidedUcxMtAlloc> for CommAlloc {
     fn from(alloc: OneSidedUcxMtAlloc) -> Self {
         CommAlloc {
             inner_alloc: Arc::new(CommAllocInner::OneSidedUcxMtAlloc(alloc)),
-            alloc_type: CommAllocType::Remote,
+            // alloc_type: CommAllocType::Remote,
         }
     }
 }

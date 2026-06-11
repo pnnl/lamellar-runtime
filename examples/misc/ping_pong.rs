@@ -37,7 +37,7 @@ struct RecvAm {
 impl LamellarAm for RecvAm {
     async fn exec(self) {
         unsafe {
-            let cnt = 0;
+            let _cnt = 0;
 
             let start = self.remote_pe * self.buffer_size;
             let end = start + self.buffer_size;
@@ -165,26 +165,26 @@ impl LamellarAm for MyAm {
                 let mut indices = vec![];
                 std::mem::swap(&mut indices, &mut pe_bufs[pe]);
                 let _ = task_group
-                    .spawn_am_local(SendAm {
+                    .exec_am_local(SendAm {
                         indices,
                         buffers: self.buffers.clone(),
                         remote_pe: pe,
                         buffer_size: self.buffer_size,
                         comm_lock: self.comm_lock.clone(),
-                    });
+                    }).spawn();
                 cnt += 1;
             }
         }
         for (pe, indices) in pe_bufs.drain(..).enumerate() {
             if indices.len() > 0 {
                 let _ = task_group
-                    .spawn_am_local(SendAm {
+                    .exec_am_local(SendAm {
                         indices,
                         buffers: self.buffers.clone(),
                         remote_pe: pe,
                         buffer_size: self.buffer_size,
                         comm_lock: self.comm_lock.clone(),
-                    });
+                    }).spawn();
                 cnt += 1;
             }
         }

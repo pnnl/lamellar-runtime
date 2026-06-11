@@ -71,11 +71,10 @@ fn node_total_memory_bytes() -> Option<u64> {
     pages.checked_mul(page_size)
 }
 
-// #[derive(Debug)]
 enum BarrierImpl {
     Uninit,
-    Collective(MultiCastGroup),
-    Manual(LibfabricAlloc, AtomicUsize),
+    // Collective(MultiCastGroup),
+    // Manual(LibfabricAlloc, AtomicUsize),
     Pmi(Arc<PmiX>),
 }
 
@@ -101,7 +100,7 @@ struct CommGroup {
     get_cntr: Counter<WaitableCntr>,
     av: AddressVector,
     eq: EventQueue<WaitableEq>,
-    info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
+    // info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
     lock: Mutex<()>,
@@ -131,10 +130,12 @@ impl LibfabricMem {
         }
     }
 
+    #[allow(dead_code)]
     fn as_slice(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
 
+    #[allow(dead_code)]
     fn as_mut_slice(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut(self.as_ptr(), self.len()) }
     }
@@ -560,7 +561,7 @@ impl Ofi {
             get_cntr,
             av,
             eq,
-            info_entry: info_entry.clone(),
+            // info_entry: info_entry.clone(),
             put_cnt: AtomicU64::new(0),
             get_cnt: AtomicU64::new(0),
             lock: Mutex::new(()),
@@ -695,7 +696,7 @@ impl Ofi {
             LamellarAtomicOp::BitAnd(_) => AtomicOpKind::BitAnd,
             LamellarAtomicOp::Read(_) => AtomicOpKind::Read,
             LamellarAtomicOp::Write(_) => AtomicOpKind::Write,
-            LamellarAtomicOp::Cas(_, _) => AtomicOpKind::Cas,
+            LamellarAtomicOp::Cas => AtomicOpKind::Cas,
             LamellarAtomicOp::FetchMin(_) => AtomicOpKind::Min,
             LamellarAtomicOp::FetchMax(_) => AtomicOpKind::Max,
             LamellarAtomicOp::FetchSum(_) | LamellarAtomicOp::FetchSub(_) => AtomicOpKind::Sum,
@@ -809,38 +810,40 @@ impl Ofi {
         Ok(all_mem_info)
     }
 
-    fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
-        let mut coll_attr = CollectiveAttr::<()>::new();
+    // #[allow(dead_code)]
+    // fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
+    //     let mut coll_attr = CollectiveAttr::<()>::new();
 
-        if self
-            .domain
-            .query_collective::<()>(CollectiveOp::Barrier, &mut coll_attr)
-            .is_err()
-            || true
-        {
-            let all_pes: Vec<_> = (0..self.num_pes).collect();
-            let barrier_size = all_pes.len() * std::mem::size_of::<usize>();
-            let barrier_addr = self
-                .sub_alloc(&all_pes, barrier_size, std::mem::align_of::<usize>())
-                .map_err(|e| {
-                    if let AllocError::FabricAllocationError(err_no) = e {
-                        FabricError::BarrierError(err_no as u32)
-                    } else {
-                        FabricError::BarrierError(u32::MAX)
-                    }
-                })?;
+    //     if self
+    //         .domain
+    //         .query_collective::<()>(CollectiveOp::Barrier, &mut coll_attr)
+    //         .is_err()
+    //         || true
+    //     {
+    //         let all_pes: Vec<_> = (0..self.num_pes).collect();
+    //         let barrier_size = all_pes.len() * std::mem::size_of::<usize>();
+    //         let barrier_addr = self
+    //             .sub_alloc(&all_pes, barrier_size, std::mem::align_of::<usize>())
+    //             .map_err(|e| {
+    //                 if let AllocError::FabricAllocationError(err_no) = e {
+    //                     FabricError::BarrierError(err_no as u32)
+    //                 } else {
+    //                     FabricError::BarrierError(u32::MAX)
+    //                 }
+    //             })?;
 
-            *self.barrier_impl.write() = BarrierImpl::Manual(barrier_addr, AtomicUsize::new(0));
-            Ok(())
-        } else {
-            let all_pes: Vec<_> = (0..self.num_pes).collect();
-            *self.barrier_impl.write() = BarrierImpl::Collective(
-                self.create_mc_group(&all_pes)
-                    .map_err(|e| FabricError::BarrierError(e.c_err))?,
-            );
-            Ok(())
-        }
-    }
+    //         *self.barrier_impl.write() = BarrierImpl::Manual(barrier_addr, AtomicUsize::new(0));
+    //         Ok(())
+    //     } else {
+    //         let all_pes: Vec<_> = (0..self.num_pes).collect();
+    //         *self.barrier_impl.write() = BarrierImpl::Collective(
+    //             self.create_mc_group(&all_pes)
+    //                 .map_err(|e| FabricError::BarrierError(e.c_err))?,
+    //         );
+    //         Ok(())
+    //     }
+    // }
+
     pub(crate) fn clear_barrier(&self) {
         let mut barrier_impl = self.barrier_impl.write();
         *barrier_impl = BarrierImpl::Uninit;
@@ -1140,64 +1143,64 @@ impl Ofi {
             BarrierImpl::Uninit => {
                 panic!("Barrier is not initialized");
             }
-            BarrierImpl::Collective(mc) => {
-                let cg = &self.comm_group;
-                let mut ctx = self.info_entry.allocate_context();
-                loop {
-                    let ret = cg.ep.barrier_with_context(mc, &mut ctx);
-                    match &ret {
-                        Ok(_) => break,
-                        Err(err) => {
-                            if !matches!(err.kind, libfabric::error::ErrorKind::TryAgain) {
-                                return ret;
-                            }
-                        }
-                    }
-                }
-                cg.wait_for_completion(&ctx)?;
-                // trace!("Done with barrier");
-                Ok(())
-            }
-            BarrierImpl::Manual(barrier_alloc, barrier_id) => {
-                let n = 2usize;
-                let pes = (0..self.num_pes).collect::<Vec<_>>();
-                let num_pes = pes.len();
-                let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
-                let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
-                for round in 0..num_rounds as usize {
-                    for i in 1..=n {
-                        let send_pe = (self.my_pe + i * (n + 1).pow(round as u32)) % num_pes;
+            // BarrierImpl::Collective(mc) => {
+            //     let cg = &self.comm_group;
+            //     let mut ctx = self.info_entry.allocate_context();
+            //     loop {
+            //         let ret = cg.ep.barrier_with_context(mc, &mut ctx);
+            //         match &ret {
+            //             Ok(_) => break,
+            //             Err(err) => {
+            //                 if !matches!(err.kind, libfabric::error::ErrorKind::TryAgain) {
+            //                     return ret;
+            //                 }
+            //             }
+            //         }
+            //     }
+            //     cg.wait_for_completion(&ctx)?;
+            //     // trace!("Done with barrier");
+            //     Ok(())
+            // }
+            // BarrierImpl::Manual(barrier_alloc, barrier_id) => {
+            //     let n = 2usize;
+            //     let pes = (0..self.num_pes).collect::<Vec<_>>();
+            //     let num_pes = pes.len();
+            //     let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
+            //     let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
+            //     for round in 0..num_rounds as usize {
+            //         for i in 1..=n {
+            //             let send_pe = (self.my_pe + i * (n + 1).pow(round as u32)) % num_pes;
 
-                        // let dst = barrier_addr + 8 * self.my_pe;
-                        unsafe {
-                            barrier_alloc.inner_put::<usize>(
-                                send_pe,
-                                self.my_pe,
-                                std::slice::from_ref(&my_barrier),
-                                false,
-                            )?
-                        };
-                    }
+            //             // let dst = barrier_addr + 8 * self.my_pe;
+            //             unsafe {
+            //                 barrier_alloc.inner_put::<usize>(
+            //                     send_pe,
+            //                     self.my_pe,
+            //                     std::slice::from_ref(&my_barrier),
+            //                     false,
+            //                 )?
+            //             };
+            //         }
 
-                    let _lock = self.comm_group.lock.lock();
-                    for i in 1..=n {
-                        let recv_pe = (self.my_pe as i64
-                            - i as i64 * (n as i64 + 1).pow(round as u32))
-                        .rem_euclid(num_pes as i64);
-                        // let barrier_vec = unsafe {
-                        //     std::slice::from_raw_parts(barrier_addr as *const usize, num_pes)
-                        // };
-                        let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
+            //         let _lock = self.comm_group.lock.lock();
+            //         for i in 1..=n {
+            //             let recv_pe = (self.my_pe as i64
+            //                 - i as i64 * (n as i64 + 1).pow(round as u32))
+            //             .rem_euclid(num_pes as i64);
+            //             // let barrier_vec = unsafe {
+            //             //     std::slice::from_raw_parts(barrier_addr as *const usize, num_pes)
+            //             // };
+            //             let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
 
-                        while my_barrier > barrier_vec[recv_pe as usize] {
-                            self.comm_group.progress()?;
-                            std::thread::yield_now();
-                        }
-                    }
-                }
+            //             while my_barrier > barrier_vec[recv_pe as usize] {
+            //                 self.comm_group.progress()?;
+            //                 std::thread::yield_now();
+            //             }
+            //         }
+            //     }
 
-                Ok(())
-            }
+            //     Ok(())
+            // }
             BarrierImpl::Pmi(pmi) => {
                 pmi.barrier(true).expect("PMI Barrier failed");
                 Ok(())
@@ -1869,13 +1872,15 @@ impl LibfabricAlloc {
         }
     }
 
-    pub(crate) fn remote_info(&self, remote_pe: &usize) -> Option<RemoteMemAddressInfo> {
-        self.remote_allocs.get(remote_pe).cloned()
-    }
+    // #[allow(dead_code)]
+    // pub(crate) fn remote_info(&self, remote_pe: &usize) -> Option<RemoteMemAddressInfo> {
+    //     self.remote_allocs.get(remote_pe).cloned()
+    // }
 
-    pub(crate) fn mr(&self) -> MemoryRegion {
-        self.mr.clone()
-    }
+    // #[allow(dead_code)]
+    // pub(crate) fn mr(&self) -> MemoryRegion {
+    //     self.mr.clone()
+    // }
 
     pub(crate) unsafe fn inner_put<T: Copy>(
         &self,
@@ -2175,7 +2180,7 @@ impl LibfabricAlloc {
             | LamellarAtomicOp::FetchBitAnd(_) => {
                 panic!("Fetch atomic ops must use the fetch path")
             }
-            LamellarAtomicOp::Cas(_, _) => {
+            LamellarAtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => {}
@@ -2265,7 +2270,7 @@ impl LibfabricAlloc {
             | LamellarAtomicOp::BitAnd(_) => {
                 panic!("Non-fetch atomic ops must use the non-fetch path")
             }
-            LamellarAtomicOp::Cas(_, _) => {
+            LamellarAtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => {}
@@ -2500,7 +2505,7 @@ impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::FetchBitAnd(_) => FetchAtomicOp::Band,
             LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
             LamellarAtomicOp::Read(_) => FetchAtomicOp::AtomicRead,
-            LamellarAtomicOp::Cas(_, _) => panic!("Cas conversion to FetchAtomicOp not supported"),
+            LamellarAtomicOp::Cas => panic!("Cas conversion to FetchAtomicOp not supported"),
             _ => panic!("Non-fetch atomic ops must use non-fetch path"),
         }
     }
@@ -2552,7 +2557,7 @@ impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::FetchBitAnd(_) => FetchAtomicOp::Band,
             LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
             LamellarAtomicOp::Read(_) => FetchAtomicOp::AtomicRead,
-            LamellarAtomicOp::Cas(_, _) => panic!("Cas conversion to FetchAtomicOp not supported"),
+            LamellarAtomicOp::Cas => panic!("Cas conversion to FetchAtomicOp not supported"),
             _ => panic!("Non-fetch atomic ops must use non-fetch path"),
         }
     }

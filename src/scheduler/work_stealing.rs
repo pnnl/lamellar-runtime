@@ -627,10 +627,10 @@ impl LamellarExecutor for WorkStealing {
         self.orig_num_threads
     }
 
-    fn active(&self) -> bool {
-        self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
-            || self.active_cnt.load(Ordering::Relaxed) > 0
-    }
+    // fn active(&self) -> bool {
+    //     self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
+    //         || self.active_cnt.load(Ordering::Relaxed) > 0
+    // }
 }
 
 impl WorkStealing {

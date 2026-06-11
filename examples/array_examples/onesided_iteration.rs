@@ -2,13 +2,12 @@ use futures_util::stream::StreamExt;
 use lamellar::array::prelude::*;
 
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 
 const ARRAY_LEN: usize = 100;
 
 #[lamellar::main]
 fn main() {
-    let subscriber = tracing_subscriber::registry()
+    let _subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(
             tracing_subscriber::fmt::layer()

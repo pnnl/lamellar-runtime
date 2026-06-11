@@ -256,10 +256,10 @@ fn main() {
         );
     }
 
-    let A_f = UnsafeArray::<SortElement>::new(world.team(), n, Distribution::Block);
-    let B_f = UnsafeArray::<SortElement>::new(world.team(), n, Distribution::Block);
-    let A = A_f.block();
-    let B = B_f.block();
+    let a_f = UnsafeArray::<SortElement>::new(world.team(), n, Distribution::Block);
+    let b_f = UnsafeArray::<SortElement>::new(world.team(), n, Distribution::Block);
+    let a = a_f.block();
+    let b = b_f.block();
 
     // Initialize A. The actual sort benchmark does something more complex
     // (generating random keys). Here we just set the keys to a
@@ -267,7 +267,7 @@ fn main() {
     unsafe {
         let glob_start = n_per_pe * my_pe;
 
-        let _ = A
+        let _ = a
             .local_chunks_mut(n_per_task)
             .enumerate()
             .for_each(move |(tid, task_slice)| {
@@ -281,7 +281,7 @@ fn main() {
                 //  println!("tid {:?} ->  chunk {:?}", tid, task_slice);
             })
             .spawn();
-        A.wait_all();
+        a.wait_all();
     }
 
     println!("Input to permute:");
@@ -293,24 +293,23 @@ fn main() {
     // be read back using 'tid'), in order to
     // compute the destination index.
 
-    //global_shuffle(&mut A, &mut B, &world, n_per_task);
+    //global_shuffle(&mut a, &mut b, &world, n_per_task);
     let time = Instant::now();
-    let B_clone = B.clone();
     unsafe {
         // let _ =
-        //   A.local_chunks(n_per_task)
+        //   a.local_chunks(n_per_task)
         //      .enumerate().for_each(move|(_tid,task_slice)| {
         //          //
         //         //  for elt in task_slice.iter() {
-        //         //     let _ = B_clone.store(elt.key as usize, *elt).spawn();
+        //         //     let _ = b_clone.store(elt.key as usize, *elt).spawn();
         //         //  }
         //         let mut indices = task_slice.iter().map(|e| e.key as usize);
         //         let mut vals = task_slice.iter().map(|e| *e);
-        //         let _ = B_clone.batch_store(&mut indices as &mut dyn Iterator<Item=usize>, &mut vals as &mut dyn Iterator<Item = SortElement>).spawn();
+        //         let _ = b_clone.batch_store(&mut indices as &mut dyn Iterator<Item=usize>, &mut vals as &mut dyn Iterator<Item = SortElement>).spawn();
         //      }).block();
-        let mut indices = A.local_data().iter().map(|e| e.key as usize);
-        let mut vals = A.local_data().iter().map(|e| *e);
-        B.batch_store(
+        let mut indices = a.local_data().iter().map(|e| e.key as usize);
+        let mut vals = a.local_data().iter().map(|e| *e);
+        b.batch_store(
             &mut indices as &mut dyn Iterator<Item = usize>,
             &mut vals as &mut dyn Iterator<Item = SortElement>,
         )

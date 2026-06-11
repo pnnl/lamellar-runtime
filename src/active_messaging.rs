@@ -938,6 +938,7 @@ pub(crate) struct Msg {
     padding: [u8; 1], //padding to enable IntoBytes 
 }
 
+#[allow(dead_code)]
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub(crate) enum RetType {
     //maybe change to ReqType? ReturnRequestType?

@@ -2,7 +2,7 @@ use crate::{
     config,
     lamellae::{
         comm::atomic::atomic_type_supported,
-        comm::{AtomicOp, CommInfo, CommProgress, CommShutdown},
+        comm::{AtomicOp, CommInfo, CommProgress, CommShutdown,CommMem},
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
     Backend,
@@ -134,6 +134,7 @@ impl Drop for ShmemComm {
         // }
         if self.runtime_allocs.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
+            self.print_pools();
         }
     }
 }

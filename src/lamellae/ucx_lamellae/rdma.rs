@@ -118,7 +118,7 @@ impl<T: Remote> UcxPutFuture<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
-                if let Some(mut request) = self.request.take() {
+                if let Some(request) = self.request.take() {
                     request.wait().expect("ucx put failed");
                 } else if !self.local_op {
                     self.alloc.wait_all();
@@ -204,7 +204,7 @@ impl<T: Remote> UcxGetFuture<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
-                if let Some(mut request) = self.request.take() {
+                if let Some(request) = self.request.take() {
                     request.wait().expect("ucx get failed");
                 } else if !self.local_op {
                     self.alloc.wait_all();
@@ -290,7 +290,7 @@ impl<T: Remote> UcxGetBufferFuture<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
-                if let Some(mut request) = self.request.take() {
+                if let Some(request) = self.request.take() {
                     request.wait().expect("ucx get buffer failed");
                 } else if !self.local_op {
                     self.alloc.wait_all();
@@ -381,7 +381,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxGetIntoBufferFuture<T, B> {
         self.scheduler.clone().spawn_task(
             async move {
                 match request {
-                    Some(mut request) => request.wait().expect("ucx get failed"),
+                    Some(request) => request.wait().expect("ucx get failed"),
                     None => {
                         if !local_op {
                             alloc.wait_all()

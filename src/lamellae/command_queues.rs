@@ -1032,7 +1032,16 @@ impl CQGet {
     }
 
     fn mem_per_pe() -> usize {
-        4 * std::mem::size_of::<CmdMsg>()
+        match config().cmd_queue {
+            CmdQueue::Old => super::command_queues_old::CQOld::mem_per_pe(),
+            CmdQueue::Get => 4 * std::mem::size_of::<CmdMsg>(),
+            CmdQueue::Get2 => super::command_queues_get2::CQGet2::mem_per_pe(),
+            CmdQueue::GetN => super::command_queues_get_n::CQGetN::mem_per_pe(),
+            CmdQueue::Put => super::command_queues_put::CQPut::mem_per_pe(),
+            CmdQueue::Put2 => super::command_queues_put2::CQPut2::mem_per_pe(),
+            CmdQueue::Put2N => super::command_queues_put2_n::CQPut2N::mem_per_pe(),
+            CmdQueue::Put3 => super::command_queues_put3::CQPut3::mem_per_pe(),
+        } 
     }
 
     fn available_to_send(&self, pe: usize) -> bool {

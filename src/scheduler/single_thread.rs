@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus};
+use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
 
 use tracing::debug;
 
@@ -15,6 +15,7 @@ static TASK_ID: AtomicUsize = AtomicUsize::new(0);
 #[derive(Debug)]
 pub(crate) struct SingleThread {
     queue: Arc<Mutex<VecDeque<async_task::Runnable<usize>>>>,
+    #[allow(dead_code)]
     status: Arc<AtomicU8>,
 }
 
@@ -77,7 +78,7 @@ impl LamellarExecutor for SingleThread {
             guard.push_back(runnable);
             // trace!("Scheduled task {:?} on single thread executor", task_id);
         };
-        let id = task_id;
+        let _id = task_id;
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| async move {
                 // trace!(
@@ -112,7 +113,7 @@ impl LamellarExecutor for SingleThread {
             guard.push_back(runnable);
             // trace!("Scheduled task {:?} on single thread executor", task_id);
         };
-        let id = task_id;
+        let _id = task_id;
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| async move {
                 // trace!(
@@ -214,9 +215,9 @@ impl LamellarExecutor for SingleThread {
         1
     }
 
-    fn active(&self) -> bool {
-        self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
-    }
+    // fn active(&self) -> bool {
+    //     self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
+    // }
 
     fn shutdown(&self) {
         debug!("Shutting down SingleThread executor");

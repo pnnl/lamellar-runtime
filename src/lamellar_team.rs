@@ -1831,9 +1831,10 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn flush(&self) {
-        self.lamellae.comm().flush_all();
-    }
+    // #[allow(dead_code)]
+    // pub(crate) fn flush(&self) {
+    //     self.lamellae.comm().flush_all();
+    // }
 }
 impl Darc<LamellarTeamRT> {
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -2063,6 +2064,7 @@ impl Darc<LamellarTeamRT> {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
+    #[allow(dead_code)]
     pub(crate) fn exec_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
