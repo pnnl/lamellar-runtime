@@ -1279,6 +1279,17 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     }
 }
 
+impl<T: Dist> UnsafeArray<T> {
+    /// Like `pe_and_offset_for_global_index` but always returns the absolute PE-local
+    /// memory offset (not sub-array-relative). Required for raw RDMA operations that
+    /// address PE memory directly (e.g. `mem_region.get_pe(pe, offset)`).
+    pub(crate) fn pe_and_rdma_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
+        let pe = self.inner.pe_for_dist_index(index)?;
+        let offset = self.inner.pe_full_offset_for_dist_index(pe, index)?;
+        Some((pe, offset))
+    }
+}
+
 impl<T: Dist> LamellarEnv for UnsafeArray<T> {
     fn my_pe(&self) -> usize {
         self.inner.data.my_pe
@@ -1735,7 +1746,7 @@ impl UnsafeArrayInner {
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
                 if global_index % num_pes == pe {
-                    Some(index / num_pes)
+                    Some(global_index / num_pes)
                 } else {
                     None
                 }

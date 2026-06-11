@@ -12,7 +12,7 @@ use crate::{
     memregion::{
         AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
     },
-    ActiveMessaging, LamellarArray,
+    ActiveMessaging,
 };
 impl<T: Dist> GlobalLockArray<T> {
     #[doc(alias("One-sided", "onesided"))]
@@ -686,14 +686,14 @@ impl<T: Dist> GlobalLockArray<T> {
 }
 impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
     unsafe fn put(&self, index: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.array.pe_and_rdma_offset_for_global_index(index) {
             self.put_pe(pe, offset, data)
         } else {
             panic!("index out of bounds");
         }
     }
     unsafe fn put_unmanaged(&self, index: usize, data: T, _: Sealed) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.array.pe_and_rdma_offset_for_global_index(index) {
             let _ = self.put_pe(pe, offset, data).spawn();
         } else {
             panic!("index out of bounds");
@@ -835,7 +835,7 @@ impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
 
 impl<T: Dist> LamellarRdmaGet<T> for GlobalLockArray<T> {
     unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.array.pe_and_rdma_offset_for_global_index(index) {
             let req = self.exec_am_local_tg(InitGetPeAm {
                 array: self.clone(),
                 offset,

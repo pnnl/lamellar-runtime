@@ -1127,7 +1127,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// println!("PE{my_pe} got array[0] = {val}");
     ///```
     pub unsafe fn blocking_get(&self, index: usize) -> T {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let res = self.mem_region.blocking_get(pe, offset);
             res
         } else {
@@ -1457,7 +1457,7 @@ impl<T: Dist> UnsafeArray<T> {
 
 impl<T: Dist> LamellarRdmaPut<T> for UnsafeArray<T> {
     unsafe fn put(&self, index: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let req = self.mem_region.put(pe, offset, data);
             ArrayRdmaPutHandle {
                 array: self.as_lamellar_byte_array(),
@@ -1469,7 +1469,7 @@ impl<T: Dist> LamellarRdmaPut<T> for UnsafeArray<T> {
         }
     }
     unsafe fn put_unmanaged(&self, index: usize, data: T, _: Sealed) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region.put_unmanaged(pe, offset, data);
         } else {
             panic!("index out of bounds in LamellarArray put");
@@ -1577,7 +1577,7 @@ impl<T: Dist> LamellarRdmaPut<T> for UnsafeArray<T> {
 
 impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
     unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let req = self.mem_region.get(pe, offset);
             ArrayRdmaGetHandle {
                 array: self.as_lamellar_byte_array(),
@@ -1589,7 +1589,7 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
         }
     }
     unsafe fn blocking_get(&self, index: usize, _: Sealed) -> T {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region.blocking_get(pe, offset)
         } else {
             panic!("index out of bounds in LamellarArray put");

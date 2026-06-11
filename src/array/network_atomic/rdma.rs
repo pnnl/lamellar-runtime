@@ -728,7 +728,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
 }
 impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
     unsafe fn put(&self, index: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.array.pe_and_rdma_offset_for_global_index(index) {
             let req = self
                 .array
                 .mem_region
@@ -743,7 +743,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn put_unmanaged(&self, index: usize, data: T, _: Sealed) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.array.pe_and_rdma_offset_for_global_index(index) {
             self.array
                 .mem_region
                 .atomic_op_unmanaged(pe, offset, AtomicOp::Write(Box::pin(data)));
@@ -886,7 +886,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
 
 impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.array.pe_and_rdma_offset_for_global_index(index) {
             let req = self.array.mem_region.atomic_fetch_op(
                 pe,
                 offset,
@@ -902,7 +902,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn blocking_get(&self, index: usize, _: Sealed) -> T {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.array.pe_and_rdma_offset_for_global_index(index) {
             self.array.mem_region.atomic_fetch_op_blocking(
                 pe,
                 offset,
