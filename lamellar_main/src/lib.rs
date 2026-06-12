@@ -58,7 +58,8 @@ fn create_binary_update_block() -> impl ToTokens {
                                 // Copy binary to temporary location since we can't patchelf a running binary
                                 // Create temp file in same directory as the binary to avoid cross-filesystem rename issues
                                 let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
-                                let temp_exe = exe_dir.join(format!("lamellar_exe_{}.tmp", std::process::id()));
+                                let tmp_dir = std::env::temp_dir();
+                                let temp_exe = tmp_dir.join(format!("lamellar_exe_{}.tmp", std::process::id()));
                                 let temp_exe_str = temp_exe.to_string_lossy().to_string();
 
                                 if let Err(err) = std::fs::copy(&exe_path, &temp_exe) {
@@ -69,11 +70,27 @@ fn create_binary_update_block() -> impl ToTokens {
                                         err
                                     );
                                 } else {
+
+                                    let timer = std::time::Instant::now();
+                                    while let Ok(false) = std::fs::exists(&temp_exe) {
+                                        // Wait for the copied file to be fully written to disk before trying to patch it
+                                        std::thread::sleep(std::time::Duration::from_millis(100));
+                                        if timer.elapsed() > std::time::Duration::from_secs(1) {
+                                            eprintln!(
+                                                "lamellar_main: timeout waiting for temp binary {:?} to appear after copying: {}",
+                                                temp_exe,
+                                                temp_exe_str
+                                            );
+                                            break;
+                                        }
+                                    }
                                     // Make the copy executable
-                                    let _ = std::process::Command::new("chmod")
+                                    let chmod_status = std::process::Command::new("chmod")
                                         .arg("+x")
                                         .arg(&temp_exe_str)
                                         .status();
+                                    
+                                    println!("chmod status: {:?}", chmod_status);
 
                                     let patch_status = std::process::Command::new("patchelf")
                                         // .arg("--force-runpath")
@@ -433,6 +450,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
                 #fini_prof
                 result
             }
+            println!("lamellar_main: process exiting");
         }
     };
     TokenStream::from(res)
