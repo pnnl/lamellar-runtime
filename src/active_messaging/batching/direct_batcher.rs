@@ -147,6 +147,7 @@ impl DirectBatcher {
                 async_std::task::yield_now().await;
             }
             debug!("Batcher task exiting!!!!!!");
+            trace!(target: "lamellae_debug", "Batcher task exiting lamellae cnt: {:?}", Arc::strong_count(&lamellae));
 
         });
     }
@@ -376,7 +377,7 @@ impl Batcher for DirectBatcher {
         &self,
         msg: Msg,
         ser_data: SerializedData,
-        lamellae: Arc<Lamellae>,
+        lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ){
         debug!("Executing batched message from src: {:?} with data size: {:?}", msg.src, ser_data.data_len());
@@ -390,10 +391,10 @@ impl Batcher for DirectBatcher {
             offset += std::mem::size_of::<Cmd>();
             offset += match cmd {
                 Cmd::Am => {
-                   self.exec_am(src, &data_bytes[offset..], &lamellae, ame)
+                   self.exec_am(src, &data_bytes[offset..], lamellae, ame)
                 },
                 Cmd::ReturnAm => {
-                    self.exec_return_am(src, &data_bytes[offset..], &lamellae, ame).await
+                    self.exec_return_am(src, &data_bytes[offset..], lamellae, ame).await
                 },
                 Cmd::Data => {
                     self.exec_data_am(src, &data_bytes[offset..], ame)

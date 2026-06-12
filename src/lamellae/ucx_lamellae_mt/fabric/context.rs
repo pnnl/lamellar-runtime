@@ -5,6 +5,7 @@ use lamellar_ucx_sys::*;
 use pmi::{pmi::Pmi, pmix::PmiX};
 
 use super::{error::Error, worker::Worker};
+use tracing::trace;
 
 /// The configuration for UCP application context.
 #[derive(Debug)]
@@ -42,7 +43,9 @@ impl Default for Config {
 
 impl Drop for Config {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop Config");
         unsafe { ucp_config_release(self.handle) };
+        trace!(target: "drop", "end drop Config");
     }
 }
 
@@ -140,7 +143,9 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop Context");
         unsafe { ucp_cleanup(self.handle) };
+        trace!(target: "drop", "end drop Context");
     }
 }
 

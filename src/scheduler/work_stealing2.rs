@@ -5,6 +5,7 @@ use crate::scheduler::{
 use crate::MAIN_THREAD;
 
 //use tracing::*;
+ use tracing::trace;
 
 use async_task::{Builder, Runnable};
 use core_affinity::CoreId;
@@ -557,6 +558,7 @@ impl Drop for WorkStealing2 {
     //when is this called with respect to world?
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop WorkStealing2");
         // println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {
             if thread.thread().id() != std::thread::current().id() {
@@ -564,5 +566,6 @@ impl Drop for WorkStealing2 {
             }
         }
         // println!("WorkStealing Scheduler Dropped");
+        trace!(target: "drop", "end drop WorkStealing2");
     }
 }

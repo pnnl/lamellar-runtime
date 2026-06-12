@@ -562,17 +562,19 @@ impl LamellarExecutor for WorkStealing {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     fn shutdown(&self) {
+        trace!(target: "drop", "entering shutdown");
         while self.panic.load(Ordering::SeqCst) == 0 && self.active_cnt.load(Ordering::Relaxed) > 0
         {
             //num active threads
             self.exec_task();
             std::thread::yield_now()
         }
+        trace!(target: "drop", "leaving shutdown");
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
     fn force_shutdown(&self) {
-        trace!("work stealing force shutting down");
+        trace!(target: "drop", "entering force_shutdown");
 
         // trace!("work stealing shutting down {:?}",self.status());
         let my_id = std::thread::current().id();
@@ -591,6 +593,7 @@ impl LamellarExecutor for WorkStealing {
         //     self.active_cnt.load(Ordering::Relaxed),
         //     self.active_cnt.load(Ordering::Relaxed)
         // );
+        trace!(target: "drop", "leaving force_shutdown");
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -727,6 +730,7 @@ impl Drop for WorkStealing {
     //when is this called with respect to world?
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop WorkStealing");
         debug!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {
             if thread.thread().id() != std::thread::current().id() {
@@ -734,5 +738,6 @@ impl Drop for WorkStealing {
             }
         }
         debug!("WorkStealing Scheduler Dropped");
+        trace!(target: "drop", "end drop WorkStealing");
     }
 }

@@ -869,6 +869,12 @@ pub(crate) struct ReqMetaData {
     // pub(crate) team_addr: usize,
 }
 
+// impl Drop for ReqMetaData {
+//     fn drop(&mut self) {
+//         trace!(target: "lamellae_debug", "Dropping ReqMetaData  lamellae cnt {}",  Arc::strong_count(&self.lamellae));
+//     }
+// }
+
 pub(crate) enum Am {
     All(ReqMetaData, LamellarArcAm),
     Remote(ReqMetaData, LamellarArcAm), //req data, am to execute
@@ -955,8 +961,8 @@ pub(crate) enum RetType {
 #[derive(Debug)]
 pub(crate) struct AMCounters {
     pub(crate) outstanding_reqs: Arc<AtomicUsize>,
-    pub(crate) launched_req_cnt: AtomicUsize,
-    pub(crate) send_req_cnt: AtomicUsize,
+    pub(crate) launched_req_cnt: AtomicUsize, //wrap in CachePadded to avoid false sharing with outstanding_reqs
+    pub(crate) send_req_cnt: AtomicUsize, //wrap in CachePadded to avoid false sharing with outstanding_reqs
 }
 
 impl AMCounters {
@@ -1411,7 +1417,7 @@ pub trait ActiveMessaging {
 pub(crate) trait ActiveMessageEngine {
     async fn process_msg(self, am: Am, stall_mark: usize, immediate: bool);
 
-    async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: Arc<Lamellae>);
+    async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: &Arc<Lamellae>);
 
     //#[tracing::instrument(skip_all, level = "debug")]
     fn get_team_and_world(
@@ -1426,6 +1432,7 @@ pub(crate) trait ActiveMessageEngine {
             pe,
             team_addr
         );
+        trace!(target: "lamellae_debug", "get_team_and_world: pe: {:?}  lamellae_cnt: {:?}", pe, Arc::strong_count(lamellae));
         let local_team_addr = lamellae.comm().local_addr(pe, team_addr);
         let team_rt = unsafe {
             let team_ptr = *local_team_addr.as_ptr::<*const DarcInner<LamellarTeamRT>>();

@@ -437,6 +437,7 @@ impl Clone for LamellarWorld {
 impl Drop for LamellarWorld {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop LamellarWorld");
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
             debug!("Dropping LamellarWorld");
@@ -473,6 +474,7 @@ impl Drop for LamellarWorld {
 
         // #[cfg(feature = "enable-prof")]
         // lamellar_prof::fini_prof!();
+        trace!(target: "drop", "end drop LamellarWorld");
     }
 }
 
@@ -687,7 +689,7 @@ impl LamellarWorldBuilder {
         // timer = std::time::Instant::now();
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
         sched_new.init_batcher_task(sched_new.clone(), &lamellae);
-        trace!("lamellae initialized");
+        trace!(target:"lamellae_debug", "lamellae initialized lamellae cnt {:?} ", Arc::strong_count(&lamellae));
         // println!("{:?}: init_lamellae", timer.elapsed());
 
         // timer = std::time::Instant::now();
@@ -708,7 +710,7 @@ impl LamellarWorldBuilder {
             panic.clone(),
             // teams.clone(),
         );
-        trace!("team_rt created");
+        trace!(target:"lamellae_debug", "team_rt created lamellae cnt {:?}", Arc::strong_count(&lamellae));
 
         let _ = AM_HEADER_LEN.set(crate::serialized_size::<AmHeader>(
             &AmHeader {
@@ -747,6 +749,7 @@ impl LamellarWorldBuilder {
         LAMELLAES
             .write()
             .insert(lamellae.comm().backend(), lamellae.clone());
+        trace!(target:"lamellae_debug", "lamellae inserted into world lamellae cnt {:?} ", Arc::strong_count(&lamellae));
         // println!("{:?}: insert lamellae", timer.elapsed());
 
         // timer = std::time::Instant::now();

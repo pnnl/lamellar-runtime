@@ -265,6 +265,7 @@ impl<T: Remote> LamellarBuffer<T, CommSlice<T>> {
     /// while this buffer exists
     pub(crate) unsafe fn from_comm_slice(comm_slice: CommSlice<T>,lamellae: Arc<Lamellae>) -> Self {
         let len = comm_slice.len();
+        trace!(target: "lamellae_debug", "creating LamellarBuffer from CommSlice with len {:?} lamellae cnt: {:?}", len, Arc::strong_count(&lamellae));
         LamellarBuffer {
             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(comm_slice))).into())
                 .unwrap(),
@@ -318,6 +319,7 @@ impl<T: Remote> LamellarBuffer<T, Vec<T>> {
     }
     pub(crate) fn from_vec_with_lamellae(vec: Vec<T>,lamellae: Arc<Lamellae>) -> Self {
         let len = vec.len();
+        trace!(target: "lamellae_debug", "creating LamellarBuffer from Vec with len {:?} lamellae cnt: {:?}", len, Arc::strong_count(&lamellae));
         LamellarBuffer {
             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(vec))).into()).unwrap(),
             range: 0..len,
@@ -371,6 +373,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
             lamellae: self.lamellae.clone(),
             _phantom: PhantomData,
         };
+        trace!(target: "lamellae_debug", "split LamellarBuffer at {:?} into left range {:?} and right range {:?} lamellae cnt: {:?}", at, left.range, right.range, Arc::strong_count(&self.lamellae));
         (left, right)
     }
 
@@ -395,6 +398,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
             _phantom: PhantomData,
         };
         self.range = self.range.start..(self.range.start + at);
+        trace!(target: "lamellae_debug", "split_off LamellarBuffer at {:?} into left range {:?} and right range {:?} lamellae cnt: {:?}", at, self.range, right.range, Arc::strong_count(&self.lamellae));
         right
     }
 
@@ -502,6 +506,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Drop for LamellarBuffer<T, B> {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop LamellarBuffer");
         // println!("LamellarBuffer dropped: {:?}", self);
         if unsafe {
             self.data
@@ -512,10 +517,10 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Drop for LamellarBuffer<T, B> {
         {
             // ensure all pending RDMA operations using this buffer are flushed before we drop the backing store
             self.lamellae.comm().flush_all();
-            trace!("Dropping LamellarBuffer: {:?}", self);
             unsafe {
                 let _ = Box::from_raw(self.data.as_ptr());
             }
         }
+        trace!(target: "lamellae_debug", "end drop LamellarBuffer lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
     }
 }

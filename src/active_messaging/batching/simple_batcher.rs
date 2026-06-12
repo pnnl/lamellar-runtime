@@ -537,7 +537,7 @@ impl Batcher for SimpleBatcher {
         &self,
         msg: Msg,
         mut ser_data: SerializedData,
-        lamellae: Arc<Lamellae>,
+        lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
         let mut i = 0;
@@ -556,7 +556,7 @@ impl Batcher for SimpleBatcher {
                 Cmd::Am => {
                     *cnts.entry(Cmd::Am).or_insert(0) += 1;
                     let data = ser_data.data_as_bytes();
-                    self.exec_am_serde(msg.src as usize, &data, &mut i, &lamellae, ame);
+                    self.exec_am_serde(msg.src as usize, &data, &mut i, lamellae, ame);
                     stats!(
                         BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)]
                             [&StatCmd::Am]
@@ -571,7 +571,7 @@ impl Batcher for SimpleBatcher {
                 Cmd::ReturnAm => {
                     *cnts.entry(Cmd::ReturnAm).or_insert(0) += 1;
                     let data = ser_data.data_as_bytes();
-                    self.exec_return_am_serde(msg.src as usize, &data, &mut i, &lamellae, ame).await;
+                    self.exec_return_am_serde(msg.src as usize, &data, &mut i, lamellae, ame).await;
                     stats!(
                         BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
                             [&StatCmd::Return]
@@ -623,6 +623,13 @@ impl Batcher for SimpleBatcher {
             msg.src,
             cnts,
             ser_data.data_len(),
+        );
+        trace!(target: "lamellae_debug",
+            "finished batched msg from {:?} {:?} {:?}, lamellae cnt: {:?}",
+            msg.src,
+            cnts,
+            ser_data.data_len(),
+            Arc::strong_count(&lamellae)
         );
     }
 
@@ -936,6 +943,12 @@ impl SimpleBatcher {
             }
             data = lamellae.serialize_header(header.clone(), size);
         }
+        trace!(target: "lamellae_debug",
+            "created data buf of size {} with header {:?}, lamellae cnt: {:?}",
+            size,
+            header,
+            Arc::strong_count(&lamellae)
+        );
         data.unwrap()
     }
 

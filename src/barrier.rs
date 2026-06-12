@@ -39,6 +39,12 @@ pub(crate) struct Barrier {
     panic: Arc<AtomicU8>,
 }
 
+// impl Drop for Barrier {
+//     fn drop(&mut self) {
+//         trace!(target: "lamellae_debug",  "Dropping Barrier for my_pe {:?} lamellae cnt: {:?} ", self.my_pe, Arc::strong_count(&self.lamellae));
+//     }
+// }
+
 impl Barrier {
     pub(crate) fn new(
         my_pe: usize,
@@ -66,8 +72,7 @@ impl Barrier {
                     pes.sort();
                     AllocationType::Sub(pes)
                 };
-                trace!("creating barrier {:?}", alloc);
-
+                trace!(target: "lamellae_debug", "creating barrier with alloc {:?} for my_pe {:?} num_pes {:?} num_rounds {:?} n {:?} lamellae cnt: {:?}", alloc, my_pe, num_pes, num_rounds, n, Arc::strong_count(&lamellae));
                 let mem_region =
                     MemoryRegion::new(num_rounds * n, &scheduler, None, &lamellae, alloc.clone());
                 let mem_region_comm_slice = unsafe {
@@ -78,8 +83,10 @@ impl Barrier {
                 let mut buffs = vec![];
                 for r in 0..n {
                     trace!(
-                        "[r: {r}] creating barrier buff {:?}, num_rounds: {num_rounds}",
-                        alloc
+                        target: "lamellae_debug",
+                        "[r: {r}] creating barrier buff {:?}, num_rounds: {num_rounds} lamellae cnt: {:?}",
+                        alloc,
+                        Arc::strong_count(&lamellae)
                     );
                     buffs.push(
                         mem_region_comm_slice.sub_slice(r * num_rounds..(r + 1) * num_rounds),
@@ -118,6 +125,7 @@ impl Barrier {
             panic,
         };
         // bar.print_bar();
+        trace!(target: "lamellae_debug", "Created Barrier for my_pe: {:?} num_pes: {:?} n: {:?} num_rounds: {:?} lamellae cnt: {:?}", my_pe, num_pes, n, num_rounds, Arc::strong_count(&bar.lamellae));
         bar
     }
 
@@ -405,6 +413,7 @@ pub struct BarrierHandle {
 #[pinned_drop]
 impl PinnedDrop for BarrierHandle {
     fn drop(self: Pin<&mut Self>) {
+        trace!(target: "lamellae_debug",  "Dropping BarrierHandle  lamellae cnt: {:?} ", Arc::strong_count(&self.lamellae));
         if !self.launched {
             RuntimeWarning::DroppedHandle("a BarrierHandle").print();
         }

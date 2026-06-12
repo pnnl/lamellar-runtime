@@ -879,6 +879,7 @@ impl InnerCQ {
 #[lamellar_prof::prof]
 impl Drop for InnerCQ {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop InnerCQ");
         debug!("dropping InnerCQ");
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
@@ -896,6 +897,7 @@ impl Drop for InnerCQ {
         );
         let _ = Box::into_raw(old);
         debug!("dropped InnerCQ");
+        trace!(target: "drop", "end drop InnerCQ");
     }
 }
 
@@ -1239,7 +1241,7 @@ impl CQPut3 {
                                 cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
                                 scheduler1.submit_remote_am(
                                     ser_data.drop_payload_bytes(std::mem::size_of::<u64>()),
-                                    lamellae,
+                                    &lamellae,
                                 );
                             };
                             self.scheduler.submit_io_task(task);
@@ -1300,7 +1302,7 @@ impl CQPut3 {
 
                         stats!(PE_RECVS[0][src].fetch_add(1, Ordering::SeqCst));
                         self.cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
-                        self.scheduler.submit_remote_am(ser_data, lamellae.clone());
+                        self.scheduler.submit_remote_am(ser_data, &lamellae);
                     }
                 }
             }
@@ -1326,6 +1328,7 @@ impl CQPut3 {
 #[lamellar_prof::prof]
 impl Drop for CQPut3 {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop CQPut3");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1346,5 +1349,6 @@ impl Drop for CQPut3 {
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
+        trace!(target: "drop", "end drop CQPut3");
     }
 }

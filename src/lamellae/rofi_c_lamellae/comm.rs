@@ -127,6 +127,7 @@ impl CommInfo for RofiCComm {
 impl Drop for RofiCComm {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop RofiCComm");
         if self.mem_occupied() > 0 {
             println!("dropping rofi_c -- memory in use {:?}", self.mem_occupied());
         }
@@ -142,5 +143,6 @@ impl Drop for RofiCComm {
         );
         let _ = self.rofi_c.barrier();
         let _ = rofi_c_finit();
+        trace!(target: "drop", "end drop RofiCComm");
     }
 }

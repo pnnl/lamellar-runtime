@@ -18,6 +18,7 @@ use parking_lot::RwLock;
 use std::env;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use tracing::trace;
 
 #[derive(Debug)]
 pub(crate) struct ShmemComm {
@@ -125,16 +126,18 @@ impl CommInfo for ShmemComm {
 impl Drop for ShmemComm {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop ShmemComm");
         // let allocs = self.alloc.read();
         // for alloc in allocs.iter(){
         //     println!("dropping shmem -- memory in use {:?}", alloc.occupied());
         // }
-        // if self.occupied() > 0 {
-        //     println!("dropping shmem -- memory in use {:?}", self.occupied());
-        // }
+        if self.mem_occupied() > 0 {
+            println!("dropping shmem -- memory in use {:?}", self.mem_occupied());
+        }
         if self.runtime_allocs.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
             self.print_pools();
         }
+        trace!(target: "drop", "end drop ShmemComm");
     }
 }

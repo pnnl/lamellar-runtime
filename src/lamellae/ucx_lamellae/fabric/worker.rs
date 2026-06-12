@@ -141,8 +141,10 @@ impl Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop Worker");
         debug!("dropping worker");
         unsafe { ucp_worker_destroy(self.handle) }
+        trace!(target: "drop", "end drop Worker");
     }
 }
 
@@ -166,6 +168,8 @@ impl<'a> AsRef<[u8]> for WorkerAddress<'a> {
 
 impl<'a> Drop for WorkerAddress<'a> {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop WorkerAddress");
         unsafe { ucp_worker_release_address(self.worker.handle, self.handle) }
+        trace!(target: "drop", "end drop WorkerAddress");
     }
 }

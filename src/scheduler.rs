@@ -402,7 +402,7 @@ impl Scheduler {
             .fetch_add(1, Ordering::Relaxed);
     }
 
-    pub(crate) fn submit_remote_am(&self, data: SerializedData, lamellae: Arc<Lamellae>) {
+    pub(crate) fn submit_remote_am(&self, data: SerializedData, lamellae: &Arc<Lamellae>) {
         let num_ams = self.num_ams.clone();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
@@ -411,10 +411,13 @@ impl Scheduler {
             .get(&TaskType::AmRemote)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
+        let lamellae_clone = lamellae.clone();
+        trace!(target: "lamellae_debug", "submit_remote_am:  lamellae cnt: {:?}", Arc::strong_count(lamellae));
+        
         let am_future = async move {
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
-                ame.exec_msg(msg, data, lamellae).await;
+                ame.exec_msg(msg, data, &lamellae_clone).await;
             } else {
                 data.print();
                 panic!("should i be here?");
@@ -424,6 +427,7 @@ impl Scheduler {
                 .get(&TaskType::AmRemote)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "lamellae_debug", "finished submit_remote_am:  lamellae cnt: {:?}", Arc::strong_count(&lamellae_clone));
         };
         self.executor.submit_task(am_future);
     }
@@ -608,15 +612,17 @@ impl Scheduler {
         self.executor.num_workers()
     }
     pub(crate) fn begin_shutdown(&self) {
-        trace!("beginning scheduler shutdown");
+        trace!(target: "drop", "entering begin_shutdown");
         self.status
             .store(SchedulerStatus::Finished as u8, Ordering::SeqCst);
+        trace!(target: "drop", "leaving begin_shutdown");
     }
     pub(crate) fn shutdown(&self) {
+        trace!(target: "drop", "entering shutdown");
         let mut timer = std::time::Instant::now();
         while self.panic.load(Ordering::SeqCst) == 0
-            && self.num_tasks.load(Ordering::Relaxed) > 3
-            && self.num_ams.load(Ordering::Relaxed) > 0
+            && (self.num_tasks.load(Ordering::Relaxed) > 3
+            || self.num_ams.load(Ordering::Relaxed) > 0)
         {
             //the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
             if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
@@ -630,11 +636,14 @@ impl Scheduler {
             std::thread::yield_now()
         }
         self.executor.shutdown();
+        trace!(target: "drop", "leaving shutdown");
     }
     pub(crate) fn force_shutdown(&self) {
+        trace!(target: "drop", "entering force_shutdown");
         self.status
             .store(SchedulerStatus::Panic as u8, Ordering::SeqCst);
         self.executor.force_shutdown();
+        trace!(target: "drop", "leaving force_shutdown");
     }
 
     pub(crate) fn max_threads(executor: &ExecutorType, num_workers: usize) -> usize {

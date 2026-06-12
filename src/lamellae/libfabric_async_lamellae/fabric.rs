@@ -1092,12 +1092,12 @@ impl OfiAsync {
 
 impl Drop for OfiAsync {
     fn drop(&mut self) {
-        trace!("Dropping OFI backend");
+        trace!(target: "drop", "drop OfiAsync");
         let _ = self.barrier();
         let _ = self.wait_for_tx_cntr();
         trace!("wait_all put done");
         let _ = self.wait_for_rx_cntr();
-        trace!("wait_all done");
+        trace!(target: "drop", "end drop OfiAsync");
     }
 }
 
@@ -2427,6 +2427,7 @@ impl LibfabricAsyncAlloc {
 
 impl Drop for LibfabricAsyncAlloc {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop LibfabricAsyncAlloc");
         let fabric_ref_count = self.decrement_fabric_ref_count();
         debug!(target: "libfabric", "Dropping LibfabricAsyncAlloc: {:x} - {:x} ref_cnt(before drop) {}", self.range.start,self.range.end, fabric_ref_count);
 
@@ -2453,6 +2454,7 @@ impl Drop for LibfabricAsyncAlloc {
                 }
             }
         }
+        trace!(target: "drop", "end drop LibfabricAsyncAlloc");
     }
 }
 

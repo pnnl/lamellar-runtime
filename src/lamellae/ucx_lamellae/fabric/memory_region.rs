@@ -337,9 +337,11 @@ impl MemoryHandleInner {
 
 impl Drop for MemoryHandleInner {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop MemoryHandleInner");
         debug!("Dropping MemoryHandleInner {:x}", self.addr);
         // println!("dropping MemoryHandleInner {:x}", self.addr);
         unsafe { ucp_mem_unmap(self.context.handle, self.handle) };
+        trace!(target: "drop", "end drop MemoryHandleInner");
     }
 }
 
@@ -358,7 +360,9 @@ impl AsRef<[u8]> for RKeyBuffer {
 
 impl Drop for RKeyBuffer {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop RKeyBuffer");
         unsafe { ucp_rkey_buffer_release(self.buf as _) }
+        trace!(target: "drop", "end drop RKeyBuffer");
     }
 }
 
@@ -392,6 +396,8 @@ impl RKey {
 
 impl Drop for RKey {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop RKey");
         unsafe { ucp_rkey_destroy(self.handle) }
+        trace!(target: "drop", "end drop RKey");
     }
 }

@@ -10,6 +10,7 @@ use core::marker::PhantomData;
 use std::sync::Arc;
 
 use std::ops::Bound;
+use tracing::trace;
 
 /// A Shared Memory Region is a [RemoteMemoryRegion] that has only been allocated on multiple PEs.
 ///
@@ -1184,6 +1185,6 @@ impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> 
 
 impl<T: Remote> Drop for SharedMemoryRegion<T> {
     fn drop(&mut self) {
-        // println!("dropping shared memory region");
+        trace!(target: "drop", "drop SharedMemoryRegion");
     }
 }

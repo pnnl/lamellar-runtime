@@ -63,6 +63,8 @@ impl std::error::Error for AllocError {}
 
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
+
+#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async",feature="enable-rofi-c", feature = "enable-ucx", feature = "enable-ucx-mt"))]
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum FabricError {
     InitError(u32),

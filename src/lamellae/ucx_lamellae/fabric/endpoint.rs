@@ -69,9 +69,11 @@ impl UcxRequest {
 
 impl Drop for UcxRequest {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop UcxRequest");
         if UCS_PTR_IS_PTR(self.request) {
             unsafe { ucp_request_free(self.request as _) };
         }
+        trace!(target: "drop", "end drop UcxRequest");
     }
 }
 
@@ -444,6 +446,7 @@ impl Endpoint {
 
 impl Drop for Endpoint {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop Endpoint");
         // println!("dropping endpoint");
         debug!("Dropping Endpoint");
         unsafe {
@@ -484,6 +487,7 @@ impl Drop for Endpoint {
                 let _ = Error::from_ptr(request);
             }
         };
+        trace!(target: "drop", "end drop Endpoint");
     }
 }
 

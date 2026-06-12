@@ -172,7 +172,7 @@ pub(crate) trait Batcher {
         &self,
         msg: Msg,
         ser_data: SerializedData,
-        lamellae: Arc<Lamellae>,
+        lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     );
 
@@ -382,7 +382,7 @@ impl Batcher for BatcherType {
         &self,
         msg: Msg,
         ser_data: SerializedData,
-        lamellae: Arc<Lamellae>,
+        lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
         match self {
@@ -628,6 +628,7 @@ pub(crate) async fn exec_am_zerocopy(
     let ame = ame.clone();
     world.team.world_counters.inc_outstanding(1);
     team.team.team_counters.inc_outstanding(1);
+    trace!(target: "lamellae_debug", "exec_am_zerocopy:  lamellae cnt: {:?}", Arc::strong_count(&lamellae));
     executor.submit_task(async move {
         let am = match am.exec(team.team.world_pe, team.team.num_world_pes, false, world.clone(), team.clone()).await {
             LamellarReturn::Unit => Am::Unit(req_data),
@@ -670,6 +671,7 @@ pub(crate) async fn exec_return_am_zerocopy(
         team: team.team.clone(),
     };
     ame.clone().exec_local_am(req_data, am.as_local(), world, team).await;
+    trace!(target: "lamellae_debug", "finished processing return am in exec_return_am_zerocopy, lamellae cnt: {:?}", Arc::strong_count(&lamellae));
 }
 
 pub(crate) fn exec_data_am_zerocopy(
@@ -742,6 +744,7 @@ pub(crate) fn exec_am_serde(
     let ame = ame.clone();
     world.team.world_counters.inc_outstanding(1);
     team.team.team_counters.inc_outstanding(1);
+    trace!(target: "lamellae_debug", "exec_am_serde:  lamellae cnt: {:?}", Arc::strong_count(lamellae));
     executor.submit_task(async move {
         let am = match am
             .exec(team.team.world_pe, team.team.num_world_pes, false, world.clone(), team.clone())
@@ -785,6 +788,7 @@ pub(crate) async fn exec_return_am_serde(
         team: team.team.clone(),
     };
     ame.clone().exec_local_am(req_data, am.as_local(), world, team).await;
+    trace!(target: "lamellae_debug", "finished processing return am in exec_return_am_serde, lamellae cnt: {:?}", Arc::strong_count(&lamellae));
 }
 
 // ---------------------------------------------------------------------------
@@ -808,6 +812,7 @@ async fn create_serde_buf(
         }
         data = lamellae.serialize_header(header.clone(), size);
     }
+    trace!(target: "lamellae_debug", "create_serde_buf:  lamellae cnt: {:?}, requested size: {}", Arc::strong_count(lamellae), size);
     data.unwrap()
 }
 
@@ -845,6 +850,7 @@ pub(crate) async fn send_am_serde(
     am.ser(darc_ser_cnt, &mut darcs);
     am.serialize_into(&mut data_slice[header_len..]);
     req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf).await;
+    trace!(target: "lamellae_debug", "send_am_serde:  lamellae cnt: {:?}, am size: {}", Arc::strong_count(&req_data.lamellae), am_size);
 }
 
 pub(crate) async fn send_data_am_serde(
@@ -871,6 +877,7 @@ pub(crate) async fn send_data_am_serde(
     i += darc_list_size;
     data.serialize_into(&mut data_slice[i..]);
     req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf).await;
+    trace!(target: "lamellae_debug", "send_data_am_serde:  lamellae cnt: {:?}, data size: {}", Arc::strong_count(&req_data.lamellae), data_size);
 }
 
 pub(crate) async fn send_unit_am_serde(req_data: ReqMetaData) {
@@ -882,6 +889,7 @@ pub(crate) async fn send_unit_am_serde(req_data: ReqMetaData) {
     let unit_header = UnitHeader { req_id: req_data.id };
     crate::serialize_into(&mut data_slice[0..*UNIT_HEADER_LEN], &unit_header, false).unwrap();
     req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf).await;
+    trace!(target: "lamellae_debug", "send_unit_am_serde:  lamellae cnt: {:?}, sent unit am", Arc::strong_count(&req_data.lamellae));
 }
 
 pub(crate) fn exec_data_am_serde(

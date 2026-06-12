@@ -33,6 +33,7 @@ use pin_project::pin_project;
 
 use std::ops::{Deref, DerefMut};
 use std::task::{Context, Poll, Waker};
+use tracing::trace;
 
 /// A safe abstraction of a distributed array, providing read/write access protected by locks.
 ///
@@ -296,6 +297,12 @@ impl<T: Dist> LocalLockWriteGuard<T> {
     }
 }
 
+impl <T: Remote> Drop for LocalLockArray<T>{
+    fn drop(&mut self) {
+        trace!(target: "drop", "drop LocalLockArray");
+    }
+}
+
 impl<T: Dist + ArrayOps + std::default::Default> LocalLockArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new LocalLockArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
@@ -320,6 +327,7 @@ impl<T: Dist + ArrayOps + std::default::Default> LocalLockArray<T> {
             team: team.clone(),
             launched: false,
             creation_future: Box::pin(async move {
+                trace!(target: "new", "beginning LocalLockArray::new async block");
                 let lock_task = LocalRwDarc::new(team.clone(), ()).spawn();
                 LocalLockArray {
                     lock: lock_task.await.expect("pe exists in team"),
@@ -354,7 +362,7 @@ impl<T: Dist> LocalLockArray<T> {
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         LocalLockArray {
             lock: self.lock.clone(),
-            array: self.array.use_distribution(distribution),
+            array: self.array.clone().use_distribution(distribution),
         }
     }
 
@@ -616,7 +624,7 @@ impl<T: Dist> LocalLockArray<T> {
     ///```
     pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("locallock into_read_only");
-        self.array.into_read_only()
+        self.array.clone().into_read_only()
     }
 
     #[doc(alias = "Collective")]
@@ -678,7 +686,7 @@ impl<T: Dist> LocalLockArray<T> {
     ///```
     pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("readonly into_global_lock");
-        self.array.into_global_lock()
+        self.array.clone().into_global_lock()
     }
 }
 
@@ -742,7 +750,7 @@ impl<T: Dist + 'static> LocalLockArray<T> {
     ///```
     pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
         // println!("locallock into_atomic");
-        self.array.into_atomic()
+        self.array.clone().into_atomic()
         // IntoAtomicArrayHandle {
         //     array: self.array.clone(),
         //     team: self.array.team_rt(),
@@ -780,7 +788,7 @@ impl<T: Dist> From<LocalLockArray<T>> for __LocalLockByteArray {
     fn from(array: LocalLockArray<T>) -> Self {
         __LocalLockByteArray {
             lock: array.lock.clone(),
-            array: array.array.into(),
+            array: array.array.clone().into(),
         }
     }
 }
@@ -788,7 +796,7 @@ impl<T: Dist> From<LocalLockArray<T>> for LamellarByteArray {
     fn from(array: LocalLockArray<T>) -> Self {
         LamellarByteArray::LocalLockArray(__LocalLockByteArray {
             lock: array.lock.clone(),
-            array: array.array.into(),
+            array: array.array.clone().into(),
         })
     }
 }
@@ -850,7 +858,7 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for LocalLockArray<T> {
         self.array.pe_offset_for_dist_index(pe, index)
     }
     unsafe fn into_inner(self) -> UnsafeArray<T> {
-        self.array
+        self.array.clone()
     }
     fn as_lamellar_byte_array(&self) -> LamellarByteArray {
         self.clone().into()

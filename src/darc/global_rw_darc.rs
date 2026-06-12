@@ -6,6 +6,7 @@ use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use tracing::trace;
 
 use crate::{
     active_messaging::RemotePtr,
@@ -332,6 +333,7 @@ impl<T> Clone for GlobalRwDarcReadGuard<T> {
 
 impl<T: 'static> Drop for GlobalRwDarcReadGuard<T> {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop GlobalRwDarcReadGuard");
         // println!("dropping global rwdarc read guard");
         if self.local_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
             let inner = self.darc.inner();
@@ -352,6 +354,7 @@ impl<T: 'static> Drop for GlobalRwDarcReadGuard<T> {
             // am.launch();
             // inner.serialize_update_cnts(1);
         }
+        trace!(target: "drop", "end drop GlobalRwDarcReadGuard");
     }
 }
 
@@ -387,6 +390,7 @@ impl<T> DerefMut for GlobalRwDarcWriteGuard<T> {
 
 impl<T: 'static> Drop for GlobalRwDarcWriteGuard<T> {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop GlobalRwDarcWriteGuard");
         // println!("dropping write guard");
         let inner = self.darc.inner();
         let team = inner.darc_rt_team();
@@ -405,6 +409,7 @@ impl<T: 'static> Drop for GlobalRwDarcWriteGuard<T> {
         );
         // am.launch();
         // inner.serialize_update_cnts(1);
+        trace!(target: "drop", "end drop GlobalRwDarcWriteGuard");
     }
 }
 
@@ -438,6 +443,7 @@ impl<T> DerefMut for GlobalRwDarcCollectiveWriteGuard<T> {
 
 impl<T: 'static> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop GlobalRwDarcCollectiveWriteGuard");
         // println!("dropping collective write guard");
         let inner = self.darc.inner();
         let team = inner.darc_rt_team();
@@ -456,6 +462,7 @@ impl<T: 'static> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
         );
         // am.launch();
         // inner.serialize_update_cnts(1);
+        trace!(target: "drop", "end drop GlobalRwDarcCollectiveWriteGuard");
     }
 }
 

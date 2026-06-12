@@ -1449,8 +1449,9 @@ impl LamellarTaskGroup {
 
 impl Drop for LamellarTaskGroup {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop LamellarTaskGroup");
         self.cnt.fetch_sub(1, Ordering::SeqCst);
-        trace!("Dropping LamellarTaskGroup");
+        trace!(target: "drop", "end drop LamellarTaskGroup");
     }
 }
 

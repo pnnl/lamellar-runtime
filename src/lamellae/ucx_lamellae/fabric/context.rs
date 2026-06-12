@@ -3,7 +3,7 @@ use std::{mem::MaybeUninit, sync::Arc};
 use lamellar_ucx_sys::*;
 
 use pmi::{pmi::Pmi, pmix::PmiX};
-use tracing::debug;
+use tracing::{debug, trace};
 
 use super::{error::Error, worker::Worker};
 
@@ -43,8 +43,10 @@ impl Default for Config {
 
 impl Drop for Config {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop Config");
         debug!("Dropping UCP Config");
         unsafe { ucp_config_release(self.handle) };
+        trace!(target: "drop", "end drop Config");
     }
 }
 
@@ -141,8 +143,10 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop Context");
         debug!("Dropping UCP Context");
         unsafe { ucp_cleanup(self.handle) };
+        trace!(target: "drop", "end drop Context");
     }
 }
 

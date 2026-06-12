@@ -30,6 +30,7 @@ use std::ops::Bound;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::trace;
 
 pub(crate) struct UnsafeArrayData {
     pub(crate) mem_region: MemoryRegion<u8>,
@@ -107,9 +108,15 @@ pub struct __UnsafeArraySerde<T> {
 impl<T: Remote> From<UnsafeArray<T>> for __UnsafeArraySerde<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         Self {
-            array: array.inner,
+            array: array.inner.clone(),
             phantom: PhantomData,
         }
+    }
+}
+
+impl <T: Remote> Drop for UnsafeArray<T>{
+    fn drop(&mut self) {
+        trace!(target: "drop", "drop UnsafeArray");
     }
 }
 
@@ -245,6 +252,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         distribution: Distribution,
         darc_mode: DarcMode,
     ) -> UnsafeArray<T> {
+        trace!(target: "new", "beginning async new UnsafeArray");
         let team = team.into().team.clone();
         team.async_barrier().await;
         let task_group = LamellarTaskGroup::new(team.clone());
@@ -338,6 +346,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             phantom: PhantomData,
         };
 
+        trace!(target: "new", "finished async new UnsafeArray");
         if full_array_size != array_size {
             println!("WARNING: Array size {array_size} is less than number of pes {full_array_size}, each PE will not contain data");
             array.sub_array(0..array_size)
@@ -982,7 +991,7 @@ impl<T: Dist> AsyncFrom<LocalLockArray<T>> for UnsafeArray<T> {
             .array
             .await_on_outstanding(DarcMode::UnsafeArray)
             .await;
-        array.array
+        array.array.clone()
     }
 }
 
@@ -1052,7 +1061,7 @@ impl<T: Dist + 'static> From<&__UnsafeByteArray> for UnsafeArray<T> {
 
 impl<T: Dist> From<UnsafeArray<T>> for __UnsafeByteArray {
     fn from(array: UnsafeArray<T>) -> Self {
-        __UnsafeByteArray { inner: array.inner }
+        __UnsafeByteArray { inner: array.inner.clone() }
     }
 }
 

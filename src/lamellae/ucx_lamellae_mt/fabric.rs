@@ -416,6 +416,7 @@ impl UcxWorld {
 
 impl Drop for UcxWorld {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop UcxWorld");
         debug!("dropping ucx world");
         self.barrier();
         self.exchange_buffer.take();
@@ -429,6 +430,7 @@ impl Drop for UcxWorld {
         // self.remote_keys.lock().unwrap().clear();
         // self.mem_handles.lock().unwrap().clear();
         self.barrier();
+        trace!(target: "drop", "end drop UcxWorld");
     }
 }
 
@@ -1090,11 +1092,11 @@ impl UcxMtAlloc {
 
 impl Drop for UcxMtAlloc {
     fn drop(&mut self) {
-        trace!(target: "ucx", "Dropping UcxMtAlloc mem: {:x} - ({:x}) {:x}",
+        trace!(target: "ucx", "drop UcxMtAlloc mem: {:x} - ({:x}) {:x} {:?}",
                 self.mem.addr,
                 self.mem.addr + self.data_num_bytes,
-                self.mem.addr + self.mem.size);
-        trace!(target: "ucx", "Dropping UCX alloc: {:?}", self);
+                self.mem.addr + self.mem.size,
+                self);
         let fabric_ref_count = self.decrement_fabric_ref_count();
         match &self.alloc_table {
             AllocTable::Fabric(mem_handles, remote_keys) => {
@@ -1150,6 +1152,7 @@ impl Drop for UcxMtAlloc {
                 // }
             }
         }
+        trace!(target: "drop", "end drop UcxMtAlloc");
     }
 }
 

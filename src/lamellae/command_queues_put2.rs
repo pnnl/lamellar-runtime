@@ -738,6 +738,7 @@ impl InnerCQ {
 impl Drop for InnerCQ {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop InnerCQ");
         debug!("dropping InnerCQ");
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
@@ -755,6 +756,7 @@ impl Drop for InnerCQ {
         );
         let _ = Box::into_raw(old);
         debug!("dropped InnerCQ");
+        trace!(target: "drop", "end drop InnerCQ");
     }
 }
 
@@ -1076,7 +1078,7 @@ impl CQPut2 {
                                     cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
                                     scheduler1.submit_remote_am(
                                         ser_data.drop_payload_bytes(std::mem::size_of::<u64>()),
-                                        lamellae,
+                                        &lamellae,
                                     );
                                     // No send_free needed: sender freed source after put_buffer().await
                                 };
@@ -1108,6 +1110,7 @@ impl CQPut2 {
 impl Drop for CQPut2 {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop CQPut2");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1128,5 +1131,6 @@ impl Drop for CQPut2 {
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
+        trace!(target: "drop", "end drop CQPut2");
     }
 }

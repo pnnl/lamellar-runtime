@@ -8,7 +8,7 @@ use std::task::{Context, Poll};
 
 use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
 
-use tracing::debug;
+use tracing::{debug, trace};
 
 static TASK_ID: AtomicUsize = AtomicUsize::new(0);
 
@@ -232,6 +232,6 @@ impl LamellarExecutor for SingleThread {
 
 impl Drop for SingleThread {
     fn drop(&mut self) {
-        debug!("Dropped SingleThread Scheduler");
+        trace!(target: "drop", "Dropped SingleThread Scheduler");
     }
 }

@@ -428,7 +428,7 @@ impl Batcher for TeamAmBatcher {
         &self,
         msg: Msg,
         mut ser_data: SerializedData,
-        lamellae: Arc<Lamellae>,
+        lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
         // println!("[{:?}] exec_batched_msg", std::thread::current().id());
@@ -458,11 +458,12 @@ impl Batcher for TeamAmBatcher {
                     exec_unit_am_serde(msg.src as usize, &data, &mut i, ame);
                 }
                 Cmd::BatchedMsg => {
-                    self.exec_batched_am(&msg, batch.cnt, &mut ser_data, &mut i, &lamellae, &ame)
+                    self.exec_batched_am(&msg, batch.cnt, &mut ser_data, &mut i, lamellae, &ame)
                         .await;
                 }
             }
         }
+        trace!(target: "lamellae_debug", "finished exec_batched_msg  lamellae cnt: {:?}",Arc::strong_count(&lamellae));
     }
 
     async fn send_am(

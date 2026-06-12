@@ -1130,7 +1130,7 @@ impl Ofi {
 
 impl Drop for Ofi {
     fn drop(&mut self) {
-        trace!(target: "libfabric", "Dropping OFI backend");
+        trace!(target: "drop", "drop Ofi");
         for cg in self.comm_groups.iter() {
             let _ = cg.wait_all();
         }
@@ -1138,6 +1138,7 @@ impl Drop for Ofi {
         self._my_pmi
             .barrier(false)
             .expect("PMI Barrier failed during OFI drop");
+        trace!(target: "drop", "end drop Ofi");
     }
 }
 
@@ -2172,6 +2173,7 @@ impl LibfabricMtAlloc {
 
 impl Drop for LibfabricMtAlloc {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop LibfabricMtAlloc");
         let fabric_ref_count = self.decrement_fabric_ref_count();
         // if self.print {
         //     println!(
@@ -2216,6 +2218,7 @@ impl Drop for LibfabricMtAlloc {
                 }
             }
         }
+        trace!(target: "drop", "end drop LibfabricMtAlloc");
     }
 }
 

@@ -711,6 +711,7 @@ impl InnerCQ {
 #[lamellar_prof::prof]
 impl Drop for InnerCQ {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop InnerCQ");
         debug!("dropping InnerCQ");
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
@@ -728,6 +729,7 @@ impl Drop for InnerCQ {
         );
         let _ = Box::into_raw(old);
         debug!("dropped InnerCQ");
+        trace!(target: "drop", "end drop InnerCQ");
     }
 }
 
@@ -989,7 +991,7 @@ impl CQGetN {
                                         debug!("getting cmd from {src} {:?} msg_id: {msg_id}", cmd);
                                         let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae).await;
                                         debug!("msg_id: {msg_id} submitting remote am from {src}");
-                                        scheduler1.submit_remote_am(work_data, lamellae.clone());
+                                        scheduler1.submit_remote_am(work_data, &lamellae);
                                         cq.send_free(src, cmd);
                                     };
                                     self.scheduler.submit_io_task(task);
@@ -1021,6 +1023,7 @@ impl CQGetN {
 #[lamellar_prof::prof]
 impl Drop for CQGetN {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop CQGetN");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1041,5 +1044,6 @@ impl Drop for CQGetN {
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
+        trace!(target: "drop", "end drop CQGetN");
     }
 }

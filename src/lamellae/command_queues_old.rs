@@ -415,9 +415,11 @@ impl std::fmt::Debug for CmdMsgBuffer {
 impl Drop for CmdMsgBuffer {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop CmdMsgBuffer");
         while !self.empty() {
             std::thread::yield_now()
         }
+        trace!(target: "drop", "end drop CmdMsgBuffer");
     }
 }
 
@@ -1101,6 +1103,7 @@ impl InnerCQ {
     //update cmdbuffers to include a hash the wait on that here
     // //#[tracing::instrument(skip(self), level = "debug")]
     async fn get_data(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> Vec<CmdMsg> {
+        trace!(target: "lamellae_debug", "entering get_data lamellae cnt: {:?}", Arc::strong_count(lamellae));
         let (local_daddr_alloc, offset) = self
             .comm
             .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
@@ -1198,6 +1201,7 @@ impl InnerCQ {
 
             stats!(PE_RECVS[1][src].fetch_add(1, Ordering::SeqCst));
             debug!("got data from {src} -- {:?} cmds", data.len());
+            trace!(target: "lamellae_debug", "leaving get_data lamellae cnt: {:?}", Arc::strong_count(&lamellae));
             data
         }
     }
@@ -1211,6 +1215,7 @@ impl InnerCQ {
         msg_id: usize,
         lamellae: &Arc<Lamellae>,
     ) {
+        trace!(target: "lamellae_debug", "entering get_serialized_data lamellae cnt: {:?}", Arc::strong_count(lamellae));
         let len = ser_data.len();
         // let vec = vec![0u8; len];
         let mut buffer = unsafe {
@@ -1287,11 +1292,12 @@ impl InnerCQ {
             cmd.daddr,
             ser_data.len()
         );
+        trace!(target: "lamellae_debug", "leaving get_serialized_data lamellae cnt: {:?}", Arc::strong_count(lamellae));
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
     async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> SerializedData {
-        trace!("getting cmd from {} of size {}", src, cmd.dsize);
+        trace!(target: "lamellae_debug", "entering get_cmd from {} of size {} lamellae cnt: {:?}", src, cmd.dsize, Arc::strong_count(lamellae));
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut print = true;
 
@@ -1308,6 +1314,7 @@ impl InnerCQ {
         self.get_serialized_data(src, cmd, &mut ser_data, msg_id,lamellae)
             .await;
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
+        trace!(target: "lamellae_debug", "leaving get_cmd lamellae cnt: {:?}", Arc::strong_count(lamellae));
         ser_data
     }
 
@@ -1323,6 +1330,7 @@ impl InnerCQ {
 impl Drop for InnerCQ {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop InnerCQ");
         debug!("dropping InnerCQ");
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
@@ -1359,6 +1367,7 @@ impl Drop for InnerCQ {
         let _ = Box::into_raw(old);
         self.cmd_buffers.clear();
         debug!("dropped InnerCQ");
+        trace!(target: "drop", "end drop InnerCQ");
     }
 }
 
@@ -1379,6 +1388,15 @@ pub(crate) struct CQOld {
 
 #[lamellar_prof::prof]
 impl CQOld {
+
+    fn print_arc_cnts(&self) {
+        trace!(target: "drop",
+            "CQOld Arc counts: cq: {:?}  cmd_buffers: {:?} comm: {:?}",
+            Arc::strong_count(&self.cq),
+            self._cmd_buffers.iter().map(|cb| Arc::strong_count(cb)).collect::<Vec<_>>(),
+            Arc::strong_count(&self._comm),
+        );
+    }
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         comm: Arc<Comm>,
@@ -1543,6 +1561,7 @@ impl CQOld {
     }
 
     pub(crate) fn wait_all_print(&self) {
+        self.print_arc_cnts();
         println!("command queue");
         println!(
             "sends {:?}",
@@ -1663,6 +1682,7 @@ impl CQOld {
             // async_std::task::yield_now().await;
             async_std::task::sleep(std::time::Duration::from_millis(10)).await;
         }
+        self.print_arc_cnts();
     }
 
     pub(crate) async fn panic_task(&self) {
@@ -1675,6 +1695,7 @@ impl CQOld {
             warn!("received panic from other PE");
             panic!("received panic from other PE");
         }
+        self.print_arc_cnts();
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -1683,6 +1704,7 @@ impl CQOld {
         let num_pes = comm.num_pes();
         let my_pe = comm.my_pe();
         let mut timer = std::time::Instant::now();
+        trace!(target: "lamellae_debug", "entering recv_data lamellae cnt: {:?}", Arc::strong_count(&lamellae));
         while self.active.load(Ordering::SeqCst) == CmdQStatus::Active as u8
             || !self.cq.empty().await
             || self.scheduler.active(0)
@@ -1712,6 +1734,8 @@ impl CQOld {
                                 trace!("got tx");
                                 let cq = self.cq.clone();
                                 let lamellae = lamellae.clone();
+                                trace!(target: "lamellae_debug", "[{:?}] recv_data got tx cmd_buf from {src} submitting get cmd buf task cq cloned {:?} lamellae cnt {:?}", std::thread::current().id(), Arc::strong_count(&cq), Arc::strong_count(&lamellae));
+                                
                                 let scheduler1 = self.scheduler.clone();
                                 let task = async move {
                                     trace!("going to get cmd_buf {:?} from {:?}", cmd_buf_cmd, src);
@@ -1727,14 +1751,17 @@ impl CQOld {
                                     for cmd in data.into_iter() {
                                         if cmd.dsize != 0 {
                                             let cq = cq.clone();
-                                            let lamellae = lamellae.clone();
+                                            let lamellae_c = lamellae.clone();
+                                            trace!(target: "lamellae_debug", "[{:?}] recv_data submitting get command task for cmd {:?} from {src} msg_id: {msg_id} [{:?}/{:?}] cmd_cnt: {:?} cq cloned {:?} lamellae cnt {:?}", std::thread::current().id(), cmd, i, len, cmd_cnt, Arc::strong_count(&cq), Arc::strong_count(&lamellae_c));
+                                            
                                             let scheduler2 = scheduler1.clone();
                                             let cmd_cnt_clone = cmd_cnt.clone();
                                             let task = async move {
-                                                let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae).await;
+                                                let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae_c).await;
                                                 debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
                                                 scheduler2
-                                                    .submit_remote_am(work_data, lamellae.clone());
+                                                    .submit_remote_am(work_data, &lamellae_c);
+                                                trace!(target: "lamellae_debug", "submitted_remote_am lamellae cnt: {:?}", Arc::strong_count(&lamellae_c));
                                                 if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
                                                 {
                                                     //     debug!(
@@ -1742,12 +1769,14 @@ impl CQOld {
                                                     //     );
                                                     cq.send_free(src, cmd_buf_cmd);
                                                 }
+                                                trace!(target: "lamellae_debug", "finished processing cmd {:?} from {src} msg_id: {msg_id} [{:?}/{:?}] remaining cmds: {:?} lamellae cnt {:?}", cmd,  i, len, cmd_cnt_clone.load(Ordering::SeqCst), Arc::strong_count(&lamellae_c));
                                             };
                                             trace!(
                                                 "[{:?}] recv_data submitting get command task",
                                                 std::thread::current().id(),
                                             );
                                             scheduler1.submit_io_task(task);
+                                            trace!(target: "lamellae_debug","submitteg scheduler1 io_task lamellae cnt: {:?}", Arc::strong_count(&lamellae));
                                             i += 1;
                                         } else {
                                             panic!(
@@ -1760,6 +1789,13 @@ impl CQOld {
                                     // cq.send_free(src, cmd_buf_cmd);
                                     // };
                                     // scheduler1.submit_io_task(task);
+                                    trace!(target: "lamellae_debug",
+                                        "[{:?}] finished recv_data submitted get command task for cmd_buf {:?} from {src} msg_id: {msg_id} lamellae cnt {:?} cq cnt {:?}",
+                                        std::thread::current().id(),
+                                        cmd_buf_cmd,
+                                        Arc::strong_count(&lamellae),
+                                        Arc::strong_count(&cq)
+                                    );
                                 };
                                 self.scheduler.submit_io_task(task);
                             }
@@ -1774,6 +1810,8 @@ impl CQOld {
         }
         self.active
             .store(CmdQStatus::Finished as u8, Ordering::SeqCst);
+        self.print_arc_cnts();
+        trace!(target: "drop", "recv_data finished, cq empty? {:?}  scheduler active? {:?} lamellae cnt {:?}", self.cq.empty().await, self.scheduler.active(0), Arc::strong_count(&lamellae));
     }
 
     // //#[tracing::instrument(skip_all, level = "debug")]
@@ -1796,6 +1834,7 @@ impl CQOld {
 impl Drop for CQOld {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop CQOld");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1816,5 +1855,6 @@ impl Drop for CQOld {
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
+        trace!(target: "drop", "end drop CQOld");
     }
 }

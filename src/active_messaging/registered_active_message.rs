@@ -284,14 +284,14 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: Arc<Lamellae>) {
+    async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: &Arc<Lamellae>) {
         trace!("[{:?}] exec_msg {:?}", std::thread::current().id(), msg.cmd);
         let mut i = 0;
 
         match msg.cmd {
             Cmd::Am => {
                 let data_bytes = ser_data.data_as_bytes();
-                self.batcher.exec_am(msg.src as usize, &data_bytes, &mut i, &lamellae, &self, &self.executor).await;
+                self.batcher.exec_am(msg.src as usize, &data_bytes, &mut i, lamellae, &self, &self.executor).await;
                 stats!(
                     BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)][&StatCmd::Am]
                         .fetch_add(1, Ordering::Relaxed)
@@ -304,7 +304,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             }
             Cmd::ReturnAm => {
                 let data_bytes = ser_data.data_as_bytes();
-                self.batcher.exec_return_am(msg.src as usize, &data_bytes, &mut i, &lamellae, &self).await;
+                self.batcher.exec_return_am(msg.src as usize, &data_bytes, &mut i, lamellae, &self).await;
                 stats!(
                     BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
                         [&StatCmd::Return]
@@ -358,6 +358,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 );
             }
         }
+        trace!(target: "lamellae_debug", "[{:?}] finished exec_msg {:?}, lamellae cnt: {:?}", std::thread::current().id(), msg.cmd, Arc::strong_count(lamellae));
     }
 }
 

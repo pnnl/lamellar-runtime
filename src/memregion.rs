@@ -822,6 +822,7 @@ impl<T: Remote> MemoryRegion<T> {
         lamellae: &Arc<Lamellae>,
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
+
         if let Ok(memreg) = MemoryRegion::try_new(num_elems, scheduler, counters, lamellae, alloc) {
             memreg
         } else {
@@ -876,7 +877,7 @@ impl<T: Remote> MemoryRegion<T> {
             // freeable: true,
             phantom: PhantomData,
         };
-        trace!("new memregion alloc {:?}", temp.alloc,);
+        trace!(target: "lamellae_debug", "new memregion id: {:?} pe: {:?} alloc: {:?} num_bytes: {:?} mode: {:?} lamellae cnt: {:?}", temp.id(), temp.pe, temp.alloc, temp.alloc.num_bytes(), temp.mode, Arc::strong_count(&temp.rdma));
         Ok(temp)
     }
 
@@ -898,7 +899,7 @@ impl<T: Remote> MemoryRegion<T> {
             pe,
             num_bytes
         );
-        Ok(MemoryRegion {
+        let mem_region = Ok(MemoryRegion {
             alloc: lamellae.comm().one_sided_alloc_from_remote_pe_and_addr(
                 pe,
                 addr.into(),
@@ -913,7 +914,9 @@ impl<T: Remote> MemoryRegion<T> {
             mode: Mode::Remote,
             // freeable: true,
             phantom: PhantomData,
-        })
+        });
+        trace!(target: "lamellae_debug", "new memregion from remote addr id: {:?} pe: {:?} num_bytes: {:?} mode: {:?} lamellae cnt: {:?}", mem_region.as_ref().unwrap().id(), pe, num_bytes, Mode::Remote, Arc::strong_count(&mem_region.as_ref().unwrap().rdma));
+        mem_region
     }
 
     #[allow(dead_code)]
@@ -926,12 +929,12 @@ impl<T: Remote> MemoryRegion<T> {
             "Error converting memregion to new base, does not align"
         );
         MemoryRegion {
-            alloc: self.alloc,
+            alloc: self.alloc.clone(),
             pe: self.pe,
-            scheduler: self.scheduler,
-            counters: self.counters,
+            scheduler: self.scheduler.clone(),
+            counters: self.counters.clone(),
             backend: self.backend,
-            rdma: self.rdma,
+            rdma: self.rdma.clone(),
             mode: self.mode,
             phantom: PhantomData,
         }
@@ -1493,20 +1496,21 @@ pub trait RemoteMemoryRegion {
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error>;
 }
 
-// impl<T: Remote> Drop for MemoryRegion<T> {
-//     //#[tracing::instrument(skip_all, level = "debug")]
-//     fn drop(&mut self) {
-//         // println!("trying to dropping mem region {:?}", self);
-//         if self.freeable {
-//             match self.mode {
-//                 Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()),
-//                 Mode::Shared => self.rdma.comm().free(self.alloc.clone()),
-//                 Mode::Remote => {}
-//             }
-//         }
-//         // println!("dropping mem region {:?}",self);
-//     }
-// }
+impl<T: Remote> Drop for MemoryRegion<T> {
+    //#[tracing::instrument(skip_all, level = "debug")]
+    fn drop(&mut self) {
+        trace!(target: "lamellae_debug", "dropping memory region lamellae cnt: {:?}", Arc::strong_count(&self.rdma));
+        // println!("trying to dropping mem region {:?}", self);
+        // if self.freeable {
+        //     match self.mode {
+        //         Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()),
+        //         Mode::Shared => self.rdma.comm().free(self.alloc.clone()),
+        //         Mode::Remote => {}
+        //     }
+        // }
+        // println!("dropping mem region {:?}",self);
+    }
+}
 
 impl<T: Remote> std::fmt::Debug for MemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

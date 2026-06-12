@@ -371,6 +371,7 @@ impl ShmemAlloc {
 
 impl Drop for ShmemAlloc {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop ShmemAlloc");
         let fabric_ref_count = self.decrement_fabric_ref_count();
         debug!(target: "shmem", "Dropping ShmemAlloc: {:?}" , self);
         match &self.alloc_table {
@@ -407,6 +408,7 @@ impl Drop for ShmemAlloc {
                 }
             }
         }
+        trace!(target: "drop", "end drop ShmemAlloc");
     }
 }
 

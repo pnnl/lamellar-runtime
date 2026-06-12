@@ -198,6 +198,12 @@ impl<T> LocalRwDarc<T> {
     }
 }
 
+impl <T> Drop for LocalRwDarc<T> {
+    fn drop(&mut self) {
+        tracing::trace!(target: "drop", "drop LocalRwDarc");
+    }
+}
+
 impl<T: Sync + Send> LocalRwDarc<T> {
     #[doc(alias("One-sided", "onesided"))]
     /// Creates a handle for acquiring a reader lock of this LocalRwDarc local to this PE.

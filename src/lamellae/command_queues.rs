@@ -721,6 +721,7 @@ impl InnerCQ {
 impl Drop for InnerCQ {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop InnerCQ");
         debug!("dropping InnerCQ");
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
@@ -738,6 +739,7 @@ impl Drop for InnerCQ {
         );
         let _ = Box::into_raw(old);
         debug!("dropped InnerCQ");
+        trace!(target: "drop", "end drop InnerCQ");
     }
 }
 
@@ -1013,7 +1015,7 @@ impl CQGet {
                                     debug!("getting cmd from {src} {:?} msg_id: {msg_id}", cmd);
                                     let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae).await;
                                     debug!("msg_id: {msg_id} submitting remote am from {src}");
-                                    scheduler1.submit_remote_am(work_data, lamellae.clone());
+                                    scheduler1.submit_remote_am(work_data, &lamellae);
                                     cq.send_free(src, cmd);
                                 };
                                 self.scheduler.submit_io_task(task);
@@ -1052,6 +1054,7 @@ impl CQGet {
 impl Drop for CQGet {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop CQGet");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1072,6 +1075,7 @@ impl Drop for CQGet {
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
+        trace!(target: "drop", "end drop CQGet");
     }
 }
 
@@ -1211,6 +1215,7 @@ impl CommandQueue {
             CQVariant::Put3(cq) => cq.alloc_task().await,
         }
         self.background_done.fetch_sub(1, Ordering::Release);
+        debug!(target: "drop","alloc_task exiting");
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -1226,6 +1231,7 @@ impl CommandQueue {
             CQVariant::Put3(cq) => cq.panic_task().await,
         }
         self.background_done.fetch_sub(1, Ordering::Release);
+        debug!(target: "drop","panic_task exiting");
     }
 
     pub(crate) fn background_tasks_done(&self) -> bool {
@@ -1244,6 +1250,7 @@ impl CommandQueue {
             CQVariant::Put2N(cq) => cq.recv_data(lamellae).await,
             CQVariant::Put3(cq) => cq.recv_data(lamellae).await,
         }
+        debug!(target: "drop","recv_data exiting");
     }
 
     pub(crate) fn mem_per_pe() -> usize {
@@ -1266,5 +1273,18 @@ impl CommandQueue {
             CQVariant::Put2N(cq) => cq.available_to_send(pe),
             CQVariant::Put3(cq) => cq.available_to_send(pe),
         }
+    }
+}
+
+impl Drop for CommandQueue {
+    //#[tracing::instrument(skip_all, level = "debug")]
+    fn drop(&mut self) {
+        trace!(target: "drop", "begin drop CommandQueue");
+        debug!("dropping CommandQueue");
+        while !self.background_tasks_done() {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        debug!("dropped CommandQueue");
+        trace!(target: "drop", "end drop CommandQueue");
     }
 }

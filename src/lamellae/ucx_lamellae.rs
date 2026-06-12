@@ -52,10 +52,13 @@ impl LamellaeInit for UcxBuilder {
         let cq = ucx.cq();
         trace!("created command queue for ucx");
         let ucx = Arc::new(Lamellae::Ucx(ucx));
+        trace!(target: "lamellae_debug", "created Arc<Lamellae::Ucx> instance lamellae cnt: {:?}", Arc::strong_count(&ucx));    
         let ucx_clone = ucx.clone();
         let cq_clone = cq.clone();
         scheduler.submit_long_task(async move {
+            trace!(target: "lamellae_debug", "starting recv_data task for ucx lamellae cnt: {:?}", Arc::strong_count(&ucx_clone));
             cq_clone.recv_data(ucx_clone.clone()).await;
+            trace!(target: "lamellae_debug", "finished recv_data task for ucx lamellae cnt: {:?}", Arc::strong_count(&ucx_clone));
         });
 
         let cq_clone = cq.clone();
@@ -66,6 +69,7 @@ impl LamellaeInit for UcxBuilder {
         scheduler.submit_long_task(async move {
             cq_clone.panic_task().await;
         });
+        trace!(target: "lamellae_debug", "finished submitting long tasks for ucx lamellae cnt: {:?}", Arc::strong_count(&ucx));
         ucx
     }
 }

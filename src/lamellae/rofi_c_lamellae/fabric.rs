@@ -574,8 +574,7 @@ impl RofiCAlloc {
 
 impl Drop for RofiCAlloc {
     fn drop(&mut self) {
-        trace!(
-            "RofiCAlloc::drop enter base={:p} sub={:p} bytes={}",
+        trace!(target: "drop", "drop RofiCAlloc base={:p} sub={:p} bytes={}",
             self.base_data,
             self.sub_data,
             self.sub_data_num_bytes
@@ -633,6 +632,7 @@ impl Drop for RofiCAlloc {
                 }
             }
         }
+        trace!(target: "drop", "end drop RofiCAlloc");
     }
 }
 

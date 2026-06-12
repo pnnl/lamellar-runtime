@@ -140,7 +140,7 @@ impl CommInfo for LibfabricAsyncComm {
 impl Drop for LibfabricAsyncComm {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        trace!("dropping libfabric comm");
+        trace!(target: "drop", "drop LibfabricAsyncComm");
         if self.mem_occupied() > 0 {
             println!(
                 "dropping libfabric -- memory in use {:?}",
@@ -162,5 +162,6 @@ impl Drop for LibfabricAsyncComm {
             "libfabric comm dropped ofi count: {:?}",
             Arc::strong_count(&self.ofi)
         );
+        trace!(target: "drop", "end drop LibfabricAsyncComm");
     }
 }

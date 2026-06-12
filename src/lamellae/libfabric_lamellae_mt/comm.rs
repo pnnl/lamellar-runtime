@@ -142,7 +142,7 @@ impl CommInfo for LibfabricMtComm {
 impl Drop for LibfabricMtComm {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        trace!("dropping LibfabricMt comm");
+        trace!(target: "drop", "drop LibfabricMtComm");
         if self.mem_occupied() > 0 {
             println!(
                 "dropping LibfabricMt -- memory in use {:?}",
@@ -166,5 +166,6 @@ impl Drop for LibfabricMtComm {
             "LibfabricMt comm dropped ofi count: {:?}",
             Arc::strong_count(&self.ofi)
         );
+        trace!(target: "drop", "end drop LibfabricMtComm");
     }
 }

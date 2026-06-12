@@ -807,7 +807,7 @@ pub struct IntoLamellarTeam {
 
 impl Drop for IntoLamellarTeam {
     fn drop(&mut self) {
-        trace!("Dropping IntoLamellarTeam");
+        trace!(target: "drop", "drop IntoLamellarTeam");
     }
 }
 
@@ -1059,6 +1059,7 @@ impl LamellarTeamRT {
         });
         lamellae.comm().barrier();
 
+        trace!(target: "lamellae_debug", "creating barrier for team lamellae cnt: {:?}", Arc::strong_count(&lamellae));
         let barrier = Barrier::new(
             world_pe,
             num_pes,
@@ -1067,6 +1068,7 @@ impl LamellarTeamRT {
             scheduler.clone(),
             panic.clone(),
         );
+        trace!(target: "lamellae_debug", "barrier created lamellae cnt: {:?}", Arc::strong_count(&lamellae));
         // println!("barrier created");
 
         let alloc = AllocationType::Global;
@@ -1079,6 +1081,7 @@ impl LamellarTeamRT {
             &lamellae,
             alloc.clone(),
         );
+        trace!(target: "lamellae_debug", "dropped memory region created lamellae cnt: {:?}", Arc::strong_count(&lamellae));
         unsafe { dropped.as_mut_slice().fill(0) };
 
         // let remote_ptr_alloc = lamellae
@@ -1116,6 +1119,7 @@ impl LamellarTeamRT {
             // panic_info: Arc::new(Mutex::new(Vec::new())),
             _pin: PhantomPinned,
         };
+        trace!(target: "lamellae_debug", "team created lamellae cnt: {:?}", Arc::strong_count(&lamellae));
 
         // trace!("team addr {:?}", team.remote_ptr_alloc);
         // unsafe {
@@ -1199,7 +1203,7 @@ impl LamellarTeamRT {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn destroy(&self) {
-        trace!("destroying team? {:?}", self.mem_regions.read().len());
+        trace!(target: "drop","destroying team? {:?}", self.mem_regions.read().len());
         if self.panic.load(Ordering::SeqCst) == 0 {
             // println!(
             //     "in team destroy mype: {:?} cnt: {:?} {:?}",
@@ -1230,15 +1234,15 @@ impl LamellarTeamRT {
         if self.panic.load(Ordering::SeqCst) == 0 {
             // what does it mean if we drop a parent team while a sub_team is valid?
             if let None = &self.parent {
-                trace!("shutdown lamellae, going to shutdown scheduler");
+                trace!(target: "drop","shutdown lamellae, going to shutdown scheduler");
                 self.scheduler.begin_shutdown();
                 self.put_dropped();
                 self.drop_barrier();
-                trace!("barrier dropped, now shutting down lamellae and scheduler");
+                trace!(target: "drop","barrier dropped, now shutting down lamellae and scheduler");
                 self.lamellae.shutdown();
-                trace!("lamellae shutdown, now shutting down scheduler");
+                trace!(target: "drop","lamellae shutdown cnt: {:?}, now shutting down scheduler cnt: {:?}",Arc::strong_count(&self.lamellae), Arc::strong_count(&self.scheduler));
                 self.scheduler.shutdown();
-                trace!("scheduler shutdown");
+                trace!(target: "drop","scheduler shutdown");
             }
         }
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
@@ -1268,9 +1272,9 @@ impl LamellarTeamRT {
         //     // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
         //     Pin::new_unchecked(arc_team); //allows us to get rid of the extra reference created in new
         // }
-        trace!("Tasks Launched: {:?} Tasks Completed: {:?}", task_launched_to_string(),
+        trace!(target: "drop","Tasks Launched: {:?} Tasks Completed: {:?}", task_launched_to_string(),
                         task_finished_to_string(),);
-        trace!("team destroyed");
+        trace!(target: "lamellae_debug", "team destroyed lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
     }
     #[allow(dead_code)]
     pub(crate) fn get_pes(&self) -> Vec<usize> {
@@ -1318,6 +1322,7 @@ impl LamellarTeamRT {
                 &parent.lamellae,
                 parent_alloc.clone(),
             );
+            trace!(target: "lamellae_debug", "subteam hash_buf created lamellae cnt: {:?}", Arc::strong_count(&parent.lamellae));
             unsafe { dropped.as_mut_slice().fill(0) };
 
             let s = Instant::now();
@@ -1376,6 +1381,7 @@ impl LamellarTeamRT {
                 // panic_info: parent.panic_info.clone(),
                 _pin: PhantomPinned,
             };
+            trace!(target: "lamellae_debug", "subteam RT team created lamellae cnt: {:?}", Arc::strong_count(&parent.lamellae));
             unsafe {
                 team.dropped.as_mut_slice().fill(0);
             }
@@ -1904,6 +1910,7 @@ impl Darc<LamellarTeamRT> {
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
+        trace!(target: "lamellae_debug", "exec_am_all_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team exec all", std::thread::current().id());
         // self.scheduler.submit_am(Am::All(req_data, func));
@@ -1981,8 +1988,9 @@ impl Darc<LamellarTeamRT> {
         };
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team exec all", std::thread::current().id());
+        trace!(target: "lamellae_debug", "spawn_am_all_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         self.scheduler
-            .submit_am(Am::All(req_data.clone(), func.clone()));
+            .submit_am(Am::All(req_data, func.clone()));
         MultiAmHandle {
             inner: req,
             am: None,
@@ -2053,6 +2061,7 @@ impl Darc<LamellarTeamRT> {
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
+        trace!(target: "lamellae_debug", "am_group_exec_am_all_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team am group exec all", std::thread::current().id());
         // self.scheduler.submit_am(Am::All(req_data, func));
@@ -2131,7 +2140,7 @@ impl Darc<LamellarTeamRT> {
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
-
+        trace!(target: "lamellae_debug", "exec_am_pe_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         AmHandle {
             inner: req,
             am: Some((Am::Remote(req_data, func), 1)),
@@ -2199,9 +2208,9 @@ impl Darc<LamellarTeamRT> {
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
-
+        trace!(target: "lamellae_debug", "spawn_am_pe_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         self.scheduler.submit_am(Am::Remote(req_data, func));
-
+        
         AmHandle {
             inner: req,
             am: None,
@@ -2282,6 +2291,7 @@ impl Darc<LamellarTeamRT> {
         //     inner: req,
         //     _phantom: PhantomData,
         // })
+        trace!(target: "lamellae_debug", "am_group_exec_am_pe_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         AmHandle {
             inner: req,
             am: Some((Am::Remote(req_data, func), 1)),
@@ -2342,6 +2352,7 @@ impl Darc<LamellarTeamRT> {
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
+        trace!(target: "lamellae_debug", "exec_arc_am_all submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
 
         // println!(
         //     "[{:?}] team arc exec am all tg",
@@ -2406,6 +2417,7 @@ impl Darc<LamellarTeamRT> {
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
+        trace!(target: "lamellae_debug", "exec_arc_am_pe submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
         // self.scheduler.submit_am(Am::Remote(req_data, am));
@@ -2475,6 +2487,7 @@ impl Darc<LamellarTeamRT> {
         };
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
+        trace!(target: "lamellae_debug", "exec_arc_am_pe_immediately submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         self.scheduler.exec_am(Am::Remote(req_data, am)).await;
 
         // Box::new(LamellarRequestHandle {
@@ -2555,6 +2568,7 @@ impl Darc<LamellarTeamRT> {
         //     inner: req,
         //     _phantom: PhantomData,
         // })
+        trace!(target: "lamellae_debug", "exec_am_local_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         LocalAmHandle {
             inner: req,
             am: Some((Am::Local(req_data, func), 1)),
@@ -2619,6 +2633,7 @@ impl Darc<LamellarTeamRT> {
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
+        trace!(target: "lamellae_debug", "spawn_am_local_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         // println!("[{:?}] team exec am local", std::thread::current().id());
         self.scheduler
             .submit_am(Am::Local(req_data.clone(), func.clone()));
@@ -2627,6 +2642,7 @@ impl Darc<LamellarTeamRT> {
         //     inner: req,
         //     _phantom: PhantomData,
         // })
+
         LocalAmHandle {
             inner: req,
             am: None,
@@ -2680,6 +2696,7 @@ impl Darc<LamellarTeamRT> {
             self.scheduler.block_on(alloc_fut);
             lmr = OneSidedMemoryRegion::try_new(size, self);
         }
+        trace!(target: "lamellae_debug", "allocated one sided mem region lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         lmr.expect("out of memory")
     }
 
@@ -2692,6 +2709,7 @@ impl Darc<LamellarTeamRT> {
 impl Drop for LamellarTeamRT {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop LamellarTeamRT");
         // println!("LamellarTeamRT Drop");
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
         // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
@@ -2717,12 +2735,27 @@ impl Drop for LamellarTeamRT {
         //     }
         // }
         debug!("LamellarTeamRT dropped");
+        trace!(target: "drop", "end drop LamellarTeamRT lamellae cnt: {:?} scheduler cnt: {:?} arch cnt: {:?} world_counters cnt: {:?} team_counters cnt: {:?}",
+            Arc::strong_count(&self.lamellae),
+            Arc::strong_count(&self.scheduler),
+            Arc::strong_count(&self.arch),
+            Arc::strong_count(&self.world_counters),
+            Arc::strong_count(&self.team_counters),
+        );
+        trace!(target: "lamellae_debug", "end drop LamellarTeamRT lamellae cnt: {:?} scheduler cnt: {:?} arch cnt: {:?} world_counters cnt: {:?} team_counters cnt: {:?}",
+            Arc::strong_count(&self.lamellae),
+            Arc::strong_count(&self.scheduler),
+            Arc::strong_count(&self.arch),
+            Arc::strong_count(&self.world_counters),
+            Arc::strong_count(&self.team_counters),
+        );
     }
 }
 
 impl Drop for LamellarTeam {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop LamellarTeam");
         // println!("team handle dropping {:?}", self.team.team_hash);
         // println!("arch: {:?}", Arc::strong_count(&self.team.arch));
         // self.team.print_cnt();
@@ -2796,8 +2829,7 @@ impl Drop for LamellarTeam {
         // }
         // println!("how am i here...");
 
-        trace!("team handle dropped");
-        trace!("RT Team: {:?}", self.team);
+        trace!("team handle dropped, RT Team: {:?}", self.team);
         // self.team.print();
 
         // if let Some(world) = &self.world{
@@ -2813,6 +2845,20 @@ impl Drop for LamellarTeam {
         //     self.team.dropped.as_slice()
         // );
         // std::thread::sleep(Duration::from_secs(1));
+        trace!(target: "drop", "end drop LamellarTeam lamellae cnt: {:?} scheduler cnt: {:?} arch cnt: {:?} world_counters cnt: {:?} team_counters cnt: {:?}",
+            Arc::strong_count(&self.team.lamellae),
+            Arc::strong_count(&self.team.scheduler),
+            Arc::strong_count(&self.team.arch),
+            Arc::strong_count(&self.team.world_counters),
+            Arc::strong_count(&self.team.team_counters),
+        );
+        trace!(target: "lamellae_debug", "end drop LamellarTeam lamellae cnt: {:?} scheduler cnt: {:?} arch cnt: {:?} world_counters cnt: {:?} team_counters cnt: {:?}",
+            Arc::strong_count(&self.team.lamellae),
+            Arc::strong_count(&self.team.scheduler),
+            Arc::strong_count(&self.team.arch),
+            Arc::strong_count(&self.team.world_counters),
+            Arc::strong_count(&self.team.team_counters),
+        );
     }
 }
 

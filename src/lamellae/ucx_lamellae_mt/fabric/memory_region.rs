@@ -11,6 +11,7 @@ use super::{context::Context, endpoint::Endpoint, error::Error, UcxMtAlloc};
 use lamellar_ucx_sys::*;
 use pmi::{pmi::Pmi, pmix::PmiX};
 use std::vec::Vec;
+use tracing::trace;
 
 #[derive(Debug, Clone)]
 pub(crate) struct MemoryHandle {
@@ -213,8 +214,10 @@ impl MemoryHandleInner {
 
 impl Drop for MemoryHandleInner {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop MemoryHandleInner");
         // println!("dropping MemoryHandleInner {:x}", self.addr);
         unsafe { ucp_mem_unmap(self.context.handle, self.handle) };
+        trace!(target: "drop", "end drop MemoryHandleInner");
     }
 }
 
@@ -233,7 +236,9 @@ impl AsRef<[u8]> for RKeyBuffer {
 
 impl Drop for RKeyBuffer {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop RKeyBuffer");
         unsafe { ucp_rkey_buffer_release(self.buf as _) }
+        trace!(target: "drop", "end drop RKeyBuffer");
     }
 }
 
@@ -304,11 +309,13 @@ impl RKey {
 
 impl Drop for RKey {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop RKey");
         for h in &self.handles {
             let v = h.load(Ordering::Acquire);
             if v != 0 {
                 unsafe { ucp_rkey_destroy(v as ucp_rkey_h) }
             }
         }
+        trace!(target: "drop", "end drop RKey");
     }
 }

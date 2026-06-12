@@ -119,6 +119,7 @@ impl CommInfo for UcxComm {
 impl Drop for UcxComm {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop UcxComm");
         // println!("dropping ucx comm");
         debug!("Dropping UcxComm");
         if self.mem_occupied() > 0 {
@@ -141,5 +142,6 @@ impl Drop for UcxComm {
 
         let _ = self.ucx.barrier();
         debug!("Dropping UcxComm: ucx world ref count: {}", world_ref_count);
+        trace!(target: "drop", "end drop UcxComm");
     }
 }

@@ -112,11 +112,9 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
 
 impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
     fn from(mem_reg: Arc<MemRegionHandleInner>) -> Self {
-        trace!("creating net handle {:?}", mem_reg);
         trace!(
-            "creating net handle mem region addr 0x{:x} orig_pe: {:?}",
-            mem_reg.orig_addr,
-            mem_reg.orig_pe
+            "creating net handle {:?} addr 0x{:x} orig_pe: {:?}",
+            mem_reg, mem_reg.orig_addr, mem_reg.orig_pe
         );
         NetMemRegionHandle {
             mr_addr: mem_reg.orig_addr,
@@ -211,6 +209,7 @@ impl Clone for MemRegionHandle {
 
 impl Drop for MemRegionHandle {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop MemRegionHandle");
         //this means all local instances of this handle have been dropped
         let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let cnt = self.inner.local_ref.fetch_sub(1, Ordering::SeqCst);
@@ -256,6 +255,7 @@ impl Drop for MemRegionHandle {
                     }, None,None);
             }
         }
+        trace!(target: "drop", "end drop MemRegionHandle");
     }
 }
 

@@ -827,6 +827,7 @@ impl InnerCQ {
 #[lamellar_prof::prof]
 impl Drop for InnerCQ {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop InnerCQ");
         debug!("dropping InnerCQ");
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
@@ -844,6 +845,7 @@ impl Drop for InnerCQ {
         );
         let _ = Box::into_raw(old);
         debug!("dropped InnerCQ");
+        trace!(target: "drop", "end drop InnerCQ");
     }
 }
 
@@ -1124,7 +1126,7 @@ impl CQGet2 {
                             self.cq.send_eager_ack(src, processed);
                             self.cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
                             stats!(PE_RECVS[1][src].fetch_add(1, Ordering::SeqCst));
-                            self.scheduler.submit_remote_am(ser_data, lamellae.clone());
+                            self.scheduler.submit_remote_am(ser_data, &lamellae);
                         }
                     }
 
@@ -1147,7 +1149,7 @@ impl CQGet2 {
                                     debug!("getting cmd from {src} {:?} msg_id: {msg_id}", cmd);
                                     let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae).await;
                                     debug!("msg_id: {msg_id} submitting remote am from {src}");
-                                    scheduler1.submit_remote_am(work_data, lamellae.clone());
+                                    scheduler1.submit_remote_am(work_data, &lamellae);
                                     cq.send_free(src, cmd);
                                 };
                                 self.scheduler.submit_io_task(task);
@@ -1179,6 +1181,7 @@ impl CQGet2 {
 #[lamellar_prof::prof]
 impl Drop for CQGet2 {
     fn drop(&mut self) {
+        trace!(target: "drop", "begin drop CQGet2");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1193,5 +1196,6 @@ impl Drop for CQGet2 {
                 .map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
+        trace!(target: "drop", "end drop CQGet2");
     }
 }
