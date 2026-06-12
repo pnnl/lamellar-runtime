@@ -414,8 +414,10 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
                 .load(std::sync::atomic::Ordering::SeqCst)
         } == 1
         {
-            let this = std::mem::ManuallyDrop::new(self);
+            let mut this = std::mem::ManuallyDrop::new(self);
             let data = unsafe { Box::from_raw(this.data.as_ptr()) };
+            // drop Arc<Lamellae> that ManuallyDrop suppresses
+            unsafe { std::ptr::drop_in_place(&mut this.lamellae as *mut Arc<Lamellae>) };
             Ok(data.data)
         } else {
             Err(self)
@@ -438,8 +440,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
             trace!("Waiting to unwrap LamellarBuffer: {:?}", self);
             async_std::task::yield_now().await;
         }
-        let this = std::mem::ManuallyDrop::new(self);
+        let mut this = std::mem::ManuallyDrop::new(self);
         let data = unsafe { Box::from_raw(this.data.as_ptr()) };
+        trace!(target: "lamellae_debug", "successfully unwrapped LamellarBuffer, lamellae cnt: {:?}", Arc::strong_count(&this.lamellae));
+        // drop Arc<Lamellae> that ManuallyDrop suppresses
+        unsafe { std::ptr::drop_in_place(&mut this.lamellae as *mut Arc<Lamellae>) };
         data.data
     }
 
