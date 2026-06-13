@@ -2356,10 +2356,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-sys")]
-            CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric-mt")]
             CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
@@ -2416,7 +2412,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
     fn reduce_all<T: Remote> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         op: ReduceOp,
@@ -2479,7 +2475,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
     fn reduce_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         op: ReduceOp,
@@ -2543,7 +2539,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
     fn reduce_all_in_place<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src_and_dst: LamellarBuffer<T, B>,
         op: ReduceOp,
     ) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
@@ -2608,7 +2604,7 @@ impl CommAllocCollectiveReduce for CommAllocInner {
     fn reduce<T: Remote> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -2671,7 +2667,7 @@ impl CommAllocCollectiveReduce for CommAllocInner {
     fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -2736,7 +2732,7 @@ impl CommAllocCollectiveReduce for CommAllocInner {
     // fn reduce_in_place<T: Remote> ( // TODO: FIX
     //     &self,
     //     scheduler: &Arc<Scheduler>,
-    //     counters: Vec<Arc<AMCounters>>,
+    //     counters: Option<Arc<[Arc<AMCounters>]>>,
     //     op: ReduceOp,
     //     root_pe: usize,
     // ) -> CollectiveReduceInPlaceOpHandle<T> {
@@ -2797,7 +2793,7 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
     fn gather_all<T: Remote> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
     ) -> CollectiveAllGatherOpHandle<T> {
@@ -2858,7 +2854,7 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
     fn gather_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         buffer: LamellarBuffer<T, B>,
@@ -2923,7 +2919,7 @@ impl CommAllocCollectiveGather for CommAllocInner {
     fn gather<T: Remote> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         root_pe: usize,
@@ -2985,7 +2981,7 @@ impl CommAllocCollectiveGather for CommAllocInner {
     fn gather_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
@@ -3019,7 +3015,7 @@ impl CommAllocCollectiveGather for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
             }
-            #[cfg(feature = "enable-ucx-mt-mt")]
+            #[cfg(feature = "enable-ucx-mt")]
             CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
             }
@@ -3052,7 +3048,7 @@ impl CommAllocCollectiveAllToAll for CommAllocInner {
     fn alltoall<T: Remote> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
     ) -> CollectiveAllToAllOpHandle<T> {
@@ -3115,7 +3111,7 @@ impl CommAllocCollectiveAllToAll for CommAllocInner {
     fn alltoall_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         buffer: LamellarBuffer<T, B>,
@@ -3166,7 +3162,7 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
     fn broadcast<T: Remote> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src_or_root_pe: BroadcastInput,
         len: usize,
     ) -> CollectiveBroadcastOpHandle<T> {
@@ -3227,7 +3223,7 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
     fn broadcast_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         root_or_buffer: RootSrcOrLamellarBuffer<T, B>,
         len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
@@ -3292,7 +3288,7 @@ impl CommAllocCollectiveScatter for CommAllocInner {
     fn scatter<T: Remote> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src_or_root_pe: ScatterInput,
         len: usize,
     ) -> CollectiveScatterOpHandle<T> {
@@ -3354,7 +3350,7 @@ impl CommAllocCollectiveScatter for CommAllocInner {
     fn scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         buf: LamellarBuffer<T, B>,
         src_or_root_pe: ScatterInput,
         len: usize,
@@ -3420,7 +3416,7 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
     fn reduce_scatter<T: Remote> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -3482,7 +3478,7 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
     fn reduce_scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,

@@ -878,6 +878,7 @@ impl OfiAsync {
         Ok(self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1)
     }
 
+    #[allow(dead_code)] // WIP: get path not yet implemented in libfabric-async
     fn post_get(
         &self,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
@@ -2151,6 +2152,7 @@ impl LibfabricAsyncAlloc {
         Ok(())
     }
 
+    #[allow(dead_code)] // WIP: small-get optimization path not yet wired up
     pub(crate) async unsafe fn inner_get_small<T: Copy>(
         &self,
         pe: usize,
@@ -2475,6 +2477,7 @@ impl LibfabricAsyncAlloc {
         }
     }
 
+    #[allow(dead_code)] // WIP: unmanaged atomic path not yet exposed
     pub(crate) fn atomic_fetch_op_inner_unmanaged<T: 'static>(
         &self,
         pe: usize,

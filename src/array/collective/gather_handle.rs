@@ -18,7 +18,7 @@ pub(crate) struct CollectiveAllGatherManualOpHandle<T: Dist> {
     #[pin]
     pub(crate) future: Pin<Box<dyn Future<Output = Vec<T>> + Send>>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 }
 
 #[pin_project]
@@ -26,7 +26,7 @@ pub(crate) struct CollectiveAllGatherIntoBufferManualOpHandle {
     #[pin]
     pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 }
 
 
@@ -39,9 +39,8 @@ impl<T: Dist> Future for CollectiveAllGatherManualOpHandle<T> {
 }
 
 impl<T: Dist> CollectiveAllGatherManualOpHandle<T> {
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
     
@@ -59,9 +58,8 @@ impl Future for CollectiveAllGatherIntoBufferManualOpHandle {
 }
 
 impl CollectiveAllGatherIntoBufferManualOpHandle {
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
     
@@ -83,7 +81,7 @@ impl<T: Dist> ArrayCollectiveAllGatherHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
+    pub fn spawn(self) -> LamellarTask<Vec<T>> {
         let task = match self.state {
             ArrayCollectiveAllGatherState::CollectiveAllGather(req) => req.spawn(),
             ArrayCollectiveAllGatherState::CollectiveAllGatherManual(req) => req.spawn(),
@@ -148,7 +146,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllGatherIntoBufferHandle<T
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(mut self) -> LamellarTask<()> {
+    pub fn spawn(self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveAllGatherIntoBufferState::CollectiveAllGatherIntoBuffer(req) => req.spawn(),
             ArrayCollectiveAllGatherIntoBufferState::CollectiveAllGatherIntoBufferManual(req) => req.spawn(),
@@ -191,7 +189,7 @@ pub(crate) struct CollectiveGatherManualOpHandle<T: Dist> {
     #[pin]
     pub(crate) future: Pin<Box<dyn Future<Output = Option<Vec<T>>> + Send>>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 }
 
 impl<T: Dist> Future for CollectiveGatherManualOpHandle<T> {
@@ -203,9 +201,8 @@ impl<T: Dist> Future for CollectiveGatherManualOpHandle<T> {
 }
 
 impl<T: Dist> CollectiveGatherManualOpHandle<T> {
-    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
     
@@ -219,7 +216,7 @@ pub(crate) struct CollectiveGatherIntoBufferManualOpHandle {
     #[pin]
     pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 }
 
 impl Future for CollectiveGatherIntoBufferManualOpHandle {
@@ -231,9 +228,8 @@ impl Future for CollectiveGatherIntoBufferManualOpHandle {
 }
 
 impl CollectiveGatherIntoBufferManualOpHandle {
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
     
@@ -268,7 +264,7 @@ impl<T: Dist> ArrayCollectiveGatherHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+    pub fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         let task = match self.state {
             ArrayCollectiveGatherState::CollectiveGather(req) => req.spawn(),
             ArrayCollectiveGatherState::CollectiveGatherManual(req) => req.spawn(),
@@ -331,7 +327,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveGatherIntoBufferHandle<T, B
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(mut self) -> LamellarTask<()> {
+    pub fn spawn(self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveGatherIntoBufferState::CollectiveGatherIntoBuffer(req) => req.spawn(),
             ArrayCollectiveGatherIntoBufferState::CollectiveGatherIntoBufferManual(req) => req.spawn(),

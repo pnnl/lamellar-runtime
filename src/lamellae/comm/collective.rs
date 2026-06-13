@@ -635,6 +635,7 @@ pub(crate) enum CollectiveReduceInPlaceOpFuture<T> {
     #[allow(dead_code)]
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceInPlaceFuture<T>),
+    #[allow(dead_code)] // WIP: ucx-mt reduce-in-place not yet wired up
     #[cfg(feature = "enable-ucx-mt")]
     UcxMt(#[pin] UcxMtCollectiveReduceInPlaceFuture<T>),
     // Shmem(#[pin] ShmemCollectiveReduceInPlaceFuture<T>),
@@ -1875,6 +1876,7 @@ pub enum BroadcastInput {
     NotRoot(usize)
 }
 
+#[allow(dead_code)] // WIP: broadcast inner representation not yet consumed
 pub(crate) enum BroadcastInputInner {
     Root(usize),
     NotRoot(usize)
@@ -2052,7 +2054,7 @@ pub(crate) trait CommAllocCollectiveAllReduce {
     fn reduce_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         op: ReduceOp,
@@ -2061,7 +2063,7 @@ pub(crate) trait CommAllocCollectiveAllReduce {
     fn reduce_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         op: ReduceOp,
@@ -2071,7 +2073,7 @@ pub(crate) trait CommAllocCollectiveAllReduce {
     fn reduce_all_in_place<T: Remote, B: AsLamellarBuffer<T>>(
         &self, // TODO: This should probably take a multiple reference to self.
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src_and_dst: LamellarBuffer<T, B>,
         op: ReduceOp,
     ) -> CollectiveAllReduceInPlaceOpHandle<T, B>;
@@ -2081,7 +2083,7 @@ pub(crate) trait CommAllocCollectiveReduce {
     fn reduce<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -2091,7 +2093,7 @@ pub(crate) trait CommAllocCollectiveReduce {
     fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -2101,7 +2103,7 @@ pub(crate) trait CommAllocCollectiveReduce {
     // fn reduce_in_place<T: Remote>(
     //     &self,
     //     scheduler: &Arc<Scheduler>,
-    //     counters: Vec<Arc<AMCounters>>,
+    //     counters: Option<Arc<[Arc<AMCounters>]>>,
     //     op: ReduceOp,
     //     root_pe: usize,
     // ) -> CollectiveReduceInPlaceOpHandle<T>;
@@ -2111,14 +2113,14 @@ pub(crate) trait CommAllocCollectiveAllGather {
     fn gather_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
     ) -> CollectiveAllGatherOpHandle<T>;
     fn gather_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         dst: LamellarBuffer<T, B>,
@@ -2129,7 +2131,7 @@ pub(crate) trait CommAllocCollectiveGather {
     fn gather<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         root_pe: usize,
@@ -2137,7 +2139,7 @@ pub(crate) trait CommAllocCollectiveGather {
     fn gather_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
@@ -2148,14 +2150,14 @@ pub(crate) trait CommAllocCollectiveAllToAll {
     fn alltoall<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
     ) -> CollectiveAllToAllOpHandle<T>;
     fn alltoall_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         dst: LamellarBuffer<T, B>,
@@ -2166,14 +2168,14 @@ pub(crate) trait CommAllocCollectiveBroadcast {
     fn broadcast<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src_or_root_pe: BroadcastInput,
         len: usize,
     ) -> CollectiveBroadcastOpHandle<T>;
     fn broadcast_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         dst: RootSrcOrLamellarBuffer<T, B>,
         len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B>;
@@ -2183,14 +2185,14 @@ pub(crate) trait CommAllocCollectiveScatter {
     fn scatter<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src_or_root_pe: ScatterInput,
         len: usize,
     ) -> CollectiveScatterOpHandle<T>;
     fn scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         dst: LamellarBuffer<T, B>,
         src_or_root_pe: ScatterInput,
         len: usize,
@@ -2201,7 +2203,7 @@ pub(crate) trait CommAllocCollectiveReduceScatter {
     fn reduce_scatter<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -2210,7 +2212,7 @@ pub(crate) trait CommAllocCollectiveReduceScatter {
     fn reduce_scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -2220,7 +2222,7 @@ pub(crate) trait CommAllocCollectiveReduceScatter {
     // fn reduce_scatter_in_place<T: Remote, B: AsLamellarBuffer<T>>(
     //     &self, // TODO: This should probably take a multiple reference to self.
     //     scheduler: &Arc<Scheduler>,
-    //     counters: Vec<Arc<AMCounters>>,
+    //     counters: Option<Arc<[Arc<AMCounters>]>>,
     //     src_and_dst: LamellarBuffer<T, B>,
     //     op: ReduceOp,
     // ) -> CollectiveAllReduceInPlaceOpHandle<T, B>;

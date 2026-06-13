@@ -48,7 +48,7 @@
 //     pub(crate) len: usize,
 //     pub(crate) result: Vec<T>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -96,14 +96,14 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self) -> Vec<T> {
+//     pub(crate) fn block(self) -> Vec<T> {
 //         self.exec_op();
 //         let mut res = Vec::new();
 //         std::mem::swap(&mut self.result, &mut res);
 //         res
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+//     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -151,7 +151,7 @@
 //     pub(crate) len: usize,
 //     pub(crate) result: LamellarBuffer<T, B>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -188,11 +188,11 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -236,7 +236,7 @@
 //     pub(super) op: ReduceOp,
 //     pub(crate) result: LamellarBuffer<T, B>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 //     phantom: std::marker::PhantomData<T>,
 // }
@@ -277,11 +277,11 @@
 //         // self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -327,7 +327,7 @@
 //     pub(super) op: ReduceOp,
 //     pub(crate) target: RootOrBuffer<T>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -363,7 +363,7 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self) -> Option<Vec<T>> {
+//     pub(crate) fn block(self) -> Option<Vec<T>> {
 //         self.exec_op();
 //         match &mut self.target {
 //             RootOrBuffer::Root(r) => {
@@ -375,7 +375,7 @@
 //         }
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+//     pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -427,7 +427,7 @@
 //     pub(super) op: ReduceOp,
 //     pub(crate) target: RootOrLamellarBuffer<T, B>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -463,11 +463,11 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -543,7 +543,7 @@
 //     pub(crate) len: usize,
 //     pub(crate) result: Vec<T>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -553,7 +553,7 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self) -> Vec<T> {
+//     pub(crate) fn block(self) -> Vec<T> {
 //         self.exec_op();
 //         let mut res = Vec::new();
 //         std::mem::swap(&mut res, &mut self.result);
@@ -561,7 +561,7 @@
 //         res
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+//     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -607,7 +607,7 @@
 //     pub(crate) len: usize,
 //     pub(crate) result: LamellarBuffer<T, B>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -618,11 +618,11 @@
 
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -666,7 +666,7 @@
 //     pub(crate) len: usize,
 //     pub(crate) target: RootOrBuffer<T>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -683,7 +683,7 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self) -> Option<Vec<T>> {
+//     pub(crate) fn block(self) -> Option<Vec<T>> {
 //         self.exec_op();
 //         match &mut self.target {
 //             RootOrBuffer::Root(r) => {
@@ -695,7 +695,7 @@
 //         }
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+//     pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -746,7 +746,7 @@
 //     pub(crate) len: usize,
 //     pub(crate) target: RootOrLamellarBuffer<T, B>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -764,11 +764,11 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -812,7 +812,7 @@
 //     pub(crate) src: MemregionRdmaInputInner<T>,
 //     pub(crate) result: Vec<T>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -821,14 +821,14 @@
 //         unimplemented!("shmem collective allbroadcast is not yet implemented");
 //     }
 
-//     pub(crate) fn block(mut self) -> Vec<T> {
+//     pub(crate) fn block(self) -> Vec<T> {
 //         self.exec_op();
 //         let mut res = Vec::new();
 //         std::mem::swap(&mut res, &mut self.result);
 //         res
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+//     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -874,7 +874,7 @@
 //     pub(crate) src: MemregionRdmaInputInner<T>,
 //     pub(crate) result: LamellarBuffer<T, B>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -883,11 +883,11 @@
 //         unimplemented!("shmem collective allbroadcast into buffer is not yet implemented");
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -930,7 +930,7 @@
 //     pub(crate) target: RootSrcOrBuffer<T> ,
 //     pub(crate) len: usize,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -981,7 +981,7 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self) -> Option<Vec<T>>  {
+//     pub(crate) fn block(self) -> Option<Vec<T>>  {
 //         self.exec_op();
 //         match &mut self.target {
 //             RootSrcOrBuffer::Root(_) => None,
@@ -993,7 +993,7 @@
 //         }
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+//     pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -1043,7 +1043,7 @@
 //     pub(crate) target: RootSrcOrLamellarBufferInner<T, B>,
 //     pub(crate) len: usize,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -1060,11 +1060,11 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -1146,7 +1146,7 @@
 //     pub(crate) result: Vec<T> ,
 //     src_or_root_pe: ScatterInputInner,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -1163,14 +1163,14 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self) -> Vec<T> {
+//     pub(crate) fn block(self) -> Vec<T> {
 //         self.exec_op();
 //         let mut res = Vec::new();
 //         std::mem::swap(&mut res, &mut self.result);
 //         res
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+//     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -1216,7 +1216,7 @@
 //     src_or_root_pe: ScatterInputInner,
 //     pub(crate) result: LamellarBuffer<T, B>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -1233,11 +1233,11 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -1282,7 +1282,7 @@
 //     pub(crate) len: usize,
 //     pub(crate) result: Vec<T>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -1321,14 +1321,14 @@
 //         self.spawned = true;
 //     }
 
-//     pub(crate) fn block(mut self) -> Vec<T> {
+//     pub(crate) fn block(self) -> Vec<T> {
 //         self.exec_op();
 //         let mut res = Vec::new();
 //         std::mem::swap(&mut res, &mut self.result);
 //         res
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+//     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -1375,7 +1375,7 @@
 //     pub(crate) len: usize,
 //     pub(crate) result: LamellarBuffer<T, B>,
 //     pub(crate) scheduler: Arc<Scheduler>,
-//     pub(crate) counters: Vec<Arc<AMCounters>>,
+//     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 //     pub(crate) spawned: bool,
 // }
 
@@ -1412,11 +1412,11 @@
 //         }
 //     }
 
-//     pub(crate) fn block(mut self)  {
+//     pub(crate) fn block(self)  {
 //         self.exec_op();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -1551,7 +1551,7 @@
 //     fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         op: ReduceOp,
 //         index: usize,
 //         len: usize,
@@ -1575,7 +1575,7 @@
 //     fn broadcast<T: Remote>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         src_or_pe: BroadcastInput,
 //         len: usize,
 //     ) -> CollectiveBroadcastOpHandle<T> {
@@ -1597,7 +1597,7 @@
 //     fn broadcast_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         root_or_buffer: RootSrcOrLamellarBuffer<T, B>,
 //         len: usize,
 //     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
@@ -1617,7 +1617,7 @@
 //     fn gather<T: Remote>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         index: usize,
 //         len: usize,
 //         root_pe: usize,
@@ -1643,7 +1643,7 @@
 //     fn gather_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         index: usize,
 //         len: usize,
 //         root_or_buffer: RootOrLamellarBuffer<T, B>
@@ -1666,7 +1666,7 @@
 //     fn gather_all<T: Remote>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         index: usize,
 //         len: usize,
 //     ) -> CollectiveAllGatherOpHandle<T> {
@@ -1684,7 +1684,7 @@
 //     fn gather_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         index: usize,
 //         len: usize,
 //         dst: LamellarBuffer<T, B>,
@@ -1706,7 +1706,7 @@
 //     fn scatter<T: Remote>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         src_or_root_pe: ScatterInput,
 //         len: usize,
 //     ) -> CollectiveScatterOpHandle<T> {
@@ -1724,7 +1724,7 @@
 //     fn scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         result: LamellarBuffer<T, B>,
 //         src_or_root_pe: ScatterInput,
 //         len: usize,
@@ -1746,7 +1746,7 @@
 //     fn reduce_scatter<T: Remote>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         op: ReduceOp,
 //         index: usize, 
 //         len: usize,
@@ -1766,7 +1766,7 @@
 //     fn reduce_scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
+//         counters: Option<Arc<[Arc<AMCounters>]>>,
 //         op: ReduceOp,
 //         index: usize,
 //         len: usize,

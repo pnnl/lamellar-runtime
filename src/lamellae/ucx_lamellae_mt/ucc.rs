@@ -188,6 +188,7 @@ unsafe impl Sync for UccTeam {}
 pub(crate) struct UccTeam {
     handle: ucc_team_h,
     pub(crate) context: Arc<UccContext>,
+    #[allow(dead_code)] // WIP: pinning params required for UCC safety, not yet read directly
     params: Box<UccTeamParams>, // pin?
     pub(crate) req_pending: Arc<AtomicUsize>,
     pub(crate) req_completed: Arc<AtomicUsize>,

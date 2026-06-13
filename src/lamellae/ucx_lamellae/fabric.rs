@@ -19,7 +19,7 @@ use crate::config;
 use crate::{
     lamellae::{
         comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
-        collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone},  ucx_lamellae::ucc::{self, Error, UccContext, UccRequest, UccTeam}, CommAllocAddr, CommAllocInner, CommAllocType, FabricError
+        collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone},  ucx_lamellae::ucc::{self, Error, UccContext, UccRequest, UccTeam}, CommAllocAddr, CommAllocInner, FabricError
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };

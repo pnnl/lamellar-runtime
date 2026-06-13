@@ -84,7 +84,7 @@ pub(crate) struct CommGroup{
     get_cntr: Counter<WaitableCntr>,
     av: AddressVector,
     eq: EventQueue<WaitableEq>,
-    // info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
+    info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
     coll_cnt_issued: AtomicU64,
@@ -690,7 +690,7 @@ impl Ofi {
                 coll_cnt_issued: AtomicU64::new(0),
                 av,
                 eq,
-                // info_entry: info_entry.clone(),
+                info_entry: info_entry.clone(),
                 put_cnt: AtomicU64::new(0),
                 get_cnt: AtomicU64::new(0),
                 lock: Mutex::new(()),
@@ -1488,55 +1488,16 @@ impl Ofi {
             BarrierImpl::Uninit => {
                 panic!("Barrier is not initialized");
             }
-            BarrierImpl::Collective(mc) => {
-                let cg = &self.comm_group;
-                cg.post_collective(true, || {
-                    cg.ep.barrier(mc)
-                })?;
-                // trace!("Done with barrier");
-                Ok(())
-            }
-            BarrierImpl::Manual(barrier_alloc, barrier_id) => {
-                // panic!("Manual barrier is not implemented");
-                // let n = 2usize;
-                // let pes = (0..self.num_pes).collect::<Vec<_>>();
-                // let num_pes = pes.len();
-                // let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
-                // let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
-                // for round in 0..num_rounds as usize {
-                //     for i in 1..=n {
-                //         let send_pe = (self.my_pe + i * (n + 1).pow(round as u32)) % num_pes;
-
-                //         // let dst = barrier_addr + 8 * self.my_pe;
-                //         unsafe {
-                //             barrier_alloc.inner_put::<usize>(
-                //                 send_pe,
-                //                 self.my_pe,
-                //                 std::slice::from_ref(&my_barrier),
-                //                 false,
-                //             )?
-                //         };
-                //     }
-
-                //     let _lock = self.comm_group.lock.lock();
-                //     for i in 1..=n {
-                //         let recv_pe = (self.my_pe as i64
-                //             - i as i64 * (n as i64 + 1).pow(round as u32))
-                //         .rem_euclid(num_pes as i64);
-                //         // let barrier_vec = unsafe {
-                //         //     std::slice::from_raw_parts(barrier_addr as *const usize, num_pes)
-                //         // };
-                //         let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
-
-                //         while my_barrier > barrier_vec[recv_pe as usize] {
-                //             self.comm_group.progress()?;
-                //             std::thread::yield_now();
-                //         }
-                //     }
-                // }
-
-                // Ok(())
-            }
+            // BarrierImpl::Collective(mc) => {
+            //     let cg = &self.comm_group;
+            //     cg.post_collective(true, || {
+            //         cg.ep.barrier(mc)
+            //     })?;
+            //     Ok(())
+            // }
+            // BarrierImpl::Manual(_barrier_alloc, _barrier_id) => {
+            //     Ok(())
+            // }
             BarrierImpl::Pmi(pmi) => {
                 pmi.barrier(true).expect("PMI Barrier failed");
                 Ok(())
@@ -2147,14 +2108,14 @@ impl LibfabricAlloc {
         decrement_ref_count(ref_count)
     }
 
-    // pub(crate) unsafe fn as_mut_slice<T: Copy>(&self) -> &mut [T] {
-    //     unsafe {
-    //         std::slice::from_raw_parts_mut(
-    //             self.start() as *mut T,
-    //             self.num_bytes() / std::mem::size_of::<T>(),
-    //         )
-    //     }
-    // }
+    pub(crate) unsafe fn as_mut_slice<T: Copy>(&self) -> &mut [T] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.start() as *mut T,
+                self.num_bytes() / std::mem::size_of::<T>(),
+            )
+        }
+    }
 
     pub(crate) unsafe fn as_slice<T: Copy>(&self) -> &[T] {
         unsafe {

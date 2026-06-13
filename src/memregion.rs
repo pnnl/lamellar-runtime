@@ -940,7 +940,7 @@ impl<T: Remote> MemoryRegion<T> {
         );
         MemoryRegion {
             alloc: self.alloc.clone(),
-            coll_sync_alloc: self.coll_sync_alloc,
+            coll_sync_alloc: self.coll_sync_alloc.clone(),
             pe: self.pe,
             scheduler: self.scheduler.clone(),
             counters: self.counters.clone(),

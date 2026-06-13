@@ -39,7 +39,7 @@ pub(crate) struct LibfabricSysAtomicFuture<T> {
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -61,8 +61,7 @@ impl<T: Send + 'static> LibfabricSysAtomicFuture<T> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         let ofi = self.alloc.ofi.clone();
         self.scheduler
             .clone()
@@ -106,7 +105,7 @@ pub(crate) struct LibfabricSysAtomicFetchFuture<T> {
     pub(super) op: AtomicOp<T>,
     pub(crate) result: Box<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -137,9 +136,7 @@ impl<T: Remote> LibfabricSysAtomicFetchFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_op();
-
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -182,7 +179,7 @@ pub(crate) struct LibfabricSysAtomicCompareExchangeFuture<T> {
     new: Pin<Box<T>>,
     pub(crate) result: Box<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 impl<T: Remote + PartialEq> LibfabricSysAtomicCompareExchangeFuture<T> {
@@ -207,8 +204,7 @@ impl<T: Remote + PartialEq> LibfabricSysAtomicCompareExchangeFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
         self.exec_op();
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -246,7 +242,7 @@ impl CommAllocAtomic for LibfabricSysAlloc {
     fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -277,7 +273,7 @@ impl CommAllocAtomic for LibfabricSysAlloc {
     fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T> {
@@ -300,7 +296,7 @@ impl CommAllocAtomic for LibfabricSysAlloc {
     fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -333,7 +329,7 @@ impl CommAllocAtomic for LibfabricSysAlloc {
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         current: T,
         new: T,
         pe: usize,
@@ -378,7 +374,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
     fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -425,7 +421,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
     fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T> {
@@ -437,7 +433,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
     fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: AtomicOp<T>,
         pe: usize,
         offset: usize,
@@ -486,7 +482,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         current: T,
         new: T,
         pe: usize,

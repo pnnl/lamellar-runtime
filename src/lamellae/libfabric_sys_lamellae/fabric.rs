@@ -5,7 +5,7 @@ use parking_lot::{Mutex, RwLock};
 use pmi::{Pmi, PmiBuilder};
 use tracing::{debug, trace};
 
-use crate::{lamellae::{AllocError, AllocResult, AllocationType, AtomicOp, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, FabricError, FabricResult, calc_alloc_padding_size_align, collective::{AllReduceOp, ReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, decode_padding, decode_ref_count, decode_ref_count_and_padding, decrement_ref_count, encode_ref_count_and_padding, get_ref_count, increment_ref_count}, lamellar_alloc::{BTreeAlloc, LamellarAlloc}};
+use crate::{lamellae::{AllocError, AllocResult, AllocationType, AtomicOp, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner, FabricError, FabricResult, calc_alloc_padding_size_align, collective::{AllReduceOp, ReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, decode_padding, decode_ref_count, decode_ref_count_and_padding, decrement_ref_count, encode_ref_count_and_padding, get_ref_count, increment_ref_count}, lamellar_alloc::{BTreeAlloc, LamellarAlloc}};
 
 enum BarrierImpl {
     Uninit,
@@ -282,6 +282,7 @@ pub(crate) struct Ofi {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     domain: *mut libfabric_sys::fid_domain,
+    #[allow(dead_code)] // WIP: held for ownership/lifetime, not yet read
     fabric: *mut libfabric_sys::fid_fabric,
     _my_pmi: Arc<dyn Pmi>,
     alloc_manager: Arc<AllocInfoManager>,
@@ -696,7 +697,7 @@ impl Ofi {
             AtomicOp::BitAnd(_)| AtomicOp::FetchBitAnd(_) => AtomicOpKind::BitAnd,
             AtomicOp::Read(_) => AtomicOpKind::Read,
             AtomicOp::Write(_) => AtomicOpKind::Write,
-            AtomicOp::Cas(_, _) => AtomicOpKind::Cas,
+            AtomicOp::Cas => AtomicOpKind::Cas,
         };
 
         self.atomic_op_avail_inner::<T>(op_kind)
@@ -831,24 +832,22 @@ impl Ofi {
             let mut key_size = (*(*self.comm_group.info_entry).domain_attr).mr_key_size ;
             let mut raw_key = vec![0u8; key_size + std::mem::size_of::<u64>()];
             if  (*(*self.comm_group.info_entry).domain_attr).mr_mode & (libfabric_sys::FI_MR_RAW as i32) != 0  {
-                let err = unsafe {
-                    libfabric_sys::inlined_fi_mr_raw_attr(
-                        mr,
-                        &mut base_addr,
-                        raw_key.as_mut_ptr().cast(),
-                        &mut key_size,
-                        0,
-                    )
-                };
+                let err = libfabric_sys::inlined_fi_mr_raw_attr(
+                    mr,
+                    &mut base_addr,
+                    raw_key.as_mut_ptr().cast(),
+                    &mut key_size,
+                    0,
+                );
 
                 if err != 0 {
                     panic!("Error getting raw MR key: {}", err);
                 }
 
                 let raw_key_len = raw_key.len();
-                raw_key[raw_key_len - std::mem::size_of::<u64>()..].copy_from_slice(unsafe {
+                raw_key[raw_key_len - std::mem::size_of::<u64>()..].copy_from_slice(
                     std::slice::from_raw_parts(&base_addr as *const u64 as *const u8, 8)
-                });
+                );
                 raw_key
             }
             else {
@@ -1428,7 +1427,7 @@ fn atomic_op_to_fi_atomic_op<T: 'static>(op: &AtomicOp<T>) -> u32 {
         AtomicOp::BitAnd(_) | AtomicOp::FetchBitAnd(_) => libfabric_sys::fi_op_FI_BAND,
         AtomicOp::Read(_) => libfabric_sys::fi_op_FI_ATOMIC_READ,
         AtomicOp::Write(_) => libfabric_sys::fi_op_FI_ATOMIC_WRITE,
-        AtomicOp::Cas(_, _) => libfabric_sys::fi_op_FI_CSWAP,
+        AtomicOp::Cas => libfabric_sys::fi_op_FI_CSWAP,
     }
 }
 
@@ -1817,8 +1816,7 @@ impl Clone for LibfabricSysAlloc {
 impl From<LibfabricSysAlloc> for CommAlloc {
     fn from(alloc: LibfabricSysAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::LibfabricSysAlloc(alloc),
-            alloc_type: CommAllocType::Fabric,
+            inner_alloc: Arc::new(CommAllocInner::LibfabricSysAlloc(alloc)),
         }
     }
 }
@@ -2443,7 +2441,7 @@ impl LibfabricSysAlloc {
             | AtomicOp::FetchBitAnd(_) => {
                 panic!("Fetch atomic ops must use the fetch path")
             }
-            AtomicOp::Cas(_, _) => {
+            AtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => {}
@@ -2513,7 +2511,7 @@ impl LibfabricSysAlloc {
             | AtomicOp::BitAnd(_) => {
                 panic!("Non-fetch atomic ops must use the non-fetch path")
             }
-            AtomicOp::Cas(_, _) => {
+            AtomicOp::Cas => {
                 panic!("Compare atomic ops must use the compare path")
             }
             _ => {}
@@ -2975,8 +2973,7 @@ impl OneSidedLibfabricSysAlloc {
 impl From<OneSidedLibfabricSysAlloc> for CommAlloc {
     fn from(alloc: OneSidedLibfabricSysAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::OneSidedLibfabricSysAlloc(alloc),
-            alloc_type: CommAllocType::Remote,
+            inner_alloc: Arc::new(CommAllocInner::OneSidedLibfabricSysAlloc(alloc)),
         }
     }
 }

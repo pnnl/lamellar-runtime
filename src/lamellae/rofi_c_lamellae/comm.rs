@@ -4,7 +4,7 @@ use crate::{
         comm::atomic::AtomicOp,
         comm::{
             CommInfo, CommMem,
-            CommProgress, CommShutdown,
+            CommProgress, CommShutdown, CollectiveOpKind,
         },
         AllocationType,
     },
@@ -121,6 +121,9 @@ impl CommInfo for RofiCComm {
     }
     fn atomic_op_avail<T: 'static>(&self, op: AtomicOp<T>) -> bool {
         self.rofi_c.atomic_op_avail(&op)
+    }
+    fn collective_avail<T: 'static>(&self, _op: CollectiveOpKind) -> bool {
+        false
     }
 }
 

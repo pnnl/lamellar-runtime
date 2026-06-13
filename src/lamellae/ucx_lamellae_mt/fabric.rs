@@ -13,7 +13,7 @@ use worker::Worker;
 
 use crate::{
     LAMELLAR_THREAD_ID, config, lamellae::{
-        AllocError, AllocResult, AllocationType, AtomicOp, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, FabricError, collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, comm::alloc::*, ucx_lamellae_mt::ucc::{self, Error, UccContext, UccLib, UccRequest, UccTeam}
+        AllocError, AllocResult, AllocationType, AtomicOp, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner, FabricError, collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, comm::alloc::*, ucx_lamellae_mt::ucc::{self, Error, UccContext, UccLib, UccRequest, UccTeam}
     }, lamellar_alloc::{BTreeAlloc, LamellarAlloc}
 };
 
@@ -352,6 +352,7 @@ impl UcxWorld {
                 .expect("UcxWorld::wait_all failed waiting on UCX requests");
         }
     }
+    #[allow(dead_code)] // WIP: called via trait dispatch, lint false-positive
     pub(crate) fn thread_wait(&self) {
         self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
             .worker
@@ -1360,42 +1361,7 @@ impl UcxMtAlloc {
     }
 
     pub(crate) fn wait_ucc_all(&self) {
-        for comm_group in &self.comm_groups {
-            if let Some(ucc_team) = &comm_group.ucc_world_team {
-                loop {
-                    ucc_team.context.progress().unwrap();
-                    let completed = ucc_team.req_completed.load(std::sync::atomic::Ordering::SeqCst);
-                    let pending = ucc_team.req_pending.load(std::sync::atomic::Ordering::SeqCst);
-                    if completed == pending {
-                        break;
-                    }
-                    std::thread::yield_now();
-                }
-            }
-        }
-    }
-
-    pub(crate) unsafe fn as_slice<T>(&self) -> &[T] {
-        self.mem.as_slice()
-    }
-
-    pub(crate) fn wait_ucc_request(&self, req: &UccRequest) -> Result<(), ucc::Error> {
-        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
-            while let Err(err) = req.test() {
-                if !matches!(err, Error::Inprogress) {
-                    return Err(err);
-                } 
-                ucc_team.context.progress()?;
-            }
-            Ok(())
-        }
-        else {
-            panic!("UCC team not initialized for waiting on UCC request");
-        }
-    }
-
-    pub(crate) fn wait_ucc_all(&self) {
-        for comm_group in &self.comm_groups {
+        for comm_group in self.comm_groups.iter() {
             if let Some(ucc_team) = &comm_group.ucc_world_team {
                 loop {
                     ucc_team.context.progress().unwrap();
@@ -1411,7 +1377,7 @@ impl UcxMtAlloc {
     }
 
     pub(crate) fn wait_all(&self) {
-        for comm_group in &self.comm_groups {
+        for comm_group in self.comm_groups.iter() {
             comm_group
                 .worker
                 .wait_all()
@@ -1421,6 +1387,7 @@ impl UcxMtAlloc {
         self.wait_ucc_all();
     }
 
+    #[allow(dead_code)] // WIP: called via trait dispatch, lint false-positive
     pub(crate) fn thread_wait(&self) {
         self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
             .worker

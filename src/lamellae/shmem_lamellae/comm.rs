@@ -1,7 +1,7 @@
 use crate::{
     config,
     lamellae::{
-        comm::{atomic::atomic_type_supported, AtomicOp, CommInfo, CommProgress, CommShutdown},
+        comm::{atomic::atomic_type_supported, AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
         CollectiveOpKind,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},

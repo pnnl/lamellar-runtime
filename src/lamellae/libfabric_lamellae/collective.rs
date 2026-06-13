@@ -23,7 +23,7 @@ pub(crate) struct LibfabricCollectiveAllReduceFuture<T: Remote> {
     pub(crate) len: usize,
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -50,7 +50,7 @@ impl<T: Remote> LibfabricCollectiveAllReduceFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) -> Vec<T> {
+    pub(crate) fn block(self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -58,11 +58,10 @@ impl<T: Remote> LibfabricCollectiveAllReduceFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -106,7 +105,7 @@ pub(crate) struct LibfabricCollectiveAllReduceIntoBufferFuture<T: Remote, B: AsL
     pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -133,16 +132,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllReduceIntoBufferFu
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -182,7 +180,7 @@ pub(crate) struct LibfabricCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLame
     pub(super) op: ReduceOp,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
     phantom: std::marker::PhantomData<T>,
 }
@@ -208,16 +206,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllReduceInPlaceFutur
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -258,7 +255,7 @@ pub(crate) struct LibfabricCollectiveReduceFuture<T: Remote> {
     pub(super) op: ReduceOp,
     pub(crate) target: RootOrBuffer<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -283,7 +280,7 @@ impl<T: Remote> LibfabricCollectiveReduceFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) -> Option<Vec<T>> {
+    pub(crate) fn block(self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         match &mut self.target {
@@ -296,11 +293,10 @@ impl<T: Remote> LibfabricCollectiveReduceFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -348,7 +344,7 @@ pub(crate) struct LibfabricCollectiveReduceIntoBufferFuture<T: Remote, B: AsLame
     pub(super) op: ReduceOp,
     pub(crate) target: RootOrLamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -373,16 +369,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveReduceIntoBufferFutur
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(self)  {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -420,7 +415,7 @@ pub(crate) struct LibfabricCollectiveReduceInPlaceFuture<T> {
     pub(crate) alloc: LibfabricAlloc,
     pub(super) op: ReduceOp,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
     root_pe: Option<usize>,
     phantom: std::marker::PhantomData<T>,
@@ -447,12 +442,12 @@ pub(crate) struct LibfabricCollectiveReduceInPlaceFuture<T> {
 //         );
 //         self.spawned = true;
 //     }
-//     pub(crate) fn block(mut self) {
+//     pub(crate) fn block(self) {
 //         self.exec_op();
 //         self.alloc.ofi.wait_all().unwrap();
 //     }
 
-//     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+//     pub(crate) fn spawn(self) -> LamellarTask<()> {
 //         self.exec_op();
 
 //         let mut counters = Vec::new();
@@ -493,7 +488,7 @@ impl CommAllocCollectiveAllReduce for LibfabricAlloc {
     fn reduce_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         op: ReduceOp,
@@ -514,7 +509,7 @@ impl CommAllocCollectiveAllReduce for LibfabricAlloc {
     fn reduce_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         op: ReduceOp,
@@ -535,7 +530,7 @@ impl CommAllocCollectiveAllReduce for LibfabricAlloc {
     fn reduce_all_in_place<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         source_and_dst: LamellarBuffer<T, B>,
         op: ReduceOp,
     ) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
@@ -557,7 +552,7 @@ impl CommAllocCollectiveReduce for LibfabricAlloc {
     fn reduce<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -585,7 +580,7 @@ impl CommAllocCollectiveReduce for LibfabricAlloc {
     fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -606,7 +601,7 @@ impl CommAllocCollectiveReduce for LibfabricAlloc {
     // fn reduce_in_place<T: Remote>( // TODO: Fix
     //     &self,
     //     scheduler: &Arc<Scheduler>,
-    //     counters: Vec<Arc<AMCounters>>,
+    //     counters: Option<Arc<[Arc<AMCounters>]>>,
     //     op: ReduceOp,
     //     root_pe: usize,
     // ) -> CollectiveReduceInPlaceOpHandle<T> {
@@ -636,7 +631,7 @@ pub(crate) struct LibfabricCollectiveAllGatherFuture<T: Remote> {
     pub(crate) len: usize,
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -660,7 +655,7 @@ impl<T: Remote> LibfabricCollectiveAllGatherFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) -> Vec<T> {
+    pub(crate) fn block(self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -668,11 +663,10 @@ impl<T: Remote> LibfabricCollectiveAllGatherFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -715,7 +709,7 @@ pub(crate) struct LibfabricCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsL
     pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -740,16 +734,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllGatherIntoBufferFu
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -790,7 +783,7 @@ pub(crate) struct LibfabricCollectiveGatherFuture<T: Remote> {
     pub(crate) len: usize,
     pub(crate) target: RootOrBuffer<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -814,7 +807,7 @@ impl<T: Remote> LibfabricCollectiveGatherFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) -> Option<Vec<T>> {
+    pub(crate) fn block(self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         match &mut self.target {
@@ -827,11 +820,10 @@ impl<T: Remote> LibfabricCollectiveGatherFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -878,7 +870,7 @@ pub(crate) struct LibfabricCollectiveGatherIntoBufferFuture<T: Remote, B: AsLame
     pub(crate) len: usize,
     pub(crate) target: RootOrLamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -902,16 +894,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveGatherIntoBufferFutur
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(self)  {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -952,7 +943,7 @@ pub(crate) struct LibfabricCollectiveAllToAllFuture<T: Remote> {
     pub(crate) len: usize,
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -977,7 +968,7 @@ impl<T: Remote> LibfabricCollectiveAllToAllFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) -> Vec<T> {
+    pub(crate) fn block(self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -985,11 +976,10 @@ impl<T: Remote> LibfabricCollectiveAllToAllFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -1032,7 +1022,7 @@ pub(crate) struct LibfabricCollectiveAllToAllIntoBufferFuture<T: Remote, B: AsLa
     pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -1056,16 +1046,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllToAllIntoBufferFut
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -1104,7 +1093,7 @@ pub(crate) struct LibfabricCollectiveBroadcastFuture<T: Remote> {
     pub(crate) target: RootSrcOrBuffer<T> ,
     pub(crate) len: usize,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -1128,7 +1117,7 @@ impl<T: Remote> LibfabricCollectiveBroadcastFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) -> Option<Vec<T>> {
+    pub(crate) fn block(self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         match &mut self.target {
@@ -1141,11 +1130,10 @@ impl<T: Remote> LibfabricCollectiveBroadcastFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -1192,7 +1180,7 @@ pub(crate) struct LibfabricCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsL
     pub(crate) target: RootSrcOrLamellarBufferInner<T, B>,
     pub(crate) len: usize,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -1215,16 +1203,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveBroadcastIntoBufferFu
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -1264,7 +1251,7 @@ pub(crate) struct LibfabricCollectiveScatterFuture<T: Remote> {
     pub(crate) result: Vec<T> ,
     src_or_root_pe: ScatterInputInner,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -1290,7 +1277,7 @@ impl<T: Remote> LibfabricCollectiveScatterFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) -> Vec<T> {
+    pub(crate) fn block(self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -1298,11 +1285,10 @@ impl<T: Remote> LibfabricCollectiveScatterFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -1345,7 +1331,7 @@ pub(crate) struct LibfabricCollectiveScatterIntoBufferFuture<T: Remote, B: AsLam
     src_or_root_pe: ScatterInputInner,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -1370,16 +1356,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveScatterIntoBufferFutu
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -1421,7 +1406,7 @@ pub(crate) struct LibfabricCollectiveReduceScatterFuture<T: Remote> {
     pub(crate) len: usize,
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -1450,7 +1435,7 @@ impl<T: Remote> LibfabricCollectiveReduceScatterFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) -> Vec<T> {
+    pub(crate) fn block(self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -1458,11 +1443,10 @@ impl<T: Remote> LibfabricCollectiveReduceScatterFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -1506,7 +1490,7 @@ pub(crate) struct LibfabricCollectiveReduceScatterIntoBufferFuture<T: Remote, B:
     pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
 }
 
@@ -1534,16 +1518,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveReduceScatterIntoBuff
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         self.exec_op();
 
-        let mut counters = Vec::new();
-        std::mem::swap(&mut counters, &mut self.counters);
+        let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
@@ -1581,7 +1564,7 @@ impl CommAllocCollectiveAllGather for LibfabricAlloc {
     fn gather_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
     ) -> CollectiveAllGatherOpHandle<T> {
@@ -1599,7 +1582,7 @@ impl CommAllocCollectiveAllGather for LibfabricAlloc {
     fn gather_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         dst: LamellarBuffer<T, B>,
@@ -1621,7 +1604,7 @@ impl CommAllocCollectiveGather for LibfabricAlloc {
     fn gather<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         root_pe: usize,
@@ -1647,7 +1630,7 @@ impl CommAllocCollectiveGather for LibfabricAlloc {
     fn gather_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
@@ -1669,7 +1652,7 @@ impl CommAllocCollectiveAllToAll for LibfabricAlloc {
     fn alltoall<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
     ) -> CollectiveAllToAllOpHandle<T> {
@@ -1687,7 +1670,7 @@ impl CommAllocCollectiveAllToAll for LibfabricAlloc {
     fn alltoall_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
         dst: LamellarBuffer<T, B>,
@@ -1710,7 +1693,7 @@ impl CommAllocCollectiveBroadcast for LibfabricAlloc {
     fn broadcast<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src_or_pe: BroadcastInput,
         len: usize,
     ) -> CollectiveBroadcastOpHandle<T> {
@@ -1732,7 +1715,7 @@ impl CommAllocCollectiveBroadcast for LibfabricAlloc {
     fn broadcast_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         root_or_buffer: RootSrcOrLamellarBuffer<T, B>,
         len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
@@ -1753,7 +1736,7 @@ impl CommAllocCollectiveScatter for LibfabricAlloc {
     fn scatter<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         src_or_root_pe: ScatterInput,
         len: usize,
     ) -> CollectiveScatterOpHandle<T> {
@@ -1771,7 +1754,7 @@ impl CommAllocCollectiveScatter for LibfabricAlloc {
     fn scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         result: LamellarBuffer<T, B>,
         src_or_root_pe: ScatterInput,
         len: usize,
@@ -1793,7 +1776,7 @@ impl CommAllocCollectiveReduceScatter for LibfabricAlloc {
     fn reduce_scatter<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize, 
         len: usize,
@@ -1813,7 +1796,7 @@ impl CommAllocCollectiveReduceScatter for LibfabricAlloc {
     fn reduce_scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
@@ -1833,7 +1816,7 @@ impl CommAllocCollectiveReduceScatter for LibfabricAlloc {
     // fn reduce_scatter_in_place<T: Remote, B: AsLamellarBuffer<T>>(
     //     &self,
     //     scheduler: &Arc<Scheduler>,
-    //     counters: Vec<Arc<AMCounters>>,
+    //     counters: Option<Arc<[Arc<AMCounters>]>>,
     //     source_and_dst: LamellarBuffer<T, B>,
     //     op: ReduceOp,
     // ) -> CollectiveAllReduceInPlaceOpHandle<T, B> {

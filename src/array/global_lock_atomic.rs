@@ -9,8 +9,7 @@ mod iteration;
 pub(crate) mod operations;
 mod rdma;
 mod collective;
-use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle as ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle};
-use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
+use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::__UnsafeByteArray;
 use crate::barrier::BarrierHandle;
 use crate::darc::global_rw_darc::{

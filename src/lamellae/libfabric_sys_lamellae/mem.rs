@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
 use crate::{
     config,
@@ -7,7 +7,7 @@ use crate::{
         comm::{
             calc_alloc_padding_size_align,
             error::{AllocError, AllocResult},
-            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
+            CommAlloc, CommAllocAddr, CommAllocInner, CommMem,
         },
         AllocationType,
     },
@@ -31,8 +31,7 @@ impl CommMem for LibfabricSysComm {
         //     inner_alloc.zeroize_bytes();
         // }
         let comm_alloc = CommAlloc {
-            inner_alloc: CommAllocInner::LibfabricSysAlloc(inner_alloc),
-            alloc_type: CommAllocType::Fabric,
+            inner_alloc: Arc::new(CommAllocInner::LibfabricSysAlloc(inner_alloc)),
         };
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
         Ok(comm_alloc)
@@ -83,8 +82,7 @@ impl CommMem for LibfabricSysComm {
                 //     alloc.zeroize_bytes();
                 // }
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricSysAlloc(alloc),
-                    alloc_type: CommAllocType::RtHeap,
+                    inner_alloc: Arc::new(CommAllocInner::LibfabricSysAlloc(alloc)),
                 });
             }
         }
@@ -201,7 +199,7 @@ impl CommMem for LibfabricSysComm {
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
 
-            if let CommAllocInner::LibfabricSysAlloc(inner_alloc) = alloc.inner_alloc {
+            if let CommAllocInner::LibfabricSysAlloc(inner_alloc) = &*alloc.inner_alloc {
                 println!("Allocated new libfabric-sys alloc pool: {:?}", inner_alloc);
                 let mut new_alloc = BTreeAlloc::new("libfabric_sys_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
@@ -262,12 +260,11 @@ impl CommMem for LibfabricSysComm {
         for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricSysAlloc(
+                    inner_alloc: Arc::new(CommAllocInner::LibfabricSysAlloc(
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
-                    ),
-                    alloc_type: CommAllocType::RtHeap,
+                    )),
                 };
                 return Ok(comm_alloc);
             }
@@ -285,8 +282,7 @@ impl CommMem for LibfabricSysComm {
         trace!("get_alloc cloned: {:?}", addr);
         if let Ok(alloc) = self.ofi.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
-                inner_alloc: CommAllocInner::LibfabricSysAlloc(alloc),
-                alloc_type: CommAllocType::Fabric,
+                inner_alloc: Arc::new(CommAllocInner::LibfabricSysAlloc(alloc)),
             });
         }
 
@@ -294,10 +290,9 @@ impl CommMem for LibfabricSysComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricSysAlloc(
+                    inner_alloc: Arc::new(CommAllocInner::LibfabricSysAlloc(
                         inner_alloc.sub_alloc(addr.0, size)?,
-                    ),
-                    alloc_type: CommAllocType::RtHeap,
+                    )),
                 });
             }
         }
