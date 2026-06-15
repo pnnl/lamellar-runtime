@@ -151,6 +151,15 @@ impl<T: Remote> LamellarMemoryRegion<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     /// If the memory region contains local data, return it as a mutable slice
     /// else return a 0 length slice
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
+    /// let mem_region: LamellarMemoryRegion<usize> = mem_region.into();
+    /// let slice = unsafe { mem_region.as_mut_slice() };
+    ///```
     pub unsafe fn as_mut_slice(&self) -> &mut [T] {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(),
@@ -162,6 +171,15 @@ impl<T: Remote> LamellarMemoryRegion<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     /// if the memory region contains local data, return it as a slice
     /// else return a 0 length slice
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
+    /// let mem_region: LamellarMemoryRegion<usize> = mem_region.into();
+    /// let slice = unsafe { mem_region.as_slice() };
+    ///```
     pub unsafe fn as_slice(&self) -> &[T] {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_slice(),

@@ -50,7 +50,7 @@ impl<T: Remote> LibfabricCollectiveAllReduceFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -58,7 +58,7 @@ impl<T: Remote> LibfabricCollectiveAllReduceFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -132,12 +132,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllReduceIntoBufferFu
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -206,12 +206,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllReduceInPlaceFutur
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -280,7 +280,7 @@ impl<T: Remote> LibfabricCollectiveReduceFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         match &mut self.target {
@@ -293,7 +293,7 @@ impl<T: Remote> LibfabricCollectiveReduceFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -369,12 +369,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveReduceIntoBufferFutur
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self)  {
+    pub(crate) fn block(mut self)  {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -655,7 +655,7 @@ impl<T: Remote> LibfabricCollectiveAllGatherFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -663,7 +663,7 @@ impl<T: Remote> LibfabricCollectiveAllGatherFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -734,12 +734,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllGatherIntoBufferFu
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -807,7 +807,7 @@ impl<T: Remote> LibfabricCollectiveGatherFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         match &mut self.target {
@@ -820,7 +820,7 @@ impl<T: Remote> LibfabricCollectiveGatherFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -894,12 +894,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveGatherIntoBufferFutur
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self)  {
+    pub(crate) fn block(mut self)  {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -968,7 +968,7 @@ impl<T: Remote> LibfabricCollectiveAllToAllFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -976,7 +976,7 @@ impl<T: Remote> LibfabricCollectiveAllToAllFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -1046,12 +1046,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllToAllIntoBufferFut
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -1117,7 +1117,7 @@ impl<T: Remote> LibfabricCollectiveBroadcastFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         match &mut self.target {
@@ -1130,7 +1130,7 @@ impl<T: Remote> LibfabricCollectiveBroadcastFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -1203,12 +1203,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveBroadcastIntoBufferFu
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -1277,7 +1277,7 @@ impl<T: Remote> LibfabricCollectiveScatterFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -1285,7 +1285,7 @@ impl<T: Remote> LibfabricCollectiveScatterFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -1356,12 +1356,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveScatterIntoBufferFutu
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -1435,7 +1435,7 @@ impl<T: Remote> LibfabricCollectiveReduceScatterFuture<T> {
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
         let mut res = Vec::new();
@@ -1443,7 +1443,7 @@ impl<T: Remote> LibfabricCollectiveReduceScatterFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
 
         let counters = self.counters.clone();
@@ -1518,12 +1518,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveReduceScatterIntoBuff
         // );
         self.spawned = true;
     }
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
 
         let counters = self.counters.clone();

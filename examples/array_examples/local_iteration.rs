@@ -5,7 +5,7 @@ const ARRAY_LEN: usize = 100;
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let _num_pes = world.num_pes();
+    let num_pes = world.num_pes();
     let block_array =
         AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
     let cyclic_array =
@@ -262,14 +262,63 @@ fn main() {
         })
         .block();
     println!("block map reduce");
+    // block_array[i] = i (set via dist_iter_mut above); local_iter sees only local elements
+    // each PE owns ARRAY_LEN/num_pes elements (block dist); sum of local indices varies by PE
     let req = block_array
         .local_iter()
         .map(|elem| elem.load())
         .reduce(|acc, elem| acc + elem);
 
     let sum = req.block();
-
     println!("{my_pe} reduce sum: {:?}", sum);
+
+    // verify: local elements for block distribution are [pe*chunk .. (pe+1)*chunk)
+    let chunk = ARRAY_LEN / num_pes;
+    let local_start = my_pe * chunk;
+    let local_end = local_start + chunk;
+    let expected_local_sum: usize = (local_start..local_end).sum();
+    assert_eq!(
+        sum,
+        Some(expected_local_sum),
+        "PE {my_pe} local_iter map+reduce: got {:?} expected {expected_local_sum}",
+        sum
+    );
+    block_array.barrier();
+
+    println!("--------------------------------------------------------");
+    println!("block local_iter filter count");
+    // block_array[i] = i; local elems are [local_start..local_end)
+    // count of even local elems
+    let even_count = block_array
+        .local_iter()
+        .filter(|e| e.load() % 2 == 0)
+        .count()
+        .block();
+    let expected_even = (local_start..local_end).filter(|e| e % 2 == 0).count();
+    assert_eq!(
+        even_count, expected_even,
+        "PE {my_pe} local_iter filter+count: got {even_count} expected {expected_even}"
+    );
+    println!("{my_pe} local even count: {even_count} (expected {expected_even})");
+    block_array.barrier();
+
+    println!("--------------------------------------------------------");
+    println!("block local_iter zip sum");
+    // zip block_array with itself: pairs (elem, elem), sum of products == sum of squares of local elems
+    let zip_sum = block_array
+        .local_iter()
+        .zip(block_array.local_iter())
+        .map(|(a, b)| a.load() * b.load())
+        .reduce(|acc, v| acc + v)
+        .block();
+    let expected_zip_sum: usize = (local_start..local_end).map(|i| i * i).sum();
+    assert_eq!(
+        zip_sum,
+        Some(expected_zip_sum),
+        "PE {my_pe} local_iter zip+map+reduce: got {:?} expected {expected_zip_sum}",
+        zip_sum
+    );
+    println!("{my_pe} zip sum of squares: {:?} (expected {expected_zip_sum})", zip_sum);
     block_array.barrier();
 
     println!("--------------------------------------------------------");

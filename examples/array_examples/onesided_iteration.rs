@@ -47,16 +47,23 @@ fn main() {
 
     if my_pe == 0 {
         println!("Here");
+        let mut count = 0;
         for elem in block_array.onesided_iter().into_iter() {
             //we can convert from a oneside iterator into a rust iterator
             print!("{:?} ", elem);
+            count += 1;
         }
         println!("");
+        assert_eq!(count, ARRAY_LEN, "onesided_iter into_iter count: got {count} expected {ARRAY_LEN}");
+
         println!("Here2");
+        let mut cyclic_count = 0;
         for elem in cyclic_array.onesided_iter().into_iter() {
             print!("{:?} ", elem);
+            cyclic_count += 1;
         }
         println!("");
+        assert_eq!(cyclic_count, ARRAY_LEN, "cyclic onesided_iter count: got {cyclic_count} expected {ARRAY_LEN}");
     }
     println!("Here3");
     println!("--------------------------------------------------------");
@@ -98,22 +105,31 @@ fn main() {
         }
 
         println!("-----");
-        for (i, (a, b)) in cyclic_array
+        // zip: cyclic[i]=my_pe(0 on PE0), block[i]=my_pe(0 on PE0) — verify count and pairing
+        let zipped: Vec<_> = cyclic_array
             .onesided_iter()
             .zip(block_array.onesided_iter())
             .into_iter()
             .enumerate()
-        {
+            .collect();
+        assert_eq!(zipped.len(), ARRAY_LEN, "zip count: got {} expected {ARRAY_LEN}", zipped.len());
+        for (i, (a, b)) in &zipped {
             println!("{:?}: {:?} {:?}", i, a, b);
+            // both arrays initialized to my_pe (0 on PE 0), so values must match
+            assert_eq!(a, b, "zip pair mismatch at {i}: {a} != {b}");
         }
         println!("-----");
-        for (a, b) in cyclic_array
+        // chunks zip: verify chunk count
+        let chunk_pairs: Vec<_> = cyclic_array
             .onesided_iter()
             .chunks(10)
             .zip(block_array.onesided_iter().chunks(10))
             .into_iter()
-        {
+            .collect();
+        assert_eq!(chunk_pairs.len(), ARRAY_LEN / 10, "chunks zip count: got {} expected {}", chunk_pairs.len(), ARRAY_LEN / 10);
+        for (a, b) in &chunk_pairs {
             println!("{:?} {:?}", a.as_slice(), b.as_slice());
+            assert_eq!(a.as_slice(), b.as_slice(), "chunk content mismatch");
         }
     }
 
@@ -147,13 +163,14 @@ fn main() {
 
     world.block_on(async move {
         if my_pe == 0 {
+            // block_array[i] = my_pe; all values < num_pes by definition
             let result = block_array
                 .onesided_iter()
                 .into_stream()
                 .take(4)
                 .map(|elem| elem as f64)
                 .all(|elem| async move { elem < num_pes as f64 });
-            assert_eq!(result.await, true);
+            assert!(result.await, "onesided_iter all: expected all elems < num_pes");
         }
     });
 }

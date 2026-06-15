@@ -1,6 +1,7 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
+use lamellar::LamellarMemoryRegion;
 
+#[allow(dead_code)]
 fn initialize_mem_region<T: Dist + std::ops::AddAssign + std::ops::Mul<Output = T>>(
     memregion: &LamellarMemoryRegion<T>,
     init_val: T,
@@ -41,15 +42,6 @@ macro_rules! initialize_array {
             .dist_iter_mut()
             .for_each(move |x| *x = $init_val)
             .block();
-    };
-}
-
-macro_rules! onesided_iter {
-    (GlobalLockArray,$array:ident) => {
-        $array.read_lock().block().onesided_iter()
-    };
-    ($arraytype:ident,$array:ident) => {
-        $array.onesided_iter()
     };
 }
 

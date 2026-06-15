@@ -5,7 +5,7 @@ const ARRAY_LEN: usize = 100;
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let _num_pes = world.num_pes();
+    let num_pes = world.num_pes();
     let block_array =
         LocalLockArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
     let cyclic_array =
@@ -42,15 +42,22 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block sum");
+    // block_array[i] = i after init above, so sum = 0+1+...+(ARRAY_LEN-1)
     let sum = block_array.dist_iter().map(|e| *e).sum().block();
     println!("result: {sum}");
     world.barrier();
+    let expected_sum = ARRAY_LEN * (ARRAY_LEN - 1) / 2;
+    assert_eq!(sum, expected_sum, "block dist_iter map+sum: got {sum} expected {expected_sum}");
     println!("--------------------------------------------------------");
     println!("--------------------------------------------------------");
     println!("cyclic sum");
+    // cyclic_array[i] = my_pe for local elems; global sum = sum of all pe ids * elems_per_pe
     let sum = cyclic_array.dist_iter().map(|e| e.load()).sum().block();
     println!("result: {sum}");
     world.barrier();
+    // each pe owns ARRAY_LEN/num_pes elems (cyclic), all set to my_pe
+    let expected_cyclic_sum = (0..num_pes).sum::<usize>() * (ARRAY_LEN / num_pes);
+    assert_eq!(sum, expected_cyclic_sum, "cyclic dist_iter map+sum: got {sum} expected {expected_cyclic_sum}");
     println!("--------------------------------------------------------");
 
     // our plan is to support a number of iterator extenders/operators similar to tradition rust iters
@@ -272,10 +279,28 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block filter count");
+    // block_array[i] = i; even indices: 0,2,4,...,98 → 50 elements
     let count = block_array
         .dist_iter()
         .filter(|e| *e % 2 == 0)
         .count()
         .block();
     println!("result: {count}");
+    assert_eq!(count, ARRAY_LEN / 2, "dist_iter filter+count: got {count} expected {}", ARRAY_LEN / 2);
+
+    println!("--------------------------------------------------------");
+    println!("block filter_map collect correctness");
+    // filter_map: keep elems divisible by 8, cast to u8 — values 0,8,16,...,96 → 13 elements
+    let filtered = block_array
+        .dist_iter()
+        .filter_map(|elem| {
+            let e = *elem;
+            if e % 8 == 0 { Some(e as u8) } else { None }
+        })
+        .collect::<ReadOnlyArray<u8>>(Distribution::Block)
+        .block();
+    let expected_count = (0..ARRAY_LEN).filter(|e| e % 8 == 0).count();
+    let actual_count = filtered.onesided_iter().into_iter().count();
+    assert_eq!(actual_count, expected_count, "dist_iter filter_map+collect: got {actual_count} expected {expected_count}");
+    println!("filter_map collect count: {actual_count} (expected {expected_count})");
 }

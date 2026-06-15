@@ -217,6 +217,15 @@ impl LamellarWorld {
     ///
     /// This is primarily useful for measuring communication overhead during development and profiling.
     /// Only the value from the first registered backend is currently returned.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::LamellarWorldBuilder;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let mb_sent = world.MB_sent();
+    /// println!("MB sent: {}", mb_sent);
+    ///```
     pub fn MB_sent(&self) -> f64 {
         let mut sent = vec![];
         for (_backend, lamellae) in LAMELLAES.read().iter() {

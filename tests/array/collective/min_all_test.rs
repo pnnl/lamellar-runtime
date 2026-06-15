@@ -1,5 +1,4 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -30,14 +29,6 @@ macro_rules! initialize_array {
     };
 }
 
-macro_rules! onesided_iter {
-    (GlobalLockArray,$array:ident) => {
-        $array.read_lock().block().onesided_iter()
-    };
-    ($arraytype:ident,$array:ident) => {
-        $array.onesided_iter()
-    };
-}
 macro_rules! lock_if_needed {
     (GlobalLockArray, $array: ident) => {
         $array.collective_write_local_data().block()

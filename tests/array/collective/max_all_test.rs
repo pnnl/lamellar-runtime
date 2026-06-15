@@ -1,5 +1,4 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
 
 
 macro_rules! initialize_array {

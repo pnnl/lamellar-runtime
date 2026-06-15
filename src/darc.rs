@@ -346,8 +346,20 @@ unsafe impl<T: Sync> Sync for WeakDarc<T> {}
 
 #[lamellar_prof::prof]
 impl<T> WeakDarc<T> {
-    /// attempts to upgrade the `WeakDarc` to a [Darc], if the inner value has not been dropped
-    /// returns `None` if the value has been dropped
+    /// Attempts to upgrade the `WeakDarc` to a [Darc], if the inner value has not been dropped.
+    ///
+    /// Returns `None` if the value has been dropped.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let darc = Darc::new(&world, 42).block().expect("PE in world team");
+    /// let weak = Darc::downgrade(&darc);
+    /// let upgraded = weak.upgrade();
+    /// assert!(upgraded.is_some());
+    ///```
     pub fn upgrade(&self) -> Option<Darc<T>> {
         let inner = &*self.inner;
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -1077,7 +1089,16 @@ impl Darc<LamellarTeamRT> {
 // #[lamellar_prof::prof]
 impl<T> Darc<T> {
     //#[doc(hidden)]
-    /// downgrade a darc to a weak darc
+    /// Downgrade a [Darc] to a [WeakDarc].
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let darc = Darc::new(&world, 42).block().expect("PE in world team");
+    /// let weak = Darc::downgrade(&darc);
+    ///```
     //#[tracing::instrument(skip_all, level = "debug")]
     #[lamellar_prof::prof]
     pub fn downgrade(the_darc: &Darc<T>) -> WeakDarc<T> {

@@ -38,7 +38,7 @@ impl<T: Dist> CollectiveAllReduceManualOpHandle<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
-    
+
     pub(crate) fn block(self) -> Vec<T> {
         self.scheduler.clone().block_on(self)
     }
@@ -58,12 +58,26 @@ pub(crate) enum ArrayCollectiveAllReduceState<T: Dist> {
 }
 
 impl<T: Dist> ArrayCollectiveAllReduceHandle<T> {
+    /// Spawn the collective allreduce operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.allreduce_init(lamellar::array::operations::Sum);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         let task = match self.state {
             ArrayCollectiveAllReduceState::CollectiveAllReduce(req) => req.spawn(),
             ArrayCollectiveAllReduceState::CollectiveAllReduceManual(req) => req.spawn(),
@@ -71,6 +85,16 @@ impl<T: Dist> ArrayCollectiveAllReduceHandle<T> {
         self.spawned = true;
         task
     }
+    /// Block until the collective allreduce operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.allreduce_init(lamellar::array::operations::Sum);
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self) -> Vec<T> {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveAllReduceHandle::block",
@@ -131,8 +155,8 @@ impl CollectiveAllReduceIntoBufferManualOpHandle {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
-    
-    pub(crate) fn block(self)  {
+
+    pub(crate) fn block(self) {
         self.scheduler.clone().block_on(self)
     }
 }
@@ -150,12 +174,28 @@ pub(crate) enum ArrayCollectiveAllReduceIntoBufferState<T: Dist, B: AsLamellarBu
 }
 
 impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    /// Spawn the collective allreduce_into_buffer operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = array.allreduce_into_buffer_init(lamellar::array::operations::Sum, &buf);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<()> {
+    pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBuffer(req) => req.spawn(),
             ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(req) => req.spawn(),
@@ -163,6 +203,18 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceIntoBufferHandle<T
         self.spawned = true;
         task
     }
+    /// Block until the collective allreduce_into_buffer operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = array.allreduce_into_buffer_init(lamellar::array::operations::Sum, &buf);
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self)  {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveAllReduceIntoBufferHandle::block",
@@ -212,18 +264,44 @@ pub(crate) enum ArrayCollectiveAllReduceInPlaceState<T: Dist, B: AsLamellarBuffe
 }
 
 impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
+    /// Spawn the collective allreduce_in_place operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = buf.allreduce_in_place_init(lamellar::array::operations::Sum);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<()> {
+    pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveAllReduceInPlaceState::CollectiveAllReduceInPlace(req) => req.spawn(),
         };
         self.spawned = true;
         task
     }
+    /// Block until the collective allreduce_in_place operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = buf.allreduce_in_place_init(lamellar::array::operations::Sum);
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self) {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveAllReduceInPlaceHandle::block",
@@ -280,7 +358,7 @@ impl<T: Dist> CollectiveReduceManualOpHandle<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
-    
+
     pub(crate) fn block(self) -> Option<Vec<T>> {
         self.scheduler.clone().block_on(self)
     }
@@ -298,12 +376,26 @@ pub(crate) enum ArrayCollectiveReduceState<T: Dist> {
 }
 
 impl<T: Dist> ArrayCollectiveReduceHandle<T> {
+    /// Spawn the collective reduce operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.reduce_init(0, lamellar::array::operations::Sum);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         let task = match self.state {
             ArrayCollectiveReduceState::CollectiveReduce(req) => req.spawn(),
             ArrayCollectiveReduceState::CollectiveReduceManual(req) => req.spawn(),
@@ -311,6 +403,16 @@ impl<T: Dist> ArrayCollectiveReduceHandle<T> {
         self.spawned = true;
         task
     }
+    /// Block until the collective reduce operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.reduce_init(0, lamellar::array::operations::Sum);
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self) -> Option<Vec<T>> {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveReduceHandle::block",
@@ -372,7 +474,7 @@ impl CollectiveReduceIntoBufferManualOpHandle {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
-    
+
     pub(crate) fn block(self) {
         self.scheduler.clone().block_on(self)
     }
@@ -390,12 +492,28 @@ pub(crate) enum ArrayCollectiveReduceIntoBufferState<T: Dist, B: AsLamellarBuffe
 }
 
 impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    /// Spawn the collective reduce_into_buffer operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = array.reduce_into_buffer_init(0, lamellar::array::operations::Sum, &buf);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<()> {
+    pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req) => req.spawn(),
             ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(req) => req.spawn(),
@@ -403,6 +521,18 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceIntoBufferHandle<T, B
         self.spawned = true;
         task
     }
+    /// Block until the collective reduce_into_buffer operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = array.reduce_into_buffer_init(0, lamellar::array::operations::Sum, &buf);
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self) {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveReduceIntoBufferHandle::block",
@@ -435,7 +565,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveReduceIntoBuffer
 }
 
 #[pin_project]
-pub struct ArrayCollectiveReduceInPlaceHandle<T: Dist> {
+pub(crate) struct ArrayCollectiveReduceInPlaceHandle<T: Dist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     #[pin]
     pub(crate) state: ArrayCollectiveReduceInPlaceState<T>,
@@ -466,7 +596,7 @@ pub(crate) enum ArrayCollectiveReduceInPlaceState<T: Dist> {
 //         self.spawned = true;
 //         task
 //     }
-//     pub fn block(mut self) {
+//     pub fn block(self) {
 //         RuntimeWarning::BlockingCall(
 //             "ArrayCollectiveReduceInPlaceHandle::block",
 //             "<handle>.spawn() or <handle>.await",

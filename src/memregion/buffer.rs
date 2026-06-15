@@ -337,11 +337,27 @@ impl<T: Remote> LamellarBuffer<T, Vec<T>> {
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     /// Returns the number of elements in the (possibly sub-sliced) buffer.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let buf = LamellarBuffer::from_vec(&world, vec![1, 2, 3]);
+    /// assert_eq!(buf.len(), 3);
+    ///```
     pub fn len(&self) -> usize {
         self.range.end - self.range.start
     }
 
     /// Returns `true` if the buffer contains no elements.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let buf: LamellarBuffer<usize, Vec<usize>> = LamellarBuffer::from_vec(&world, vec![]);
+    /// assert!(buf.is_empty());
+    ///```
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -353,6 +369,16 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     ///
     /// # Panics
     /// Panics if `at > self.len()`.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let buf = LamellarBuffer::from_vec(&world, vec![1, 2, 3, 4, 5]);
+    /// let (left, right) = buf.split(2);
+    /// assert_eq!(left.len(), 2);
+    /// assert_eq!(right.len(), 3);
+    ///```
     pub fn split(self, at: usize) -> (Self, Self) {
         unsafe {
             self.data
@@ -382,6 +408,16 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     ///
     /// # Panics
     /// Panics if `at > self.len()`.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let mut buf = LamellarBuffer::from_vec(&world, vec![1, 2, 3, 4, 5]);
+    /// let tail = buf.split_off(3);
+    /// assert_eq!(buf.len(), 3);
+    /// assert_eq!(tail.len(), 2);
+    ///```
     pub fn split_off(&mut self, at: usize) -> Self {
         unsafe {
             self.data
@@ -406,6 +442,17 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     ///
     /// Succeeds (returns `Ok(B)`) when this is the sole remaining reference; otherwise
     /// returns `Err(self)` so the caller can retry.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let buf = LamellarBuffer::from_vec(&world, vec![1, 2, 3]);
+    /// match buf.try_unwrap() {
+    ///     Ok(vec) => println!("Reclaimed Vec: {:?}", vec),
+    ///     Err(buf) => println!("Other references exist"),
+    /// }
+    ///```
     pub fn try_unwrap(self) -> Result<B, Self> {
         if unsafe {
             self.data
@@ -428,6 +475,17 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     /// backing store.
     ///
     /// Yields via `async_std::task::yield_now` while other references exist.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// async fn example() {
+    ///     let world = LamellarWorldBuilder::new().build();
+    ///     let buf = LamellarBuffer::from_vec(&world, vec![1, 2, 3]);
+    ///     let vec = buf.async_unwrap().await;
+    ///     println!("Unwrapped: {:?}", vec);
+    /// }
+    ///```
     pub async fn async_unwrap(self) -> B {
         while unsafe {
             self.data
@@ -452,6 +510,16 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     /// remaining reference.
     ///
     /// Returns `true` on success; `false` if other references still exist.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let mut buf = LamellarBuffer::from_vec(&world, vec![1, 2, 3, 4, 5]);
+    /// let _tail = buf.split_off(2);
+    /// // After split, window is [0, 2); try_reset returns false due to other reference
+    /// assert_eq!(buf.try_reset(), false);
+    ///```
     pub fn try_reset(&mut self) -> bool {
         if unsafe {
             self.data
@@ -469,11 +537,29 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     }
 
     /// Returns a shared slice of the active window of the buffer.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let buf = LamellarBuffer::from_vec(&world, vec![1, 2, 3]);
+    /// let slice = buf.as_slice();
+    /// assert_eq!(slice.len(), 3);
+    ///```
     pub fn as_slice(&self) -> &[T] {
         unsafe { &self.data.as_ref().data.as_slice()[self.range.clone()] }
     }
 
     /// Returns a mutable slice of the active window of the buffer.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let mut buf = LamellarBuffer::from_vec(&world, vec![1, 2, 3]);
+    /// let slice = buf.as_mut_slice();
+    /// slice[0] = 42;
+    ///```
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { &mut self.data.as_mut().data.as_mut_slice()[self.range.clone()] }
     }

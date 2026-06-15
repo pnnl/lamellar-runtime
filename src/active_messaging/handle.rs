@@ -167,6 +167,28 @@ impl<T: AmDist> AmHandle<T> {
             trace!("am spawned");
         }
     }
+    /// Spawn the active message on the work queue for concurrent execution.
+    ///
+    /// Returns a task handle that can be polled or awaited to retrieve the result.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let handle = world.exec_am_pe(0, MyAm { val: 21 });
+    /// let task = handle.spawn();
+    /// // task can now be awaited or polled
+    ///```
+    ///
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
@@ -176,7 +198,25 @@ impl<T: AmDist> AmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters
     }
-    /// This method will block the calling thread until the associated Active Message completes
+    /// Block until the active message completes and return the result.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let handle = world.exec_am_pe(0, MyAm { val: 21 });
+    /// let result = handle.block();
+    /// assert_eq!(result, 42);
+    ///```
     pub fn block(mut self) -> T {
         RuntimeWarning::BlockingCall("AmHandle::block", "<handle>.spawn() or <handle>.await")
             .print();
@@ -309,6 +349,25 @@ impl<T: 'static> LocalAmHandle<T> {
 }
 
 impl<T: Send + 'static> LocalAmHandle<T> {
+    /// Spawn the local active message on the work queue for concurrent execution.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmLocalData(Debug, Clone)]
+    /// struct MyLocalAm { val: usize }
+    ///
+    /// #[lamellar::local_am]
+    /// impl LamellarAM for MyLocalAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let handle = world.exec_am_local(MyLocalAm { val: 21 });
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the local operation.
     ///
@@ -318,7 +377,25 @@ impl<T: Send + 'static> LocalAmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters)
     }
-    /// This method will block the calling thread until the associated Active Message completes
+    /// Block until the local active message completes and return the result.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmLocalData(Debug, Clone)]
+    /// struct MyLocalAm { val: usize }
+    ///
+    /// #[lamellar::local_am]
+    /// impl LamellarAM for MyLocalAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let handle = world.exec_am_local(MyLocalAm { val: 21 });
+    /// let result = handle.block();
+    /// assert_eq!(result, 42);
+    ///```
     pub fn block(mut self) -> T {
         RuntimeWarning::BlockingCall("LocalAmHandle::block", "<handle>.spawn() or <handle>.await")
             .print();
@@ -528,6 +605,27 @@ impl<T: AmDist> MultiAmHandle<T> {
         }
     }
 
+    /// Spawn the active messages on the work queue for concurrent execution.
+    ///
+    /// Returns a task handle that resolves to a vector of results from all PEs.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { lamellar::current_pe }
+    /// }
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let handle = world.spawn_am_all(MyAm { val: 42 });
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
@@ -537,7 +635,25 @@ impl<T: AmDist> MultiAmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //AM handles counters
     }
-    /// This method will block the calling thread until the associated Active Message completes
+    /// Block until all active messages complete and return a vector of results.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { lamellar::current_pe }
+    /// }
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let handle = world.spawn_am_all(MyAm { val: 42 });
+    /// let results = handle.block();
+    /// assert_eq!(results.len(), world.num_pes());
+    ///```
     pub fn block(mut self) -> Vec<T> {
         RuntimeWarning::BlockingCall("MultiAmHandle::block", "<handle>.spawn() or <handle>.await")
             .print();

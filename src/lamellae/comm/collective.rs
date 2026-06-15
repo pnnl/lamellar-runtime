@@ -1871,8 +1871,11 @@ pub(crate) enum RootOrBuffer<T> {
 }
 
 
+/// Input type for broadcast collective operations, indicating whether this PE is the root (source) or not.
 pub enum BroadcastInput {
+    /// This PE is the root; `usize` is the local array index of the data to broadcast.
     Root(usize),
+    /// This PE is not the root; `usize` is the PE index of the root.
     NotRoot(usize)
 }
 
@@ -1893,10 +1896,12 @@ impl From<BroadcastInput> for BroadcastInputInner {
 }
 
 impl BroadcastInput {
+    /// Construct a [`BroadcastInput`] for the root PE, providing the local array `index` of the data to broadcast.
     pub fn root(index: usize) -> Self {
         Self::Root(index)
     }
 
+    /// Construct a [`BroadcastInput`] for a non-root PE, providing the `root_pe` index.
     pub fn not_root(root_pe: usize) -> Self {
         Self::NotRoot(root_pe)
     }
@@ -1921,22 +1926,30 @@ pub(crate) enum RootSrcOrLamellarBufferInner<T: Remote, B: AsLamellarBuffer<T>> 
     NotRoot(LamellarBuffer<T, B>, usize) 
 }
 
+/// Input type for scatter/broadcast operations where the root PE provides a source index and non-root PEs provide a destination buffer.
 pub enum RootSrcOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
-    Root(usize), 
-    NotRoot(LamellarBuffer<T, B>, usize) 
+    /// Root PE: local array index of the source data.
+    Root(usize),
+    /// Non-root PE: destination buffer and root PE index.
+    NotRoot(LamellarBuffer<T, B>, usize)
 }
 
+/// Input type for scatter collective operations, indicating whether this PE is the root (source) or not.
 pub enum ScatterInput {
+    /// This PE is the root; `usize` is the local array index of the data to scatter.
     Root(usize),
+    /// This PE is not the root; `usize` is the PE index of the root.
     NotRoot(usize)
 }
 
 
 impl ScatterInput {
+    /// Construct a [`ScatterInput`] for the root PE, providing the local array `index` of the data to scatter.
     pub fn root(index: usize) -> Self {
         Self::Root(index)
     }
 
+    /// Construct a [`ScatterInput`] for a non-root PE, providing the `root_pe` index.
     pub fn not_root(root_pe: usize) -> Self {
         Self::NotRoot(root_pe)
     }

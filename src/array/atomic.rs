@@ -552,6 +552,21 @@ pub enum AtomicElementRef<'a, T: Dist> {
 }
 
 impl<'a, T: Dist> AtomicElementRef<'a, T> {
+    /// Returns the current value of the element.
+    ///
+    /// `AtomicElementRef` is obtained by iterating over [`AtomicLocalData`].
+    /// Use [`AtomicArray`] directly; do not construct `AtomicElementRef` by hand.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in local_data.iter() {
+    ///     let val = elem.load();
+    /// }
+    ///```
     pub fn load(&self) -> T {
         match self {
             AtomicElementRef::NativeAtomicElementRef(e) => e.load(),
@@ -559,6 +574,18 @@ impl<'a, T: Dist> AtomicElementRef<'a, T> {
             AtomicElementRef::NetworkAtomicElementRef(e) => e.load(),
         }
     }
+    /// Stores `val` into the element atomically.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in local_data.iter() {
+    ///     elem.store(42);
+    /// }
+    ///```
     pub fn store(&self, val: T) {
         match self {
             AtomicElementRef::NativeAtomicElementRef(e) => e.store(val),
@@ -566,6 +593,18 @@ impl<'a, T: Dist> AtomicElementRef<'a, T> {
             AtomicElementRef::NetworkAtomicElementRef(e) => e.store(val),
         }
     }
+    /// Atomically stores `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in local_data.iter() {
+    ///     let old = elem.swap(42);
+    /// }
+    ///```
     pub fn swap(&self, val: T) -> T {
         match self {
             AtomicElementRef::NativeAtomicElementRef(e) => e.swap(val),
@@ -576,6 +615,18 @@ impl<'a, T: Dist> AtomicElementRef<'a, T> {
 }
 
 impl<'a, T: ElementArithmeticOps> AtomicElementRef<'a, T> {
+    /// Atomically adds `val` to the element and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in local_data.iter() {
+    ///     let old = elem.fetch_add(1);
+    /// }
+    ///```
     pub fn fetch_add(&self, val: T) -> T {
         match self {
             AtomicElementRef::NativeAtomicElementRef(e) => e.fetch_add(val),
@@ -583,6 +634,18 @@ impl<'a, T: ElementArithmeticOps> AtomicElementRef<'a, T> {
             AtomicElementRef::NetworkAtomicElementRef(e) => e.fetch_add(val),
         }
     }
+    /// Atomically subtracts `val` from the element and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in local_data.iter() {
+    ///     let old = elem.fetch_sub(1);
+    /// }
+    ///```
     pub fn fetch_sub(&self, val: T) -> T {
         match self {
             AtomicElementRef::NativeAtomicElementRef(e) => e.fetch_sub(val),
@@ -593,6 +656,18 @@ impl<'a, T: ElementArithmeticOps> AtomicElementRef<'a, T> {
 }
 
 impl<'a, T: Dist + std::cmp::Eq> AtomicElementRef<'a, T> {
+    /// Atomically replaces the element with `new` if it equals `current`; returns old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in local_data.iter() {
+    ///     let _ = elem.compare_exchange(0, 42);
+    /// }
+    ///```
     pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
         match self {
             AtomicElementRef::NativeAtomicElementRef(e) => e.compare_exchange(current, new),
@@ -964,6 +1039,14 @@ impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
     /// Each operation is listed with either:
     /// - `[Comm: NIC RDMA, Op: NIC Atomic]` — the NIC handles the operation natively
     /// - `[Comm: AM, Op: CPU atomic]` — the operation is performed via an Active Message on the target PE
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// array.print_network_atomic_avail();
+    ///```
     pub fn print_network_atomic_avail(&self) {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {

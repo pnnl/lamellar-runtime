@@ -43,7 +43,7 @@ impl<T: Dist> CollectiveAllGatherManualOpHandle<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
-    
+
     pub(crate) fn block(self) -> Vec<T> {
         self.scheduler.clone().block_on(self)
     }
@@ -62,7 +62,7 @@ impl CollectiveAllGatherIntoBufferManualOpHandle {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
-    
+
     pub(crate) fn block(self)  {
         self.scheduler.clone().block_on(self)
     }
@@ -76,12 +76,26 @@ pub(crate) enum ArrayCollectiveAllGatherState<T: Dist> {
 }
 
 impl<T: Dist> ArrayCollectiveAllGatherHandle<T> {
+    /// Spawn the collective allgather operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.allgather_init();
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         let task = match self.state {
             ArrayCollectiveAllGatherState::CollectiveAllGather(req) => req.spawn(),
             ArrayCollectiveAllGatherState::CollectiveAllGatherManual(req) => req.spawn(),
@@ -89,6 +103,16 @@ impl<T: Dist> ArrayCollectiveAllGatherHandle<T> {
         self.spawned = true;
         task
     }
+    /// Block until the collective allgather operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.allgather_init();
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self) -> Vec<T> {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveAllGatherHandle::block",
@@ -141,12 +165,28 @@ pub(crate) enum ArrayCollectiveAllGatherIntoBufferState<T: Dist, B: AsLamellarBu
 }
 
 impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
+    /// Spawn the collective allgather_into_buffer operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = array.allgather_into_buffer_init(&buf);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<()> {
+    pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveAllGatherIntoBufferState::CollectiveAllGatherIntoBuffer(req) => req.spawn(),
             ArrayCollectiveAllGatherIntoBufferState::CollectiveAllGatherIntoBufferManual(req) => req.spawn(),
@@ -154,6 +194,18 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllGatherIntoBufferHandle<T
         self.spawned = true;
         task
     }
+    /// Block until the collective allgather_into_buffer operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = array.allgather_into_buffer_init(&buf);
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self)  {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveAllGatherIntoBufferHandle::block",
@@ -205,7 +257,7 @@ impl<T: Dist> CollectiveGatherManualOpHandle<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
-    
+
     pub(crate) fn block(self) -> Option<Vec<T>> {
         self.scheduler.clone().block_on(self)
     }
@@ -232,7 +284,7 @@ impl CollectiveGatherIntoBufferManualOpHandle {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
-    
+
     pub(crate) fn block(self) -> () {
         self.scheduler.clone().block_on(self)
     }
@@ -259,12 +311,26 @@ pub(crate) enum ArrayCollectiveGatherState<T: Dist> {
 }
 
 impl<T: Dist> ArrayCollectiveGatherHandle<T> {
+    /// Spawn the collective gather operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.gather_init(0);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         let task = match self.state {
             ArrayCollectiveGatherState::CollectiveGather(req) => req.spawn(),
             ArrayCollectiveGatherState::CollectiveGatherManual(req) => req.spawn(),
@@ -272,6 +338,16 @@ impl<T: Dist> ArrayCollectiveGatherHandle<T> {
         self.spawned = true;
         task
     }
+    /// Block until the collective gather operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.gather_init(0);
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self) -> Option<Vec<T>> {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveGatherHandle::block",
@@ -322,12 +398,28 @@ pub(crate) enum ArrayCollectiveGatherIntoBufferState<T: Dist, B: AsLamellarBuffe
 }
 
 impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveGatherIntoBufferHandle<T, B> {
+    /// Spawn the collective gather_into_buffer operation.
+    ///
+    /// # Collective Operation
+    /// All PEs must participate; collective barriers used internally.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = array.gather_into_buffer_init(0, &buf);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Array RDMA Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<()> {
+    pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveGatherIntoBufferState::CollectiveGatherIntoBuffer(req) => req.spawn(),
             ArrayCollectiveGatherIntoBufferState::CollectiveGatherIntoBufferManual(req) => req.spawn(),
@@ -335,6 +427,18 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveGatherIntoBufferHandle<T, B
         self.spawned = true;
         task
     }
+    /// Block until the collective gather_into_buffer operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_shared_mem::<usize>(100).block();
+    /// let handle = array.gather_into_buffer_init(0, &buf);
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self) {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveGatherIntoBufferHandle::block",

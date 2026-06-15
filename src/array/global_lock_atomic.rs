@@ -280,6 +280,17 @@ pub struct GlobalLockReadGuard<T: Dist> {
 
 impl<T: Dist> GlobalLockReadGuard<T> {
     /// Access the underlying local data through the read lock
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, 100, Distribution::Block).block();
+    /// let read_guard = array.read_lock().block();
+    /// let local_data = read_guard.local_data();
+    /// println!("PE{my_pe} data: {local_data:?}");
+    ///```
     pub fn local_data(&self) -> GlobalLockLocalData<T> {
         GlobalLockLocalData {
             array: self.array.clone(),
@@ -308,6 +319,17 @@ impl<T: Dist> From<GlobalLockMutLocalData<T>> for GlobalLockWriteGuard<T> {
 
 impl<T: Dist> GlobalLockWriteGuard<T> {
     /// Access the underlying local data through the write lock
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, 100, Distribution::Block).block();
+    /// let write_guard = array.write_lock().block();
+    /// let mut local_data = write_guard.local_data();
+    /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
+    ///```
     pub fn local_data(self) -> GlobalLockMutLocalData<T> {
         GlobalLockMutLocalData {
             array: self.array.clone(),
@@ -1082,6 +1104,14 @@ impl<T: Dist + AmDist> GlobalLockArrayReduceHandle<T> {
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.reduce("sum").spawn();
+    ///```
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Option<T>> {
         self.req.launch();
@@ -1089,6 +1119,14 @@ impl<T: Dist + AmDist> GlobalLockArrayReduceHandle<T> {
     }
 
     /// This method will block the caller until the associated Array Reduce Operation completes
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, 100, Distribution::Block).block();
+    /// let result = array.reduce("sum").block();
+    ///```
     pub fn block(self) -> Option<T> {
         RuntimeWarning::BlockingCall(
             "GlobalLockArrayReduceHandle::block",

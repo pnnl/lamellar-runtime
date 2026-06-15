@@ -1061,11 +1061,27 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     }
 
     /// Returns the length of the memory region
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(100);
+    /// let len = mem_region.len();
+    ///```
     pub fn len(&self) -> usize {
         self.sub_region_size
     }
 
     /// Returns the original processing element (PE) where this memory region was created
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::memregion::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(100);
+    /// let pe = mem_region.orig_pe();
+    ///```
     pub fn orig_pe(&self) -> usize {
         self.pe
     }

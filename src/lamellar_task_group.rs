@@ -167,6 +167,18 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
         }
     }
 
+    /// Spawn the task group operation.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// // Create task group and add some AMs, then get handle
+    /// // let handle = group.exec_am(...);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
@@ -176,6 +188,18 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //counters managed by AM
     }
+
+    /// Block until the task group operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// // Create task group and add some AMs, then get handle
+    /// // let handle = group.exec_am(...);
+    /// let result = handle.block();
+    ///```
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> T {
         RuntimeWarning::BlockingCall(
@@ -419,6 +443,18 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
         }
     }
 
+    /// Spawn the task group operation.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// // Create task group and add some AMs, then get handle
+    /// // let handle = group.exec_am(...);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
@@ -428,6 +464,18 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //counters managed by AM
     }
+
+    /// Block until the task group operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// // Create task group and add some AMs, then get handle
+    /// // let handle = group.exec_am(...);
+    /// let result = handle.block();
+    ///```
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> Vec<T> {
         RuntimeWarning::BlockingCall(
@@ -621,6 +669,18 @@ impl<T: 'static> TaskGroupLocalAmHandle<T> {
 }
 
 impl<T: Send + 'static> TaskGroupLocalAmHandle<T> {
+    /// Spawn the task group operation.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// // Create task group and add some AMs, then get handle
+    /// // let handle = group.exec_am(...);
+    /// let task = handle.spawn();
+    ///```
+    ///
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
@@ -630,6 +690,18 @@ impl<T: Send + 'static> TaskGroupLocalAmHandle<T> {
         self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self, None) //counters managed by AM
     }
+
+    /// Block until the task group operation completes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// // Create task group and add some AMs, then get handle
+    /// // let handle = group.exec_am(...);
+    /// let result = handle.block();
+    ///```
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> T {
         RuntimeWarning::BlockingCall(
@@ -1437,6 +1509,26 @@ impl LamellarTaskGroup {
     ///
     /// # One-sided Operation
     /// The active message executes only on the calling PE; remote PEs are not involved.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmLocalData(Debug, Clone)]
+    /// struct MyLocalAm { val: usize }
+    ///
+    /// #[lamellar::local_am]
+    /// impl LamellarAM for MyLocalAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let tg = LamellarTaskGroup::new(&world);
+    /// // Execute on worker thread 0
+    /// let handle = tg.exec_am_local_thread(MyLocalAm { val: 21 }, 0);
+    /// let result = handle.spawn().await;
+    /// assert_eq!(result, 42);
+    ///```
     pub fn exec_am_local_thread<F>(&self, am: F, thread: usize) -> TaskGroupLocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -2112,16 +2204,42 @@ pub enum TypedAmGroupResult<T> {
 
 impl<T> TypedAmGroupResult<T> {
     /// creates a new Unit result
+    ///
+    /// # Examples
+    ///```no_run
+    /// // TypedAmGroupResult is returned by typed_am_group!; construct via the macro, not directly.
+    /// use lamellar::active_messaging::prelude::*;
+    ///```
     pub fn unit(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
         TypedAmGroupResult::Unit(TypedAmGroupUnitResult::new(reqs, cnt, num_pes))
     }
 
     /// creates a new Val result
+    ///
+    /// # Examples
+    ///```no_run
+    /// // TypedAmGroupResult is returned by typed_am_group!; construct via the macro, not directly.
+    /// use lamellar::active_messaging::prelude::*;
+    ///```
     pub fn val(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
         TypedAmGroupResult::Val(TypedAmGroupValResult::new(reqs, cnt, num_pes))
     }
 
     /// returns the result at index i
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { self.val }
+    /// }
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let results = typed_am_group!(usize, &world, MyAm{val:1} => All).block();
+    /// let first = results.at(0);
+    ///```
     pub fn at(&self, i: usize) -> AmGroupResult<'_, T> {
         match self {
             TypedAmGroupResult::Unit(res) => res.at(i),
@@ -2130,6 +2248,20 @@ impl<T> TypedAmGroupResult<T> {
     }
 
     /// returns the number of results in the AM group request
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { self.val }
+    /// }
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let results = typed_am_group!(usize, &world, MyAm{val:1} => All).block();
+    /// let len = results.len();
+    ///```
     pub fn len(&self) -> usize {
         match self {
             TypedAmGroupResult::Unit(res) => res.len(),
@@ -2138,6 +2270,20 @@ impl<T> TypedAmGroupResult<T> {
     }
 
     /// returns an iterator over the results of the Typed Am group
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { self.val }
+    /// }
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let results = typed_am_group!(usize, &world, MyAm{val:1} => All).block();
+    /// for result in results.iter() { println!("{:?}", result); }
+    ///```
     pub fn iter(&self) -> TypedAmGroupResultIter<'_, T> {
         TypedAmGroupResultIter {
             index: 0,
@@ -2223,11 +2369,23 @@ pub struct TypedAmGroupBatchResult<T> {
 
 impl<T: AmDist> TypedAmGroupBatchReq<T> {
     /// Create a new TypedAmGroupBatchReq for PE with the assoicated IDs and individual Requests
+    ///
+    /// # Examples
+    ///```no_run
+    /// // TypedAmGroupBatchReq is constructed internally by the runtime; use typed_am_group! instead.
+    /// use lamellar::active_messaging::prelude::*;
+    ///```
     pub fn new(pe: usize, ids: Vec<usize>, reqs: BaseAmGroupReq<T>) -> Self {
         Self { pe, ids, reqs }
     }
 
     /// Convert this TypedAmGroupBatchReq into a TypedAmGroupBatchResult
+    ///
+    /// # Examples
+    ///```no_run
+    /// // TypedAmGroupBatchReq is constructed internally by the runtime; use typed_am_group! instead.
+    /// use lamellar::active_messaging::prelude::*;
+    ///```
     pub async fn into_result(self) -> TypedAmGroupBatchResult<T> {
         TypedAmGroupBatchResult {
             pe: self.pe,
@@ -2250,6 +2408,12 @@ pub struct TypedAmGroupValResult<T> {
 
 impl<T> TypedAmGroupValResult<T> {
     /// Construct a new `TypedAmGroupValResult` from a list of per-PE batch results.
+    ///
+    /// # Examples
+    ///```no_run
+    /// // TypedAmGroupValResult is returned by typed_am_group!; construct via the macro, not directly.
+    /// use lamellar::active_messaging::prelude::*;
+    ///```
     pub fn new(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
         TypedAmGroupValResult { reqs, cnt, num_pes }
     }
@@ -2258,6 +2422,20 @@ impl<T> TypedAmGroupValResult<T> {
     ///
     /// # Panics
     /// Panics if `index >= self.len()`.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { self.val }
+    /// }
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let results = typed_am_group!(usize, &world, MyAm{val:1} => All).block();
+    /// let first = results.at(0);
+    ///```
     pub fn at(&self, index: usize) -> AmGroupResult<'_, T> {
         assert!(
             index < self.cnt,
@@ -2286,6 +2464,20 @@ impl<T> TypedAmGroupValResult<T> {
         panic!("AmGroupResult index out of bounds");
     }
     /// Returns the total number of AMs in this group result.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { self.val }
+    /// }
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let results = typed_am_group!(usize, &world, MyAm{val:1} => All).block();
+    /// let len = results.len();
+    ///```
     pub fn len(&self) -> usize {
         self.cnt
     }
@@ -2304,6 +2496,12 @@ pub struct TypedAmGroupUnitResult<T> {
 
 impl<T> TypedAmGroupUnitResult<T> {
     /// Construct a new `TypedAmGroupUnitResult` from a list of per-PE batch results.
+    ///
+    /// # Examples
+    ///```no_run
+    /// // TypedAmGroupUnitResult is returned by typed_am_group!; construct via the macro, not directly.
+    /// use lamellar::active_messaging::prelude::*;
+    ///```
     pub fn new(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
         TypedAmGroupUnitResult { reqs, cnt, num_pes }
     }
@@ -2312,6 +2510,20 @@ impl<T> TypedAmGroupUnitResult<T> {
     ///
     /// # Panics
     /// Panics if `index >= self.len()`.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> () {}
+    /// }
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let results = typed_am_group!((), &world, MyAm{} => All).block();
+    /// let first = results.at(0);
+    ///```
     pub fn at(&self, index: usize) -> AmGroupResult<'_, T> {
         assert!(
             index < self.cnt,
@@ -2337,6 +2549,20 @@ impl<T> TypedAmGroupUnitResult<T> {
         panic!("AmGroupResult index out of bounds");
     }
     /// Returns the total number of AMs in this group result.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::active_messaging::prelude::*;
+    /// #[AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> () {}
+    /// }
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let results = typed_am_group!((), &world, MyAm{} => All).block();
+    /// let len = results.len();
+    ///```
     pub fn len(&self) -> usize {
         self.cnt
     }

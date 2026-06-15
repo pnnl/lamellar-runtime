@@ -158,6 +158,15 @@ where
     }
 
     /// This method will block until the associated Sumoperation completes and returns the result
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.local_iter().sum::<usize>();
+    /// let result = handle.block();
+    ///```
     pub fn block(mut self) -> T {
         self.launched = true;
         RuntimeWarning::BlockingCall(
@@ -171,6 +180,15 @@ where
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.local_iter().sum::<usize>();
+    /// let task = handle.spawn();
+    ///```
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<T> {
         self.launched = true;

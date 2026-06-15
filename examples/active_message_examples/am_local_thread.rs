@@ -2,7 +2,7 @@
 /// Demonstrates exec_am_local_thread, which pins a local AM to a specific Lamellar
 /// worker thread, and join_all, which awaits a collection of futures concurrently.
 ///
-/// Each thread receives an AM that returns its LAMELLAR_THREAD_ID. We verify that
+/// Each thread receives an AM that returns its lamellar::tid. We verify that
 /// the returned thread id matches the thread the AM was pinned to.
 /// --------------------------------------------------------------------
 use lamellar::active_messaging::prelude::*;
@@ -13,7 +13,7 @@ struct ThreadIdAm;
 #[lamellar::local_am]
 impl LamellarAM for ThreadIdAm {
     async fn exec(self) -> usize {
-        lamellar::LAMELLAR_THREAD_ID
+        lamellar::tid
     }
 }
 
@@ -23,12 +23,13 @@ fn main() {
     let my_pe = world.my_pe();
     let num_threads = world.num_threads_per_pe();
     let team = world.team();
+    let world_clone = world.clone();
 
-    world.block_on(async move {
+    world_clone.block_on(async move {
         // Launch one AM per thread, each pinned to a specific thread index.
         // Collect the LamellarTask handles for use with join_all.
         let handles: Vec<_> = (0..num_threads)
-            .map(|thread| team.exec_am_local_thread(ThreadIdAm, thread).spawn())
+            .map(|thread| team.exec_am_local_thread(ThreadIdAm{}, thread).spawn())
             .collect();
 
         // join_all awaits all futures concurrently without blocking the caller thread.
@@ -51,5 +52,5 @@ fn main() {
             thread_ids
         );
     });
-    world.barrier();
+    world_clone.barrier();
 }

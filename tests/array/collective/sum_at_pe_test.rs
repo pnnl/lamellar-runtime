@@ -1,6 +1,4 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
-
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {

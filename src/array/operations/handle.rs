@@ -49,10 +49,22 @@ impl<T: Remote> PinnedDrop for ArrayOpHandle<T> {
 }
 
 impl<T: Dist> ArrayOpHandle<T> {
+    /// Spawn the array operation.
+    ///
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let task = handle.spawn();
+    /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
         let old_state = std::mem::replace(&mut self.state, OpState::Spawned);
@@ -63,7 +75,20 @@ impl<T: Dist> ArrayOpHandle<T> {
             _ => panic!("ArrayOpHandle should already have been spawned"),
         }
     }
+
+    /// Block until the array operation completes.
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.put(0, 42);
+    /// handle.block();
+    /// ```
     pub fn block(mut self) -> () {
         RuntimeWarning::BlockingCall(
             "ArrayBatchOpHandle::block",
@@ -136,10 +161,22 @@ impl PinnedDrop for ArrayBatchOpHandle {
 }
 
 impl ArrayBatchOpHandle {
+    /// Spawn the array operation.
+    ///
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let task = handle.spawn();
+    /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
         let old_state = std::mem::replace(&mut self.state, BatchOpState::Completed);
@@ -157,7 +194,20 @@ impl ArrayBatchOpHandle {
             _ => panic!("ArrayBatchOpHandle should already have been spawned"),
         }
     }
+
+    /// Block until the array operation completes.
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.put(0, 42);
+    /// handle.block();
+    /// ```
     pub fn block(mut self) -> () {
         RuntimeWarning::BlockingCall(
             "ArrayBatchOpHandle::block",
@@ -243,10 +293,22 @@ pub(crate) enum FetchOpState<R: Remote> {
 }
 
 impl<R: Dist> ArrayFetchOpHandle<R> {
+    /// Spawn the array operation.
+    ///
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let task = handle.spawn();
+    /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<R> {
         match self.state {
@@ -260,7 +322,19 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
         }
     }
 
+    /// Block until the array operation completes.
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.get(0);
+    /// let result = handle.block();
+    /// ```
     pub fn block(self) -> R {
         RuntimeWarning::BlockingCall(
             "ArrayFetchOpHandle::block",
@@ -326,10 +400,22 @@ impl<R: AmDist> PinnedDrop for ArrayFetchBatchOpHandle<R> {
 }
 
 impl<R: AmDist> ArrayFetchBatchOpHandle<R> {
+    /// Spawn the array operation.
+    ///
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let task = handle.spawn();
+    /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Vec<R>> {
         match &mut self.state {
@@ -345,7 +431,19 @@ impl<R: AmDist> ArrayFetchBatchOpHandle<R> {
         }
     }
 
+    /// Block until the array operation completes.
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.get(0);
+    /// let result = handle.block();
+    /// ```
     pub fn block(mut self) -> Vec<R> {
         RuntimeWarning::BlockingCall(
             "ArrayFetchBatchOpHandle::block",
@@ -450,10 +548,22 @@ pub(crate) enum ResultOpState<R: Remote + PartialEq> {
 }
 
 impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
+    /// Spawn the array operation.
+    ///
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let task = handle.spawn();
+    /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Result<R, R>> {
         match self.state {
@@ -466,7 +576,19 @@ impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
         }
     }
 
+    /// Block until the array operation completes.
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.compare_exchange(0, 42, 0);
+    /// let result = handle.block();
+    /// ```
     pub fn block(mut self) -> Result<R, R> {
         RuntimeWarning::BlockingCall(
             "ArrayResultOpHandle::block",
@@ -534,10 +656,22 @@ impl<R: AmDist> PinnedDrop for ArrayResultBatchOpHandle<R> {
 }
 
 impl<R: AmDist> ArrayResultBatchOpHandle<R> {
+    /// Spawn the array operation.
+    ///
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let task = handle.spawn();
+    /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Vec<Result<R, R>>> {
         match &mut self.state {
@@ -553,7 +687,19 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
         }
     }
 
+    /// Block until the array operation completes.
+    ///
     /// This method will block the calling thread until the associated Array Operation completes
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let handle = array.compare_exchange(0, 42, 0);
+    /// let result = handle.block();
+    /// ```
     pub fn block(mut self) -> Vec<Result<R, R>> {
         RuntimeWarning::BlockingCall(
             "ArrayResultBatchOpHandle::block",

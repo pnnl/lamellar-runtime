@@ -367,7 +367,14 @@ lazy_static! {
 //         thread_local::ThreadLocal::new();
 // }
 
-/// Wrapper function for serializing data
+/// Serializes an object into a byte vector.
+///
+/// # Examples
+///```
+/// let data = vec![1, 2, 3];
+/// let serialized = lamellar::serialize(&data, false).expect("serialize");
+/// assert!(!serialized.is_empty());
+///```
 pub fn serialize<T>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
@@ -387,7 +394,14 @@ where
     res
 }
 
-/// Wrapper function for getting the size of serialized data
+/// Returns the size of serialized data without allocating.
+///
+/// # Examples
+///```
+/// let data = vec![1, 2, 3];
+/// let size = lamellar::serialized_size(&data, false);
+/// assert!(size > 0);
+///```
 pub fn serialized_size<T>(obj: &T, var: bool) -> usize
 where
     T: serde::Serialize,
@@ -407,7 +421,15 @@ where
     res
 }
 
-/// Wrapper function for serializing an object into a buffer
+/// Wrapper function for serializing an object into a buffer.
+///
+/// # Examples
+///```
+/// let mut buf = vec![0u8; 64];
+/// let data = vec![1, 2, 3];
+/// lamellar::serialize_into(&mut buf, &data, false)?;
+///# Ok::<(), anyhow::Error>(())
+///```
 pub fn serialize_into<T>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
 where
     T: serde::Serialize,
@@ -428,7 +450,16 @@ where
     Ok(())
 }
 
-/// Wrapper function for deserializing data
+/// Wrapper function for deserializing data.
+///
+/// # Examples
+///```
+/// let data = vec![1, 2, 3];
+/// let serialized = lamellar::serialize(&data, false)?;
+/// let deserialized: Vec<i32> = lamellar::deserialize(&serialized, false)?;
+/// assert_eq!(data, deserialized);
+///# Ok::<(), anyhow::Error>(())
+///```
 pub fn deserialize<'a, T>(bytes: &'a [u8], var: bool) -> Result<T, anyhow::Error>
 where
     T: serde::Deserialize<'a>,

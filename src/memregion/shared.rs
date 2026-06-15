@@ -299,6 +299,16 @@ impl<T: Remote> SharedMemoryRegion<T> {
     }
 
     /// Return the length of the memory region
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
+    /// assert_eq!(mem_region.len(), 1000);
+    ///```
     pub fn len(&self) -> usize {
         self.sub_region_size
     }
@@ -930,210 +940,1043 @@ impl<T: Remote> SharedMemoryRegion<T> {
             AtomicOp::Write(Box::pin(val)),
         )
     }
+    /// Performs a collective all-reduce minimum over `len` elements starting at `index`.
+    /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.min_all(0, num_pes).block();
+    /// }
+    ///```
     pub unsafe fn min_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all(index, len, ReduceOp::Min)
     }
+    /// Performs a collective all-reduce maximum over `len` elements starting at `index`.
+    /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.max_all(0, num_pes).block();
+    /// }
+    ///```
     pub unsafe fn max_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all(index, len, ReduceOp::Max)
     }
+    /// Performs a collective all-reduce sum over `len` elements starting at `index`.
+    /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.sum_all(0, num_pes).block();
+    /// }
+    ///```
     pub unsafe fn sum_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all(index, len, ReduceOp::Sum)
     }
+    /// Performs a collective all-reduce product over `len` elements starting at `index`.
+    /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.prod_all(0, num_pes).block();
+    /// }
+    ///```
     pub unsafe fn prod_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all(index, len, ReduceOp::Prod)
     }
+    /// Performs a collective all-reduce bitwise OR over `len` elements starting at `index`.
+    /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.bit_or_all(0, num_pes).block();
+    /// }
+    ///```
     pub unsafe fn bit_or_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all(index, len, ReduceOp::BitOr)
     }
+    /// Performs a collective all-reduce bitwise XOR over `len` elements starting at `index`.
+    /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.bit_xor_all(0, num_pes).block();
+    /// }
+    ///```
     pub unsafe fn bit_xor_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all(index, len, ReduceOp::BitXor)
     }
+    /// Performs a collective all-reduce bitwise AND over `len` elements starting at `index`.
+    /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = usize::MAX;
+    ///     mem_region.bit_and_all(0, num_pes).block();
+    /// }
+    ///```
     pub unsafe fn bit_and_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all(index, len, ReduceOp::BitAnd)
     }
+    /// Performs a collective all-reduce minimum, storing results into `buffer`.
+    /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.min_all_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
     pub unsafe fn min_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_into_buffer(index, len, ReduceOp::Min, buffer)
     }
+    /// Performs a collective all-reduce maximum, storing results into `buffer`.
+    /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.max_all_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
     pub unsafe fn max_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_into_buffer(index, len, ReduceOp::Max, buffer)
     }
+    /// Performs a collective all-reduce sum, storing results into `buffer`.
+    /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.sum_all_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
     pub unsafe fn sum_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_into_buffer(index, len, ReduceOp::Sum, buffer)
     }
+    /// Performs a collective all-reduce product, storing results into `buffer`.
+    /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.prod_all_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
     pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_into_buffer(index, len, ReduceOp::Prod, buffer)
     }
+    /// Performs a collective all-reduce bitwise OR, storing results into `buffer`.
+    /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.bit_or_all_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
     pub unsafe fn bit_or_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_into_buffer(index, len, ReduceOp::BitOr, buffer)
     }
+    /// Performs a collective all-reduce bitwise XOR, storing results into `buffer`.
+    /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.bit_xor_all_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
     pub unsafe fn bit_xor_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_into_buffer(index, len, ReduceOp::BitXor, buffer)
     }
+    /// Performs a collective all-reduce bitwise AND, storing results into `buffer`.
+    /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = usize::MAX;
+    ///     mem_region.bit_and_all_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
     pub unsafe fn bit_and_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_into_buffer(index, len, ReduceOp::BitAnd, buffer)
     }
+    /// Performs an in-place collective all-reduce minimum using `src_and_dst` as both source and destination.
+    /// Returns a [`CollectiveAllReduceInPlaceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![my_pe + 1; num_pes]);
+    /// unsafe {
+    ///     mem_region.min_all_in_place(buf).block();
+    /// }
+    ///```
     pub unsafe fn min_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T, B>) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_in_place(src_and_dst, ReduceOp::Min)
     }
+    /// Performs an in-place collective all-reduce maximum using `src_and_dst` as both source and destination.
+    /// Returns a [`CollectiveAllReduceInPlaceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![my_pe + 1; num_pes]);
+    /// unsafe {
+    ///     mem_region.max_all_in_place(buf).block();
+    /// }
+    ///```
     pub unsafe fn max_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T, B>) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
         .as_base::<T>()
         .reduce_all_in_place(src_and_dst, ReduceOp::Max)
     }
+    /// Performs an in-place collective all-reduce sum using `src_and_dst` as both source and destination.
+    /// Returns a [`CollectiveAllReduceInPlaceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![my_pe + 1; num_pes]);
+    /// unsafe {
+    ///     mem_region.sum_all_in_place(buf).block();
+    /// }
+    ///```
     pub unsafe fn sum_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T, B>) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_in_place(src_and_dst, ReduceOp::Sum)
     }
+    /// Performs an in-place collective all-reduce product using `src_and_dst` as both source and destination.
+    /// Returns a [`CollectiveAllReduceInPlaceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![my_pe + 1; num_pes]);
+    /// unsafe {
+    ///     mem_region.prod_all_in_place(buf).block();
+    /// }
+    ///```
     pub unsafe fn prod_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T, B>) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_in_place(src_and_dst, ReduceOp::Prod)
     }
+    /// Performs an in-place collective all-reduce bitwise OR using `src_and_dst` as both source and destination.
+    /// Returns a [`CollectiveAllReduceInPlaceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![1usize << my_pe; num_pes]);
+    /// unsafe {
+    ///     mem_region.bit_or_all_in_place(buf).block();
+    /// }
+    ///```
     pub unsafe fn bit_or_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T, B>) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_in_place(src_and_dst, ReduceOp::BitOr)
     }
+    /// Performs an in-place collective all-reduce bitwise XOR using `src_and_dst` as both source and destination.
+    /// Returns a [`CollectiveAllReduceInPlaceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![1usize << my_pe; num_pes]);
+    /// unsafe {
+    ///     mem_region.bit_xor_all_in_place(buf).block();
+    /// }
+    ///```
     pub unsafe fn bit_xor_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T, B>) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_in_place(src_and_dst, ReduceOp::BitXor)
     }
+    /// Performs an in-place collective all-reduce bitwise AND using `src_and_dst` as both source and destination.
+    /// Returns a [`CollectiveAllReduceInPlaceOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![usize::MAX; num_pes]);
+    /// unsafe {
+    ///     mem_region.bit_and_all_in_place(buf).block();
+    /// }
+    ///```
     pub unsafe fn bit_and_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T, B>) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .reduce_all_in_place(src_and_dst, ReduceOp::BitAnd)
     }
+    /// Performs a collective reduce minimum to `root_pe`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.min_at_pe(0, num_pes, 0).block();
+    /// }
+    ///```
     pub unsafe fn min_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce(ReduceOp::Min, index, len, root_pe)
     }
+    /// Performs a collective reduce maximum to `root_pe`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.max_at_pe(0, num_pes, 0).block();
+    /// }
+    ///```
             pub unsafe fn max_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
         .as_base::<T>()
         .reduce(ReduceOp::Max, index, len, root_pe)
     }
+    /// Performs a collective reduce sum to `root_pe`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.sum_at_pe(0, num_pes, 0).block();
+    /// }
+    ///```
     pub unsafe fn sum_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce(ReduceOp::Sum, index, len, root_pe)
     }
+    /// Performs a collective reduce product to `root_pe`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.prod_at_pe(0, num_pes, 0).block();
+    /// }
+    ///```
             pub unsafe fn prod_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce(ReduceOp::Prod, index, len, root_pe)
     }
+    /// Performs a collective reduce bitwise OR to `root_pe`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.bit_or_at_pe(0, num_pes, 0).block();
+    /// }
+    ///```
             pub unsafe fn bit_or_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce(ReduceOp::BitOr, index, len, root_pe)
     }
+    /// Performs a collective reduce bitwise XOR to `root_pe`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.bit_xor_at_pe(0, num_pes, 0).block();
+    /// }
+    ///```
             pub unsafe fn bit_xor_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce(ReduceOp::BitXor, index, len, root_pe)
     }
+    /// Performs a collective reduce bitwise AND to `root_pe`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = usize::MAX;
+    ///     mem_region.bit_and_at_pe(0, num_pes, 0).block();
+    /// }
+    ///```
             pub unsafe fn bit_and_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce(ReduceOp::BitAnd, index, len, root_pe)
     }
+    /// Performs a collective reduce minimum to `root_pe`, storing results into `target`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     let target = if my_pe == 0 {
+    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///     } else {
+    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///     };
+    ///     mem_region.min_at_pe_into_buffer(0, num_pes, target).block();
+    /// }
+    ///```
             pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_into_buffer(ReduceOp::Min, index, len, target)
     }
+    /// Performs a collective reduce maximum to `root_pe`, storing results into `target`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     let target = if my_pe == 0 {
+    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///     } else {
+    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///     };
+    ///     mem_region.max_at_pe_into_buffer(0, num_pes, target).block();
+    /// }
+    ///```
             pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
         .as_base::<T>()
         .reduce_into_buffer(ReduceOp::Max, index, len, target)
     }
+    /// Performs a collective reduce sum to `root_pe`, storing results into `target`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     let target = if my_pe == 0 {
+    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///     } else {
+    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///     };
+    ///     mem_region.sum_at_pe_into_buffer(0, num_pes, target).block();
+    /// }
+    ///```
     pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_into_buffer(ReduceOp::Sum, index, len, target)
     }
+    /// Performs a collective reduce product to `root_pe`, storing results into `target`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     let target = if my_pe == 0 {
+    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///     } else {
+    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///     };
+    ///     mem_region.prod_at_pe_into_buffer(0, num_pes, target).block();
+    /// }
+    ///```
             pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_into_buffer(ReduceOp::Prod, index, len, target)
     }
+    /// Performs a collective reduce bitwise OR to `root_pe`, storing results into `target`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     let target = if my_pe == 0 {
+    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///     } else {
+    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///     };
+    ///     mem_region.bit_or_at_pe_into_buffer(0, num_pes, target).block();
+    /// }
+    ///```
             pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_into_buffer(ReduceOp::BitOr, index, len, target)
     }
+    /// Performs a collective reduce bitwise XOR to `root_pe`, storing results into `target`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     let target = if my_pe == 0 {
+    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///     } else {
+    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///     };
+    ///     mem_region.bit_xor_at_pe_into_buffer(0, num_pes, target).block();
+    /// }
+    ///```
             pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_into_buffer(ReduceOp::BitXor, index, len, target)
     }
+    /// Performs a collective reduce bitwise AND to `root_pe`, storing results into `target`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = usize::MAX;
+    ///     let target = if my_pe == 0 {
+    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///     } else {
+    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///     };
+    ///     mem_region.bit_and_at_pe_into_buffer(0, num_pes, target).block();
+    /// }
+    ///```
             pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
@@ -1182,144 +2025,733 @@ impl<T: Remote> SharedMemoryRegion<T> {
     //         .as_base::<T>()
     //         .reduce_in_place(ReduceOp::BitAnd, root_pe)
     // }
+    /// Performs a collective all-gather.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     let gathered: Vec<usize> = mem_region.gather_all(0, 1).block();
+    ///     assert_eq!(gathered.len(), num_pes);
+    /// }
+    ///```
         pub unsafe fn gather_all(&self, index: usize, len: usize) -> CollectiveAllGatherOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .gather_all(index, len)
     }
+    /// Performs a collective all-gather, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.gather_all_into_buffer(0, 1, buf).block();
+    /// }
+    ///```
         pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .gather_all_into_buffer(index, len, buffer)
     }
+    /// Performs a collective gather to a single PE.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     if my_pe == 0 {
+    ///         let gathered: Vec<usize> = mem_region.gather_at_pe(0, 1, 0).block();
+    ///         assert_eq!(gathered.len(), num_pes);
+    ///     } else {
+    ///         mem_region.gather_at_pe(0, 1, 0).block();
+    ///     }
+    /// }
+    ///```
         pub unsafe fn gather_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveGatherOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .gather(index, len, root_pe)
     }
+    /// Performs a collective gather to a single PE, storing results into `target`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     let root_or_buffer = if my_pe == 0 {
+    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///     } else {
+    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///     };
+    ///     mem_region.gather_at_pe_into_buffer(0, 1, root_or_buffer).block();
+    /// }
+    ///```
         pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, root_or_buffer: RootOrLamellarBuffer<T, B>) -> CollectiveGatherIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .gather_into_buffer(index, len, root_or_buffer)
     }
+    /// Broadcasts `len` elements starting at `index` from the root PE to all PEs.
+    /// Returns a [`CollectiveAllToAllOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.broadcast_all(0, 1).block();
+    /// }
+    ///```
     pub unsafe fn broadcast_all(&self,  index:usize, len: usize) -> CollectiveAllToAllOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .alltoall(index, len)
     }
+    /// Broadcasts `len` elements starting at `index` from the root PE to all PEs, storing results into `buffer`.
+    /// Returns a [`CollectiveAllToAllIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.broadcast_all_into_buffer(0, 1, buf).block();
+    /// }
+    ///```
     pub unsafe fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(&self,  index:usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllToAllIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .alltoall_into_buffer(index, len, buffer)
     }
+    /// Performs a collective broadcast from a root PE.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1).block();
+    /// unsafe {
+    ///     let input = if my_pe == 0 {
+    ///         BroadcastInput::root(0)
+    ///     } else {
+    ///         BroadcastInput::not_root(0)
+    ///     };
+    ///     mem_region.broadcast_from_pe(input, 1).block();
+    /// }
+    ///```
         pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput, len: usize) -> CollectiveBroadcastOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .broadcast(src_or_root_pe, len)
     }
+    /// Performs a collective broadcast from a root PE, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1).block();
+    /// unsafe {
+    ///     let root_or_buffer = if my_pe == 0 {
+    ///         RootSrcOrLamellarBuffer::Root(0)
+    ///     } else {
+    ///         RootSrcOrLamellarBuffer::NotRoot(LamellarBuffer::from_vec(vec![0usize; 1]), 0)
+    ///     };
+    ///     mem_region.broadcast_from_pe_into_buffer(root_or_buffer, 1).block();
+    /// }
+    ///```
         pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, root_or_buffer: RootSrcOrLamellarBuffer<T, B>, len: usize) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .broadcast_into_buffer(root_or_buffer, len)
     }
+    /// Performs a collective scatter from a root PE.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     if my_pe == 0 {
+    ///         let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///         for i in 0..num_pes { slice[i] = i; }
+    ///     }
+    ///     let input = if my_pe == 0 {
+    ///         ScatterInput::root(0)
+    ///     } else {
+    ///         ScatterInput::not_root(0)
+    ///     };
+    ///     mem_region.scatter_from_pe(input, 1).block();
+    /// }
+    ///```
         pub unsafe fn scatter_from_pe(&self, src_or_root_pe: ScatterInput, len: usize) -> CollectiveScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .scatter(src_or_root_pe, len)
     }
+    /// Performs a collective scatter from a root PE, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; 1]);
+    /// unsafe {
+    ///     if my_pe == 0 {
+    ///         let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///         for i in 0..num_pes { slice[i] = i; }
+    ///     }
+    ///     let input = if my_pe == 0 {
+    ///         ScatterInput::root(0)
+    ///     } else {
+    ///         ScatterInput::not_root(0)
+    ///     };
+    ///     mem_region.scatter_from_pe_into_buffer(buf, input, 1).block();
+    /// }
+    ///```
         pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, buffer: LamellarBuffer<T, B>, src_or_root_pe: ScatterInput, len: usize) -> CollectiveScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
             .scatter_into_buffer(buffer, src_or_root_pe, len)
     }
+    /// Performs a collective reduce-scatter minimum.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
+    ///     mem_region.min_scatter(0, num_pes).block();
+    /// }
+    ///```
     pub unsafe fn min_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter(ReduceOp::Min, index, len)
     }
+    /// Performs a collective reduce-scatter maximum.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
+    ///     mem_region.max_scatter(0, num_pes).block();
+    /// }
+    ///```
             pub unsafe fn max_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter(ReduceOp::Max, index, len)
     }
+    /// Performs a collective reduce-scatter sum.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
+    ///     mem_region.sum_scatter(0, num_pes).block();
+    /// }
+    ///```
             pub unsafe fn sum_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter(ReduceOp::Sum, index, len)
     }
+    /// Performs a collective reduce-scatter product.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
+    ///     mem_region.prod_scatter(0, num_pes).block();
+    /// }
+    ///```
             pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter(ReduceOp::Prod, index, len)
     }
+    /// Performs a collective reduce-scatter bitwise OR.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = 1 << (my_pe + i); }
+    ///     mem_region.bit_or_scatter(0, num_pes).block();
+    /// }
+    ///```
             pub unsafe fn bit_or_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter(ReduceOp::BitOr, index, len)
     }
+    /// Performs a collective reduce-scatter bitwise XOR.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = 1 << (my_pe + i); }
+    ///     mem_region.bit_xor_scatter(0, num_pes).block();
+    /// }
+    ///```
             pub unsafe fn bit_xor_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter(ReduceOp::BitXor, index, len)
     }
+    /// Performs a collective reduce-scatter bitwise AND.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = usize::MAX; }
+    ///     mem_region.bit_and_scatter(0, num_pes).block();
+    /// }
+    ///```
             pub unsafe fn bit_and_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter(ReduceOp::BitAnd, index, len)
     }
+    /// Performs a collective reduce-scatter minimum, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
+    ///     mem_region.min_scatter_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
             pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter_into_buffer(ReduceOp::Min, index, len, buffer)
     }
+    /// Performs a collective reduce-scatter maximum, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
+    ///     mem_region.max_scatter_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
             pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
         .as_base::<T>()
         .reduce_scatter_into_buffer(ReduceOp::Max, index, len, buffer)
     }
+    /// Performs a collective reduce-scatter sum, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
+    ///     mem_region.sum_scatter_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
     pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter_into_buffer(ReduceOp::Sum, index, len, buffer)
     }
+    /// Performs a collective reduce-scatter product, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
+    ///     mem_region.prod_scatter_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
             pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter_into_buffer(ReduceOp::Prod, index, len, buffer)
     }
+    /// Performs a collective reduce-scatter bitwise OR, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = 1 << (my_pe + i); }
+    ///     mem_region.bit_or_scatter_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
             pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter_into_buffer(ReduceOp::BitOr, index, len, buffer)
     }
+    /// Performs a collective reduce-scatter bitwise XOR, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = 1 << (my_pe + i); }
+    ///     mem_region.bit_xor_scatter_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
             pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
                 .reduce_scatter_into_buffer(ReduceOp::BitXor, index, len, buffer)
     }
+    /// Performs a collective reduce-scatter bitwise AND, storing results into `buffer`.
+    ///
+    /// # Safety
+    /// `index + len` must not exceed the local segment length. Concurrent mutation of the same elements is undefined behavior.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
+    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// unsafe {
+    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     for i in 0..num_pes * num_pes { slice[i] = usize::MAX; }
+    ///     mem_region.bit_and_scatter_into_buffer(0, num_pes, buf).block();
+    /// }
+    ///```
             pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
@@ -1329,6 +2761,22 @@ impl<T: Remote> SharedMemoryRegion<T> {
 
     /// Blocks until all outstanding RDMA operations issued by this PE on this memory region
     /// have completed.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.put(my_pe, my_pe, my_pe);
+    /// }
+    /// mem_region.wait_all();
+    /// world.barrier();
+    ///```
     pub fn wait_all(&self) {
         self.mr.wait_all();
     }

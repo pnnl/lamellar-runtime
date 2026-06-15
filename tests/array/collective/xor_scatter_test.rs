@@ -1,5 +1,4 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
 
 
 macro_rules! initialize_array {
@@ -28,15 +27,6 @@ macro_rules! initialize_array {
             .dist_iter_mut()
             .for_each(move |x| *x = $init_val)
             .block();
-    };
-}
-
-macro_rules! onesided_iter {
-    (GlobalLockArray,$array:ident) => {
-        $array.read_lock().block().onesided_iter()
-    };
-    ($arraytype:ident,$array:ident) => {
-        $array.onesided_iter()
     };
 }
 

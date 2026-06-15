@@ -652,7 +652,7 @@ macro_rules! impl_compare_exchange_eps {
         }
     };
 }
-/// `NativeAtomicElement` represents a native (like AtomicUsize, AtomicU8, etc.) atomic element in a `NativeAtomicArray`.
+#[doc(hidden)]
 pub struct NativeAtomicElement<T: Remote> {
     array: NativeAtomicArray<T>,
     local_index: usize,
@@ -666,16 +666,52 @@ impl<T: Dist> From<NativeAtomicElement<T>> for AtomicElement<T> {
 
 impl<T: Dist> NativeAtomicElement<T> {
     /// returns the value of the atomic element
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let val = elem.load();
+    /// }
+    ///```
     pub fn load(&self) -> T {
         impl_load!(self)
     }
 
     /// stores a value into the atomic element
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     elem.store(42);
+    /// }
+    ///```
     pub fn store(&self, val: T) {
         impl_store!(self, val);
     }
 
     /// Atomically replaces the current value with `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.swap(42);
+    /// }
+    ///```
     pub fn swap(&self, val: T) -> T {
         impl_swap!(self, val)
     }
@@ -683,6 +719,18 @@ impl<T: Dist> NativeAtomicElement<T> {
     /// Performs an atomic compare and exchange operation on the atomic element.
     /// The operation succeeds if the current value is equal to `old`. If successful, it replaces the current value with `new` and returns the old value.
     /// If the current value is not equal to `old`, it returns the current value without making any changes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let result = elem.compare_exchange(0, 42);
+    /// }
+    ///```
     pub fn compare_exchange(&self, old: T, new: T) -> Result<T, T> {
         impl_compare_exchange!(self, old, new)
     }
@@ -690,42 +738,138 @@ impl<T: Dist> NativeAtomicElement<T> {
     /// Performs an atomic compare and exchange operation with an epsilon value.
     /// This operation succeeds if the absolute difference between the current value and `old` is less than `eps`. If successful, it replaces the current value with `new` and returns the old value.
     /// If the absolute difference is greater than or equal to `eps`, it returns the current value without making any changes.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<f64> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let result = elem.compare_exchange_epsilon(0.0, 1.0, 1e-9);
+    /// }
+    ///```
     pub fn compare_exchange_epsilon(&self, old: T, new: T, eps: T) -> Result<T, T> {
         impl_compare_exchange_eps!(self, old, new, eps)
     }
 
     /// Atomically adds `val` to the current value and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_add(5);
+    /// }
+    ///```
     pub fn fetch_add(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_add, val)
     }
 
     /// Atomically subtracts `val` from the current value and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_sub(1);
+    /// }
+    ///```
     pub fn fetch_sub(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_sub, val)
     }
 
     /// Atomically multiplies the current value by `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_mul(2);
+    /// }
+    ///```
     pub fn fetch_mul(&self, val: T) -> T {
         impl_mul_div!(self, * , val)
     }
 
     /// Atomically divides the current value by `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_div(2);
+    /// }
+    ///```
     pub fn fetch_div(&self, val: T) -> T {
         impl_mul_div!(self, /, val)
     }
 
     /// Atomically computes the remainder of the current value divided by `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_rem(3);
+    /// }
+    ///```
     pub fn fetch_rem(&self, val: T) -> T {
         impl_mul_div!(self, %, val)
     }
 
     /// Atomically shifts the current value left by `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_shl(1);
+    /// }
+    ///```
     pub fn fetch_shl(&self, val: T) -> T {
         //result.0 is old value, result.1 is new value
         impl_shift!(self, <<, val)
     }
 
     /// Atomically shifts the current value right by `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_shr(1);
+    /// }
+    ///```
     pub fn fetch_shr(&self, val: T) -> T {
         //result.0 is old value, result.1 is new value
         impl_shift!(self, >>, val)
@@ -734,16 +878,52 @@ impl<T: Dist> NativeAtomicElement<T> {
 
 impl<T: ElementBitWiseOps + 'static> NativeAtomicElement<T> {
     /// Atomically performs a bitwise AND operation with `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_and(0xFF);
+    /// }
+    ///```
     pub fn fetch_and(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_and, val)
     }
 
     /// Atomically performs a bitwise OR operation with `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_or(0x01);
+    /// }
+    ///```
     pub fn fetch_or(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_or, val)
     }
 
     /// Atomically performs a bitwise XOR operation with `val` and returns the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_xor(0xFF);
+    /// }
+    ///```
     pub fn fetch_xor(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_xor, val)
     }

@@ -58,12 +58,12 @@ impl<T: Remote> CollectiveReduceData<T> {
 }
 
 impl<T: Remote> LibfabricAsyncCollectiveAllReduceFuture<T> {
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         let fut_data = self.fut_data.take().unwrap();
         fut_data.block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         let fut_data = self.fut_data.take().unwrap();
         fut_data.spawn()
     }
@@ -1885,12 +1885,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferData<T, B> {
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         let fut_data = self.fut_data.take().unwrap();
         fut_data.block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         let fut_data = self.fut_data.take().unwrap();
         fut_data.spawn()
     }
@@ -1972,11 +1972,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceData<T, B> {
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveAllReduceInPlaceFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2069,11 +2069,11 @@ impl<T: Remote> CollectiveReduceDataToRoot<T> {
 }
 
 impl<T: Remote> LibfabricAsyncCollectiveReduceFuture<T> {
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2148,11 +2148,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferDataToRoot<T, 
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveReduceIntoBufferFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2278,11 +2278,11 @@ impl<T: Remote> CollectiveAllGatherData<T> {
 }
 
 impl<T: Remote> LibfabricAsyncCollectiveAllGatherFuture<T> {
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2356,11 +2356,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferData<T, B> 
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveAllGatherIntoBufferFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2453,11 +2453,11 @@ impl<T: Remote> CollectiveGatherData<T> {
 }
 
 impl<T: Remote> LibfabricAsyncCollectiveGatherFuture<T> {
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2531,11 +2531,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferData<T, B> {
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveGatherIntoBufferFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2621,11 +2621,11 @@ impl<T: Remote> CollectiveAllToAllData<T> {
 }
 
 impl<T: Remote> LibfabricAsyncCollectiveAllToAllFuture<T> {
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2699,11 +2699,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferData<T, B> {
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveAllToAllIntoBufferFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2798,11 +2798,11 @@ impl<T: Remote> CollectiveBroadcastData<T> {
 }
 
 impl<T: Remote> LibfabricAsyncCollectiveBroadcastFuture<T> {
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2878,11 +2878,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferData<T, B> 
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveBroadcastIntoBufferFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -2972,11 +2972,11 @@ impl<T: Remote> CollectiveScatterData<T> {
 }
 
 impl<T: Remote> LibfabricAsyncCollectiveScatterFuture<T> {
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -3054,11 +3054,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferData<T, B> {
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveScatterIntoBufferFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -3146,11 +3146,11 @@ impl<T: Remote> CollectiveReduceScatterData<T> {
 }
 
 impl<T: Remote> LibfabricAsyncCollectiveReduceScatterFuture<T> {
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.fut_data.take().unwrap().spawn()
     }
 }
@@ -3233,11 +3233,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferData<T,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveReduceScatterIntoBufferFuture<T, B> {
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.fut_data.take().unwrap().spawn()
     }
 }

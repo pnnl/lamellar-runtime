@@ -67,7 +67,7 @@ impl<T: Remote> UcxCollectiveAllReduceFuture<T> {
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut res = Vec::new();
@@ -75,7 +75,7 @@ impl<T: Remote> UcxCollectiveAllReduceFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -133,12 +133,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceIntoBufferFuture<T
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -186,12 +186,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceInPlaceFuture<T, B
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -242,7 +242,7 @@ impl<T: Remote> UcxCollectiveReduceFuture<T> {
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
@@ -255,7 +255,7 @@ impl<T: Remote> UcxCollectiveReduceFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -313,12 +313,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceIntoBufferFuture<T, B
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -357,11 +357,12 @@ pub(crate) struct UcxCollectiveReduceInPlaceFuture<T> {
 
 impl<T: Remote> UcxCollectiveReduceInPlaceFuture<T> {
     #[allow(dead_code)] // WIP: reduce-in-place not yet wired up in ucx
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.spawned = true;
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    #[allow(dead_code)] // WIP: reduce-in-place not yet wired up in ucx
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -408,7 +409,7 @@ impl<T: Remote> UcxCollectiveAllGatherFuture<T> {
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
@@ -416,7 +417,7 @@ impl<T: Remote> UcxCollectiveAllGatherFuture<T> {
         out
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -468,12 +469,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllGatherIntoBufferFuture<T
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -523,7 +524,7 @@ impl<T: Remote> UcxCollectiveGatherFuture<T> {
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
@@ -536,7 +537,7 @@ impl<T: Remote> UcxCollectiveGatherFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -593,12 +594,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveGatherIntoBufferFuture<T, B
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -648,7 +649,7 @@ impl<T: Remote> UcxCollectiveAllToAllFuture<T> {
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
@@ -656,7 +657,7 @@ impl<T: Remote> UcxCollectiveAllToAllFuture<T> {
         out
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -708,12 +709,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllToAllIntoBufferFuture<T,
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -759,7 +760,7 @@ impl<T: Remote> UcxCollectiveBroadcastFuture<T> {
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) -> Option<Vec<T>> {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
@@ -772,7 +773,7 @@ impl<T: Remote> UcxCollectiveBroadcastFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -825,12 +826,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveBroadcastIntoBufferFuture<T
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -880,7 +881,7 @@ impl<T: Remote> UcxCollectiveScatterFuture<T> {
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
@@ -888,7 +889,7 @@ impl<T: Remote> UcxCollectiveScatterFuture<T> {
         out
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -940,12 +941,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveScatterIntoBufferFuture<T, 
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -998,7 +999,7 @@ impl<T: Remote> UcxCollectiveReduceScatterFuture<T> {
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) -> Vec<T> {
+    pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
@@ -1006,7 +1007,7 @@ impl<T: Remote> UcxCollectiveReduceScatterFuture<T> {
         out
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
@@ -1061,12 +1062,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceScatterIntoBufferFutu
         self.spawned = true;
     }
 
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
-    pub(crate) fn spawn(self) -> LamellarTask<()> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)

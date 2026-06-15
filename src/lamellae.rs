@@ -76,6 +76,7 @@ pub enum Backend {
     RofiC,
     #[cfg(feature = "enable-libfabric-sys")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric-sys")))]
+    /// The LibfabricSys backend for communication
     LibfabricSys,
     #[cfg(feature = "enable-libfabric")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric")))]

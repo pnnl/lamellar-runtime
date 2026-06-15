@@ -1,7 +1,5 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
 use lamellar::BroadcastInput;
-
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {

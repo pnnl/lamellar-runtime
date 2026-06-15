@@ -1,5 +1,5 @@
+#![allow(unused_unsafe)]
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
 use lamellar::ScatterInput;
 
 macro_rules! initialize_array {
@@ -28,15 +28,6 @@ macro_rules! initialize_array {
             .dist_iter_mut()
             .for_each(move |x| *x = $init_val)
             .block();
-    };
-}
-
-macro_rules! onesided_iter {
-    (GlobalLockArray,$array:ident) => {
-        $array.read_lock().block().onesided_iter()
-    };
-    ($arraytype:ident,$array:ident) => {
-        $array.onesided_iter()
     };
 }
 
@@ -89,7 +80,7 @@ macro_rules! scatter_from_pe_test{
                     } else {
                         ScatterInput::not_root(root)
                     };
-                    reqs.push(( unsafe { array_or_lock!($array, array, _lock).scatter_from_pe(scatter_in, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn() }, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
+                    reqs.push(( unsafe { array_or_lock!($array, array, _lock).scatter_from_pe(scatter_in, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes) }.spawn(), (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
                 }
                 let mut i = 0;
                 for req in reqs.drain(..){

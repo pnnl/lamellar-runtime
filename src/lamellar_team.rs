@@ -211,27 +211,18 @@ impl LamellarTeam {
     }
 
     // #[doc(alias("One-sided", "onesided"))]
-    /// Returns number of threads on this PE (including the main thread)
+    /// Returns number of threads on this PE (including the main thread).
     ///
     /// # One-sided Operation
-    /// The result is returned only on the calling PE
+    /// The result is returned only on the calling PE.
     ///
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let num_pes = world.num_pes();
-    ///
-    /// //create a team consisting of the "even" PEs in the world
-    /// let even_pes = world.create_team_from_arch(StridedArch::new(
-    ///    0,                                      // start pe
-    ///    2,                                      // stride
-    ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
-    /// )).expect("PE in world team");
-    /// let pes = even_pes.get_pes();
-    ///
-    /// assert_eq!((num_pes as f64 / 2.0).ceil() as usize,even_pes.num_pes());
+    /// let num_threads = world.num_threads_per_pe();
+    /// assert!(num_threads > 0);
     ///```
     //#[tracing::instrument(skip_all, level = "debug")]
     pub fn num_threads_per_pe(&self) -> usize {
@@ -456,6 +447,8 @@ impl LamellarTeam {
     /// This is a lower-level variant of [`ActiveMessaging::exec_am_local`] that allows the caller
     /// to direct the active message to a particular worker thread within this PE.
     ///
+    /// Execute an active message on a specific thread of the calling PE.
+    ///
     /// Returns a future that can be awaited, [spawned][LocalAmHandle::spawn], or [blocked on][LocalAmHandle::block].
     ///
     /// # One-sided Operation
@@ -464,6 +457,24 @@ impl LamellarTeam {
     /// # Note
     /// The future returned by this function is lazy and does nothing unless awaited,
     /// [spawned][LocalAmHandle::spawn] or [blocked on][LocalAmHandle::block].
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmLocalData(Debug, Clone)]
+    /// struct MyLocalAm { val: usize }
+    ///
+    /// #[lamellar::local_am]
+    /// impl LamellarAM for MyLocalAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let handle = world.exec_am_local_thread(MyLocalAm { val: 21 }, 0);
+    /// let result = handle.block();
+    /// assert_eq!(result, 42);
+    ///```
     pub fn exec_am_local_thread<F>(&self, am: F, thread: usize) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,

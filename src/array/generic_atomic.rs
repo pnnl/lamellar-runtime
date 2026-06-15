@@ -42,16 +42,46 @@ impl<T: Dist> From<GenericAtomicElement<T>> for AtomicElement<T> {
 }
 
 impl<T: Dist> GenericAtomicElement<T> {
+    /// Atomically read the value of this element
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let val = local_data.at(0).load();
+    ///```
     pub fn load(&self) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe { self.array.__local_as_mut_slice()[self.local_index] }
     }
+    /// Atomically store `val` into this element
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// local_data.at(0).store(42);
+    ///```
     pub fn store(&self, val: T) {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
             self.array.__local_as_mut_slice()[self.local_index] = val;
         }
     }
+    /// Atomically swap `val` with the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).swap(42);
+    ///```
     pub fn swap(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -62,6 +92,16 @@ impl<T: Dist> GenericAtomicElement<T> {
     }
 }
 impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
+    /// Atomically add `val` to the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_add(1);
+    ///```
     pub fn fetch_add(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -70,6 +110,16 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
             old
         }
     }
+    /// Atomically subtract `val` from the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_sub(1);
+    ///```
     pub fn fetch_sub(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -78,6 +128,16 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
             old
         }
     }
+    /// Atomically multiply the current value by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_mul(2);
+    ///```
     pub fn fetch_mul(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -86,6 +146,16 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
             old
         }
     }
+    /// Atomically divide the current value by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_div(2);
+    ///```
     pub fn fetch_div(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -94,6 +164,16 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
             old
         }
     }
+    /// Atomically compute the remainder of the current value divided by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_rem(3);
+    ///```
     pub fn fetch_rem(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -105,6 +185,18 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
 }
 
 impl<T: Dist + std::cmp::Eq> GenericAtomicElement<T> {
+    /// Atomically store `new` if the current value equals `current`, returning the previous value
+    ///
+    /// Returns `Ok(previous)` on success, `Err(current)` if the value did not match.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let result = local_data.at(0).compare_exchange(0, 42);
+    ///```
     pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
         let _lock = self.array.lock_index(self.local_index);
         let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
@@ -121,6 +213,18 @@ impl<T: Dist + std::cmp::Eq> GenericAtomicElement<T> {
 impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
     GenericAtomicElement<T>
 {
+    /// Atomically store `new` if the current value is within `eps` of `current`, returning the previous value
+    ///
+    /// Returns `Ok(previous)` on success, `Err(current)` if the value was not within epsilon.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<f32> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let result = local_data.at(0).compare_exchange_epsilon(0.0, 1.0, 0.01);
+    ///```
     pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
         let _lock = self.array.lock_index(self.local_index);
         let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
@@ -141,6 +245,16 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
 }
 
 impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
+    /// Atomically perform a bitwise AND of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_and(0b1010);
+    ///```
     pub fn fetch_and(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -149,6 +263,16 @@ impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
             old
         }
     }
+    /// Atomically perform a bitwise OR of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_or(0b0101);
+    ///```
     pub fn fetch_or(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -157,6 +281,16 @@ impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
             old
         }
     }
+    /// Atomically perform a bitwise XOR of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_xor(0b1111);
+    ///```
     pub fn fetch_xor(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -168,6 +302,16 @@ impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
 }
 
 impl<T: ElementShiftOps + 'static> GenericAtomicElement<T> {
+    /// Atomically left-shift the current value by `val` bits, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_shl(2);
+    ///```
     pub fn fetch_shl(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -176,6 +320,16 @@ impl<T: ElementShiftOps + 'static> GenericAtomicElement<T> {
             old
         }
     }
+    /// Atomically right-shift the current value by `val` bits, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_shr(2);
+    ///```
     pub fn fetch_shr(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -276,16 +430,52 @@ pub struct GenericAtomicElementRef<'a, T: Remote> {
 }
 
 impl<'a, T: Dist> GenericAtomicElementRef<'a, T> {
+    /// Atomically read the value of this element
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let val = elem.load();
+    /// }
+    ///```
     pub fn load(&self) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe { self.array.__local_as_mut_slice()[self.local_index] }
     }
+    /// Atomically store `val` into this element
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     elem.store(42);
+    /// }
+    ///```
     pub fn store(&self, val: T) {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
             self.array.__local_as_mut_slice()[self.local_index] = val;
         }
     }
+    /// Atomically swap `val` with the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.swap(42);
+    /// }
+    ///```
     pub fn swap(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -297,6 +487,18 @@ impl<'a, T: Dist> GenericAtomicElementRef<'a, T> {
 }
 
 impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
+    /// Atomically add `val` to the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_add(1);
+    /// }
+    ///```
     pub fn fetch_add(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -305,6 +507,18 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
             old
         }
     }
+    /// Atomically subtract `val` from the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_sub(1);
+    /// }
+    ///```
     pub fn fetch_sub(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -313,6 +527,18 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
             old
         }
     }
+    /// Atomically multiply the current value by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_mul(2);
+    /// }
+    ///```
     pub fn fetch_mul(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -321,6 +547,18 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
             old
         }
     }
+    /// Atomically divide the current value by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_div(2);
+    /// }
+    ///```
     pub fn fetch_div(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -329,6 +567,18 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
             old
         }
     }
+    /// Atomically compute the remainder of the current value divided by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_rem(3);
+    /// }
+    ///```
     pub fn fetch_rem(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -340,6 +590,20 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
 }
 
 impl<'a, T: Dist + std::cmp::Eq> GenericAtomicElementRef<'a, T> {
+    /// Atomically store `new` if the current value equals `current`, returning the previous value
+    ///
+    /// Returns `Ok(previous)` on success, `Err(current)` if the value did not match.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let result = elem.compare_exchange(0, 42);
+    /// }
+    ///```
     pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
         let _lock = self.array.lock_index(self.local_index);
         let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
@@ -357,6 +621,20 @@ impl<'a, T: Dist + std::cmp::Eq> GenericAtomicElementRef<'a, T> {
 impl<'a, T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
     GenericAtomicElementRef<'a, T>
 {
+    /// Atomically store `new` if the current value is within `eps` of `current`, returning the previous value
+    ///
+    /// Returns `Ok(previous)` on success, `Err(current)` if the value was not within epsilon.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<f32> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let result = elem.compare_exchange_epsilon(0.0, 1.0, 0.01);
+    /// }
+    ///```
     pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
         let _lock = self.array.lock_index(self.local_index);
         let current_val = unsafe { self.array.__local_as_mut_slice()[self.local_index] };
@@ -377,6 +655,18 @@ impl<'a, T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Ou
 }
 
 impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
+    /// Atomically perform a bitwise AND of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_and(0b1010);
+    /// }
+    ///```
     pub fn fetch_and(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -385,6 +675,18 @@ impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
             old
         }
     }
+    /// Atomically perform a bitwise OR of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_or(0b0101);
+    /// }
+    ///```
     pub fn fetch_or(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -393,6 +695,18 @@ impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
             old
         }
     }
+    /// Atomically perform a bitwise XOR of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_xor(0b1111);
+    /// }
+    ///```
     pub fn fetch_xor(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -404,6 +718,18 @@ impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
 }
 
 impl<'a, T: ElementShiftOps + 'static> GenericAtomicElementRef<'a, T> {
+    /// Atomically left-shift the current value by `val` bits, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_shl(2);
+    /// }
+    ///```
     pub fn fetch_shl(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -412,6 +738,18 @@ impl<'a, T: ElementShiftOps + 'static> GenericAtomicElementRef<'a, T> {
             old
         }
     }
+    /// Atomically right-shift the current value by `val` bits, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_shr(2);
+    /// }
+    ///```
     pub fn fetch_shr(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
         unsafe {
@@ -1106,12 +1444,42 @@ impl<T: Dist> From<LocalGenericAtomicElement<T>> for AtomicElement<T> {
 }
 
 impl<T: Dist> LocalGenericAtomicElement<T> {
+    /// Atomically read the value of this element
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let val = local_data.at(0).load();
+    ///```
     pub fn load(&self) -> T {
         *self.val.lock()
     }
+    /// Atomically store `val` into this element
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// local_data.at(0).store(42);
+    ///```
     pub fn store(&self, val: T) {
         *self.val.lock() = val
     }
+    /// Atomically swap `val` with the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).swap(42);
+    ///```
     pub fn swap(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() = val;
@@ -1119,26 +1487,76 @@ impl<T: Dist> LocalGenericAtomicElement<T> {
     }
 }
 impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
+    /// Atomically add `val` to the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_add(1);
+    ///```
     pub fn fetch_add(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() += val;
         old
     }
+    /// Atomically subtract `val` from the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_sub(1);
+    ///```
     pub fn fetch_sub(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() -= val;
         old
     }
+    /// Atomically multiply the current value by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_mul(2);
+    ///```
     pub fn fetch_mul(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() *= val;
         old
     }
+    /// Atomically divide the current value by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_div(2);
+    ///```
     pub fn fetch_div(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() /= val;
         old
     }
+    /// Atomically compute the remainder of the current value divided by `val`, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_rem(3);
+    ///```
     pub fn fetch_rem(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() %= val;
@@ -1147,6 +1565,18 @@ impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
 }
 
 impl<T: Dist + std::cmp::Eq> LocalGenericAtomicElement<T> {
+    /// Atomically store `new` if the current value equals `current`, returning the previous value
+    ///
+    /// Returns `Ok(previous)` on success, `Err(current)` if the value did not match.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let result = local_data.at(0).compare_exchange(0, 42);
+    ///```
     pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
         let current_val = *self.val.lock();
         if current_val == current {
@@ -1161,6 +1591,18 @@ impl<T: Dist + std::cmp::Eq> LocalGenericAtomicElement<T> {
 impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
     LocalGenericAtomicElement<T>
 {
+    /// Atomically store `new` if the current value is within `eps` of `current`, returning the previous value
+    ///
+    /// Returns `Ok(previous)` on success, `Err(current)` if the value was not within epsilon.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<f32> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let result = local_data.at(0).compare_exchange_epsilon(0.0, 1.0, 0.01);
+    ///```
     pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
         let current_val = *self.val.lock();
         let same = if current_val > current {
@@ -1179,16 +1621,46 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
 }
 
 impl<T: ElementBitWiseOps + 'static> LocalGenericAtomicElement<T> {
+    /// Atomically perform a bitwise AND of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_and(0b1010);
+    ///```
     pub fn fetch_and(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() &= val;
         old
     }
+    /// Atomically perform a bitwise OR of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_or(0b0101);
+    ///```
     pub fn fetch_or(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() |= val;
         old
     }
+    /// Atomically perform a bitwise XOR of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_xor(0b1111);
+    ///```
     pub fn fetch_xor(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() ^= val;
@@ -1197,6 +1669,16 @@ impl<T: ElementBitWiseOps + 'static> LocalGenericAtomicElement<T> {
 }
 
 impl<T: ElementShiftOps + 'static> LocalGenericAtomicElement<T> {
+    /// Atomically left-shift the current value by `val` bits, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_shl(2);
+    ///```
     pub fn fetch_shl(&self, val: T) -> T {
         let old = *self.val.lock();
         *self.val.lock() <<= val;

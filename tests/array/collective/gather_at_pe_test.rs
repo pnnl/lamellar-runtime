@@ -1,5 +1,5 @@
+#![allow(unused_unsafe)]
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -77,7 +77,7 @@ macro_rules! gather_to_pe_test{
                 let num_txs = mem_seg_len/tx_size;
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
-                    reqs.push((unsafe { array_or_lock!($array, array, _lock).gather_at_pe(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size, root_pe).spawn() }, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
+                    reqs.push((unsafe { array_or_lock!($array, array, _lock).gather_at_pe(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size, root_pe) }.spawn(), std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
                 }
                 for req in reqs.drain(..){
                     let maybe_buf = req.0.block();

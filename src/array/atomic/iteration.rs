@@ -48,6 +48,20 @@ unsafe impl<T: Dist> Send for AtomicDistIterElement<'_, T> {}
 unsafe impl<T: Dist> Sync for AtomicDistIterElement<'_, T> {}
 
 impl<'a, T: Dist> AtomicDistIterElement<'a, T> {
+    /// Returns the current value of the element.
+    ///
+    /// `AtomicDistIterElement` is yielded by [`AtomicArray::dist_iter_mut`].
+    /// Use [`AtomicArray`] to obtain elements; do not construct this type directly.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let val = elem.load();
+    /// }).block();
+    ///```
     pub fn load(&self) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.load(),
@@ -55,6 +69,17 @@ impl<'a, T: Dist> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.load(),
         }
     }
+    /// Stores `val` into the element atomically.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     elem.store(42);
+    /// }).block();
+    ///```
     pub fn store(&self, val: T) {
         match self {
             AtomicDistIterElement::Native(e) => e.store(val),
@@ -62,6 +87,17 @@ impl<'a, T: Dist> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.store(val),
         }
     }
+    /// Atomically stores `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.swap(42);
+    /// }).block();
+    ///```
     pub fn swap(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.swap(val),
@@ -72,6 +108,17 @@ impl<'a, T: Dist> AtomicDistIterElement<'a, T> {
 }
 
 impl<'a, T: Dist + std::cmp::Eq> AtomicDistIterElement<'a, T> {
+    /// Atomically replaces the element with `new` if it equals `current`; returns old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let _ = elem.compare_exchange(0, 42);
+    /// }).block();
+    ///```
     pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
         match self {
             AtomicDistIterElement::Native(e) => e.compare_exchange(current, new),
@@ -84,6 +131,17 @@ impl<'a, T: Dist + std::cmp::Eq> AtomicDistIterElement<'a, T> {
 impl<'a, T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = T>>
     AtomicDistIterElement<'a, T>
 {
+    /// Atomically replaces element with `new` if `|current - elem| <= eps`; returns old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<f64> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let _ = elem.compare_exchange_epsilon(0.0, 1.0, 1e-9);
+    /// }).block();
+    ///```
     pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
         match self {
             AtomicDistIterElement::Native(e) => e.compare_exchange_epsilon(current, new, eps),
@@ -94,6 +152,17 @@ impl<'a, T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Ou
 }
 
 impl<'a, T: Dist + ElementArithmeticOps> AtomicDistIterElement<'a, T> {
+    /// Atomically adds `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_add(1);
+    /// }).block();
+    ///```
     pub fn fetch_add(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_add(val),
@@ -101,6 +170,17 @@ impl<'a, T: Dist + ElementArithmeticOps> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.fetch_add(val),
         }
     }
+    /// Atomically subtracts `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_sub(1);
+    /// }).block();
+    ///```
     pub fn fetch_sub(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_sub(val),
@@ -108,6 +188,17 @@ impl<'a, T: Dist + ElementArithmeticOps> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.fetch_sub(val),
         }
     }
+    /// Atomically multiplies by `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_mul(2);
+    /// }).block();
+    ///```
     pub fn fetch_mul(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_mul(val),
@@ -115,6 +206,17 @@ impl<'a, T: Dist + ElementArithmeticOps> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.fetch_mul(val),
         }
     }
+    /// Atomically divides by `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_div(2);
+    /// }).block();
+    ///```
     pub fn fetch_div(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_div(val),
@@ -122,6 +224,17 @@ impl<'a, T: Dist + ElementArithmeticOps> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.fetch_div(val),
         }
     }
+    /// Atomically computes remainder by `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_rem(3);
+    /// }).block();
+    ///```
     pub fn fetch_rem(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_rem(val),
@@ -132,6 +245,17 @@ impl<'a, T: Dist + ElementArithmeticOps> AtomicDistIterElement<'a, T> {
 }
 
 impl<'a, T: Dist + ElementBitWiseOps + 'static> AtomicDistIterElement<'a, T> {
+    /// Atomically bitwise-ANDs with `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_and(0xFF);
+    /// }).block();
+    ///```
     pub fn fetch_and(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_and(val),
@@ -139,6 +263,17 @@ impl<'a, T: Dist + ElementBitWiseOps + 'static> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.fetch_and(val),
         }
     }
+    /// Atomically bitwise-ORs with `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_or(0x01);
+    /// }).block();
+    ///```
     pub fn fetch_or(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_or(val),
@@ -146,6 +281,17 @@ impl<'a, T: Dist + ElementBitWiseOps + 'static> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.fetch_or(val),
         }
     }
+    /// Atomically bitwise-XORs with `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_xor(0x01);
+    /// }).block();
+    ///```
     pub fn fetch_xor(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_xor(val),
@@ -156,6 +302,17 @@ impl<'a, T: Dist + ElementBitWiseOps + 'static> AtomicDistIterElement<'a, T> {
 }
 
 impl<'a, T: Dist + ElementShiftOps + 'static> AtomicDistIterElement<'a, T> {
+    /// Atomically left-shifts by `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_shl(1);
+    /// }).block();
+    ///```
     pub fn fetch_shl(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_shl(val),
@@ -163,6 +320,17 @@ impl<'a, T: Dist + ElementShiftOps + 'static> AtomicDistIterElement<'a, T> {
             AtomicDistIterElement::Network(e) => e.fetch_shl(val),
         }
     }
+    /// Atomically right-shifts by `val` and returns the previous value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let _ = array.dist_iter_mut().for_each(|elem| {
+    ///     let old = elem.fetch_shr(1);
+    /// }).block();
+    ///```
     pub fn fetch_shr(&self, val: T) -> T {
         match self {
             AtomicDistIterElement::Native(e) => e.fetch_shr(val),
