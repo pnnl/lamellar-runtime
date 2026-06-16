@@ -263,7 +263,6 @@ fn main() {
         .block();
     println!("block map reduce");
     // block_array[i] = i (set via dist_iter_mut above); local_iter sees only local elements
-    // each PE owns ARRAY_LEN/num_pes elements (block dist); sum of local indices varies by PE
     let req = block_array
         .local_iter()
         .map(|elem| elem.load())
@@ -272,10 +271,15 @@ fn main() {
     let sum = req.block();
     println!("{my_pe} reduce sum: {:?}", sum);
 
-    // verify: local elements for block distribution are [pe*chunk .. (pe+1)*chunk)
+    // block dist: first rem PEs get chunk+1 elems, rest get chunk
     let chunk = ARRAY_LEN / num_pes;
-    let local_start = my_pe * chunk;
-    let local_end = local_start + chunk;
+    let rem = ARRAY_LEN % num_pes;
+    let local_start = if my_pe < rem {
+        my_pe * (chunk + 1)
+    } else {
+        rem * (chunk + 1) + (my_pe - rem) * chunk
+    };
+    let local_end = local_start + if my_pe < rem { chunk + 1 } else { chunk };
     let expected_local_sum: usize = (local_start..local_end).sum();
     assert_eq!(
         sum,

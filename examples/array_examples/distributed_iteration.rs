@@ -55,8 +55,8 @@ fn main() {
     let sum = cyclic_array.dist_iter().map(|e| e.load()).sum().block();
     println!("result: {sum}");
     world.barrier();
-    // each pe owns ARRAY_LEN/num_pes elems (cyclic), all set to my_pe
-    let expected_cyclic_sum = (0..num_pes).sum::<usize>() * (ARRAY_LEN / num_pes);
+    // element i is on PE i%num_pes and stores that PE's id
+    let expected_cyclic_sum: usize = (0..ARRAY_LEN).map(|i| i % num_pes).sum();
     assert_eq!(sum, expected_cyclic_sum, "cyclic dist_iter map+sum: got {sum} expected {expected_cyclic_sum}");
     println!("--------------------------------------------------------");
 

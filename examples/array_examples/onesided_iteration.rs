@@ -105,7 +105,13 @@ fn main() {
         }
 
         println!("-----");
-        // zip: cyclic[i]=my_pe(0 on PE0), block[i]=my_pe(0 on PE0) — verify count and pairing
+        // cyclic[i] = i%num_pes, block[i] = owning PE under block distribution
+        let chunk = ARRAY_LEN / num_pes;
+        let rem = ARRAY_LEN % num_pes;
+        let block_pe_for = |i: usize| -> usize {
+            let boundary = rem * (chunk + 1);
+            if i < boundary { i / (chunk + 1) } else { rem + (i - boundary) / chunk }
+        };
         let zipped: Vec<_> = cyclic_array
             .onesided_iter()
             .zip(block_array.onesided_iter())
@@ -115,11 +121,10 @@ fn main() {
         assert_eq!(zipped.len(), ARRAY_LEN, "zip count: got {} expected {ARRAY_LEN}", zipped.len());
         for (i, (a, b)) in &zipped {
             println!("{:?}: {:?} {:?}", i, a, b);
-            // both arrays initialized to my_pe (0 on PE 0), so values must match
-            assert_eq!(a, b, "zip pair mismatch at {i}: {a} != {b}");
+            assert_eq!(*a, i % num_pes, "zip cyclic value mismatch at {i}: got {a} expected {}", i % num_pes);
+            assert_eq!(*b, block_pe_for(*i), "zip block value mismatch at {i}: got {b} expected {}", block_pe_for(*i));
         }
         println!("-----");
-        // chunks zip: verify chunk count
         let chunk_pairs: Vec<_> = cyclic_array
             .onesided_iter()
             .chunks(10)
@@ -127,9 +132,13 @@ fn main() {
             .into_iter()
             .collect();
         assert_eq!(chunk_pairs.len(), ARRAY_LEN / 10, "chunks zip count: got {} expected {}", chunk_pairs.len(), ARRAY_LEN / 10);
-        for (a, b) in &chunk_pairs {
+        for (chunk_idx, (a, b)) in chunk_pairs.iter().enumerate() {
             println!("{:?} {:?}", a.as_slice(), b.as_slice());
-            assert_eq!(a.as_slice(), b.as_slice(), "chunk content mismatch");
+            for j in 0..a.as_slice().len() {
+                let i = chunk_idx * 10 + j;
+                assert_eq!(a.as_slice()[j], i % num_pes, "chunk cyclic mismatch at global {i}");
+                assert_eq!(b.as_slice()[j], block_pe_for(i), "chunk block mismatch at global {i}");
+            }
         }
     }
 
