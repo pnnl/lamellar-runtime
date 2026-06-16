@@ -302,9 +302,11 @@ impl UcxWorld {
             remote_keys.clone(),
         )
         .unwrap();
+
+        // Self::warmup_peer_puts( &worker, &barrier_buffer, my_pe, num_pes);
     
         let mut world = UcxWorld {
-            pmi: my_pmi,
+            pmi: my_pmi.clone(),
             my_pe,
             num_pes,
             #[cfg(feature = "enable-on-node-shmem")]
@@ -328,17 +330,21 @@ impl UcxWorld {
             )))),
             ucc_world_buffer: None,
         };
+        my_pmi.barrier(false).expect("Failed to perform barrier after initial allocations");
     
         let alloc = Arc::new(world.alloc(config().ucc_oob_init_buffer_size * world.num_pes, 8, AllocationType::Global));
         world.ucc_world_buffer = Some(alloc.clone());
 
         unsafe { alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX) };
         world.barrier();
+        // my_pmi.barrier(false);
         let ucc_lib = Arc::new(UccLib::new());
         let ucc_context = Arc::new(UccContext::new(ucc_lib.clone(), alloc.clone()).unwrap());
         world.barrier();
+        // my_pmi.barrier(false);
         unsafe { alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX) };
         world.barrier();
+        // my_pmi.barrier(false);
         let ucc_world_team = UccTeam::new(my_pe, &(0..num_pes).collect::<Vec<_>>(), ucc_context.clone(), alloc.clone()).unwrap();
 
         world.ucc_context = Some(ucc_context);
@@ -351,7 +357,7 @@ impl UcxWorld {
     // if this becomes a bottleneck it may be sufficient to just do a put to each node instead of each PE, but for now we will do it to each PE to be safe
     fn warmup_peer_puts(
         worker: &Arc<Worker>,
-        exchange_buffer: &UcxAlloc,
+        buffer: &UcxAlloc,
         my_pe: usize,
         num_pes: usize,
     ) {
@@ -360,7 +366,7 @@ impl UcxWorld {
                 continue;
             }
             unsafe {
-                exchange_buffer.put_inner(pe, 0, std::slice::from_ref(&my_pe), false, false);
+                buffer.put_inner(pe, 0, std::slice::from_ref(&my_pe), false, false);
             }
         }
 
@@ -675,7 +681,11 @@ impl UcxWorld {
             // For sub_alloc we don't create new shared segments here; use placeholders sized to `pes`.
             (vec![None; pes.len()], vec![None; pes.len()])
         };
-        let ucc_team = UccTeam::new(self.my_pe, pes, self.ucc_context.as_ref().unwrap().clone(), self.ucc_world_buffer.as_ref().unwrap().clone()).expect("Failed to create UCC team for sub allocation");
+        let ucc_team = self.ucc_context.as_ref().and_then(|ctx| {
+            UccTeam::new_sub_team(self.my_pe, pes, ctx.clone())
+                .map_err(|e| eprintln!("Failed to create UCC sub-team, falling back to manual collectives: {:?}", e))
+                .ok()
+        });
         let alloc = UcxAlloc::new(
             mem,
             data_size,
@@ -694,7 +704,7 @@ impl UcxWorld {
             buffer_keys_map.clone(),
             self.mem_handles.clone(),
             self.remote_keys.clone(),
-            Some(Arc::new(ucc_team))
+            ucc_team.map(Arc::new)
         )
         .expect("UcxAlloc::new failed");
         self.mem_handles.lock().unwrap().push(alloc.clone());

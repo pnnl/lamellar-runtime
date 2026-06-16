@@ -2446,7 +2446,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.reduce_all(scheduler, counters, index, len, op)
             }
-            #[cfg(feature = "enable-ucx")]
+            #[cfg(feature = "enable-ucx-mt")]
             CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.reduce_all(scheduler, counters, index, len, op)
             }

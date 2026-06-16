@@ -89,8 +89,11 @@ impl UccLib {
                                     | ucc_coll_sync_type_t_UCC_NO_SYNC_COLLECTIVES;
 
         let params = ucc_lib_params_t {
-            mask: 0,
-            thread_mode: 0,
+            mask: ucc_lib_params_field_UCC_LIB_PARAM_FIELD_THREAD_MODE as u64
+                | ucc_lib_params_field_UCC_LIB_PARAM_FIELD_COLL_TYPES as u64
+                | ucc_lib_params_field_UCC_LIB_PARAM_FIELD_REDUCTION_TYPES as u64
+                | ucc_lib_params_field_UCC_LIB_PARAM_FIELD_SYNC_TYPE as u64,
+            thread_mode: ucc_thread_mode_t_UCC_THREAD_MULTIPLE,
             coll_types: requested_coll_types,
             reduction_types: requested_reduction_types,
             sync_type: requested_sync_types,
@@ -123,10 +126,9 @@ pub(crate) struct UccContext {
     _lib: Arc<UccLib>,
     handle: ucc_context_h,
     _params: Box<UccTeamParams>, // pin?
+    progress_lock: std::sync::Mutex<()>,
 }
 
-
-// Context is thread safe.
 unsafe impl Send for UccContext {}
 unsafe impl Sync for UccContext {}
 
@@ -136,7 +138,7 @@ impl UccContext {
         let mut params = Box::new(UccTeamParams {
             my_pe: ucx_alloc.my_pe,
             pes: (0..ucx_alloc.num_pes).collect(),
-            ucx_alloc: ucx_alloc.clone(),
+            ucx_alloc: Some(ucx_alloc.clone()),
         });
         let ctx_params = ucc_context_params_t {
             mask: (ucc_context_params_field_UCC_CONTEXT_PARAM_FIELD_TYPE
@@ -168,10 +170,12 @@ impl UccContext {
             _lib: ucc_lib.clone(),
             handle: unsafe { ctx.assume_init() },
             _params: params,
+            progress_lock: std::sync::Mutex::new(()),
         })
     }
 
     pub(crate) fn progress(&self) -> Result<(), Error> {
+        let _guard = self.progress_lock.lock().unwrap();
         Error::from_status( unsafe { ucc_context_progress(self.handle) })
     }
 }
@@ -197,7 +201,7 @@ pub(crate) struct UccTeam {
 pub(crate) struct UccTeamParams {
     pub(crate) my_pe: usize,
     pub(crate) pes: Vec<usize>,
-    pub(crate) ucx_alloc: Arc<UcxAlloc>,
+    pub(crate) ucx_alloc: Option<Arc<UcxAlloc>>,
 }
 
 impl UccTeam {
@@ -210,7 +214,7 @@ impl UccTeam {
         let mut params = Box::new(UccTeamParams {
             my_pe,
             pes: pes.to_vec(),
-            ucx_alloc: ucx_alloc.clone(),
+            ucx_alloc: Some(ucx_alloc.clone()),
         });
         let ucc_coll_info = ucc_oob_coll_t {
             allgather: Some(oob_collective),    
@@ -289,6 +293,112 @@ impl UccTeam {
             Error::from_status(team_status)?;
             break;
         }
+        Ok(Self {
+            handle,
+            context: ctx.clone(),
+            params,
+            req_pending: Arc::new(AtomicUsize::new(0)),
+            req_completed: Arc::new(AtomicUsize::new(0)),
+        })
+    }
+
+    // Creates a sub-team using the context's inherited OOB (no per-team OOB needed).
+    // `pes` is the ordered list of global PE ids in the sub-team.
+    pub(crate) fn new_sub_team(my_pe: usize, pes: &[usize], ctx: Arc<UccContext>) -> Result<Self, Error> {
+        let mut handle: MaybeUninit<ucc_team_h> = MaybeUninit::uninit();
+
+        // The map must stay alive until ucc_team_create_test returns.
+        let global_ranks: Vec<u64> = pes.iter().map(|&p| p as u64).collect();
+
+        let team_rank = pes.iter().position(|&p| p == my_pe).ok_or(Error::InvalidParam)?;
+
+        // Stable team ID derived from sorted PE list — consistent across all team members.
+        // Avoids UCC's service-team allreduce for ID allocation (which requires all world PEs).
+        // UCC_TEAM_ID_MAX = 0x7FFF; use lower 14 bits (nonzero) to avoid reserved values.
+        let team_id: u64 = {
+            let mut h: u64 = 0xcbf29ce484222325; // FNV-1a offset basis
+            for &pe in pes.iter() {
+                h ^= pe as u64;
+                h = h.wrapping_mul(0x100000001b3);
+            }
+            let id = h & 0x3FFF; // 14 bits
+            if id == 0 { 1 } else { id }
+        };
+
+        let team_params = ucc_team_params {
+            mask: (ucc_team_params_field_UCC_TEAM_PARAM_FIELD_EP
+                | ucc_team_params_field_UCC_TEAM_PARAM_FIELD_EP_MAP
+                | ucc_team_params_field_UCC_TEAM_PARAM_FIELD_EP_RANGE
+                | ucc_team_params_field_UCC_TEAM_PARAM_FIELD_TEAM_SIZE
+                | ucc_team_params_field_UCC_TEAM_PARAM_FIELD_ID) as u64,
+            flags: 0,
+            ordering: 0,
+            outstanding_colls: 0,
+            // CONTIG ep_range: UCC derives team_rank directly from ep (team-local rank).
+            // The ep_map then maps team-local rank -> global endpoint for transport.
+            ep: team_rank as u64,
+            ep_list: std::ptr::null_mut(),
+            ep_range: ucc_ep_range_type_t_UCC_COLLECTIVE_EP_RANGE_CONTIG,
+            team_size: pes.len() as u64,
+            sync_type: 0,
+            oob: ucc_oob_coll_t {
+                allgather: None,
+                req_test: None,
+                req_free: None,
+                n_oob_eps: 0,
+                oob_ep: 0,
+                coll_info: std::ptr::null_mut(),
+            },
+            p2p_conn: ucc_team_p2p_conn {
+                conn_info_lookup: None,
+                conn_info_release: None,
+                conn_ctx: std::ptr::null_mut(),
+                req_test: None,
+                req_free: None,
+            },
+            mem_params: ucc_mem_map_params { segments: std::ptr::null_mut(), n_segments: 0 },
+            ep_map: ucc_ep_map_t {
+                type_: ucc_ep_map_type_t_UCC_EP_MAP_ARRAY,
+                ep_num: pes.len() as u64,
+                __bindgen_anon_1: ucc_ep_map_t__bindgen_ty_1 {
+                    array: ucc_ep_map_array {
+                        map: global_ranks.as_ptr() as *mut c_void,
+                        elem_size: std::mem::size_of::<u64>(),
+                    },
+                },
+            },
+            id: team_id,
+        };
+
+        let mut contexts = [ctx.handle];
+        let status = unsafe {
+            ucc_team_create_post(
+                contexts.as_mut_ptr(),
+                contexts.len() as u32,
+                &team_params,
+                handle.as_mut_ptr(),
+            )
+        };
+        Error::from_status(status)?;
+        let handle = unsafe { handle.assume_init() };
+        assert_ne!(handle, std::ptr::null_mut());
+        loop {
+            ctx.progress()?;
+            let team_status = unsafe { ucc_team_create_test(handle) };
+            if team_status == ucc_status_t_UCC_INPROGRESS {
+                continue;
+            }
+            Error::from_status(team_status)?;
+            break;
+        }
+        // global_ranks kept alive through the create_test loop above; safe to drop now.
+        drop(global_ranks);
+
+        let params = Box::new(UccTeamParams {
+            my_pe,
+            pes: pes.to_vec(),
+            ucx_alloc: None, // OOB is at context level; no per-team ucx_alloc needed
+        });
         Ok(Self {
             handle,
             context: ctx.clone(),
@@ -564,62 +674,61 @@ unsafe extern "C" fn oob_collective(
     // println!("[{}] Source bufer: len:{}, data: {:x?}", params.my_pe, src_buf.len(), src_buf);
 
     if my_team_idx == 0 {
+        let alloc = params.ucx_alloc.as_ref().unwrap();
         for i in 1..params.pes.len() {
             // println!("PE[{}]: Waiting for PE: {}", params.my_pe, i);
-            while params.ucx_alloc.as_mut_slice::<u8>()[i] == u8::MAX {
-                params.ucx_alloc.wait();
+            while alloc.as_mut_slice::<u8>()[i] == u8::MAX {
+                alloc.wait();
                 std::thread::yield_now();
             }
             // println!("PE[{}]: Done Waiting for PE: {}", params.my_pe, i);
         }
         // println!("PE[{}]: Putting data to self", params.my_pe);
-        params.ucx_alloc.put_inner(params.my_pe, 1, src_buf, false, false);
+        alloc.put_inner(params.my_pe, 1, src_buf, false, false);
         // println!("PE[{}]: Done Putting data to self", params.my_pe);
-        // params.ucx_alloc.wait_all();
-        
+        // alloc.wait_all();
+
         for (i, pe) in params.pes.iter().enumerate() {
             // println!("PE[{}]: Getting from PE: {}", params.my_pe, i);
-            
-            params.ucx_alloc.inner_get(*pe, 1, true, &mut dst_addr[i*size..(i+1)*size]);
+
+            alloc.inner_get(*pe, 1, true, &mut dst_addr[i*size..(i+1)*size]);
             // println!("PE[{}]: Done getting from PE: {}", params.my_pe, i);
         }
-        // params.ucx_alloc.wait_all();
-        
+        // alloc.wait_all();
+
         let one = [1u8];
         for (i, pe) in params.pes.iter().skip(1).enumerate() {
-            params.ucx_alloc.as_mut_slice::<u8>()[i+1] = u8::MAX;
+            alloc.as_mut_slice::<u8>()[i+1] = u8::MAX;
             // println!("PE[{}]: Putting data to PE: {}", params.my_pe, pe);
-            params.ucx_alloc.put_inner(*pe, 1, &dst_addr, false, false);
+            alloc.put_inner(*pe, 1, &dst_addr, false, false);
             // println!("PE[{}]: Done data Putting  to PE: {}", params.my_pe, pe);
         }
-        // params.ucx_alloc.wait_all();
-        
+        // alloc.wait_all();
+
         for pe in params.pes.iter().skip(1) {
             // println!("PE[{}]: Putting done to PE: {}", params.my_pe, pe);
-            params.ucx_alloc.put_inner(*pe, 0, &one, false, false);
+            alloc.put_inner(*pe, 0, &one, false, false);
             // println!("PE[{}]: Done Putting done to PE: {}", params.my_pe, pe);
         }
         // params.ucx_alloc.wait_all();
     }
     else {
+        let alloc = params.ucx_alloc.as_ref().unwrap();
         // println!("PE[{}]: Putting data to self", params.my_pe);
-        params.ucx_alloc.as_mut_slice::<u8>()[1..src_buf.len()+1].copy_from_slice(src_buf);
-        // params.ucx_alloc.put_inner(params.my_pe, 1, src_buf, false, false);
+        alloc.as_mut_slice::<u8>()[1..src_buf.len()+1].copy_from_slice(src_buf);
         // println!("PE[{}]: Done Putting data to self", params.my_pe);
-        // params.ucx_alloc.wait_all();
         let one = [1u8];
         // println!("PE[{}]: Putting data to Root", params.my_pe);
-        params.ucx_alloc.put_inner(params.pes[0], my_team_idx, &one, false, false);
+        alloc.put_inner(params.pes[0], my_team_idx, &one, false, false);
         // println!("PE[{}]: Done Putting data to Root", params.my_pe);
-        // params.ucx_alloc.wait_all();
         // println!("PE[{}]: Waiting data from root", params.my_pe);
-        while params.ucx_alloc.as_mut_slice::<u8>()[0] == u8::MAX {
-            params.ucx_alloc.wait();
+        while alloc.as_mut_slice::<u8>()[0] == u8::MAX {
+            alloc.wait();
             std::thread::yield_now();
         }
         // println!("PE[{}]: Done waiting data from root", params.my_pe);
-        params.ucx_alloc.as_mut_slice::<u8>()[0] = u8::MAX;
-        dst_addr.copy_from_slice(&params.ucx_alloc.as_mut_slice::<u8>()[1..(1+size*params.pes.len())]);
+        alloc.as_mut_slice::<u8>()[0] = u8::MAX;
+        dst_addr.copy_from_slice(&alloc.as_mut_slice::<u8>()[1..(1+size*params.pes.len())]);
     }
     // println!("PE[{}] Completed allgather in oob_collective", params.my_pe);
     // println!("[{}]recv_buf: len:{}, data: {:x?}", params.my_pe, dst_addr.len(), dst_addr);

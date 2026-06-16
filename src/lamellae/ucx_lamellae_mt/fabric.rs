@@ -110,7 +110,7 @@ impl UcxWorld {
             num_pes,
         );
         let mut world = UcxWorld {
-            pmi: my_pmi,
+            pmi: my_pmi.clone(),
             my_pe,
             num_pes,
             context,
@@ -120,8 +120,9 @@ impl UcxWorld {
             remote_keys,
             exchange_buffer: Some(exchange_buffer),
         };
+        my_pmi.barrier(false).expect("Failed to perform barrier after initial allocations");
         for tid in 0..num_threads {
-        
+
             let alloc = Arc::new(world.alloc(config().ucc_oob_init_buffer_size * num_pes, 8, AllocationType::Global));
             world.comm_groups[tid].ucc_world_buffer = Some(alloc.clone());
 
@@ -280,7 +281,7 @@ impl UcxWorld {
     // happened simultaneously (in a MT environment) with other operations like progress or flush
     fn warmup_peer_puts(
         worker: &Arc<Worker>,
-        exchange_buffer: &UcxMtAlloc,
+        buffer: &UcxMtAlloc,
         my_pe: usize,
         num_pes: usize,
     ) {
@@ -289,7 +290,7 @@ impl UcxWorld {
                 continue;
             }
             unsafe {
-                exchange_buffer.put_inner(pe, 0, std::slice::from_ref(&my_pe), false, false);
+                buffer.put_inner(pe, 0, std::slice::from_ref(&my_pe), false, false);
             }
         }
 
