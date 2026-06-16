@@ -29,26 +29,26 @@ libfabric = { git = "https://github.com/pnnl/lamellar.git", features = [
     "threading-thread-safe",
 ], optional = true }
 libfabric-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-# pmi = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-# pmix-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true, features = [
-#     "vendored",
-# ] }
-# prrte-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-# lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-# rofisys = { git = "https://github.com/pnnl/rofi-sys.git", optional = true }
+pmi = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+pmix-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true, features = [
+    "vendored",
+] }
+prrte-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+rofisys = { git = "https://github.com/pnnl/rofi-sys.git", optional = true }
 
 # libfabric = { path = "../lamellar-repo/communication_frameworks/libfabric", features = [
 #     # "use-async-std",
 #     "threading-thread-safe",
 # ], optional = true }
 # libfabric-sys = { path = "../lamellar-repo/communication_frameworks/libfabric-sys", optional = true }
-pmi = { path = "../lamellar-repo/process_management/pmi", optional = true }
-pmix-sys = { path = "../lamellar-repo/process_management/pmix-sys", optional = true, features = [
-    "vendored",
-] }
-prrte-sys = { path = "../lamellar-repo/process_management/prrte-sys", optional = true }
-lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
-rofisys = { path = "../lamellar-repo/communication_frameworks/rofi-sys", optional = true }
+# pmi = { path = "../lamellar-repo/process_management/pmi", optional = true }
+# pmix-sys = { path = "../lamellar-repo/process_management/pmix-sys", optional = true, features = [
+#     "vendored",
+# ] }
+# prrte-sys = { path = "../lamellar-repo/process_management/prrte-sys", optional = true }
+# lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
+# rofisys = { path = "../lamellar-repo/communication_frameworks/rofi-sys", optional = true }
 
 memmap = "0.7.0"
 page_size = "0.6.0"

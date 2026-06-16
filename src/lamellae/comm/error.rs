@@ -73,6 +73,8 @@ pub(crate) enum FabricError {
     // FabricError(u32),
 }
 
+#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async",feature="enable-rofi-c", feature = "enable-ucx", feature = "enable-ucx-mt"))]
+
 impl std::fmt::Display for FabricError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -88,6 +90,8 @@ impl std::fmt::Display for FabricError {
         }
     }
 }
+
+#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async",feature="enable-rofi-c", feature = "enable-ucx", feature = "enable-ucx-mt"))]
 
 impl std::error::Error for FabricError {}
 
