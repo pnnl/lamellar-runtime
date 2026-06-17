@@ -682,7 +682,30 @@ impl Ofi {
     }
 
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
-        self.atomic_avail_inner::<T>()
+        let id = std::any::TypeId::of::<T>();
+        if id == std::any::TypeId::of::<u8>() {
+            self.atomic_avail_inner::<u8>()
+        } else if id == std::any::TypeId::of::<u16>() {
+            self.atomic_avail_inner::<u16>()
+        } else if id == std::any::TypeId::of::<u32>() {
+            self.atomic_avail_inner::<u32>()
+        } else if id == std::any::TypeId::of::<u64>() {
+            self.atomic_avail_inner::<u64>()
+        } else if id == std::any::TypeId::of::<i8>() {
+            self.atomic_avail_inner::<i8>()
+        } else if id == std::any::TypeId::of::<i16>() {
+            self.atomic_avail_inner::<i16>()
+        } else if id == std::any::TypeId::of::<i32>() {
+            self.atomic_avail_inner::<i32>()
+        } else if id == std::any::TypeId::of::<i64>() {
+            self.atomic_avail_inner::<i64>()
+        } else if id == std::any::TypeId::of::<usize>() {
+            self.atomic_avail_inner::<usize>()
+        } else if id == std::any::TypeId::of::<isize>() {
+            self.atomic_avail_inner::<isize>()
+        } else {
+            false
+        }
     }
 
     pub(crate) fn atomic_op_avail<T: 'static>(&self, op: AtomicOp<T>) -> bool {
@@ -700,7 +723,30 @@ impl Ofi {
             AtomicOp::Cas => AtomicOpKind::Cas,
         };
 
-        self.atomic_op_avail_inner::<T>(op_kind)
+        let id = std::any::TypeId::of::<T>();
+        if id == std::any::TypeId::of::<u8>() {
+            self.atomic_op_avail_inner::<u8>(op_kind)
+        } else if id == std::any::TypeId::of::<u16>() {
+            self.atomic_op_avail_inner::<u16>(op_kind)
+        } else if id == std::any::TypeId::of::<u32>() {
+            self.atomic_op_avail_inner::<u32>(op_kind)
+        } else if id == std::any::TypeId::of::<u64>() {
+            self.atomic_op_avail_inner::<u64>(op_kind)
+        } else if id == std::any::TypeId::of::<i8>() {
+            self.atomic_op_avail_inner::<i8>(op_kind)
+        } else if id == std::any::TypeId::of::<i16>() {
+            self.atomic_op_avail_inner::<i16>(op_kind)
+        } else if id == std::any::TypeId::of::<i32>() {
+            self.atomic_op_avail_inner::<i32>(op_kind)
+        } else if id == std::any::TypeId::of::<i64>() {
+            self.atomic_op_avail_inner::<i64>(op_kind)
+        } else if id == std::any::TypeId::of::<usize>() {
+            self.atomic_op_avail_inner::<usize>(op_kind)
+        } else if id == std::any::TypeId::of::<isize>() {
+            self.atomic_op_avail_inner::<isize>(op_kind)
+        } else {
+            false
+        }
     }
 
     pub(crate) fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
