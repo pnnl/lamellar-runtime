@@ -255,7 +255,7 @@ use private::UnsafeArrayInner;
 //     sub: bool,
 // }
 
-impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
+impl<T: Dist + ArrayOps + Default + 'static> UnsafeArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new UnsafeArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam] (instance or reference).
@@ -937,7 +937,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
+impl<T: Dist + ArrayOps + Default> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
@@ -945,7 +945,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
+impl<T: Dist + ArrayOps + Default> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let (local_vals, distribution) = input;
         let team = team.team.clone();
@@ -993,7 +993,7 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
+impl<T: Dist + ArrayOps + Default> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (&Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let (local_vals, distribution) = input;
         let team = team.team.clone();
@@ -1512,21 +1512,22 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
         &self,
         op: &str,
         byte_array: LamellarByteArray,
-    ) -> AmHandle<Option<T>> {
+    ) -> crate::array::ArrayReduceHandle<T> {
         let func = self.get_reduction_op(op, byte_array);
-        if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
-            self.inner.data.team.exec_arc_am_pe::<Option<T>>(
+        let raw = if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
+            self.inner.data.team.exec_arc_am_pe::<Option<Vec<u8>>>(
                 my_pe,
                 func,
                 Some(self.inner.data.array_counters.clone()),
             )
         } else {
-            self.inner.data.team.exec_arc_am_pe::<Option<T>>(
+            self.inner.data.team.exec_arc_am_pe::<Option<Vec<u8>>>(
                 0,
                 func,
                 Some(self.inner.data.array_counters.clone()),
             )
-        }
+        };
+        crate::array::ArrayReduceHandle::new(raw)
     }
 }
 
@@ -1567,7 +1568,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub unsafe fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
+    pub unsafe fn reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
         self.reduce_data(op, self.clone().into())
     }
 
@@ -1605,7 +1606,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// // assert_eq!(array.len()*num_pes,sum);//this may or may not fail
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub unsafe fn sum(&self) -> AmHandle<Option<T>> {
+    pub unsafe fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("sum")
     }
 
@@ -1642,7 +1643,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub unsafe fn prod(&self) -> AmHandle<Option<T>> {
+    pub unsafe fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("prod")
     }
 
@@ -1675,7 +1676,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub unsafe fn max(&self) -> AmHandle<Option<T>> {
+    pub unsafe fn max(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("max")
     }
 
@@ -1708,7 +1709,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub unsafe fn min(&self) -> AmHandle<Option<T>> {
+    pub unsafe fn min(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("min")
     }
 }

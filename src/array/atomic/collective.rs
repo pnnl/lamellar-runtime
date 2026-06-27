@@ -1,6 +1,6 @@
 use crate::{AsLamellarBuffer, AtomicArray, Dist, ElementArithmeticOps, ElementBitWiseOps, LamellarBuffer, array::{collective::{broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceIntoBufferHandle}, reduce_scatter_handle::{ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle}}}, lamellae::collective::{BroadcastInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}};
 
-impl<T: ElementArithmeticOps> AtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// All-reduce sum of `len` elements starting at `index`, delivering the result to all PEs.
     ///
@@ -145,7 +145,7 @@ impl<T: ElementArithmeticOps> AtomicArray<T> {
         }
     }
 }
-impl<T: ElementBitWiseOps> AtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// All-reduce bitwise AND of `len` elements starting at `index`, delivering the result to all PEs.
     ///
@@ -255,7 +255,7 @@ impl<T: ElementBitWiseOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> AtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Like `sum_all` but places the result into caller-supplied `buffer`. Returns an `ArrayCollectiveAllReduceIntoBufferHandle`.
     ///
@@ -409,7 +409,7 @@ impl<T: ElementArithmeticOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> AtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
 
     #[doc(alias("Collective", "collective"))]
     /// Like `bit_and_all` but places the result into caller-supplied `buffer`. Returns an `ArrayCollectiveAllReduceIntoBufferHandle`.
@@ -526,7 +526,7 @@ impl<T: ElementBitWiseOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> AtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// All-reduce sum in place, using `src_and_dst` as both input and output. Currently only supported on `NetworkAtomicArray`; panics on other array variants.
     ///
@@ -687,7 +687,7 @@ impl<T: ElementArithmeticOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> AtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
 
     #[doc(alias("Collective", "collective"))]
     /// All-reduce bitwise AND in place, using `src_and_dst` as both input and output. Currently only supported on `NetworkAtomicArray`; panics on other array variants.
@@ -784,7 +784,7 @@ impl<T: ElementBitWiseOps> AtomicArray<T> {
 }
 
 
-impl<T: ElementArithmeticOps> AtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Reduce sum of `len` elements starting at `index`, delivering the result only to PE `pe`.
     ///
@@ -930,7 +930,7 @@ impl<T: ElementArithmeticOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> AtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Reduce bitwise AND of `len` elements starting at `index`, delivering the result only to PE `pe`.
     ///
@@ -1041,7 +1041,7 @@ impl<T: ElementBitWiseOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> AtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Like `sum_at_pe` but places the result into caller-supplied `target: RootOrLamellarBuffer`.
     ///
@@ -1195,7 +1195,7 @@ impl<T: ElementArithmeticOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> AtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
 
     #[doc(alias("Collective", "collective"))]
     /// Like `bit_and_at_pe` but places the result into caller-supplied `target: RootOrLamellarBuffer`.
@@ -1312,7 +1312,7 @@ impl<T: ElementBitWiseOps> AtomicArray<T> {
     }
 }
 
-// impl<T: Dist> AtomicArray<T> {
+// impl<T: Dist + Default> AtomicArray<T> {
 //     pub unsafe fn sum_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
 //         match self {
 //             AtomicArray::NetworkAtomicArray(array) => {
@@ -1385,7 +1385,7 @@ impl<T: ElementBitWiseOps> AtomicArray<T> {
 // }
 
 
-impl<T: Dist> AtomicArray<T> {
+impl<T: Dist + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Gathers `len` elements starting at `index` from every PE, delivering the concatenated result to all PEs.
     ///
@@ -1461,7 +1461,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-impl<T: Dist> AtomicArray<T> {
+impl<T: Dist + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Gathers `len` elements starting at `index` from every PE, delivering the concatenated result only to PE `pe`.
     ///
@@ -1538,7 +1538,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-impl<T: Dist> AtomicArray<T> {
+impl<T: Dist + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// All-to-all exchange: each PE sends `len` elements starting at `index` to every other PE, each receiving one segment per PE.
     ///
@@ -1613,7 +1613,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-impl<T: Dist> AtomicArray<T> {
+impl<T: Dist + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Broadcasts `len` elements from the root PE specified by `src_or_root_pe: BroadcastInput` to all PEs.
     ///
@@ -1688,7 +1688,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-impl<T: Dist> AtomicArray<T> {
+impl<T: Dist + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Scatters segments of data from the root PE specified by `src_or_root_pe: ScatterInput` to each PE, with `len` elements per PE.
     ///
@@ -1765,7 +1765,7 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 
-impl<T: ElementArithmeticOps> AtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Reduce-scatter sum: reduces `len` elements starting at `index` and distributes disjoint result segments across all PEs.
     ///
@@ -1911,7 +1911,7 @@ impl<T: ElementArithmeticOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> AtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Reduce-scatter bitwise AND: reduces `len` elements starting at `index` and distributes disjoint result segments across all PEs.
     ///
@@ -2024,7 +2024,7 @@ impl<T: ElementBitWiseOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> AtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Like `sum_scatter` but places received segment into caller-supplied `buffer`.
     ///
@@ -2177,7 +2177,7 @@ impl<T: ElementArithmeticOps> AtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> AtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Like `bit_and_scatter` but places received segment into caller-supplied `buffer`.
     ///

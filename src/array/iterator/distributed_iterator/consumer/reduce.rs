@@ -98,7 +98,7 @@ enum InnerState<T> {
 
 impl<T, F> InnerDistIterReduceHandle<T, F>
 where
-    T: Dist + ArrayOps,
+    T: Dist + ArrayOps + Default,
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     async fn async_reduce_remote_vals(
@@ -149,7 +149,7 @@ where
 
 impl<T, F> Future for InnerDistIterReduceHandle<T, F>
 where
-    T: Dist + ArrayOps,
+    T: Dist + ArrayOps + Default,
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     type Output = Option<T>;
@@ -226,7 +226,7 @@ impl<T, F> PinnedDrop for DistIterReduceHandle<T, F> {
 
 impl<T, F> DistIterReduceHandle<T, F>
 where
-    T: Dist + ArrayOps,
+    T: Dist + ArrayOps + Default,
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     pub(crate) fn new(
@@ -300,7 +300,7 @@ enum State<T, F> {
 }
 impl<T, F> Future for DistIterReduceHandle<T, F>
 where
-    T: Dist + ArrayOps,
+    T: Dist + ArrayOps + Default,
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     type Output = Option<T>;

@@ -7,9 +7,11 @@ use futures_util::Future;
 
 use pin_project::{pin_project, pinned_drop};
 
+use crate::active_messaging::handle::AmHandle;
 use crate::darc::Darc;
+use crate::lamellar_request::LamellarRequest;
 use crate::Remote;
-use crate::{scheduler::LamellarTask, warnings::RuntimeWarning, Dist, LamellarTeamRT};
+use crate::{scheduler::LamellarTask, warnings::RuntimeWarning, AmDist, Dist, LamellarTeamRT};
 
 use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeArray};
 
@@ -1030,6 +1032,71 @@ impl<T: Dist> Future for IntoReadOnlyArrayHandle<T> {
                 Poll::Pending
             }
             Poll::Ready(array) => Poll::Ready(array),
+        }
+    }
+}
+
+/// Handle returned by array reduce operations.
+///
+/// The AM executes internally with `Option<Vec<u8>>` as its return type so a single
+/// AM struct can serve all array variants. This handle deserializes the bytes back to
+/// `Option<T>` when polled, keeping the public API identical to before.
+#[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+pub struct ArrayReduceHandle<T: AmDist> {
+    pub(crate) req: AmHandle<Option<Vec<u8>>>,
+    pub(crate) _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T: AmDist> ArrayReduceHandle<T> {
+    pub(crate) fn new(req: AmHandle<Option<Vec<u8>>>) -> Self {
+        Self { req, _phantom: std::marker::PhantomData }
+    }
+
+    fn deserialize(bytes: Option<Vec<u8>>) -> Option<T> {
+        bytes.map(|b| crate::deserialize::<T>(&b, true).expect("failed to deserialize reduction result"))
+    }
+
+    /// Spawn the reduction on the work queue.
+    pub fn spawn(mut self) -> LamellarTask<Option<T>> {
+        self.req.launch();
+        let scheduler = self.req.inner.scheduler.clone();
+        scheduler.spawn_task(self, None)
+    }
+
+    /// Block until the reduction completes and return the result.
+    pub fn block(mut self) -> Option<T> {
+        RuntimeWarning::BlockingCall(
+            "ArrayReduceHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
+        self.req.launch();
+        self.req.inner.scheduler.clone().block_on(self)
+    }
+}
+
+impl<T: AmDist> crate::lamellar_request::LamellarRequest for ArrayReduceHandle<T> {
+    fn launch(&mut self) {
+        self.req.launch();
+    }
+    fn blocking_wait(self) -> Self::Output {
+        Self::deserialize(self.req.blocking_wait())
+    }
+    fn ready_or_set_waker(&mut self, waker: &std::task::Waker) -> bool {
+        self.req.ready_or_set_waker(waker)
+    }
+    fn val(&self) -> Self::Output {
+        Self::deserialize(self.req.val())
+    }
+}
+
+impl<T: AmDist> Future for ArrayReduceHandle<T> {
+    type Output = Option<T>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
+        match this.req.ready_or_set_waker(cx.waker()) {
+            true => Poll::Ready(Self::deserialize(this.req.val())),
+            false => Poll::Pending,
         }
     }
 }

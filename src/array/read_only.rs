@@ -57,7 +57,7 @@ impl __ReadOnlyByteArray {
 /// Thanks to this gaurantee there is the potential for increased performance when ready remote data in this
 /// array type as locking or atomic access is uneeded. For certain operations like `get()` it is possible to
 /// directly do an RDMA transfer.
-impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
+impl<T: Dist + ArrayOps + Default> ReadOnlyArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new ReadOnlyArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam] (instance or reference).
@@ -419,7 +419,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
 }
 
 // #[async_trait]
-impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
+impl<T: Dist + ArrayOps + Default> AsyncTeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
@@ -499,7 +499,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
+    pub fn reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
         self.array.reduce_data(op, self.clone().into())
     }
 }
@@ -532,7 +532,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// assert_eq!(array.len()*num_pes,sum);
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn sum(&self) -> AmHandle<Option<T>> {
+    pub fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("sum")
     }
 
@@ -561,7 +561,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn prod(&self) -> AmHandle<Option<T>> {
+    pub fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("prod")
     }
 }
@@ -589,7 +589,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn max(&self) -> AmHandle<Option<T>> {
+    pub fn max(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("max")
     }
 
@@ -616,7 +616,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn min(&self) -> AmHandle<Option<T>> {
+    pub fn min(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("min")
     }
 }

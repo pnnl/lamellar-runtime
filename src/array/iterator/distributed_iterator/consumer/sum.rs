@@ -90,7 +90,7 @@ enum InnerState<T> {
 
 impl<T> InnerDistIterSumHandle<T>
 where
-    T: Dist + ArrayOps + std::iter::Sum,
+    T: Dist + ArrayOps + std::iter::Sum + Default,
 {
     async fn async_reduce_remote_vals(local_sum: T, team: Darc<LamellarTeamRT>) -> T {
         let local_sums = UnsafeArray::<T>::async_new(
@@ -132,7 +132,7 @@ where
 
 impl<T> Future for InnerDistIterSumHandle<T>
 where
-    T: Dist + ArrayOps + std::iter::Sum,
+    T: Dist + ArrayOps + std::iter::Sum + Default,
 {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -203,7 +203,7 @@ impl<T> PinnedDrop for DistIterSumHandle<T> {
 
 impl<T> DistIterSumHandle<T>
 where
-    T: Dist + ArrayOps + std::iter::Sum,
+    T: Dist + ArrayOps + std::iter::Sum + Default,
 {
     pub(crate) fn new(
         lock: Option<IterLockFuture>,
@@ -276,7 +276,7 @@ enum State<T> {
 }
 impl<T> Future for DistIterSumHandle<T>
 where
-    T: Dist + ArrayOps + std::iter::Sum,
+    T: Dist + ArrayOps + std::iter::Sum + Default,
 {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

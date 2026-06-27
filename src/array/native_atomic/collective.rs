@@ -10,7 +10,7 @@ use crate::{AsLamellarBuffer, Dist, ElementArithmeticOps, ElementBitWiseOps, Lam
     };
 
 
-impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
     /// All-reduce sum of `len` elements starting at `index`, delivering the result to all PEs.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -197,7 +197,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
 
     /// All-reduce bitwise AND of `len` elements starting at `index`, delivering the result to all PEs.
     ///
@@ -341,7 +341,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
     /// All-reduce sum of `len` elements starting at `index`, writing the result into `buffer` on all PEs.
     ///
     /// Like [`sum_all`](NativeAtomicArray::sum_all) but places the result into a caller-supplied
@@ -535,7 +535,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
     /// All-reduce bitwise AND of `len` elements starting at `index`, writing the result into `buffer` on all PEs.
     ///
     /// Like [`bit_and_all`](NativeAtomicArray::bit_and_all) but places the result into a caller-supplied
@@ -681,7 +681,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
     }
 }
 
-// impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
+// impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
 //     pub unsafe fn sum_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
 //         self.array
 //             .sum_all_in_place(src_and_dst)
@@ -703,7 +703,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
 //     }
 // }
 
-// impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
+// impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
 //     pub unsafe fn bit_and_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
 //         self.array
 //             .bit_and_all_in_place(src_and_dst)
@@ -721,7 +721,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
 // }
 
 
-impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
     /// Reduce sum of `len` elements starting at `index`, delivering the result only to `pe`.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -911,7 +911,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
     /// Reduce bitwise AND of `len` elements starting at `index`, delivering the result only to `pe`.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -1057,7 +1057,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
     /// Reduce sum of `len` elements starting at `index`, writing the result into `dst` on the root PE.
     ///
     /// Like [`sum_at_pe`](NativeAtomicArray::sum_at_pe) but the caller supplies the destination buffer via
@@ -1255,7 +1255,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
     /// Reduce bitwise AND of `len` elements starting at `index`, writing the result into `dst` on the root PE.
     ///
     /// Like [`bit_and_at_pe`](NativeAtomicArray::bit_and_at_pe) but the caller supplies the destination buffer via
@@ -1404,7 +1404,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
     }
 }
 
-// impl<T: Dist> NativeAtomicArray<T> {
+// impl<T: Dist + Default> NativeAtomicArray<T> {
 //     pub unsafe fn sum_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
 //         match self {
 //             AtomicArray::NativeAtomicArray(array) => {
@@ -1483,7 +1483,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
 //     }
 // }
 
-impl<T: Dist> NativeAtomicArray<T> {
+impl<T: Dist + Default> NativeAtomicArray<T> {
     /// Gathers `len` elements starting at `index` from every PE, delivering the concatenated result to all PEs.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The gathered
@@ -1581,7 +1581,7 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> NativeAtomicArray<T> {
+impl<T: Dist + Default> NativeAtomicArray<T> {
     /// Gathers `len` elements starting at `index` from every PE, delivering the concatenated result only to PE `pe`.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The gathered
@@ -1678,7 +1678,7 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> NativeAtomicArray<T> {
+impl<T: Dist + Default> NativeAtomicArray<T> {
     /// All-to-all exchange: each PE sends `len` elements starting at `index` to every other PE.
     ///
     /// Each PE sends `len` elements from its local segment beginning at `index` to every other PE,
@@ -1775,7 +1775,7 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> NativeAtomicArray<T> {
+impl<T: Dist + Default> NativeAtomicArray<T> {
     /// Broadcasts `len` elements from the root PE specified by `src_or_root_pe` to all PEs.
     ///
     /// `src_or_root_pe: BroadcastInput` encodes both the root PE index and, on the root, the source
@@ -1891,7 +1891,7 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> NativeAtomicArray<T> {
+impl<T: Dist + Default> NativeAtomicArray<T> {
     /// Scatters segments of data from the root PE to each PE, with `len` elements per PE.
     ///
     /// `src_or_root_pe: ScatterInput` encodes the root PE index and, on the root, the source buffer
@@ -2024,7 +2024,7 @@ impl<T: Dist> NativeAtomicArray<T> {
 }
 
 
-impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
     /// Reduce-scatter sum: reduces `len` elements starting at `index` and distributes disjoint result segments across PEs.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -2214,7 +2214,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
 
     /// Reduce-scatter bitwise AND: reduces `len` elements starting at `index` and distributes disjoint result segments across PEs.
     ///
@@ -2361,7 +2361,7 @@ impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
     /// Reduce-scatter sum, placing each PE's result segment into caller-supplied `buffer`.
     ///
     /// Like [`sum_scatter`](NativeAtomicArray::sum_scatter) but places the received result segment into
@@ -2555,7 +2555,7 @@ impl<T: ElementArithmeticOps> NativeAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NativeAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
     /// Reduce-scatter bitwise AND, placing each PE's result segment into caller-supplied `buffer`.
     ///
     /// Like [`bit_and_scatter`](NativeAtomicArray::bit_and_scatter) but places the received result segment into

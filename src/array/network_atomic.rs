@@ -1434,7 +1434,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for NetworkAtomicArray<T> {
+impl<T: Dist + ArrayOps + Default> AsyncTeamFrom<(Vec<T>, Distribution)> for NetworkAtomicArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
@@ -1726,27 +1726,27 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NetworkAtomicArray<T> {
 
 impl<T: Dist + AmDist + 'static> NetworkAtomicArray<T> {
     #[doc(hidden)]
-    pub fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
+    pub fn reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
         self.array.reduce_data(op, self.clone().into())
     }
 }
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> NetworkAtomicArray<T> {
     #[doc(hidden)]
-    pub fn sum(&self) -> AmHandle<Option<T>> {
+    pub fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("sum")
     }
     #[doc(hidden)]
-    pub fn prod(&self) -> AmHandle<Option<T>> {
+    pub fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("prod")
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> NetworkAtomicArray<T> {
     #[doc(hidden)]
-    pub fn max(&self) -> AmHandle<Option<T>> {
+    pub fn max(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("max")
     }
     #[doc(hidden)]
-    pub fn min(&self) -> AmHandle<Option<T>> {
+    pub fn min(&self) -> crate::array::ArrayReduceHandle<T> {
         self.reduce("min")
     }
 }

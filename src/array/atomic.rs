@@ -1508,7 +1508,7 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 // #[async_trait]
-impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
+impl<T: Dist + ArrayOps + Default> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
@@ -1632,7 +1632,7 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn reduce(&self, reduction: &str) -> AmHandle<Option<T>> {
+    pub fn reduce(&self, reduction: &str) -> crate::array::ArrayReduceHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
             AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
@@ -1682,7 +1682,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// assert_eq!(array.len()*num_pes,sum);
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn sum(&self) -> AmHandle<Option<T>> {
+    pub fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sum(),
             AtomicArray::GenericAtomicArray(array) => array.sum(),
@@ -1727,7 +1727,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn prod(&self) -> AmHandle<Option<T>> {
+    pub fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.prod(),
             AtomicArray::GenericAtomicArray(array) => array.prod(),
@@ -1769,7 +1769,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn max(&self) -> AmHandle<Option<T>> {
+    pub fn max(&self) -> crate::array::ArrayReduceHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.max(),
             AtomicArray::GenericAtomicArray(array) => array.max(),
@@ -1812,7 +1812,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn min(&self) -> AmHandle<Option<T>> {
+    pub fn min(&self) -> crate::array::ArrayReduceHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.min(),
             AtomicArray::GenericAtomicArray(array) => array.min(),

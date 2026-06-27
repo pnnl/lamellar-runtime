@@ -10,7 +10,7 @@ use crate::{AsLamellarBuffer, Dist, ElementArithmeticOps, ElementBitWiseOps, Lam
     };
 
 
-impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NetworkAtomicArray<T> {
     /// All-reduce sum of `len` elements starting at `index`, delivering the result to all PEs.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -197,7 +197,7 @@ impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NetworkAtomicArray<T> {
 
     /// All-reduce bitwise AND of `len` elements starting at `index`, delivering the result to all PEs.
     ///
@@ -341,7 +341,7 @@ impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NetworkAtomicArray<T> {
     /// All-reduce sum of `len` elements starting at `index`, writing the result into `buffer` on all PEs.
     ///
     /// Like [`sum_all`](NetworkAtomicArray::sum_all) but places the result into a caller-supplied
@@ -535,7 +535,7 @@ impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NetworkAtomicArray<T> {
     /// All-reduce bitwise AND of `len` elements starting at `index`, writing the result into `buffer` on all PEs.
     ///
     /// Like [`bit_and_all`](NetworkAtomicArray::bit_and_all) but places the result into a caller-supplied
@@ -681,7 +681,7 @@ impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NetworkAtomicArray<T> {
     /// All-reduce sum in place, using `src_and_dst` as both input and output on every PE.
     ///
     /// Each PE provides elements via `src_and_dst`; the global sum overwrites the same buffer.
@@ -791,7 +791,7 @@ impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NetworkAtomicArray<T> {
     /// All-reduce bitwise AND in place, using `src_and_dst` as both input and output on every PE.
     ///
     /// Each PE provides elements via `src_and_dst`; the global bitwise AND overwrites the same buffer.
@@ -875,7 +875,7 @@ impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
 }
 
 
-impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NetworkAtomicArray<T> {
     /// Reduce sum of `len` elements starting at `index`, delivering the result only to `pe`.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -1065,7 +1065,7 @@ impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NetworkAtomicArray<T> {
     /// Reduce bitwise AND of `len` elements starting at `index`, delivering the result only to `pe`.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -1211,7 +1211,7 @@ impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NetworkAtomicArray<T> {
     /// Reduce sum of `len` elements starting at `index`, writing the result into `dst` on the root PE.
     ///
     /// Like [`sum_at_pe`](NetworkAtomicArray::sum_at_pe) but the caller supplies the destination buffer via
@@ -1409,7 +1409,7 @@ impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NetworkAtomicArray<T> {
     /// Reduce bitwise AND of `len` elements starting at `index`, writing the result into `dst` on the root PE.
     ///
     /// Like [`bit_and_at_pe`](NetworkAtomicArray::bit_and_at_pe) but the caller supplies the destination buffer via
@@ -1558,7 +1558,7 @@ impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
     }
 }
 
-// impl<T: Dist> NetworkAtomicArray<T> {
+// impl<T: Dist + Default> NetworkAtomicArray<T> {
 //     pub unsafe fn sum_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
 //         match self {
 //             AtomicArray::NetworkAtomicArray(array) => {
@@ -1637,7 +1637,7 @@ impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
 //     }
 // }
 
-impl<T: Dist> NetworkAtomicArray<T> {
+impl<T: Dist + Default> NetworkAtomicArray<T> {
     /// Gathers `len` elements starting at `index` from every PE, delivering the concatenated result to all PEs.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The gathered
@@ -1735,7 +1735,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: Dist> NetworkAtomicArray<T> {
+impl<T: Dist + Default> NetworkAtomicArray<T> {
     /// Gathers `len` elements starting at `index` from every PE, delivering the concatenated result only to PE `pe`.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The gathered
@@ -1832,7 +1832,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: Dist> NetworkAtomicArray<T> {
+impl<T: Dist + Default> NetworkAtomicArray<T> {
     /// All-to-all exchange: each PE sends `len` elements starting at `index` to every other PE.
     ///
     /// Each PE sends `len` elements from its local segment beginning at `index` to every other PE,
@@ -1929,7 +1929,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: Dist> NetworkAtomicArray<T> {
+impl<T: Dist + Default> NetworkAtomicArray<T> {
     /// Broadcasts `len` elements from the root PE specified by `src_or_root_pe` to all PEs.
     ///
     /// `src_or_root_pe: BroadcastInput` encodes both the root PE index and, on the root, the source
@@ -2045,7 +2045,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: Dist> NetworkAtomicArray<T> {
+impl<T: Dist + Default> NetworkAtomicArray<T> {
     /// Scatters segments of data from the root PE to each PE, with `len` elements per PE.
     ///
     /// `src_or_root_pe: ScatterInput` encodes the root PE index and, on the root, the source buffer
@@ -2178,7 +2178,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
 }
 
 
-impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NetworkAtomicArray<T> {
     /// Reduce-scatter sum: reduces `len` elements starting at `index` and distributes disjoint result segments across PEs.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -2368,7 +2368,7 @@ impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NetworkAtomicArray<T> {
 
     /// Reduce-scatter bitwise AND: reduces `len` elements starting at `index` and distributes disjoint result segments across PEs.
     ///
@@ -2515,7 +2515,7 @@ impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
+impl<T: ElementArithmeticOps + Default> NetworkAtomicArray<T> {
     /// Reduce-scatter sum, placing each PE's result segment into caller-supplied `buffer`.
     ///
     /// Like [`sum_scatter`](NetworkAtomicArray::sum_scatter) but places the received result segment into
@@ -2709,7 +2709,7 @@ impl<T: ElementArithmeticOps> NetworkAtomicArray<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> NetworkAtomicArray<T> {
+impl<T: ElementBitWiseOps + Default> NetworkAtomicArray<T> {
     /// Reduce-scatter bitwise AND, placing each PE's result segment into caller-supplied `buffer`.
     ///
     /// Like [`bit_and_scatter`](NetworkAtomicArray::bit_and_scatter) but places the received result segment into

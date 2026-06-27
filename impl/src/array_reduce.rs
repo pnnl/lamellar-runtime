@@ -35,87 +35,62 @@ fn create_reduction(
     let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
     let reduction_id_gen = quote::format_ident!("{:}_{:}_reduction_id", typeident, reduction);
 
+    // Single struct for all array variants — array type is erased into LamellarByteArray.
+    // exec() returns Option<Vec<u8>> (serialized T) so the AM return type is independent of T's
+    // concrete type; ArrayReduceHandle<T> on the call side deserializes back to Option<T>.
+    let reduction_name =
+        quote::format_ident!("{:}_{:}_reduction", typeident, reduction);
+
     let mut gen_match_stmts = quote! {};
-    let mut array_impls = quote! {};
 
     if !native {
-        gen_match_stmts.extend(quote!{
+        gen_match_stmts.extend(quote! {
             #lamellar::array::LamellarByteArray::NativeAtomicArray(_) => panic!("this type is not a native atomic"),
             #lamellar::array::LamellarByteArray::NetworkAtomicArray(_) => panic!("this type is not a network atomic"),
         });
     }
     for array_type in array_types {
-        let reduction_name =
-            quote::format_ident!("{:}_{:}_{:}_reduction", array_type, typeident, reduction);
-
-        gen_match_stmts.extend(quote!{
-            #lamellar::array::LamellarByteArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
-                data: unsafe {Into::into(inner.clone())} , start_pe: 0, end_pe: num_pes-1}),
-        });
-
-        let iter_chain = if array_type == "AtomicArray"
-            || array_type == "GenericAtomicArray"
-            || array_type == "NativeAtomicArray"
-            || array_type == "NetworkAtomicArray"
-        {
-            quote! {.map(|elem| elem.load())}
-        } else {
-            quote! {.copied()}
-        };
-
-        let data_slice = if array_type == "LocalLockArray" || array_type == "GlobalLockArray" {
-            quote! {self.data.read_local_data().await}
-        } else {
-            quote! {self.data.local_data()}
-        };
-
-        array_impls.extend(quote! {
-            #[allow(non_camel_case_types)]
-            #[#am_data(Clone,Debug)]
-            struct #reduction_name{
-                data: #lamellar::array::#array_type<#typeident>,
-                start_pe: usize,
-                end_pe: usize,
-            }
-
-            #[#am]
-            impl LamellarAM for #reduction_name{
-                async fn exec(&self) -> Option<#typeident>{
-                    // println!("{}",stringify!(#array_type));
-                    if self.start_pe == self.end_pe{
-                        // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
-                        let timer = std::time::Instant::now();
-                        #[allow(unused_unsafe)]
-                        let data_slice = unsafe { #data_slice};
-                        let res = data_slice.iter()#iter_chain.reduce(#op);//s.expect("length of slice should be greater than 0");
-                        // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
-                        res
-                    }
-                    else{
-                        // println!("[{:?}] recurse {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
-                        let mid_pe = (self.start_pe + self.end_pe)/2;
-                        let op = #op;
-                        let timer = std::time::Instant::now();
-                        let left = __lamellar_team.spawn_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe});//;
-                        let right = __lamellar_team.spawn_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe});//;
-                        let left = left.await;
-                        let right = right.await;
-
-                        let res = match (left,right){
-                            (None,None) => None,
-                            (Some(v),None) => Some(v),
-                            (None,Some(v)) => Some(v),
-                            (Some(v1),Some(v2)) => Some(op(v1,v2))
-                        };
-
-
-                        // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
-                        res
-                    }
-                }
-            }
+        gen_match_stmts.extend(quote! {
+            #lamellar::array::LamellarByteArray::#array_type(_) => std::sync::Arc::new(#reduction_name {
+                data: data.clone(), start_pe: 0, end_pe: num_pes - 1
+            }),
         });
     }
+
+    // Recursive branch: left/right return Option<Vec<u8>>; deserialize, apply op, re-serialize.
+    let array_impls = quote! {
+        #[allow(non_camel_case_types)]
+        #[#am_data(Clone,Debug)]
+        struct #reduction_name {
+            data: #lamellar::array::LamellarByteArray,
+            start_pe: usize,
+            end_pe: usize,
+        }
+
+        #[#am]
+        impl LamellarAM for #reduction_name {
+            async fn exec(&self) -> Option<Vec<u8>> {
+                if self.start_pe == self.end_pe {
+                    #lamellar::array::reduce_local_data(self.data.local_data::<#typeident>().await, #op)
+                } else {
+                    let mid_pe = (self.start_pe + self.end_pe) / 2;
+                    let op = #op;
+                    let left = __lamellar_team.spawn_am_pe(self.start_pe, #reduction_name {
+                        data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe
+                    });
+                    let right = __lamellar_team.spawn_am_pe(mid_pe + 1, #reduction_name {
+                        data: self.data.clone(), start_pe: mid_pe + 1, end_pe: self.end_pe
+                    });
+                    let left_bytes = left.await;
+                    let right_bytes = right.await;
+                    let left_val = left_bytes.map(|b| #lamellar::deserialize::<#typeident>(&b, true).expect("reduce deserialize left"));
+                    let right_val = right_bytes.map(|b| #lamellar::deserialize::<#typeident>(&b, true).expect("reduce deserialize right"));
+                    #lamellar::array::merge_reduction(left_val, right_val, op)
+                        .map(|v| #lamellar::serialize(&v, true).expect("reduce serialize result"))
+                }
+            }
+        }
+    };
 
     let expanded = quote! {
         fn  #reduction_gen (data: #lamellar::array::LamellarByteArray, num_pes: usize)
@@ -259,6 +234,26 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
 //     TokenStream::from(output)
 // }
 
+fn pod_type_variant(type_str: &str) -> proc_macro2::TokenStream {
+    match type_str.trim() {
+        "u8"    => quote! { crate::array::PodType::U8    },
+        "u16"   => quote! { crate::array::PodType::U16   },
+        "u32"   => quote! { crate::array::PodType::U32   },
+        "u64"   => quote! { crate::array::PodType::U64   },
+        "usize" => quote! { crate::array::PodType::Usize },
+        "u128"  => quote! { crate::array::PodType::U128  },
+        "i8"    => quote! { crate::array::PodType::I8    },
+        "i16"   => quote! { crate::array::PodType::I16   },
+        "i32"   => quote! { crate::array::PodType::I32   },
+        "i64"   => quote! { crate::array::PodType::I64   },
+        "isize" => quote! { crate::array::PodType::Isize },
+        "i128"  => quote! { crate::array::PodType::I128  },
+        "f32"   => quote! { crate::array::PodType::F32   },
+        "f64"   => quote! { crate::array::PodType::F64   },
+        other   => panic!("unknown primitive type for builtin reduction: {}", other),
+    }
+}
+
 pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
     let items = item
@@ -266,69 +261,57 @@ pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStrea
         .split(",")
         .map(|i| i.to_owned())
         .collect::<Vec<String>>();
-    let native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
+    let _native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
         val.value
     } else {
-        panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
+        panic!("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
     };
 
-    let mut read_array_types: Vec<syn::Ident> = vec![
-        quote::format_ident!("LocalLockArray"),
-        quote::format_ident!("GlobalLockArray"),
-        quote::format_ident!("AtomicArray"),
-        quote::format_ident!("GenericAtomicArray"),
-        quote::format_ident!("UnsafeArray"),
-        quote::format_ident!("ReadOnlyArray"),
-    ];
-    if native {
-        read_array_types.push(quote::format_ident!("NativeAtomicArray"));
-        read_array_types.push(quote::format_ident!("NetworkAtomicArray"));
-    }
-
+    // Emit only ReduceKey inventory entries — the single PodBuiltinReductionAm struct
+    // in reduce_helpers.rs handles all types and operations via runtime dispatch.
     for t in items[1..].iter() {
         let t = t.trim().to_string();
-        let typeident = quote::format_ident!("{:}", t.clone());
-        // let elemtypeident = if
-        output.extend(create_reduction(
-            typeident.clone(),
-            "sum".to_string(),
-            quote! {
-                |acc, val|{ acc + val }
-            },
-            &read_array_types,
-            true,
-            native,
-        ));
-        output.extend(create_reduction(
-            typeident.clone(),
-            "prod".to_string(),
-            quote! {
-                |acc, val| { acc * val }
-            },
-            &read_array_types,
-            true,
-            native,
-        ));
-        output.extend(create_reduction(
-            typeident.clone(),
-            "max".to_string(),
-            quote! {
-                |val1, val2| { if val1 > val2 {val1} else {val2} }
-            },
-            &read_array_types,
-            true,
-            native,
-        ));
-        output.extend(create_reduction(
-            typeident.clone(),
-            "min".to_string(),
-            quote! {
-                |val1, val2| { if val1 < val2 {val1} else {val2} }
-            },
-            &read_array_types,
-            true,
-            native,
-        ));
+        let typeident = quote::format_ident!("{}", t.trim());
+        let pod_variant = pod_type_variant(&t);
+
+        for (op_name, builtin_op) in &[
+            ("sum",  quote! { crate::array::BuiltinOp::Sum  }),
+            ("prod", quote! { crate::array::BuiltinOp::Prod }),
+            ("max",  quote! { crate::array::BuiltinOp::Max  }),
+            ("min",  quote! { crate::array::BuiltinOp::Min  }),
+        ] {
+            let reduction_gen = quote::format_ident!("{}_{}_{}_reduction_gen", typeident, op_name, "pod");
+            let reduction_id_gen = quote::format_ident!("{}_{}_{}_reduction_id", typeident, op_name, "pod");
+            let op_name_lit = *op_name;
+            let pod = pod_variant.clone();
+            let bop = builtin_op.clone();
+
+            output.extend(quote! {
+                fn #reduction_gen(data: crate::array::LamellarByteArray, num_pes: usize)
+                    -> std::sync::Arc<dyn crate::active_messaging::RemoteActiveMessage + Sync + Send>
+                {
+                    std::sync::Arc::new(crate::array::PodBuiltinReductionAm {
+                        data,
+                        start_pe: 0,
+                        end_pe: num_pes - 1,
+                        pod_type: #pod,
+                        op: #bop,
+                    })
+                }
+
+                fn #reduction_id_gen() -> std::any::TypeId {
+                    std::any::TypeId::of::<#typeident>()
+                }
+
+                crate::inventory::submit! {
+                    crate::array::ReduceKey {
+                        id: #reduction_id_gen,
+                        name: #op_name_lit,
+                        gen: #reduction_gen,
+                    }
+                }
+            });
+        }
     }
     TokenStream::from(output)
 }

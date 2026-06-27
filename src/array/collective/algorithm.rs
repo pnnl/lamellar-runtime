@@ -216,7 +216,7 @@ impl<T: ElementBitWiseOps> AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> for Ge
     }
 }
 
-impl<T: Dist > AtomicArrayOpsForCollectiveOps<T> for NativeAtomicArray<T> {
+impl<T: Dist> AtomicArrayOpsForCollectiveOps<T> for NativeAtomicArray<T> {
     fn copy_local_data(&self, index: usize, count: usize, buffer: &mut [T]) {
         self.local_data()
             .sub_data(index, index + count)
@@ -432,7 +432,7 @@ pub(crate) async fn do_gather_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + C
 }
 
 
-pub(crate) async fn do_gather<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist>(
+pub(crate) async fn do_gather<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist + Default>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -538,7 +538,7 @@ where
 }
 
 
-pub(crate) async fn do_all_to_all<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist>(
+pub(crate) async fn do_all_to_all<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist + Default>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -575,7 +575,7 @@ pub(crate) async fn do_broadcast_impl<A, T>(
 ) -> Option<Vec<T>>
 where
     A: AtomicArrayOpsForCollectiveOps<T> + Clone,
-    T: Dist,
+    T: Dist + Default,
 {
 
     let local = array.my_pe();
@@ -603,7 +603,7 @@ where
 }
 
 
-pub(crate) async fn do_broadcast<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist>(
+pub(crate) async fn do_broadcast<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist + Default>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -615,7 +615,7 @@ pub(crate) async fn do_broadcast<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T
     do_broadcast_impl(array, &scheduler, sync_alloc, index, local_length, root).await
 }
 
-pub(crate) async fn do_broadcast_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist, B: AsLamellarBuffer<T>>(
+pub(crate) async fn do_broadcast_in_buffer<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: Dist + Default, B: AsLamellarBuffer<T>>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -649,7 +649,7 @@ pub(crate) async fn do_all_gather<A, T>(
 ) -> Vec<T>
 where
     A: AtomicArrayOpsForCollectiveOps<T> + Clone,
-    T: Dist,
+    T: Dist + Default,
 {
     let mut result = vec![T::default(); array.num_pes() * local_length];
     do_all_gather_impl(array, &scheduler, sync_alloc, index, local_length, &mut result).await;
@@ -666,7 +666,7 @@ pub(crate) async fn do_all_gather_in_buffer<A, T, B: AsLamellarBuffer<T> >(
 )
 where
     A: AtomicArrayOpsForCollectiveOps<T> + Clone,
-    T: Dist,
+    T: Dist + Default,
 {
     do_all_gather_impl(array, &scheduler, sync_alloc, index, local_length, result.as_mut_slice()).await;
 }
@@ -681,7 +681,7 @@ pub(crate) async fn do_all_gather_impl<A, T>(
 )
 where
     A: AtomicArrayOpsForCollectiveOps<T> + Clone,
-    T: Dist,
+    T: Dist + Default,
 {
 
     let num_pes = array.num_pes();
@@ -750,7 +750,7 @@ async fn do_all_reduce_impl<A, T, F>(
 )
 where
     A: AtomicArrayOpsForCollectiveOps<T> + Clone,
-    T: Dist,
+    T: Dist + Default,
     F: Fn(&A, &[T]),
 {
     let my_pe = array.my_pe();
@@ -878,7 +878,7 @@ where
     sync_slice[1].store(0, std::sync::atomic::Ordering::SeqCst); // reset sync array for next collective operation
 }
 
-pub(crate) async fn do_all_reduce<A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, T: Dist + ElementArithmeticOps>(
+pub(crate) async fn do_all_reduce<A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, T: Dist + ElementArithmeticOps + Default>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -905,7 +905,7 @@ pub(crate) async fn do_all_reduce_bitwise<A, T>(
 ) -> Vec<T>
 where
     A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone,
-    T: Dist + ElementBitWiseOps,
+    T: Dist + ElementBitWiseOps + Default,
 {
     let mut result = vec![T::default(); local_length];
     do_all_reduce_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
@@ -916,7 +916,7 @@ where
     result
 }
 
-pub(crate) async fn do_all_reduce_in_buffer<A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, T: Dist + ElementArithmeticOps, B: AsLamellarBuffer<T>>(
+pub(crate) async fn do_all_reduce_in_buffer<A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, T: Dist + ElementArithmeticOps + Default, B: AsLamellarBuffer<T>>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -942,7 +942,7 @@ pub(crate) async fn do_all_reduce_bitwise_in_buffer<A, T, B: AsLamellarBuffer<T>
 )
 where
     A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone,
-    T: Dist + ElementBitWiseOps,
+    T: Dist + ElementBitWiseOps + Default,
 {
     do_all_reduce_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
         dst.update_local_data_bitwise(index, local_length, &val, op.clone());
@@ -964,7 +964,7 @@ async fn do_reduce_impl<A, T, F>(
 )
 where
     A: AtomicArrayOpsForCollectiveOps<T> + Clone,
-    T: Dist,
+    T: Dist + Default,
     F: Copy + Fn(&A, &[T]),
 {
 
@@ -1024,7 +1024,7 @@ where
     // res
 }
 
-pub(crate) async fn do_reduce<T: ElementArithmeticOps, A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone>(
+pub(crate) async fn do_reduce<T: ElementArithmeticOps + Default, A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -1052,7 +1052,7 @@ pub(crate) async fn do_reduce<T: ElementArithmeticOps, A: AtomicArrayOpsForColle
     }
 }
 
-pub(crate) async fn do_reduce_bitwise<T: ElementBitWiseOps, A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone>(
+pub(crate) async fn do_reduce_bitwise<T: ElementBitWiseOps + Default, A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -1080,7 +1080,7 @@ pub(crate) async fn do_reduce_bitwise<T: ElementBitWiseOps, A: AtomicArrayOpsFor
     }
 }
 
-pub(crate) async fn do_reduce_in_buffer<T: ElementArithmeticOps, A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, B: AsLamellarBuffer<T>>(
+pub(crate) async fn do_reduce_in_buffer<T: ElementArithmeticOps + Default, A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone, B: AsLamellarBuffer<T>>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -1104,7 +1104,7 @@ pub(crate) async fn do_reduce_in_buffer<T: ElementArithmeticOps, A: AtomicArrayO
     };
 }
 
-pub(crate) async fn do_reduce_bitwise_in_buffer<T: ElementBitWiseOps, A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone, B: AsLamellarBuffer<T>>(
+pub(crate) async fn do_reduce_bitwise_in_buffer<T: ElementBitWiseOps + Default, A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone, B: AsLamellarBuffer<T>>(
     array: A,
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
@@ -1139,13 +1139,13 @@ async fn do_reduce_scatter_impl<T, A, F>(
 ) -> Vec<T>
 where
     A: AtomicArrayOpsForCollectiveOps<T> + Clone,
-    T: Dist,
+    T: Dist + Default,
     F: Fn(&A, &[T]),
 {
     let local = array.my_pe();
     let num_pes = array.num_pes();
     let count = local_length; // number of elements in the array each PE is responsible for
-    
+
     let mut step = 1;
     let mut replace = vec![T::default(); count];
     array.copy_local_data(index, count, &mut replace);  
@@ -1215,7 +1215,7 @@ pub(crate) async fn do_reduce_scatter<T, A>(
 ) -> Vec<T>
 where
     A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone,
-    T: Dist + ElementArithmeticOps,
+    T: Dist + ElementArithmeticOps + Default,
 {
     do_reduce_scatter_impl(array, &scheduler, sync_alloc, index, local_length, |dst, data| {
         dst.update_local_data(index, local_length, data, op.clone());
@@ -1233,9 +1233,9 @@ pub(crate) async fn do_reduce_scatter_bitwise<T, A>(
 ) -> Vec<T>
 where
     A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone,
-    T: Dist + ElementBitWiseOps,
+    T: Dist + ElementBitWiseOps + Default,
 {
-    
+
     do_reduce_scatter_impl(array, &scheduler, sync_alloc, index, local_length, |dst, val| {
         dst.update_local_data_bitwise(index, local_length, val, op.clone());
     })
@@ -1253,7 +1253,7 @@ pub(crate) async fn do_reduce_scatter_in_buffer<T, A, B: AsLamellarBuffer<T>>(
 )
 where
     A: AtomicArrayOpsForCollectiveOpsUpdate<T> + Clone,
-    T: Dist + ElementArithmeticOps,
+    T: Dist + ElementArithmeticOps + Default,
 {
     let res = do_reduce_scatter_impl(array, &scheduler, sync_alloc, index, local_length, |dst, data| {
         dst.update_local_data(index, local_length, data, op.clone());
@@ -1276,7 +1276,7 @@ pub(crate) async fn do_reduce_scatter_bitwise_in_buffer<T, A, B: AsLamellarBuffe
 )
 where
     A: AtomicArrayOpsForCollectiveOpsUpdateBitwise<T> + Clone,
-    T: Dist + ElementBitWiseOps,
+    T: Dist + ElementBitWiseOps + Default,
 {
 
 

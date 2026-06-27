@@ -782,7 +782,7 @@ impl<T: Dist + 'static> LocalLockArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for LocalLockArray<T> {
+impl<T: Dist + ArrayOps + Default> AsyncTeamFrom<(Vec<T>, Distribution)> for LocalLockArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
@@ -1030,7 +1030,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockArray<T> {
 /// This handle is used to track completion of an Array Reduce operation initiated from a Local Lock Array.
 #[pin_project]
 pub struct LocalLockArrayReduceHandle<T: Dist + AmDist> {
-    req: AmHandle<Option<T>>,
+    req: crate::array::ArrayReduceHandle<T>,
     lock_guard: LocalLockReadGuard<T>,
 }
 

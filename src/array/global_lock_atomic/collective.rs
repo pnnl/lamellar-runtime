@@ -1,6 +1,6 @@
 use crate::{AsLamellarBuffer, Dist, ElementArithmeticOps, ElementBitWiseOps, LamellarBuffer, LamellarEnv, array::{collective::{algorithm::{do_all_gather, do_all_gather_in_buffer, do_all_reduce, do_all_reduce_bitwise, do_all_reduce_bitwise_in_buffer, do_all_reduce_in_buffer, do_all_to_all, do_all_to_all_in_buffer, do_broadcast, do_broadcast_in_buffer, do_gather, do_gather_in_buffer, do_reduce, do_reduce_bitwise, do_reduce_bitwise_in_buffer, do_reduce_in_buffer, do_reduce_scatter, do_reduce_scatter_bitwise, do_reduce_scatter_bitwise_in_buffer, do_reduce_scatter_in_buffer, do_scatter, do_scatter_in_buffer}, broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveAllToAllIntoBufferState, ArrayCollectiveAllToAllState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle, ArrayCollectiveScatterIntoBufferState, ArrayCollectiveScatterState, CollectiveAllToAllIntoBufferManualOpHandle, CollectiveAllToAllManualOpHandle, CollectiveBroadcastIntoBufferManualOpHandle, CollectiveBroadcastManualOpHandle, CollectiveScatterIntoBufferManualOpHandle, CollectiveScatterManualOpHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState, CollectiveAllGatherIntoBufferManualOpHandle, CollectiveAllGatherManualOpHandle, CollectiveGatherIntoBufferManualOpHandle, CollectiveGatherManualOpHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState, CollectiveAllReduceIntoBufferManualOpHandle, CollectiveAllReduceManualOpHandle, CollectiveReduceIntoBufferManualOpHandle, CollectiveReduceManualOpHandle}, reduce_scatter_handle::{ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle, ArrayCollectiveReduceScatterIntoBufferState, ArrayCollectiveReduceScatterState, CollectiveReduceScatterIntoBufferManualOpHandle, CollectiveReduceScatterManualOpHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData, private::LamellarArrayPrivate}, lamellae::collective::{BroadcastInput, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}};
 
-impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -151,7 +151,7 @@ impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -267,7 +267,7 @@ impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
 }
 
 
-impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -422,7 +422,7 @@ impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -540,7 +540,7 @@ impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
 
 }
 
-impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -664,7 +664,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
 }
 
 
-impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -811,7 +811,7 @@ impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -922,7 +922,7 @@ impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1069,7 +1069,7 @@ impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1180,7 +1180,7 @@ impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-// impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+// impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
 //     pub fn sum_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
 //         unsafe {
 //             self
@@ -1239,7 +1239,7 @@ impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
 //     }
 // }
 
-impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1316,7 +1316,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1392,7 +1392,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1471,7 +1471,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
 }
 
 
-impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1550,7 +1550,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1653,7 +1653,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
 
 
 
-impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1800,7 +1800,7 @@ impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -1913,7 +1913,7 @@ impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
 }
 
 
-impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
@@ -2064,7 +2064,7 @@ impl<T: ElementArithmeticOps> GlobalLockCollectiveMutLocalData<T> {
     }
 }
 
-impl<T: ElementBitWiseOps> GlobalLockCollectiveMutLocalData<T> {
+impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;

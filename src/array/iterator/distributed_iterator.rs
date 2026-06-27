@@ -90,7 +90,7 @@ pub trait DistIteratorLauncher: InnerArray {
     consumer_impl!(
         reduce<I, F>(iter: &I, op: F);
         [DistIterReduceHandle<I::Item, F>];
-        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static]);
+        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + Default, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static]);
 
     consumer_impl!(
         collect<I, A>(iter: &I, d: Distribution);
@@ -110,7 +110,7 @@ pub trait DistIteratorLauncher: InnerArray {
     consumer_impl!(
         sum<I>(iter: &I);
         [DistIterSumHandle<I::Item>];
-        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum, ]);
+        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum + Default, ]);
 
     //#[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
@@ -459,7 +459,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     fn reduce<F>(&self, op: F) -> DistIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
-        Self::Item: Dist + ArrayOps,
+        Self::Item: Dist + ArrayOps + Default,
         F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
     {
         self.array().reduce(self, op)
@@ -485,7 +485,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     fn reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
-        Self::Item: Dist + ArrayOps,
+        Self::Item: Dist + ArrayOps + Default,
         F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
     {
         self.array().reduce_with_schedule(sched, self, op)
@@ -734,7 +734,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> DistIterSumHandle<Self::Item>
     where
-        Self::Item: Dist + ArrayOps + std::iter::Sum,
+        Self::Item: Dist + ArrayOps + std::iter::Sum + Default,
     {
         self.array().sum(self)
     }
@@ -763,7 +763,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn sum_with_schedule(&self, sched: Schedule) -> DistIterSumHandle<Self::Item>
     where
-        Self::Item: Dist + ArrayOps + std::iter::Sum,
+        Self::Item: Dist + ArrayOps + std::iter::Sum + Default,
     {
         self.array().sum_with_schedule(sched, self)
     }

@@ -828,7 +828,7 @@ impl<T: Dist + 'static> GlobalLockArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for GlobalLockArray<T> {
+impl<T: Dist + ArrayOps + Default> AsyncTeamFrom<(Vec<T>, Distribution)> for GlobalLockArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
@@ -1095,7 +1095,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GlobalLockArray<T> {
 /// This handle is used to check for the completion of an active message operation that was initiated by a `GlobalLockArray` reduction operation.
 #[pin_project]
 pub struct GlobalLockArrayReduceHandle<T: Dist + AmDist> {
-    req: AmHandle<Option<T>>,
+    req: crate::array::ArrayReduceHandle<T>,
     lock_guard: GlobalLockReadGuard<T>,
 }
 
