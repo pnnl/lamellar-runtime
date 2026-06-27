@@ -1108,7 +1108,7 @@ impl CommAllocCollectiveAllReduce for UcxMtAlloc {
                 op,
                 index,
                 len,
-                result: vec![T::default(); len],
+                result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 scheduler: scheduler.clone(),
                 counters,
                 spawned: false,
@@ -1177,7 +1177,7 @@ impl CommAllocCollectiveReduce for UcxMtAlloc {
         let target = if root_pe != self.my_pe {
             RootOrBuffer::NotRoot(root_pe)
         } else {
-            RootOrBuffer::Root(vec![T::default(); len])
+            RootOrBuffer::Root((0..len).map(|_| unsafe { std::mem::zeroed() }).collect())
         };
         CollectiveReduceOpHandle {
             future: CollectiveReduceOpFuture::UcxMt(UcxMtCollectiveReduceFuture {
@@ -1232,7 +1232,7 @@ impl CommAllocCollectiveAllGather for UcxMtAlloc {
                 alloc: self.clone(),
                 index,
                 len,
-                result: vec![T::default(); len * self.num_pes],
+                result: (0..len * self.num_pes).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 scheduler: scheduler.clone(),
                 counters,
                 req: None,
@@ -1276,7 +1276,7 @@ impl CommAllocCollectiveGather for UcxMtAlloc {
         let target = if root_pe != self.my_pe {
             RootOrBuffer::NotRoot(root_pe)
         } else {
-            RootOrBuffer::Root(vec![T::default(); len * self.num_pes])
+            RootOrBuffer::Root((0..len * self.num_pes).map(|_| unsafe { std::mem::zeroed() }).collect())
         };
 
         CollectiveGatherOpHandle {
@@ -1328,7 +1328,7 @@ impl CommAllocCollectiveAllToAll for UcxMtAlloc {
             future: CollectiveAllToAllOpFuture::UcxMt(UcxMtCollectiveAllToAllFuture {
                 alloc: self.clone(),
                 index,
-                result: vec![T::default(); len * self.num_pes],
+                result: (0..len * self.num_pes).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 len,
                 scheduler: scheduler.clone(),
                 counters,
@@ -1376,7 +1376,7 @@ impl CommAllocCollectiveBroadcast for UcxMtAlloc {
                 RootSrcOrBuffer::Root(index)
             }
             BroadcastInput::NotRoot(root_pe) => {
-                RootSrcOrBuffer::NotRoot(vec![T::default(); len], root_pe)
+                RootSrcOrBuffer::NotRoot((0..len).map(|_| unsafe { std::mem::zeroed() }).collect(), root_pe)
             }
         };
 
@@ -1426,7 +1426,7 @@ impl CommAllocCollectiveScatter for UcxMtAlloc {
             future: CollectiveScatterOpFuture::UcxMt(UcxMtCollectiveScatterFuture {
                 alloc: self.clone(),
                 len,
-                result: vec![T::default(); len],
+                result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 src_or_root_pe: src_or_root_pe.into(),
                 scheduler: scheduler.clone(),
                 counters,
@@ -1474,7 +1474,7 @@ impl CommAllocCollectiveReduceScatter for UcxMtAlloc {
                 op,
                 index,
                 len,
-                result: vec![T::default(); len / self.num_pes],
+                result: (0..len / self.num_pes).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 scheduler: scheduler.clone(),
                 counters,
                 req: None,

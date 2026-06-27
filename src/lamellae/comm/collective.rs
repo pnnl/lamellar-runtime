@@ -136,6 +136,7 @@ use std::{
     pin::Pin, sync::Arc, task::{Context, Poll}
 };
 
+
 #[must_use = " CollectiveAllReduceOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub struct CollectiveAllReduceOpHandle<T: Remote> {
@@ -159,6 +160,8 @@ pub(crate) enum CollectiveAllReduceOpFuture<T: Remote> {
     UcxMt(#[pin] UcxMtCollectiveAllReduceFuture<T>),
     // Shmem(#[pin] ShmemCollectiveAllReduceFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 impl<T: Remote> CollectiveAllReduceOpHandle<T> {
@@ -179,6 +182,7 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             CollectiveAllReduceOpFuture::UcxMt(f) => f.block(),
             // CollectiveAllReduceOpFuture::Shmem(f) => f.block(),
             // CollectiveAllReduceOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -203,6 +207,7 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             CollectiveAllReduceOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveAllReduceOpFuture::Shmem(f) => f.spawn(),
             // CollectiveAllReduceOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -227,6 +232,7 @@ impl<T: Remote> Future for CollectiveAllReduceOpHandle<T> {
             CollectiveAllReduceOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveAllReduceOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveAllReduceOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -254,6 +260,8 @@ pub(crate) enum CollectiveAllReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     UcxMt(#[pin] UcxMtCollectiveAllReduceIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemCollectiveAllReduceIntoBufferFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T, B> {
@@ -274,6 +282,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
             CollectiveAllReduceIntoBufferOpFuture::UcxMt(f) => f.block(),
             // CollectiveAllReduceIntoBufferOpFuture::Shmem(f) => f.block(),
             // CollectiveAllReduceIntoBufferOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -298,6 +307,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
             CollectiveAllReduceIntoBufferOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveAllReduceIntoBufferOpFuture::Shmem(f) => f.spawn(),
             // CollectiveAllReduceIntoBufferOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -322,6 +332,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceIntoBuffer
             CollectiveAllReduceIntoBufferOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveAllReduceIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveAllReduceIntoBufferOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -349,6 +360,8 @@ pub(crate) enum CollectiveAllReduceInPlaceOpFuture<T: Remote, B: AsLamellarBuffe
     UcxMt(#[pin] UcxMtCollectiveAllReduceInPlaceFuture<T, B>),  
     // Shmem(#[pin] ShmemCollectiveAllReduceInPlaceFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B> {
@@ -369,6 +382,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
             CollectiveAllReduceInPlaceOpFuture::UcxMt(f) => f.block(),
             // CollectiveAllReduceInPlaceOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -393,6 +407,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
             CollectiveAllReduceInPlaceOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveAllReduceInPlaceOpFuture::Shmem(f) => f.spawn(),
             // CollectiveAllReduceInPlaceOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -417,6 +432,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceInPlaceOpH
             CollectiveAllReduceInPlaceOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveAllReduceInPlaceOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveAllReduceInPlaceOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -446,6 +462,8 @@ pub(crate) enum CollectiveReduceOpFuture<T: Remote> {
     UcxMt(#[pin] UcxMtCollectiveReduceFuture<T>),
     // Shmem(#[pin] ShmemCollectiveReduceFuture<T>),
     // Local(#[pin] LocalCollectiveReduceFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 impl<T: Remote> CollectiveReduceOpHandle<T> {
@@ -466,6 +484,7 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
             CollectiveReduceOpFuture::UcxMt(f) => f.block(),
             // CollectiveReduceOpFuture::Shmem(f) => f.block(),
             // CollectiveReduceOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -490,6 +509,7 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
             CollectiveReduceOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveReduceOpFuture::Shmem(f) => f.spawn(),
             // CollectiveReduceOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -514,6 +534,7 @@ impl<T: Remote> Future for CollectiveReduceOpHandle<T> {
             CollectiveReduceOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveReduceOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveReduceOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -542,6 +563,8 @@ pub(crate) enum CollectiveReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
     UcxMt(#[pin] UcxMtCollectiveReduceIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemCollectiveReduceIntoBufferFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B> {
@@ -562,6 +585,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
             CollectiveReduceIntoBufferOpFuture::UcxMt(f) => f.block(),
             // CollectiveReduceIntoBufferOpFuture::Shmem(f) => f.block(),
             // CollectiveReduceIntoBufferOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -586,6 +610,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
             CollectiveReduceIntoBufferOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveReduceIntoBufferOpFuture::Shmem(f) => f.spawn(),
             // CollectiveReduceIntoBufferOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -610,6 +635,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceIntoBufferOpH
             CollectiveReduceIntoBufferOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveReduceIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveReduceIntoBufferOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -640,6 +666,8 @@ pub(crate) enum CollectiveReduceInPlaceOpFuture<T> {
     UcxMt(#[pin] UcxMtCollectiveReduceInPlaceFuture<T>),
     // Shmem(#[pin] ShmemCollectiveReduceInPlaceFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 // impl<T: Remote> CollectiveReduceInPlaceOpHandle<T> {
@@ -700,6 +728,7 @@ impl<T: Remote> Future for CollectiveReduceInPlaceOpHandle<T> {
             CollectiveReduceInPlaceOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveReduceInPlaceOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveReduceInPlaceOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -728,6 +757,8 @@ pub(crate) enum CollectiveAllGatherOpFuture<T: Remote> {
     UcxMt(#[pin] UcxMtCollectiveAllGatherFuture<T>),
     //Shmem(#[pin] ShmemCollectiveAllGatherFuture<T>),    
     // Local(#[pin] LocalCollectiveAllGatherFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 impl<T: Remote> CollectiveAllGatherOpHandle<T> {
@@ -748,6 +779,7 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
             CollectiveAllGatherOpFuture::UcxMt(f) => f.block(),
             // CollectiveAllGatherOpFuture::Shmem(f) => f.block(),
             // CollectiveAllGatherOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -772,6 +804,7 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
             CollectiveAllGatherOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveAllGatherOpFuture::Shmem(f) => f.spawn(),
             // CollectiveAllGatherOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -796,6 +829,7 @@ impl<T: Remote> Future for CollectiveAllGatherOpHandle<T> {
             CollectiveAllGatherOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveAllGatherOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveAllGatherOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -823,6 +857,8 @@ pub(crate) enum CollectiveAllGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     UcxMt(#[pin] UcxMtCollectiveAllGatherIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemCollectiveAllGatherIntoBufferFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T, B> {
@@ -843,6 +879,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
             CollectiveAllGatherIntoBufferOpFuture::UcxMt(f) => f.block(),
             // CollectiveAllGatherIntoBufferOpFuture::Shmem(f) => f.block(),
             // CollectiveAllGatherIntoBufferOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -867,6 +904,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
             CollectiveAllGatherIntoBufferOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveAllGatherIntoBufferOpFuture::Shmem(f) => f.spawn(),
             // CollectiveAllGatherIntoBufferOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -891,6 +929,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllGatherIntoBuffer
             CollectiveAllGatherIntoBufferOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveAllGatherIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveAllGatherIntoBufferOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -919,6 +958,8 @@ pub(crate) enum CollectiveGatherOpFuture<T: Remote> {
     UcxMt(#[pin] UcxMtCollectiveGatherFuture<T>),
     // Shmem(#[pin] ShmemCollectiveGatherFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 impl<T: Remote> CollectiveGatherOpHandle<T> {
@@ -939,6 +980,7 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
             CollectiveGatherOpFuture::UcxMt(f) => f.block(),
             // CollectiveGatherOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -963,6 +1005,7 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
             CollectiveGatherOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveGatherOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -987,6 +1030,7 @@ impl<T: Remote> Future for CollectiveGatherOpHandle<T> {
             CollectiveGatherOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveGatherOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1015,6 +1059,8 @@ pub(crate) enum CollectiveGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
     UcxMt(#[pin] UcxMtCollectiveGatherIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemCollectiveGatherIntoBufferFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B> {
@@ -1035,6 +1081,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
             CollectiveGatherIntoBufferOpFuture::UcxMt(f) => f.block(),
             // CollectiveGatherIntoBufferOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1059,6 +1106,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
             CollectiveGatherIntoBufferOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveGatherIntoBufferOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1083,6 +1131,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveGatherIntoBufferOpH
             CollectiveGatherIntoBufferOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveGatherIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1111,6 +1160,8 @@ pub(crate) enum CollectiveAllToAllOpFuture<T: Remote> {
     UcxMt(#[pin] UcxMtCollectiveAllToAllFuture<T>),
     // Shmem(#[pin] ShmemCollectiveAllBroadcastFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 impl<T: Remote> CollectiveAllToAllOpHandle<T> {
@@ -1131,6 +1182,7 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
             CollectiveAllToAllOpFuture::UcxMt(f) => f.block(),
             // CollectiveAllBroadcastOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1155,6 +1207,7 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
             CollectiveAllToAllOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveAllBroadcastOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1179,6 +1232,7 @@ impl<T: Remote> Future for CollectiveAllToAllOpHandle<T> {
             CollectiveAllToAllOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveAllBroadcastOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1206,6 +1260,8 @@ pub(crate) enum CollectiveAllToAllIntoBufferOpFuture<T: Remote, B: AsLamellarBuf
     UcxMt(#[pin] UcxMtCollectiveAllToAllIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemCollectiveAllBroadcastIntoBufferFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, B> {
@@ -1226,6 +1282,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
             CollectiveAllToAllIntoBufferOpFuture::UcxMt(f) => f.block(),
             // CollectiveAllBroadcastIntoBufferOpFuture::Shmem(f) => f.block(),
             // CollectiveAllBroadcastIntoBufferOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1250,6 +1307,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
             CollectiveAllToAllIntoBufferOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveAllBroadcastIntoBufferOpFuture::Shmem(f) => f.spawn(),
             // CollectiveAllBroadcastIntoBufferOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1274,6 +1332,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllToAllIntoBufferO
             CollectiveAllToAllIntoBufferOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveAllBroadcastIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveAllBroadcastIntoBufferOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1301,6 +1360,8 @@ pub(crate) enum CollectiveBroadcastOpFuture<T: Remote> {
     UcxMt(#[pin] UcxMtCollectiveBroadcastFuture<T>),
     // Shmem(#[pin] ShmemCollectiveBroadcastFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 impl<T: Remote> CollectiveBroadcastOpHandle<T> {
@@ -1321,6 +1382,7 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
             CollectiveBroadcastOpFuture::UcxMt(f) => f.block(),
             // CollectiveBroadcastOpFuture::Shmem(f) => f.block(),
             // CollectiveBroadcastOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1345,6 +1407,7 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
             CollectiveBroadcastOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveBroadcastOpFuture::Shmem(f) => f.spawn(),
             // CollectiveBroadcastOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1369,6 +1432,7 @@ impl<T: Remote> Future for CollectiveBroadcastOpHandle<T> {
             CollectiveBroadcastOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveBroadcastOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveBroadcastOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1396,6 +1460,8 @@ pub(crate) enum CollectiveBroadcastIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     UcxMt(#[pin] UcxMtCollectiveBroadcastIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemCollectiveBroadcastIntoBufferFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T, B> {
@@ -1416,6 +1482,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
             CollectiveBroadcastIntoBufferOpFuture::UcxMt(f) => f.block(),
             // CollectiveBroadcastIntoBufferOpFuture::Shmem(f) => f.block(),
             // CollectiveBroadcastIntoBufferOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1440,6 +1507,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
             CollectiveBroadcastIntoBufferOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveBroadcastIntoBufferOpFuture::Shmem(f) => f.spawn(),
             // CollectiveBroadcastIntoBufferOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1464,6 +1532,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveBroadcastIntoBuffer
             CollectiveBroadcastIntoBufferOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveBroadcastIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveBroadcastIntoBufferOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1492,6 +1561,8 @@ pub(crate) enum CollectiveScatterOpFuture<T: Remote> {
     UcxMt(#[pin] UcxMtCollectiveScatterFuture<T>),
     // Shmem(#[pin] ShmemCollectiveScatterFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 impl<T: Remote> CollectiveScatterOpHandle<T> {
@@ -1512,6 +1583,7 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
             CollectiveScatterOpFuture::UcxMt(f) => f.block(),
             // CollectiveScatterOpFuture::Shmem(f) => f.block(),
             // CollectiveScatterOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1536,6 +1608,7 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
             CollectiveScatterOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveScatterOpFuture::Shmem(f) => f.spawn(),
             // CollectiveScatterOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1560,6 +1633,7 @@ impl<T: Remote> Future for CollectiveScatterOpHandle<T> {
             CollectiveScatterOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveScatterOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveScatterOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1587,6 +1661,8 @@ pub(crate) enum CollectiveScatterIntoBufferOpFuture<T: Remote, B: AsLamellarBuff
     UcxMt(#[pin] UcxMtCollectiveScatterIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemCollectiveScatterIntoBufferFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B> {
@@ -1607,6 +1683,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
             CollectiveScatterIntoBufferOpFuture::UcxMt(f) => f.block(),
             // CollectiveScatterIntoBufferOpFuture::Shmem(f) => f.block(),
             // CollectiveScatterIntoBufferOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1631,6 +1708,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
             CollectiveScatterIntoBufferOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveScatterIntoBufferOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1655,6 +1733,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveScatterIntoBufferOp
             CollectiveScatterIntoBufferOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveScatterIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveScatterIntoBufferOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1683,6 +1762,8 @@ pub(crate) enum CollectiveReduceScatterOpFuture<T: Remote> {
     UcxMt(#[pin] UcxMtCollectiveReduceScatterFuture<T>),
     // Shmem(#[pin] ShmemCollectiveReduceScatterFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<T>),
 }
 
 impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
@@ -1703,6 +1784,7 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
             CollectiveReduceScatterOpFuture::UcxMt(f) => f.block(),
             // CollectiveReduceScatterOpFuture::Shmem(f) => f.block(),
             // CollectiveReduceScatterOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1727,6 +1809,7 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
             CollectiveReduceScatterOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveReduceScatterOpFuture::Shmem(f) => f.spawn(),
             // CollectiveReduceScatterOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1751,6 +1834,7 @@ impl<T: Remote> Future for CollectiveReduceScatterOpHandle<T> {
             CollectiveReduceScatterOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveReduceScatterOpFutureProj::Shmem(f) => f.poll(cx),
             // CollectiveReduceScatterOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }
@@ -1778,6 +1862,8 @@ pub(crate) enum CollectiveReduceScatterIntoBufferOpFuture<T: Remote, B: AsLamell
     UcxMt(#[pin] UcxMtCollectiveReduceScatterIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemCollectiveReduceScatterIntoBufferFuture<T, B>),
     // Local(#[pin] LocalAtomicFuture<T>),
+    #[allow(dead_code)]
+    _Phantom(std::marker::PhantomData<(T, B)>),
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
@@ -1798,6 +1884,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
             CollectiveReduceScatterIntoBufferOpFuture::UcxMt(f) => f.block(),
             // CollectiveReduceScatterIntoBufferOpFuture::Shmem(f) => f.block(),
             // CollectiveReduceScatterIntoBufferOpFuture::Local(f) => f.block(),
+            _ => unreachable!(),
         }
     }
 
@@ -1822,6 +1909,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
             CollectiveReduceScatterIntoBufferOpFuture::UcxMt(f) => f.spawn(),
             // CollectiveReduceScatterIntoBufferOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
+            _ => unreachable!(),
         }
     }
 }
@@ -1846,6 +1934,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceScatterIntoBu
             CollectiveReduceScatterIntoBufferOpFutureProj::UcxMt(f) => f.poll(cx),
             // CollectiveReduceScatterIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
+            _ => unreachable!(),
         }
     }
 }

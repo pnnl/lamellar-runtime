@@ -495,7 +495,7 @@ impl CommAllocCollectiveAllReduce for LibfabricMtAlloc {
             op: op,
             index,
             len,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -559,7 +559,7 @@ impl CommAllocCollectiveReduce for LibfabricMtAlloc {
                 RootOrBuffer::NotRoot(root_pe)
             }
             else {
-                RootOrBuffer::Root(vec![T::default(); len])
+                RootOrBuffer::Root((0..len).map(|_| unsafe { std::mem::zeroed() }).collect())
             };
         LibfabricMtCollectiveReduceFuture {
             alloc: self.clone(),
@@ -1564,7 +1564,7 @@ impl CommAllocCollectiveAllGather for LibfabricMtAlloc {
             alloc: self.clone(),
             index,
             len,
-            result: vec![T::default(); len * self.num_pes()],
+            result: (0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1606,7 +1606,7 @@ impl CommAllocCollectiveGather for LibfabricMtAlloc {
                 RootOrBuffer::NotRoot(root_pe)
             }
             else {
-                RootOrBuffer::Root(vec![T::default(); len * self.num_pes()])
+                RootOrBuffer::Root((0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect())
             };
         LibfabricMtCollectiveGatherFuture {
             alloc: self.clone(),
@@ -1652,7 +1652,7 @@ impl CommAllocCollectiveAllToAll for LibfabricMtAlloc {
             alloc: self.clone(),
             index,
             len,
-            result: vec![T::default(); len * self.num_pes()],
+            result: (0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1691,7 +1691,7 @@ impl CommAllocCollectiveBroadcast for LibfabricMtAlloc {
     ) -> CollectiveBroadcastOpHandle<T> {
         let target = match src_or_pe {
             BroadcastInput::Root(index) => RootSrcOrBuffer::Root(index),
-            BroadcastInput::NotRoot(root_pe) => RootSrcOrBuffer::NotRoot(vec![T::default(); len], root_pe),
+            BroadcastInput::NotRoot(root_pe) => RootSrcOrBuffer::NotRoot((0..len).map(|_| unsafe { std::mem::zeroed() }).collect(), root_pe),
         };
         // let target =
         //     if root_pe != self.ofi.my_pe {
@@ -1742,7 +1742,7 @@ impl CommAllocCollectiveScatter for LibfabricMtAlloc {
             alloc: self.clone(),
             len,
             src_or_root_pe: src_or_root_pe.into(),
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1784,7 +1784,7 @@ impl CommAllocCollectiveReduceScatter for LibfabricMtAlloc {
             op: op,
             index,
             len,
-            result: vec![T::default(); len / self.num_pes()],
+            result: (0..len / self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,

@@ -3300,7 +3300,7 @@ impl CommAllocCollectiveAllReduce for LibfabricAsyncAlloc {
                 op,
                 index,
                 len,
-                result: vec![T::default(); len],
+                result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
@@ -3369,7 +3369,7 @@ impl CommAllocCollectiveReduce for LibfabricAsyncAlloc {
         let target = if root_pe != self.ofi.my_pe {
             RootOrBuffer::NotRoot(root_pe)
         } else {
-            RootOrBuffer::Root(vec![T::default(); len])
+            RootOrBuffer::Root((0..len).map(|_| unsafe { std::mem::zeroed() }).collect())
         };
         LibfabricAsyncCollectiveReduceFuture {
             fut_data: Some(CollectiveReduceDataToRoot {
@@ -3424,7 +3424,7 @@ impl CommAllocCollectiveAllGather for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 index,
                 len,
-                result: vec![T::default(); len * self.num_pes()],
+                result: (0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -3468,7 +3468,7 @@ impl CommAllocCollectiveGather for LibfabricAsyncAlloc {
         let target = if root_pe != self.ofi.my_pe {
             RootOrBuffer::NotRoot(root_pe)
         } else {
-            RootOrBuffer::Root(vec![T::default(); len * self.num_pes()])
+            RootOrBuffer::Root((0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect())
         };
         LibfabricAsyncCollectiveGatherFuture {
             fut_data: Some(CollectiveGatherData {
@@ -3520,7 +3520,7 @@ impl CommAllocCollectiveAllToAll for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 index,
                 len,
-                result: vec![T::default(); len * self.num_pes()],
+                result: (0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -3563,7 +3563,7 @@ impl CommAllocCollectiveBroadcast for LibfabricAsyncAlloc {
         let target = match src_or_pe {
             BroadcastInput::Root(index) => RootSrcOrBuffer::Root(index),
             BroadcastInput::NotRoot(root_pe) => {
-                RootSrcOrBuffer::NotRoot(vec![T::default(); len], root_pe)
+                RootSrcOrBuffer::NotRoot((0..len).map(|_| unsafe { std::mem::zeroed() }).collect(), root_pe)
             }
         };
         LibfabricAsyncCollectiveBroadcastFuture {
@@ -3613,7 +3613,7 @@ impl CommAllocCollectiveScatter for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 len,
                 src_or_root_pe: src_or_root_pe.into(),
-                result: vec![T::default(); len],
+                result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -3660,7 +3660,7 @@ impl CommAllocCollectiveReduceScatter for LibfabricAsyncAlloc {
                 op,
                 index,
                 len,
-                result: vec![T::default(); len / self.num_pes()],
+                result: (0..len / self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
                 scheduler: scheduler.clone(),
                 counters,
             }),
