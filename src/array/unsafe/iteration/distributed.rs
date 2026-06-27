@@ -129,7 +129,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
     consumer_impl!(
         reduce<I, F>( iter: &I, op: F);
         [DistIterReduceHandle<I::Item, F>];
-        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
+        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + Default, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
         [
             Reduce {
                 iter: iter.iter_clone(Sealed),
@@ -181,7 +181,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
     consumer_impl!(
         sum<I>(iter: &I);
         [DistIterSumHandle<I::Item>];
-        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum, ];
+        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum + Default, ];
         [
             Sum {
                 iter: iter.iter_clone(Sealed),

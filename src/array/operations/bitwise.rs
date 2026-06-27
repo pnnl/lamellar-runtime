@@ -1195,35 +1195,35 @@ pub trait LocalBitWiseOps<T: Dist + ElementBitWiseOps> {
     ) -> Option<Vec<T>>;
 }
 
-macro_rules! impl_local_bitwise_op {
-    ($op:ident) => {
-        fn $op(
-            &mut self,
-            idx_vals: impl Iterator<Item = (usize, T)>,
-            fetch: bool,
-        ) -> Option<Vec<T>> {
-            match self {
-                __LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::LocalLock(ref mut data) => {
-                    let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals, fetch)
-                }
-                __LamellarMutLocalData::GlobalLock(ref mut data) => {
-                    let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals, fetch)
-                }
-                __LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
-            }
-        }
-    };
-}
+// macro_rules! impl_local_bitwise_op {
+//     ($op:ident) => {
+//         fn $op(
+//             &mut self,
+//             idx_vals: impl Iterator<Item = (usize, T)>,
+//             fetch: bool,
+//         ) -> Option<Vec<T>> {
+//             match self {
+//                 __LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::LocalLock(ref mut data) => {
+//                     let mut slice: &mut [T] = &mut *data;
+//                     slice.$op(idx_vals, fetch)
+//                 }
+//                 __LamellarMutLocalData::GlobalLock(ref mut data) => {
+//                     let mut slice: &mut [T] = &mut *data;
+//                     slice.$op(idx_vals, fetch)
+//                 }
+//                 __LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//             }
+//         }
+//     };
+// }
 
 impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for __LamellarMutLocalData<'_, T> {
-    impl_local_bitwise_op!(local_fetch_bit_and);
-    impl_local_bitwise_op!(local_fetch_bit_or);
-    impl_local_bitwise_op!(local_fetch_bit_xor);
+    local_ops_fn!(local_fetch_bit_and, Option<Vec<T>>,idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
+    local_ops_fn!(local_fetch_bit_or, Option<Vec<T>>,idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
+    local_ops_fn!(local_fetch_bit_xor, Option<Vec<T>>,idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
 }
 
 impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for &mut [T] {

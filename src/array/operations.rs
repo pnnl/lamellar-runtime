@@ -5,12 +5,26 @@ use crate::array::global_lock_atomic::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
 use crate::array::network_atomic::*;
-use crate::array::{AmDist, Dist, LamellarEnv, LamellarWriteArray};
+use crate::array::*;
 use crate::config;
+
+
+pub(crate) mod pod;
 
 // use crate::lamellar_request::LamellarRequest;
 // use crate::scheduler::Scheduler;
 // use crate::LamellarTeamRT;
+
+pub(crate) mod am_ops_helpers;
+pub use am_ops_helpers::{
+    OptionPodType, PodPrimType,
+    // OptMvMiFetchAm, OptMvMiResultAm, OptMvMiVoidAm,
+    // OptMvSiFetchAm, OptMvSiResultAm, OptMvSiVoidAm,
+    // OptSvMiFetchAm, OptSvMiResultAm, OptSvMiVoidAm,
+    // PodMvMiFetchAm, PodMvMiResultAm, PodMvMiVoidAm,
+    // PodMvSiFetchAm, PodMvSiResultAm, PodMvSiVoidAm,
+    // PodSvMiFetchAm, PodSvMiResultAm, PodSvMiVoidAm,
+};
 
 pub(crate) mod handle;
 pub use handle::{
@@ -204,6 +218,48 @@ impl<T: Dist> From<ArrayOpCmd<Vec<u8>>> for ArrayOpCmd<T> {
         }
     }
 }
+
+impl<T: Dist> From<&ArrayOpCmd<Vec<u8>>> for ArrayOpCmd<T> {
+    fn from(cmd: &ArrayOpCmd<Vec<u8>>) -> Self {
+        match cmd {
+            ArrayOpCmd::Add => ArrayOpCmd::Add,
+            ArrayOpCmd::FetchAdd => ArrayOpCmd::FetchAdd,
+            ArrayOpCmd::Sub => ArrayOpCmd::Sub,
+            ArrayOpCmd::FetchSub => ArrayOpCmd::FetchSub,
+            ArrayOpCmd::Mul => ArrayOpCmd::Mul,
+            ArrayOpCmd::FetchMul => ArrayOpCmd::FetchMul,
+            ArrayOpCmd::Div => ArrayOpCmd::Div,
+            ArrayOpCmd::FetchDiv => ArrayOpCmd::FetchDiv,
+            ArrayOpCmd::Rem => ArrayOpCmd::Rem,
+            ArrayOpCmd::FetchRem => ArrayOpCmd::FetchRem,
+            ArrayOpCmd::And => ArrayOpCmd::And,
+            ArrayOpCmd::FetchAnd => ArrayOpCmd::FetchAnd,
+            ArrayOpCmd::Or => ArrayOpCmd::Or,
+            ArrayOpCmd::FetchOr => ArrayOpCmd::FetchOr,
+            ArrayOpCmd::Xor => ArrayOpCmd::Xor,
+            ArrayOpCmd::FetchXor => ArrayOpCmd::FetchXor,
+            ArrayOpCmd::Store => ArrayOpCmd::Store,
+            ArrayOpCmd::Load => ArrayOpCmd::Load,
+            ArrayOpCmd::Swap => ArrayOpCmd::Swap,
+            ArrayOpCmd::Put => ArrayOpCmd::Put,
+            ArrayOpCmd::Get => ArrayOpCmd::Get,
+            ArrayOpCmd::CompareExchange(old) => {
+                let old_t = unsafe { std::slice::from_raw_parts(old.as_ptr() as *const T, 1) };
+                ArrayOpCmd::CompareExchange(old_t[0])
+            }
+            ArrayOpCmd::CompareExchangeEps(old, eps) => {
+                let old_t = unsafe { std::slice::from_raw_parts(old.as_ptr() as *const T, 1) };
+                let eps_t = unsafe { std::slice::from_raw_parts(eps.as_ptr() as *const T, 1) };
+                ArrayOpCmd::CompareExchangeEps(old_t[0], eps_t[0])
+            }
+            ArrayOpCmd::Shl => ArrayOpCmd::Shl,
+            ArrayOpCmd::FetchShl => ArrayOpCmd::FetchShl,
+            ArrayOpCmd::Shr => ArrayOpCmd::Shr,
+            ArrayOpCmd::FetchShr => ArrayOpCmd::FetchShr,
+        }
+    }
+}
+
 
 #[doc(hidden)]
 #[repr(C, packed)] //required as we reinterpret as bytes
@@ -997,4 +1053,78 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for __NetworkAtomicLocalData<T> {
 pub trait ElementOps: Dist + Sized {}
 impl<T> ElementOps for T where T: Dist {}
 
+
 impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {}
+
+macro_rules! local_ops_fn {
+    ($function_name:ident,  $($param_name:ident: $param_type:ty),*) => {
+        fn $function_name(&mut self, $($param_name: $param_type),*){
+            match self {
+                __LamellarMutLocalData::Slice(d) => d.$function_name($($param_name),*),
+                __LamellarMutLocalData::LocalLock(ref mut d) => {
+                    let mut slice: &mut [T] = &mut *d;
+                    slice.$function_name($($param_name),*)
+                },
+                __LamellarMutLocalData::GlobalLock(ref mut d) => {
+                    let mut slice: &mut [T] = &mut *d;
+                    slice.$function_name($($param_name),*)
+                },
+                __LamellarMutLocalData::NativeAtomic(ref mut d) => d.$function_name($($param_name),*),
+                __LamellarMutLocalData::GenericAtomic(ref mut d) => d.$function_name($($param_name),*),
+                __LamellarMutLocalData::NetworkAtomic(ref mut d) => d.$function_name($($param_name),*),
+            }
+        }
+    };
+    ($function_name:ident, $return_type:ty,  $($param_name:ident: $param_type:ty),*) => {
+        fn $function_name(&mut self, $($param_name: $param_type),*) -> $return_type {
+            match self {
+                __LamellarMutLocalData::Slice(d) => d.$function_name($($param_name),*),
+                __LamellarMutLocalData::LocalLock(ref mut d) => {
+                    let mut slice: &mut [T] = &mut *d;
+                    slice.$function_name($($param_name),*)
+                },
+                __LamellarMutLocalData::GlobalLock(ref mut d) => {
+                    let mut slice: &mut [T] = &mut *d;
+                    slice.$function_name($($param_name),*)
+                },
+                __LamellarMutLocalData::NativeAtomic(ref mut d) => d.$function_name($($param_name),*),
+                __LamellarMutLocalData::GenericAtomic(ref mut d) => d.$function_name($($param_name),*),
+                __LamellarMutLocalData::NetworkAtomic(ref mut d) => d.$function_name($($param_name),*),
+            }
+        }
+    };
+}
+pub(crate) use local_ops_fn;
+
+macro_rules! impl_traits_for_type{
+     (base: $($type:ty),*) => {
+       $(
+        impl Dist for $type {}
+        impl ArrayOps for $type {}
+        impl ElementArithmeticOps for $type {}
+        impl ElementComparePartialEqOps for $type {}
+       )*
+    };
+    (bitwise: $($type:ty),*) => {
+       $(
+        impl ElementBitWiseOps for $type {}
+        impl ElementShiftOps for $type {}
+       )*
+    };
+    (ceq: $($type:ty),*) => {
+       $(
+        impl ElementCompareEqOps for $type {}
+        impl ElementCompareEqOps for Option<$type> {}
+       )*
+    };
+}
+
+impl_traits_for_type!(base: u8,u16,u32,u64,usize,u128,i8,i16,i32,i64,isize,i128,f32,f64);
+impl_traits_for_type!(bitwise: u8,u16,u32,u64,usize,u128,i8,i16,i32,i64,isize,i128);
+impl_traits_for_type!(ceq: u8,u16,u32,u64,usize,u128,i8,i16,i32,i64,isize,i128);
+
+impl Dist for bool {}
+impl ArrayOps for bool {}
+impl ElementBitWiseOps for bool {}
+impl ElementCompareEqOps for bool {}
+impl ElementCompareEqOps for Option<bool> {}

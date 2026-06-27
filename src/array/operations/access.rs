@@ -471,39 +471,41 @@ pub trait LocalAccessOps<T: Dist + ElementOps> {
 }
 
 impl<T: Dist + ElementOps> LocalAccessOps<T> for __LamellarMutLocalData<'_, T> {
-    fn local_store(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
-        match self {
-            __LamellarMutLocalData::Slice(data) => data.local_store(idx_vals),
-            __LamellarMutLocalData::LocalLock(ref mut data) => {
-                let mut slice: &mut [T] = &mut *data;
-                slice.local_store(idx_vals)
-            }
-            __LamellarMutLocalData::GlobalLock(ref mut data) => {
-                let mut slice: &mut [T] = &mut *data;
-                slice.local_store(idx_vals)
-            }
-            __LamellarMutLocalData::NativeAtomic(ref mut data) => data.local_store(idx_vals),
-            __LamellarMutLocalData::GenericAtomic(ref mut data) => data.local_store(idx_vals),
-            __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.local_store(idx_vals),
-        }
-    }
+    local_ops_fn!(local_store, idx_vals: impl Iterator<Item = (usize, T)>);
+    local_ops_fn!(local_swap, Vec<T>, idx_vals: impl Iterator<Item = (usize, T)>);
+    // fn local_store(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
+    //     match self {
+    //         __LamellarMutLocalData::Slice(data) => data.local_store(idx_vals),
+    //         __LamellarMutLocalData::LocalLock(ref mut data) => {
+    //             let mut slice: &mut [T] = &mut *data;
+    //             slice.local_store(idx_vals)
+    //         }
+    //         __LamellarMutLocalData::GlobalLock(ref mut data) => {
+    //             let mut slice: &mut [T] = &mut *data;
+    //             slice.local_store(idx_vals)
+    //         }
+    //         __LamellarMutLocalData::NativeAtomic(ref mut data) => data.local_store(idx_vals),
+    //         __LamellarMutLocalData::GenericAtomic(ref mut data) => data.local_store(idx_vals),
+    //         __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.local_store(idx_vals),
+    //     }
+    // }
 
-    fn local_swap(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
-        match self {
-            __LamellarMutLocalData::Slice(data) => data.local_swap(idx_vals),
-            __LamellarMutLocalData::LocalLock(ref mut data) => {
-                let mut slice: &mut [T] = &mut *data;
-                slice.local_swap(idx_vals)
-            }
-            __LamellarMutLocalData::GlobalLock(ref mut data) => {
-                let mut slice: &mut [T] = &mut *data;
-                slice.local_swap(idx_vals)
-            }
-            __LamellarMutLocalData::NativeAtomic(ref mut data) => data.local_swap(idx_vals),
-            __LamellarMutLocalData::GenericAtomic(ref mut data) => data.local_swap(idx_vals),
-            __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.local_swap(idx_vals),
-        }
-    }
+    // fn local_swap(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+    //     match self {
+    //         __LamellarMutLocalData::Slice(data) => data.local_swap(idx_vals),
+    //         __LamellarMutLocalData::LocalLock(ref mut data) => {
+    //             let mut slice: &mut [T] = &mut *data;
+    //             slice.local_swap(idx_vals)
+    //         }
+    //         __LamellarMutLocalData::GlobalLock(ref mut data) => {
+    //             let mut slice: &mut [T] = &mut *data;
+    //             slice.local_swap(idx_vals)
+    //         }
+    //         __LamellarMutLocalData::NativeAtomic(ref mut data) => data.local_swap(idx_vals),
+    //         __LamellarMutLocalData::GenericAtomic(ref mut data) => data.local_swap(idx_vals),
+    //         __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.local_swap(idx_vals),
+    //     }
+    // }
 }
 
 impl<T: Dist + ElementOps> LocalAccessOps<T> for &mut [T] {

@@ -20,6 +20,10 @@ pub trait ElementArithmeticOps:
 {
 }
 
+
+
+
+
 // We dont want to auto derive this because we want to require that users
 // use the #[AmData(ArrayOps(Arithmetic))] macro to derive it for them
 // impl<T> ElementArithmeticOps for T where
@@ -1904,39 +1908,45 @@ pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
         idx_vals: impl Iterator<Item = (usize, T)>,
         fetch: bool,
     ) -> Option<Vec<T>>;
+
 }
 
-macro_rules! impl_local_arithmetic_op {
-    ($op:ident) => {
-        fn $op(
-            &mut self,
-            idx_vals: impl Iterator<Item = (usize, T)>,
-            fetch: bool,
-        ) -> Option<Vec<T>> {
-            match self {
-                __LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::LocalLock(ref mut data) => {
-                    let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals, fetch)
-                }
-                __LamellarMutLocalData::GlobalLock(ref mut data) => {
-                    let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals, fetch)
-                }
-                __LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
-            }
-        }
-    };
-}
+// macro_rules! impl_local_arithmetic_op {
+//     ($op:ident) => {
+//         fn $op(
+//             &mut self,
+//             idx_vals: impl Iterator<Item = (usize, T)>,
+//             fetch: bool,
+//         ) -> Option<Vec<T>> {
+//             match self {
+//                 __LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::LocalLock(ref mut data) => {
+//                     let mut slice: &mut [T] = &mut *data;
+//                     slice.$op(idx_vals, fetch)
+//                 }
+//                 __LamellarMutLocalData::GlobalLock(ref mut data) => {
+//                     let mut slice: &mut [T] = &mut *data;
+//                     slice.$op(idx_vals, fetch)
+//                 }
+//                 __LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//             }
+//         }
+//     };
+// }
 
 impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for __LamellarMutLocalData<'_, T> {
-    impl_local_arithmetic_op!(local_fetch_add);
-    impl_local_arithmetic_op!(local_fetch_sub);
-    impl_local_arithmetic_op!(local_fetch_mul);
-    impl_local_arithmetic_op!(local_fetch_div);
-    impl_local_arithmetic_op!(local_fetch_rem);
+    // impl_local_arithmetic_op!(local_fetch_add);
+    // impl_local_arithmetic_op!(local_fetch_sub);
+    // impl_local_arithmetic_op!(local_fetch_mul);
+    // impl_local_arithmetic_op!(local_fetch_div);
+    // impl_local_arithmetic_op!(local_fetch_rem);
+    local_ops_fn!(local_fetch_add, Option<Vec<T>>, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
+    local_ops_fn!(local_fetch_sub, Option<Vec<T>>, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
+    local_ops_fn!(local_fetch_mul, Option<Vec<T>>, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
+    local_ops_fn!(local_fetch_div, Option<Vec<T>>, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
+    local_ops_fn!(local_fetch_rem, Option<Vec<T>>, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
 }
 
 impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for &mut [T] {

@@ -24,6 +24,7 @@ impl<T: Dist + ElementOps> LocalAccessOps<T> for __GenericAtomicLocalData<T> {
             self.at(i).store(val);
         });
     }
+
     fn local_swap(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
         idx_vals.map(|(i, val)| self.at(i).swap(val)).collect()
     }

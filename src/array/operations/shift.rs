@@ -690,34 +690,36 @@ pub trait LocalShiftOps<T: Dist + ElementShiftOps> {
     ) -> Option<Vec<T>>;
 }
 
-macro_rules! impl_local_shift_op {
-    ($op:ident) => {
-        fn $op(
-            &mut self,
-            idx_vals: impl Iterator<Item = (usize, T)>,
-            fetch: bool,
-        ) -> Option<Vec<T>> {
-            match self {
-                __LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::LocalLock(ref mut data) => {
-                    let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals, fetch)
-                }
-                __LamellarMutLocalData::GlobalLock(ref mut data) => {
-                    let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals, fetch)
-                }
-                __LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
-                __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
-            }
-        }
-    };
-}
+// macro_rules! impl_local_shift_op {
+//     ($op:ident) => {
+//         fn $op(
+//             &mut self,
+//             idx_vals: impl Iterator<Item = (usize, T)>,
+//             fetch: bool,
+//         ) -> Option<Vec<T>> {
+//             match self {
+//                 __LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::LocalLock(ref mut data) => {
+//                     let mut slice: &mut [T] = &mut *data;
+//                     slice.$op(idx_vals, fetch)
+//                 }
+//                 __LamellarMutLocalData::GlobalLock(ref mut data) => {
+//                     let mut slice: &mut [T] = &mut *data;
+//                     slice.$op(idx_vals, fetch)
+//                 }
+//                 __LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//                 __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
+//             }
+//         }
+//     };
+// }
 
 impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for __LamellarMutLocalData<'_, T> {
-    impl_local_shift_op!(local_fetch_shl);
-    impl_local_shift_op!(local_fetch_shr);
+    // impl_local_shift_op!(local_fetch_shl);
+    // impl_local_shift_op!(local_fetch_shr);
+    local_ops_fn!(local_fetch_shl,Option<Vec<T>>,idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
+    local_ops_fn!(local_fetch_shr,Option<Vec<T>>,idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool);
 }
 
 impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for &mut [T] {

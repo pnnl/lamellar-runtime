@@ -1,8 +1,10 @@
 use crate::active_messaging::LamellarArcAm;
+use crate::memregion::{OneSidedMemoryRegion};
 use crate::array::operations::handle::*;
 use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
+ use crate::array::pod::{PodPrimType,PackedIndicies,PackedIdxVal,PodMultiIdxSingleValAm, PodMultiIdxMultiValAm, PodSingleIdxMultiValAm,PodMultiIdxSingleValAmReturn, PodMultiIdxMultiValAmReturn, PodSingleIdxMultiValAmReturn};
 use crate::env_var::{config, IndexType};
 use crate::lamellae::AtomicOp;
 use crate::AmHandle;
@@ -390,7 +392,20 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             .map(|pe| self.inner.num_elems_pe(pe))
             .max()
             .unwrap();
-        let index_size = IndexSize::from(max_local_size);
+        // let index_size = IndexSize::from(max_local_size);
+        let index_size = match config().array_index_size {
+            IndexType::Dynamic => {
+                //calculate smallest integer type that can hold max_local_size
+                // let bits_needed = usize::BITS as usize - max_local_size.leading_zeros() as usize;
+                // bits_needed.div_ceil(8)
+                4
+            },
+            IndexType::Static => std::mem::size_of::<usize>(),
+        };
+
+        if self.inner.data.team.my_pe() == 0 {
+            println!("max_local_size: {:?} index_size: {:?}", max_local_size, index_size);
+        }
         let res = if v_len == 1 && i_len == 1 {
             //one to one
             self.single_val_single_index::<()>(
@@ -452,10 +467,17 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             .map(|pe| self.inner.num_elems_pe(pe))
             .max()
             .unwrap();
-        let index_size = IndexSize::from(max_local_size);
-        let res = if v_len == 1 && i_len == 1 {
+        // let index_size = IndexSize::from(max_local_size);
+        let index_size = match config().array_index_size {
+            IndexType::Dynamic => {
+                let bits_needed = usize::BITS as usize - max_local_size.leading_zeros() as usize;
+                bits_needed.div_ceil(8)
+            },
+            IndexType::Static => std::mem::size_of::<usize>(),
+        };
+        let res: VecDeque<(AmHandle<OneSidedMemoryRegion<u8>>, Vec<usize>)> = if v_len == 1 && i_len == 1 {
             //one to one
-            self.single_val_single_index::<Vec<T>>(
+            self.single_val_single_index::<OneSidedMemoryRegion<u8>>(
                 byte_array.clone(),
                 vals[0].first(),
                 indices[0].first(),
@@ -464,7 +486,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )
         } else if v_len > 1 && i_len == 1 {
             //many vals one index
-            self.multi_val_one_index::<Vec<T>>(
+            self.multi_val_one_index::<OneSidedMemoryRegion<u8>>(
                 byte_array.clone(),
                 vals,
                 indices[0].first(),
@@ -474,7 +496,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )
         } else if v_len == 1 && i_len > 1 {
             //one val many indices
-            self.one_val_multi_indices::<Vec<T>>(
+            self.one_val_multi_indices::<OneSidedMemoryRegion<u8>>(
                 byte_array.clone(),
                 vals[0].first(),
                 indices,
@@ -484,7 +506,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )
         } else if v_len > 1 && i_len > 1 {
             //many vals many indices
-            self.multi_val_multi_index::<Vec<T>>(
+            self.multi_val_multi_index::<OneSidedMemoryRegion<u8>>(
                 byte_array.clone(),
                 vals,
                 indices,
@@ -496,9 +518,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             VecDeque::new()
         };
         if res.len() == 0 {
-            return ArrayFetchBatchOpHandle::new(byte_array, res, 0);
+            return ArrayFetchBatchOpHandle::new_one_sided_memory_region(byte_array, res, 0);
         }
-        ArrayFetchBatchOpHandle::new(byte_array, res, std::cmp::max(i_len, v_len))
+        ArrayFetchBatchOpHandle::new_one_sided_memory_region(byte_array, res, std::cmp::max(i_len, v_len))
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -515,10 +537,19 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             .map(|pe| self.inner.num_elems_pe(pe))
             .max()
             .unwrap();
-        let index_size = IndexSize::from(max_local_size);
-        let res = if v_len == 1 && i_len == 1 {
+        // let index_size = IndexSize::from(max_local_size);
+        let index_size = match config().array_index_size {
+            IndexType::Dynamic => {
+                let bits_needed = usize::BITS as usize - max_local_size.leading_zeros() as usize;
+                bits_needed.div_ceil(8)
+            },
+            IndexType::Static => std::mem::size_of::<usize>(),
+        };
+        
+
+        let res: VecDeque<(AmHandle<OneSidedMemoryRegion<u8>>, Vec<usize>)> = if v_len == 1 && i_len == 1 {
             //one to one
-            self.single_val_single_index::<Vec<Result<T, T>>>(
+            self.single_val_single_index::<OneSidedMemoryRegion<u8>>(
                 byte_array.clone(),
                 vals[0].first(),
                 indices[0].first(),
@@ -527,7 +558,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )
         } else if v_len > 1 && i_len == 1 {
             //many vals one index
-            self.multi_val_one_index::<Vec<Result<T, T>>>(
+            self.multi_val_one_index::<OneSidedMemoryRegion<u8>>(
                 byte_array.clone(),
                 vals,
                 indices[0].first(),
@@ -537,7 +568,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )
         } else if v_len == 1 && i_len > 1 {
             //one val many indices
-            self.one_val_multi_indices::<Vec<Result<T, T>>>(
+            self.one_val_multi_indices::<OneSidedMemoryRegion<u8>>(
                 byte_array.clone(),
                 vals[0].first(),
                 indices,
@@ -547,7 +578,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             )
         } else if v_len > 1 && i_len > 1 {
             //many vals many indices
-            self.multi_val_multi_index::<Vec<Result<T, T>>>(
+            self.multi_val_multi_index::<OneSidedMemoryRegion<u8>>(
                 byte_array.clone(),
                 vals,
                 indices,
@@ -559,7 +590,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             //no vals no indices
             VecDeque::new()
         };
-        ArrayResultBatchOpHandle::new(byte_array, res, std::cmp::max(i_len, v_len))
+        ArrayResultBatchOpHandle::new_one_sided_memory_region(byte_array, res, std::cmp::max(i_len, v_len))
     }
 
     fn one_val_multi_indices<R: AmDist>(
@@ -569,10 +600,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         mut indices: Vec<OpInputEnum<usize>>,
         op: ArrayOpCmd<T>,
         ret: BatchReturnType,
-        index_size: IndexSize,
+        index_size: usize,
     ) -> VecDeque<(AmHandle<R>, Vec<usize>)> {
         let num_per_batch =
-            (config().am_size_threshold as f32 / index_size.len() as f32).ceil() as usize;
+            (config().am_size_threshold as f32 / index_size as f32).ceil() as usize;
 
         let num_pes = self.inner.data.team.num_pes();
         // let my_pe = self.inner.data.team.my_pe();
@@ -580,6 +611,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let futures = Arc::new(Mutex::new(VecDeque::new()));
         let num_reqs = indices.len();
         let mut start_i = 0;
+
+        let val_bytes_slice = unsafe{
+                                std::slice::from_raw_parts(&val as *const T as *const u8, std::mem::size_of::<T>())
+                            };
 
         // println!("single_val_multi_index");
 
@@ -597,7 +632,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 .team
                 .scheduler
                 .submit_immediate_task(async move {
-                    let mut buffs = vec![index_size.create_buf(num_per_batch); num_pes];
+                    // let mut buffs = vec![index_size.create_buf(num_per_batch); num_pes];
+                    let mut buffs = vec![PackedIndicies::new_with_capacity(index_size, num_per_batch); num_pes];
                     let mut res_buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
                     let mut reqs: Vec<(AmHandle<R>, Vec<usize>)> = Vec::new();
 
@@ -614,18 +650,20 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         buffs[pe].push(local_index);
                         res_buffs[pe].push(j);
                         if buffs[pe].len() >= num_per_batch {
-                            let mut new_buffer = index_size.create_buf(num_per_batch);
-                            std::mem::swap(&mut buffs[pe], &mut new_buffer);
+                            // let mut new_buffer = PackedIndicies::new_with_capacity(index_size, num_per_batch);
+                            // std::mem::swap(&mut buffs[pe], &mut new_buffer);
                             let mut new_res_buffer = Vec::with_capacity(num_per_batch);
                             std::mem::swap(&mut res_buffs[pe], &mut new_res_buffer);
+                            
 
-                            let am = SingleValMultiIndex::new_with_vec(
+                            
+                            let am = SingleValMultiIndex::new(
                                 byte_array2.clone(),
                                 op,
-                                new_buffer.to_vec(),
-                                val,
+                                &mut  buffs[pe],
+                                val_bytes_slice.to_vec(),
                                 index_size,
-                            )
+                            ).await
                             .into_am::<T>(ret);
                             let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
                                 pe,
@@ -634,19 +672,21 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             );
 
                             reqs.push((req, new_res_buffer));
+                        
                         }
                     }
-                    for (pe, (buff, res_buff)) in
+                    for (pe, (mut buff, res_buff)) in
                         buffs.into_iter().zip(res_buffs.into_iter()).enumerate()
                     {
                         if buff.len() > 0 {
-                            let am = SingleValMultiIndex::new_with_vec(
+                            
+                            let am = SingleValMultiIndex::new(
                                 byte_array2.clone(),
                                 op,
-                                buff.to_vec(),
-                                val,
+                                &mut buff,
+                                val_bytes_slice.to_vec(),
                                 index_size,
-                            )
+                            ).await
                             .into_am::<T>(ret);
                             let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
                                 pe,
@@ -681,7 +721,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         index: usize,
         op: ArrayOpCmd<T>,
         ret: BatchReturnType,
-        _index_size: IndexSize,
+        _index_size: usize,
     ) -> VecDeque<(AmHandle<R>, Vec<usize>)> {
         let num_per_batch =
             (config().am_size_threshold as f32 / std::mem::size_of::<T>() as f32).ceil() as usize;
@@ -711,14 +751,15 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             scheduler.submit_immediate_task(async move {
                 let mut inner_start_i = start_i;
                 let mut reqs: Vec<(AmHandle<R>, Vec<usize>)> = Vec::new();
-                val_chunks.into_iter().for_each(|val| {
-                    let val_len = val.len();
-                    let am = MultiValSingleIndex::new_with_vec(
+                for val_chunk in val_chunks.into_iter() {
+                // val_chunks.into_iter().for_each(|val| {
+                    let val_len = val_chunk.len();
+                    let am = MultiValSingleIndex::new(
                         byte_array2.clone(),
                         op,
                         local_index,
-                        val,
-                    )
+                        val_chunk,
+                    ).await
                     .into_am::<T>(ret);
                     let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
                         pe,
@@ -729,7 +770,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                         (inner_start_i..inner_start_i + val_len).collect::<Vec<usize>>();
                     reqs.push((req, res_buffer));
                     inner_start_i += val_len;
-                });
+                }
                 futures2.lock().extend(reqs);
                 cnt2.fetch_add(1, Ordering::SeqCst);
                 the_array.inner.data.array_counters.dec_outstanding(1);
@@ -753,15 +794,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         mut indices: Vec<OpInputEnum<usize>>,
         op: ArrayOpCmd<T>,
         ret: BatchReturnType,
-        index_size: IndexSize,
+        index_size: usize,
     ) -> VecDeque<(AmHandle<R>, Vec<usize>)> {
-        let idx_val_bytes = match index_size {
-            IndexSize::U8 => std::mem::size_of::<IdxVal<u8, T>>(),
-            IndexSize::U16 => std::mem::size_of::<IdxVal<u16, T>>(),
-            IndexSize::U32 => std::mem::size_of::<IdxVal<u32, T>>(),
-            IndexSize::U64 => std::mem::size_of::<IdxVal<u64, T>>(),
-            IndexSize::Usize => std::mem::size_of::<IdxVal<usize, T>>(),
-        };
+        let idx_val_bytes = index_size + std::mem::size_of::<T>();
         let num_per_batch =
             (config().am_size_threshold as f32 / idx_val_bytes as f32).ceil() as usize;
         let bytes_per_batch = num_per_batch * idx_val_bytes;
@@ -789,7 +824,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 .team
                 .scheduler
                 .submit_immediate_task(async move {
-                    let mut buffs = vec![Vec::with_capacity(bytes_per_batch); num_pes];
+                    let mut buffs = vec![PackedIdxVal::new_with_capacity::<T>(index_size, num_per_batch); num_pes];
                     let mut res_buffs = vec![Vec::with_capacity(num_per_batch); num_pes];
                     let mut reqs: Vec<(AmHandle<R>, Vec<usize>)> = Vec::new();
                     for (ii, (idx, val)) in
@@ -804,55 +839,19 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                                 the_array.inner.size
                             ),
                         };
-                        match index_size {
-                            IndexSize::U8 => buffs[pe].extend_from_slice(
-                                IdxVal::<u8, T> {
-                                    index: local_index as u8,
-                                    val,
-                                }
-                                .as_bytes(),
-                            ),
-                            IndexSize::U16 => buffs[pe].extend_from_slice(
-                                IdxVal::<u16, T> {
-                                    index: local_index as u16,
-                                    val,
-                                }
-                                .as_bytes(),
-                            ),
-                            IndexSize::U32 => buffs[pe].extend_from_slice(
-                                IdxVal::<u32, T> {
-                                    index: local_index as u32,
-                                    val,
-                                }
-                                .as_bytes(),
-                            ),
-                            IndexSize::U64 => buffs[pe].extend_from_slice(
-                                IdxVal::<u64, T> {
-                                    index: local_index as u64,
-                                    val,
-                                }
-                                .as_bytes(),
-                            ),
-                            IndexSize::Usize => buffs[pe].extend_from_slice(
-                                IdxVal::<usize, T> {
-                                    index: local_index as usize,
-                                    val,
-                                }
-                                .as_bytes(),
-                            ),
-                        }
+                        buffs[pe].push(local_index, val);
                         res_buffs[pe].push(j);
                         if buffs[pe].len() >= bytes_per_batch {
-                            let mut new_buffer = Vec::with_capacity(bytes_per_batch);
-                            std::mem::swap(&mut buffs[pe], &mut new_buffer);
+                            // let mut new_buffer = PackedIdxVal::<T>::new_with_capacity(index_size, num_per_batch);
+                            // std::mem::swap(&mut buffs[pe], &mut new_buffer);
                             let mut new_res_buffer = Vec::with_capacity(num_per_batch);
                             std::mem::swap(&mut res_buffs[pe], &mut new_res_buffer);
-                            let am = MultiValMultiIndex::new_with_vec(
+                            let am = MultiValMultiIndex::new(
                                 byte_array2.clone(),
                                 op,
-                                new_buffer,
+                                &mut buffs[pe],
                                 index_size,
-                            )
+                            ).await
                             .into_am::<T>(ret);
                             let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
                                 pe,
@@ -862,16 +861,16 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             reqs.push((req, new_res_buffer));
                         }
                     }
-                    for (pe, (buff, res_buff)) in
+                    for (pe, (mut buff, res_buff)) in
                         buffs.into_iter().zip(res_buffs.into_iter()).enumerate()
                     {
                         if buff.len() > 0 {
-                            let am = MultiValMultiIndex::new_with_vec(
+                            let am = MultiValMultiIndex::new(
                                 byte_array2.clone(),
                                 op,
-                                buff,
+                                &mut buff,
                                 index_size,
-                            )
+                            ).await
                             .into_am::<T>(ret);
                             let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
                                 pe,
@@ -911,17 +910,20 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 self.inner.size
             ),
         };
-        let mut buff = Vec::new();
-        buff.extend_from_slice(
-            IdxVal {
-                index: local_index,
-                val,
-            }
-            .as_bytes(),
-        );
+        let index_size = std::mem::size_of::<usize>();
+        let mut idx_val = PackedIdxVal::new_with_capacity::<T>(index_size,1);
+        idx_val.push(local_index, val);
         let res_buff = vec![0];
-        let am = MultiValMultiIndex::new_with_vec(byte_array.clone(), op, buff, IndexSize::Usize)
-            .into_am::<T>(ret);
+        let am = self.inner
+                .data
+                .team
+                .scheduler
+                .block_on(
+                    async move {
+                        MultiValMultiIndex::new(byte_array.clone(), op, &mut idx_val, index_size).await
+                    .into_am::<T>(ret)
+                    }
+                );
         let req = self.inner.data.team.exec_arc_am_pe::<R>(
             pe,
             am,
@@ -930,6 +932,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         VecDeque::from(vec![(req, res_buff)])
     }
 }
+
 
 #[doc(hidden)]
 #[derive(Copy, Clone, Debug, Hash, std::cmp::Eq, std::cmp::PartialEq)]
@@ -941,218 +944,272 @@ pub enum BatchReturnType {
 
 struct SingleValMultiIndex {
     array: LamellarByteArray,
-    idx: Vec<u8>,
+    indices: Option<OneSidedMemoryRegion<u8>>,
+    indices_u8: Option<Vec<u8>>,
     val: Vec<u8>,
     op: ArrayOpCmd<Vec<u8>>,
-    index_size: IndexSize,
+    index_size: usize,
+    prim_type: Option<(PodPrimType,bool)>, // type and whether it is wrapped in an option
 }
 
 impl SingleValMultiIndex {
-    fn new_with_vec<T: Dist>(
+    async fn new<T: Dist>(
         array: LamellarByteArray,
         op: ArrayOpCmd<T>,
-        indices: Vec<u8>,
-        val: T,
-        index_size: IndexSize,
+        indices: &mut PackedIndicies,
+        val: Vec<u8>,
+        index_size: usize,
     ) -> Self {
-        let val_u8 = &val as *const T as *const u8;
+        let prim_type = PodPrimType::get_type::<T>();
+        let (indices_mr, indices_u8) = if prim_type.is_some() {
+            let mut mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
+            while let None = mem_region {
+                // println!("Failed to allocate mem region, retrying...");
+                // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
+                async_std::task::yield_now().await;
+                mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
+            }
+            let mem_region = mem_region.unwrap();
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    indices.as_ptr(),
+                    mem_region.as_mut_ptr().unwrap(),
+                    indices.len(),
+                );
+            }(Some(mem_region), None)
+        }
+        else{
+            let indices_u8 = unsafe{
+                std::slice::from_raw_parts(indices.as_ptr(), indices.len()).to_vec()
+            };
+            (None, Some(indices_u8))
+        };
+        indices.clear();
         Self {
             array: array.into(),
-            idx: indices,
-            val: unsafe { std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>()) }.to_vec(),
+            indices: indices_mr,
+            indices_u8,
+            val,
             op: op.into(),
             index_size,
+            prim_type: PodPrimType::get_type::<T>(),
         }
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        // println!("{:?} {:?} {:?}",self.array.type_id(),TypeId::of::<T>(),ret);
-        match SINGLE_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
-            Some(op) => op(
-                self.array,
-                self.op,
-                self.val,
-                self.idx,
-                self.index_size.len() as u8,
-                ret,
-            ),
-            None => SINGLE_VAL_MULTI_IDX_OPS
+        if let Some((prim_type,opt)) = self.prim_type { //built in Pod support 
+            match ret {
+                BatchReturnType::None => 
+                    Arc::new(PodMultiIdxSingleValAm{
+                        array: self.array,
+                        val: self.val,
+                        indices: self.indices.unwrap(),
+                        idx_size: self.index_size,
+                        prim_type,
+                        opt,
+                        op: self.op,
+                    }),
+                BatchReturnType::Vals | BatchReturnType::Result => 
+                    Arc::new(PodMultiIdxSingleValAmReturn{
+                        array: self.array,
+                        val: self.val,
+                        indices: self.indices.unwrap(),
+                        idx_size: self.index_size,
+                        prim_type,
+                        opt,
+                        op: self.op,
+                    }),
+            }
+        }
+        else{ // user defined type support
+            // panic!("User defined types not currently supported for single val multi index ops");
+            SINGLE_VAL_MULTI_IDX_OPS
                 .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
                 .unwrap()(
                 self.array,
                 self.op,
                 self.val,
-                self.idx,
-                self.index_size.len() as u8,
-            ),
+                self.indices_u8.unwrap(),
+                self.index_size as u8,
+            )
         }
-        // match std::env::var("TEST_OPS") {
-        //     Ok(_) => SINGLE_VAL_MULTI_IDX_OPS_NEW
-        //         .get(&TypeId::of::<T>())
-        //         .unwrap()(
-        //         self.array,
-        //         self.op,
-        //         self.val,
-        //         self.idx,
-        //         self.index_size.len() as u8,
-        //         ret,
-        //     ),
-        //     Err(_) => SINGLE_VAL_MULTI_IDX_OPS
-        //         .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-        //         .unwrap()(
-        //         self.array,
-        //         self.op,
-        //         self.val,
-        //         self.idx,
-        //         self.index_size.len() as u8,
-        //     ),
-        // }
     }
 }
 
 struct MultiValSingleIndex {
     array: LamellarByteArray,
     idx: usize,
-    val: (*const u8, usize, usize),
+    vals: Option<OneSidedMemoryRegion<u8>>,
+    val_u8: Option<Vec<u8>>,
     op: ArrayOpCmd<Vec<u8>>,
+    prim_type: Option<(PodPrimType,bool)>, // type and whether it is wrapped in an option
 }
 
 impl MultiValSingleIndex {
-    fn new_with_vec<T: Dist>(
+    async fn new<T: Dist>(
         array: LamellarByteArray,
         op: ArrayOpCmd<T>,
         index: usize,
         val: Vec<T>,
     ) -> Self {
-        // let val_u8 = val.as_ptr() as *const u8;
+        let prim_type = PodPrimType::get_type::<T>();
+            let(vals,val_u8) = if prim_type.is_some() {
+            let mut mem_region = array.team().try_alloc_one_sided_mem_region(val.len());
+            while let None = mem_region {
+                // println!("Failed to allocate mem region, retrying...");
+                // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
+                async_std::task::yield_now().await;
+                mem_region = array.team().try_alloc_one_sided_mem_region(val.len());
+            }
+            let mem_region = mem_region.unwrap();
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    val.as_ptr() as *const u8,
+                    mem_region.as_mut_ptr().unwrap(),
+                    val.len() * std::mem::size_of::<T>(),
+                );
+            }(Some(mem_region), None)
+        }
+        else{
+            let val_u8 = unsafe{
+                std::slice::from_raw_parts(val.as_ptr() as *const u8, val.len() * std::mem::size_of::<T>()).to_vec()
+            };
+            (None, Some(val_u8))
+        };
 
-        // Prevent running `val`'s destructor so we are in complete control
-        // of the allocation.
-        let mut val = std::mem::ManuallyDrop::new(val);
 
-        // Pull out the various important pieces of information about `v`
-        let p = val.as_mut_ptr() as *const u8;
-        let len = val.len();
-        let cap = val.capacity();
 
         Self {
             array: array.into(),
             idx: index,
-            val: (p, len, cap),
+            vals,
+            val_u8,
             op: op.into(),
+            prim_type,
         }
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        match MULTI_VAL_SINGLE_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
-            Some(op) => op(self.array, self.op, self.val, self.idx, ret),
-            None => {
-                let val =
-                    unsafe { Vec::from_raw_parts(self.val.0 as *mut T, self.val.1, self.val.2) };
-                let val_u8 = val.as_ptr() as *const u8;
-
-                MULTI_VAL_SINGLE_IDX_OPS
-                    .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-                    .unwrap()(
-                    self.array,
-                    self.op,
-                    unsafe {
-                        std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
-                    }
-                    .to_vec(),
-                    self.idx,
-                )
+         if let Some((prim_type,opt)) = self.prim_type { //built in Pod support 
+            match ret {
+                BatchReturnType::None => 
+                    Arc::new(PodSingleIdxMultiValAm{
+                        array: self.array,
+                        index: self.idx,
+                        vals: self.vals.unwrap(),
+                        prim_type,
+                        opt,
+                        op: self.op,
+                    }),
+                BatchReturnType::Vals | BatchReturnType::Result => 
+                    Arc::new(PodSingleIdxMultiValAmReturn{
+                        array: self.array,
+                        index: self.idx,
+                        vals: self.vals.unwrap(),
+                        prim_type,
+                        opt,
+                        op: self.op,
+                    }),
             }
         }
-        // match std::env::var("TEST_OPS") {
-        //     Ok(_) => MULTI_VAL_SINGLE_IDX_OPS_NEW
-        //         .get(&TypeId::of::<T>())
-        //         .unwrap()(self.array, self.op, self.val, self.idx, ret),
-        //     Err(_) => {
-        //         let val =
-        //             unsafe { Vec::from_raw_parts(self.val.0 as *mut T, self.val.1, self.val.2) };
-        //         let val_u8 = val.as_ptr() as *const u8;
-
-        //         MULTI_VAL_SINGLE_IDX_OPS
-        //             .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-        //             .unwrap()(
-        //             self.array,
-        //             self.op,
-        //             unsafe {
-        //                 std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
-        //             }
-        //             .to_vec(),
-        //             self.idx,
-        //         )
-        //     }
-        // }
+        else{ // user defined type support
+            // panic!("User defined types not currently supported for single val multi index ops");
+            MULTI_VAL_SINGLE_IDX_OPS
+                .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+                .unwrap()(
+                self.array,
+                self.op,
+                self.val_u8.unwrap(),
+                self.idx,
+            )
+        }
     }
 }
 
 struct MultiValMultiIndex {
     array: LamellarByteArray,
-    idxs_vals: Vec<u8>,
+    idxs_vals: Option<OneSidedMemoryRegion<u8>>,
+    idx_vals_u8: Option<Vec<u8>>,
     op: ArrayOpCmd<Vec<u8>>,
-    index_size: IndexSize,
+    index_size: usize,
+    prim_type: Option<(PodPrimType,bool)>, // type and whether it is wrapped in an option
 }
 
 impl MultiValMultiIndex {
-    fn new_with_vec<T: Dist>(
+    async fn new<T: Dist>(
         array: LamellarByteArray,
         op: ArrayOpCmd<T>,
-        idxs_vals: Vec<u8>,
-        index_size: IndexSize,
+        idxs_vals: &mut PackedIdxVal,
+        index_size: usize,
     ) -> Self {
+        let (idx_vals_mr, idx_vals_u8) = if let Some((prim_type,opt)) = PodPrimType::get_type::<T>() {
+            let mut mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
+            while let None = mem_region {
+                // println!("Failed to allocate mem region, retrying...");
+                // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
+                async_std::task::yield_now().await;
+                mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
+            }
+            let mem_region = mem_region.unwrap();
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    idxs_vals.as_ptr(),
+                    mem_region.as_mut_ptr().unwrap(),
+                    idxs_vals.len(),
+                );
+            }
+            (Some(mem_region), None)
+        }
+        else{
+            let idx_vals_u8 = unsafe{
+                std::slice::from_raw_parts(idxs_vals.as_ptr(), idxs_vals.len()).to_vec()
+            };
+            (None, Some(idx_vals_u8))
+        };
+        idxs_vals.clear(); // ensure the buffer is empty and can be reused by the caller if they want
         Self {
             array: array.into(),
-            idxs_vals,
+            idxs_vals: idx_vals_mr,
+            idx_vals_u8,
             op: op.into(),
             index_size,
+            prim_type: PodPrimType::get_type::<T>(),
         } //, type_id: TypeId::of::<T>() }
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        // println!(
-        //     "{:?} {:?} {:?} {:?}",
-        //     self.array.type_id(),
-        //     TypeId::of::<T>(),
-        //     ret,
-        //     std::any::type_name::<T>(),
-        // );
-        match MULTI_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
-            Some(op) => op(
-                self.array,
-                self.op,
-                self.idxs_vals,
-                self.index_size.len() as u8,
-                ret,
-            ),
-            None => MULTI_VAL_MULTI_IDX_OPS
+        if let Some((prim_type,opt)) = PodPrimType::get_type::<T>() { //built in Pod support 
+            match ret {
+                BatchReturnType::None => 
+                    Arc::new(PodMultiIdxMultiValAm{
+                        array: self.array,
+                        idx_val: self.idxs_vals.unwrap(),
+                        idx_size: self.index_size,
+                        prim_type,
+                        opt,
+                        op: self.op,
+                    }),
+                BatchReturnType::Vals | BatchReturnType::Result => 
+                    Arc::new(PodMultiIdxMultiValAmReturn{
+                        array: self.array,
+                        idx_val: self.idxs_vals.unwrap(),
+                        idx_size: self.index_size,
+                        prim_type,
+                        opt,
+                        op: self.op,
+                    }),
+            }
+        }else{
+            // panic!("MultiValMultiIndex AM does not support user defined types yet");
+            MULTI_VAL_MULTI_IDX_OPS
                 .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
                 .unwrap()(
                 self.array,
                 self.op,
-                self.idxs_vals,
-                self.index_size.len() as u8,
-            ),
+                self.idx_vals_u8.unwrap(),
+                self.index_size as u8,
+            )
         }
-        // match std::env::var("TEST_OPS") {
-        //     Ok(_) => MULTI_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()).unwrap()(
-        //         self.array,
-        //         self.op,
-        //         self.idxs_vals,
-        //         self.index_size.len() as u8,
-        //         ret,
-        //     ),
-        //     Err(_) => MULTI_VAL_MULTI_IDX_OPS
-        //         .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-        //         .unwrap()(
-        //         self.array,
-        //         self.op,
-        //         self.idxs_vals,
-        //         self.index_size.len() as u8,
-        //     ),
-        // }
     }
 }
 

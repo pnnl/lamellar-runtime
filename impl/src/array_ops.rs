@@ -1230,7 +1230,7 @@ fn create_buf_ops(
         }
         #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
-            async fn exec(&self) -> Vec<#typeident> {
+            async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                 // println!("in multi val multi idx fetch exec");
                 #slice
                 let mut res = Vec::new();
@@ -1266,7 +1266,21 @@ fn create_buf_ops(
                         }
                     }
                 };
-                res
+                let byte_len = res.len() * std::mem::size_of::<#typeident>();
+                let mut mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                while mem_region.is_err() {
+                    async_std::task::yield_now().await;
+                    mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                }
+                let mem_region = mem_region.unwrap();
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        res.as_ptr() as *const u8,
+                        mem_region.as_ptr().unwrap() as *mut u8,
+                        byte_len,
+                    );
+                }
+                mem_region
             }
         }
         #[allow(non_snake_case)]
@@ -1302,7 +1316,7 @@ fn create_buf_ops(
         }
         #[#am(AmGroup(false))]
         impl LamellarAM for #single_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
-            async fn exec(&self) -> Vec<#typeident>{
+            async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                 // println!("in single val multi idx fetch exec");
                 #slice
                 let val = self.val;
@@ -1346,7 +1360,21 @@ fn create_buf_ops(
                     }
                 }
                 // println!("done with exec");
-                res
+                let byte_len = res.len() * std::mem::size_of::<#typeident>();
+                let mut mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                while mem_region.is_err() {
+                    async_std::task::yield_now().await;
+                    mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                }
+                let mem_region = mem_region.unwrap();
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        res.as_ptr() as *const u8,
+                        mem_region.as_ptr().unwrap() as *mut u8,
+                        byte_len,
+                    );
+                }
+                mem_region
             }
         }
         #[allow(non_snake_case)]
@@ -1383,7 +1411,7 @@ fn create_buf_ops(
         }
         #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_single_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
-            async fn exec(&self) -> Vec<#typeident> {
+            async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                 // println!("in multi val single idx fetch exec");
                 #slice
                 let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
@@ -1393,7 +1421,21 @@ fn create_buf_ops(
                     #multi_val_single_idx_fetch_match_stmts
                 }
                 // println!("res: {:?}",res);
-                res
+                let byte_len = res.len() * std::mem::size_of::<#typeident>();
+                let mut mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                while mem_region.is_err() {
+                    async_std::task::yield_now().await;
+                    mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                }
+                let mem_region = mem_region.unwrap();
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        res.as_ptr() as *const u8,
+                        mem_region.as_ptr().unwrap() as *mut u8,
+                        byte_len,
+                    );
+                }
+                mem_region
             }
         }
         #[allow(non_snake_case)]
@@ -1496,719 +1538,325 @@ fn create_buffered_ops(
     expanded
 }
 
-fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenStream {
-    let lamellar = quote::format_ident!("crate");
-    let (am_data, am): (syn::Path, syn::Path) = (
-        syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
-        syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
-    );
-    let multi_val_multi_idx_name =
-        quote::format_ident!("MultiValMultiIdxAm{}", type_to_string(&typeident));
-    let multi_val_multi_idx_fetch_name =
-        quote::format_ident!("MultiValMultiIdxFetchAm{}", type_to_string(&typeident));
-    let multi_val_multi_idx_result_name =
-        quote::format_ident!("MultiValMultiIdxResultAm{}", type_to_string(&typeident));
-    let create_multi_val_multi_idx_name =
-        quote::format_ident!("CreateMultiValMultiIdxAm{}", type_to_string(&typeident));
-    let multi_val_multi_idx_id_new_name =
-        quote::format_ident!("MultiValMultiIdxId{}", type_to_string(&typeident));
-    let single_val_multi_idx_name =
-        quote::format_ident!("SingleValMultiIdxAm{}", type_to_string(&typeident));
-    let single_val_multi_idx_fetch_name =
-        quote::format_ident!("SingleValMultiIdxFetchAm{}", type_to_string(&typeident));
-    let single_val_multi_idx_result_name =
-        quote::format_ident!("SingleValMultiIdxResultAm{}", type_to_string(&typeident));
-    let create_single_val_multi_idx_name =
-        quote::format_ident!("CreateSingleValMultiIdxAm{}", type_to_string(&typeident));
-    let single_val_multi_idx_id_new_name =
-        quote::format_ident!("SingleValMultiIdxId{}", type_to_string(&typeident));
-    let multi_val_single_idx_name =
-        quote::format_ident!("MultiValSingleIdxAm{}", type_to_string(&typeident));
-    let multi_val_single_idx_fetch_name =
-        quote::format_ident!("MultiValSingleIdxFetchAm{}", type_to_string(&typeident));
-    let multi_val_single_idx_result_name =
-        quote::format_ident!("MultiValSingleIdxResultAm{}", type_to_string(&typeident));
-    let create_multi_val_single_idx_name =
-        quote::format_ident!("CreateMultiValSingleIdxAm{}", type_to_string(&typeident));
-    let multi_val_single_idx_id_new_name =
-        quote::format_ident!("MultiValSingleIdxId{}", type_to_string(&typeident));
+// fn pod_prim_type_variant(type_str: &str) -> proc_macro2::TokenStream {
+//     match type_str.trim() {
+//         "u8"    => quote! { crate::array::PodPrimType::U8    },
+//         "u16"   => quote! { crate::array::PodPrimType::U16   },
+//         "u32"   => quote! { crate::array::PodPrimType::U32   },
+//         "u64"   => quote! { crate::array::PodPrimType::U64   },
+//         "usize" => quote! { crate::array::PodPrimType::Usize },
+//         "u128"  => quote! { crate::array::PodPrimType::U128  },
+//         "i8"    => quote! { crate::array::PodPrimType::I8    },
+//         "i16"   => quote! { crate::array::PodPrimType::I16   },
+//         "i32"   => quote! { crate::array::PodPrimType::I32   },
+//         "i64"   => quote! { crate::array::PodPrimType::I64   },
+//         "isize" => quote! { crate::array::PodPrimType::Isize },
+//         "i128"  => quote! { crate::array::PodPrimType::I128  },
+//         "f32"   => quote! { crate::array::PodPrimType::F32   },
+//         "f64"   => quote! { crate::array::PodPrimType::F64   },
+//         other   => panic!("unknown prim type for pod ops: {}", other),
+//     }
+// }
 
-    let single_val_multi_idx_idx_vals = quote::quote! {
-        let idx_vals = unsafe{ match self.index_size {
-            1 => {
-                Box::new(self.idxs.iter()
-                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
-            }
-            2 => {
-                Box::new(std::slice::from_raw_parts(self.idxs.as_ptr() as *const u16, self.idxs.len()/2).iter()
-                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
-            }
-            4 => {
-                Box::new(std::slice::from_raw_parts(self.idxs.as_ptr() as *const u32, self.idxs.len()/4).iter()
-                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
-            }
-            8 => {
-                Box::new(std::slice::from_raw_parts(self.idxs.as_ptr() as *const u64, self.idxs.len()/8).iter()
-                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
-            }
-            _ => {
-                Box::new(std::slice::from_raw_parts(self.idxs.as_ptr() as *const usize, self.idxs.len()/std::mem::size_of::<usize>()).iter()
-                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
-            }
-        }};
-    };
+// fn option_pod_type_variant(inner: &str) -> proc_macro2::TokenStream {
+//     match inner.trim() {
+//         "u8"    => quote! { crate::array::OptionPodType::OptionU8    },
+//         "u16"   => quote! { crate::array::OptionPodType::OptionU16   },
+//         "u32"   => quote! { crate::array::OptionPodType::OptionU32   },
+//         "u64"   => quote! { crate::array::OptionPodType::OptionU64   },
+//         "usize" => quote! { crate::array::OptionPodType::OptionUsize },
+//         "u128"  => quote! { crate::array::OptionPodType::OptionU128  },
+//         "i8"    => quote! { crate::array::OptionPodType::OptionI8    },
+//         "i16"   => quote! { crate::array::OptionPodType::OptionI16   },
+//         "i32"   => quote! { crate::array::OptionPodType::OptionI32   },
+//         "i64"   => quote! { crate::array::OptionPodType::OptionI64   },
+//         "isize" => quote! { crate::array::OptionPodType::OptionIsize },
+//         "i128"  => quote! { crate::array::OptionPodType::OptionI128  },
+//         "f32"   => quote! { crate::array::OptionPodType::OptionF32   },
+//         "f64"   => quote! { crate::array::OptionPodType::OptionF64   },
+//         other   => panic!("unknown inner type for option pod ops: {}", other),
+//     }
+// }
 
-    let mut ops_mv_mi = quote! {};
-    let mut fetch_ops_mv_mi = quote! {};
-    let mut result_ops_mv_mi = quote! {};
-    let mut ops_sv_mi = quote! {};
-    let mut fetch_ops_sv_mi = quote! {};
-    let mut result_ops_sv_mi = quote! {};
-    let mut ops_mv_si = quote! {};
-    let mut fetch_ops_mv_si = quote! {};
-    let mut result_ops_mv_si = quote! {};
-    let mv_mi_idx_vals = quote! {let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals)};
-    let sv_mi_idx_vals = quote! {#single_val_multi_idx_idx_vals};
-    let mv_si_idx_vals =
-        quote! {let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied())};
-    let local_data = quote! {let local_data = data.local_data::<#typeident>().await};
-    let mut_local_data = quote! {let mut local_data = data.mut_local_data::<#typeident>().await};
-    for op in op_types {
-        match op {
-            OpType::ReadOnly => {
-                fetch_ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::Load =>  {#local_data; #mv_mi_idx_vals; local_data.local_load(idx_vals)},
-                });
-                fetch_ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::Load =>  {#local_data; #sv_mi_idx_vals;local_data.local_load(idx_vals)},
-                });
-                fetch_ops_mv_si.extend(quote!{
-                    ArrayOpCmd::Load =>  {#local_data; #mv_si_idx_vals;local_data.local_load(idx_vals)},
-                });
-            }
-            OpType::Access => {
-                ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::Store => {#mut_local_data; #mv_mi_idx_vals; local_data.local_store(idx_vals)},
-                });
-                ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::Store => {#mut_local_data; #sv_mi_idx_vals; local_data.local_store(idx_vals)},
-                });
-                ops_mv_si.extend(quote!{
-                    ArrayOpCmd::Store => {#mut_local_data; #mv_si_idx_vals; local_data.local_store(idx_vals)},
-                });
-                fetch_ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::Swap =>  {#mut_local_data; #mv_mi_idx_vals; local_data.local_swap(idx_vals)},
-                });
-                fetch_ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::Swap =>  {#mut_local_data; #sv_mi_idx_vals; local_data.local_swap(idx_vals)},
-                });
-                fetch_ops_mv_si.extend(quote!{
-                    ArrayOpCmd::Swap =>  {#mut_local_data; #mv_si_idx_vals; local_data.local_swap(idx_vals)},
-                });
-            }
-            OpType::Arithmetic => {
-                ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::Add => {#mut_local_data; #mv_mi_idx_vals; local_data.local_add(idx_vals)},
-                    ArrayOpCmd::Sub => {#mut_local_data; #mv_mi_idx_vals; local_data.local_sub(idx_vals)},
-                    ArrayOpCmd::Mul => {#mut_local_data; #mv_mi_idx_vals; local_data.local_mul(idx_vals)},
-                    ArrayOpCmd::Div => {#mut_local_data; #mv_mi_idx_vals; local_data.local_div(idx_vals)},
-                    ArrayOpCmd::Rem => {#mut_local_data; #mv_mi_idx_vals; local_data.local_rem(idx_vals)},
-                });
-                ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::Add => {#mut_local_data; #sv_mi_idx_vals; local_data.local_add(idx_vals)},
-                    ArrayOpCmd::Sub => {#mut_local_data; #sv_mi_idx_vals; local_data.local_sub(idx_vals)},
-                    ArrayOpCmd::Mul => {#mut_local_data; #sv_mi_idx_vals; local_data.local_mul(idx_vals)},
-                    ArrayOpCmd::Div => {#mut_local_data; #sv_mi_idx_vals; local_data.local_div(idx_vals)},
-                    ArrayOpCmd::Rem => {#mut_local_data; #sv_mi_idx_vals; local_data.local_rem(idx_vals)},
-                });
-                ops_mv_si.extend(quote!{
-                    ArrayOpCmd::Add => {#mut_local_data; #mv_si_idx_vals; local_data.local_add(idx_vals)},
-                    ArrayOpCmd::Sub => {#mut_local_data; #mv_si_idx_vals; local_data.local_sub(idx_vals)},
-                    ArrayOpCmd::Mul => {#mut_local_data; #mv_si_idx_vals; local_data.local_mul(idx_vals)},
-                    ArrayOpCmd::Div => {#mut_local_data; #mv_si_idx_vals; local_data.local_div(idx_vals)},
-                    ArrayOpCmd::Rem => {#mut_local_data; #mv_si_idx_vals; local_data.local_rem(idx_vals)},
-                });
-                fetch_ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::FetchAdd => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_add(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchSub => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_sub(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchMul => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_mul(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchDiv => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_div(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchRem => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_rem(idx_vals, true).unwrap()},
-                });
-                fetch_ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::FetchAdd => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_add(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchSub => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_sub(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchMul => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_mul(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchDiv => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_div(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchRem => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_rem(idx_vals, true).unwrap()},
-                });
-                fetch_ops_mv_si.extend(quote!{
-                    ArrayOpCmd::FetchAdd => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_add(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchSub => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_sub(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchMul => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_mul(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchDiv => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_div(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchRem => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_rem(idx_vals, true).unwrap()},
-                });
-            }
-            OpType::CompExEps => {
-                result_ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::CompareExchangeEps(cur,eps) => {#mut_local_data; #mv_mi_idx_vals; local_data.local_compare_exchange_epsilon(idx_vals, cur, eps)},
-                });
-                result_ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::CompareExchangeEps(cur,eps) => {#mut_local_data; #sv_mi_idx_vals; local_data.local_compare_exchange_epsilon(idx_vals, cur, eps)},
-                });
-                result_ops_mv_si.extend(quote!{
-                    ArrayOpCmd::CompareExchangeEps(cur,eps) => {#mut_local_data; #mv_si_idx_vals; local_data.local_compare_exchange_epsilon(idx_vals, cur, eps)},
-                });
-            }
-            OpType::Bitwise => {
-                ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::And => {#mut_local_data; #mv_mi_idx_vals; local_data.local_bit_and(idx_vals)},
-                    ArrayOpCmd::Or => {#mut_local_data; #mv_mi_idx_vals; local_data.local_bit_or(idx_vals)},
-                    ArrayOpCmd::Xor => {#mut_local_data; #mv_mi_idx_vals; local_data.local_bit_xor(idx_vals)},
-                });
-                ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::And => {#mut_local_data; #sv_mi_idx_vals; local_data.local_bit_and(idx_vals)},
-                    ArrayOpCmd::Or => {#mut_local_data; #sv_mi_idx_vals; local_data.local_bit_or(idx_vals)},
-                    ArrayOpCmd::Xor => {#mut_local_data; #sv_mi_idx_vals; local_data.local_bit_xor(idx_vals)},
-                });
-                ops_mv_si.extend(quote!{
-                    ArrayOpCmd::And => {#mut_local_data; #mv_si_idx_vals; local_data.local_bit_and(idx_vals)},
-                    ArrayOpCmd::Or => {#mut_local_data; #mv_si_idx_vals; local_data.local_bit_or(idx_vals)},
-                    ArrayOpCmd::Xor => {#mut_local_data; #mv_si_idx_vals; local_data.local_bit_xor(idx_vals)},
-                });
-                fetch_ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::FetchAnd => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_bit_and(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchOr => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_bit_or(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchXor => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_bit_xor(idx_vals, true).unwrap()},
-                });
-                fetch_ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::FetchAnd => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_bit_and(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchOr => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_bit_or(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchXor => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_bit_xor(idx_vals, true).unwrap()},
-                });
-                fetch_ops_mv_si.extend(quote!{
-                    ArrayOpCmd::FetchAnd => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_bit_and(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchOr => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_bit_or(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchXor => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_bit_xor(idx_vals, true).unwrap()},
-                });
-            }
-            OpType::Shift => {
-                ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::Shl => {#mut_local_data; #mv_mi_idx_vals; local_data.local_shl(idx_vals)},
-                    ArrayOpCmd::Shr => {#mut_local_data; #mv_mi_idx_vals; local_data.local_shr(idx_vals)},
-                });
-                ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::Shl => {#mut_local_data; #sv_mi_idx_vals; local_data.local_shl(idx_vals)},
-                    ArrayOpCmd::Shr => {#mut_local_data; #sv_mi_idx_vals; local_data.local_shr(idx_vals)},
-                });
-                ops_mv_si.extend(quote!{
-                    ArrayOpCmd::Shl => {#mut_local_data; #mv_si_idx_vals; local_data.local_shl(idx_vals)},
-                    ArrayOpCmd::Shr => {#mut_local_data; #mv_si_idx_vals; local_data.local_shr(idx_vals)},
-                });
-                fetch_ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::FetchShl => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_shl(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchShr => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_shr(idx_vals, true).unwrap()},
-                });
-                fetch_ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::FetchShl => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_shl(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchShr => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_shr(idx_vals, true).unwrap()},
-                });
-                fetch_ops_mv_si.extend(quote!{
-                    ArrayOpCmd::FetchShl => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_shl(idx_vals, true).unwrap()},
-                    ArrayOpCmd::FetchShr => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_shr(idx_vals, true).unwrap()},
-                });
-            }
-            OpType::CompEx => {
-                result_ops_mv_mi.extend(quote!{
-                    ArrayOpCmd::CompareExchange(cur) => {#mut_local_data; #mv_mi_idx_vals; local_data.local_compare_exchange(idx_vals, cur)},
-                });
-                result_ops_sv_mi.extend(quote!{
-                    ArrayOpCmd::CompareExchange(cur) => {#mut_local_data; #sv_mi_idx_vals; local_data.local_compare_exchange(idx_vals, cur)},
-                });
-                result_ops_mv_si.extend(quote!{
-                    ArrayOpCmd::CompareExchange(cur) => {#mut_local_data; #mv_si_idx_vals; local_data.local_compare_exchange(idx_vals, cur)},
-                });
-            }
-        }
-    }
+// /// Extract the inner type string from "Option < T >" or "Option<T>".
+// fn extract_option_inner(type_str: &str) -> Option<String> {
+//     let s = type_str.trim();
+//     if s.starts_with("Option") {
+//         let inner = s
+//             .trim_start_matches("Option")
+//             .trim()
+//             .trim_start_matches('<')
+//             .trim_end_matches('>')
+//             .trim()
+//             .to_string();
+//         Some(inner)
+//     } else {
+//         None
+//     }
+// }
 
-    let result_mv_mi_struct_impl = if result_ops_mv_mi.is_empty() {
-        quote! {}
-    } else {
-        quote! {
-            #[allow(non_camel_case_types)]
-            #[#am_data(AmGroup(false))]
-            struct #multi_val_multi_idx_result_name{
-                data: LamellarByteArray,
-                op: ArrayOpCmd<#typeident>,
-                idxs_vals: Vec<u8>,
-                index_size: u8,
-            }
+// fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenStream {
+//     let lamellar = quote::format_ident!("crate");
 
-            #[#am(AmGroup(false))]
-            impl LamellarAm for #multi_val_multi_idx_result_name{
-                async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
-                    let mut data = self.data.clone();
-                    match self.op {
-                        #result_ops_mv_mi
-                        _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
-                    }
-                }
-            }
-        }
-    };
-    let result_mv_mi_create_arm = if result_ops_mv_mi.is_empty() {
-        quote! {
-            #lamellar::array::BatchReturnType::Result => {
-                panic!("Result ops not supported for this type")
-            }
-        }
-    } else {
-        quote! {
-            #lamellar::array::BatchReturnType::Result => {
-                Arc::new(#multi_val_multi_idx_result_name{
-                    data: Into::into(array),
-                    op: op.into(),
-                    idxs_vals: idx_vals,
-                    index_size,
-                })
-            }
-        }
-    };
+//     let type_str = quote! { #typeident }.to_string();
+//     let type_str = type_str.replace(" ", "");
 
-    let result_sv_mi_struct_impl = if result_ops_sv_mi.is_empty() {
-        quote! {}
-    } else {
-        quote! {
-            #[lamellar_impl::AmDataRT(AmGroup(false))]
-            struct #single_val_multi_idx_result_name{
-                data: LamellarByteArray,
-                op: ArrayOpCmd<#typeident>,
-                val: #typeident,
-                idxs: Vec<u8>,
-                index_size: u8,
-            }
-            #[lamellar_impl::rt_am]
-            impl LamellarAm for #single_val_multi_idx_result_name{
-                async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
-                    let mut data = self.data.clone();
-                    match self.op {
-                        #result_ops_sv_mi
-                        _ => panic!("Invalid op: {:#?}", self.op)
-                    }
-                }
-            }
-        }
-    };
-    let result_sv_mi_create_arm = if result_ops_sv_mi.is_empty() {
-        quote! {
-            #lamellar::array::BatchReturnType::Result => {
-                panic!("Result ops not supported for this type")
-            }
-        }
-    } else {
-        quote! {
-            #lamellar::array::BatchReturnType::Result => {
-                Arc::new(#single_val_multi_idx_result_name{
-                    data: Into::into(array),
-                    op: op.into(),
-                    val: unsafe{*(val_bytes.as_ptr() as *const #typeident)},
-                    idxs: idxs,
-                    index_size,
-                })
-            }
-        }
-    };
+//     let has_ceq = op_types.contains(&OpType::CompEx);
+//     let has_cex = op_types.contains(&OpType::CompExEps);
+//     let has_result = has_ceq || has_cex;
 
-    let result_mv_si_struct_impl = if result_ops_mv_si.is_empty() {
-        quote! {}
-    } else {
-        quote! {
-            #[allow(non_camel_case_types)]
-            #[#am_data(AmGroup(false))]
-            struct #multi_val_single_idx_result_name{
-                data: LamellarByteArray,
-                op: ArrayOpCmd<#typeident>,
-                idx: usize,
-                vals: Vec<#typeident>,
-            }
+//     // Determine pod variant and which static AM structs to use (prim vs option).
+//     let (mv_mi_void_am, mv_mi_fetch_am, mv_mi_result_am,
+//          sv_mi_void_am, sv_mi_fetch_am, sv_mi_result_am,
+//          mv_si_void_am, mv_si_fetch_am, mv_si_result_am,
+//          pod_variant) = if let Some(inner) = extract_option_inner(&type_str) {
+//         let pod = option_pod_type_variant(&inner);
+//         (
+//             quote! { crate::array::OptMvMiVoidAm },
+//             quote! { crate::array::OptMvMiFetchAm },
+//             quote! { crate::array::OptMvMiResultAm },
+//             quote! { crate::array::OptSvMiVoidAm },
+//             quote! { crate::array::OptSvMiFetchAm },
+//             quote! { crate::array::OptSvMiResultAm },
+//             quote! { crate::array::OptMvSiVoidAm },
+//             quote! { crate::array::OptMvSiFetchAm },
+//             quote! { crate::array::OptMvSiResultAm },
+//             pod,
+//         )
+//     } else {
+//         let pod = pod_prim_type_variant(&type_str);
+//         (
+//             quote! { crate::array::PodMvMiVoidAm },
+//             quote! { crate::array::PodMvMiFetchAm },
+//             quote! { crate::array::PodMvMiResultAm },
+//             quote! { crate::array::PodSvMiVoidAm },
+//             quote! { crate::array::PodSvMiFetchAm },
+//             quote! { crate::array::PodSvMiResultAm },
+//             quote! { crate::array::PodMvSiVoidAm },
+//             quote! { crate::array::PodMvSiFetchAm },
+//             quote! { crate::array::PodMvSiResultAm },
+//             pod_prim_type_variant(&type_str),
+//         )
+//     };
 
-            #[#am(AmGroup(false))]
-            impl LamellarAm for #multi_val_single_idx_result_name{
-                async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
-                    let mut data = self.data.clone();
-                    match self.op {
-                        #result_ops_mv_si
-                        _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
-                    }
-                }
-            }
-        }
-    };
-    let result_mv_si_create_arm = if result_ops_mv_si.is_empty() {
-        quote! {
-            #lamellar::array::BatchReturnType::Result => {
-                panic!("Result ops not supported for this type")
-            }
-        }
-    } else {
-        quote! {
-            #lamellar::array::BatchReturnType::Result => {
-                Arc::new(#multi_val_single_idx_result_name{
-                    data: Into::into(array),
-                    op: op.into(),
-                    idx,
-                    vals,
-                })
-            }
-        }
-    };
+//     let mv_mi_id_fn = quote::format_ident!("_mv_mi_id{}", type_to_string(&typeident));
+//     let mv_mi_create_fn = quote::format_ident!("_mv_mi_create{}", type_to_string(&typeident));
+//     let sv_mi_id_fn = quote::format_ident!("_sv_mi_id{}", type_to_string(&typeident));
+//     let sv_mi_create_fn = quote::format_ident!("_sv_mi_create{}", type_to_string(&typeident));
+//     let mv_si_id_fn = quote::format_ident!("_mv_si_id{}", type_to_string(&typeident));
+//     let mv_si_create_fn = quote::format_ident!("_mv_si_create{}", type_to_string(&typeident));
 
-    quote! {
-        #[allow(non_camel_case_types)]
-        #[#am_data(AmGroup(false))]
-        struct #multi_val_multi_idx_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            idxs_vals: Vec<u8>,
-            index_size: u8,
-        }
+//     let mv_mi_result_arm = if has_result {
+//         quote! {
+//             #lamellar::array::BatchReturnType::Result => {
+//                 Arc::new(#mv_mi_result_am { data: Into::into(array), op, idxs_vals: idx_vals, index_size, pod_type: #pod_variant })
+//             }
+//         }
+//     } else {
+//         quote! {
+//             #lamellar::array::BatchReturnType::Result => panic!("Result ops not supported for this type"),
+//         }
+//     };
+//     let sv_mi_result_arm = if has_result {
+//         quote! {
+//             #lamellar::array::BatchReturnType::Result => {
+//                 Arc::new(#sv_mi_result_am { data: Into::into(array), op, val_bytes, idxs, index_size, pod_type: #pod_variant })
+//             }
+//         }
+//     } else {
+//         quote! {
+//             #lamellar::array::BatchReturnType::Result => panic!("Result ops not supported for this type"),
+//         }
+//     };
+//     let mv_si_result_arm = if has_result {
+//         quote! {
+//             #lamellar::array::BatchReturnType::Result => {
+//                 Arc::new(#mv_si_result_am { data: Into::into(array), op, idx, vals_bytes, pod_type: #pod_variant })
+//             }
+//         }
+//     } else {
+//         quote! {
+//             #lamellar::array::BatchReturnType::Result => panic!("Result ops not supported for this type"),
+//         }
+//     };
 
-        #[#am(AmGroup(false))]
-        impl LamellarAm for #multi_val_multi_idx_name{
-            async fn exec(&self) {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
-                match self.op {
-                    #ops_mv_mi
-                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
-                }
-            }
-        }
-        #[allow(non_camel_case_types)]
-        #[#am_data(AmGroup(false))]
-        struct #multi_val_multi_idx_fetch_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            idxs_vals: Vec<u8>,
-            index_size: u8,
-        }
+//     quote! {
+//         fn #mv_mi_id_fn() -> std::any::TypeId { std::any::TypeId::of::<#typeident>() }
+//         fn #mv_mi_create_fn(
+//             array: #lamellar::array::LamellarByteArray,
+//             op: #lamellar::array::ArrayOpCmd<Vec<u8>>,
+//             idx_vals: Vec<u8>,
+//             index_size: u8,
+//             return_type: #lamellar::array::BatchReturnType,
+//         ) -> Arc<dyn RemoteActiveMessage + Sync + Send> {
+//             match return_type {
+//                 #lamellar::array::BatchReturnType::None => Arc::new(#mv_mi_void_am  { data: Into::into(array), op, idxs_vals: idx_vals, index_size, pod_type: #pod_variant }),
+//                 #lamellar::array::BatchReturnType::Vals => Arc::new(#mv_mi_fetch_am { data: Into::into(array), op, idxs_vals: idx_vals, index_size, pod_type: #pod_variant }),
+//                 #mv_mi_result_arm
+//             }
+//         }
+//         inventory::submit! {
+//             #lamellar::array::multi_val_multi_idx_ops_new { id: #mv_mi_id_fn, op: #mv_mi_create_fn }
+//         }
 
-        #[#am(AmGroup(false))]
-        impl LamellarAm for #multi_val_multi_idx_fetch_name{
-            async fn exec(&self) -> Vec<#typeident> {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
-                match self.op {
-                    #fetch_ops_mv_mi
-                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
-                }
-            }
-        }
-        #result_mv_mi_struct_impl
-        fn #create_multi_val_multi_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>, index_size: u8, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
-            match return_type {
-                #lamellar::array::BatchReturnType::None => {
-                    Arc::new(#multi_val_multi_idx_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        idxs_vals: idx_vals,
-                        index_size,
-                    })
-                }
-                #lamellar::array::BatchReturnType::Vals => {
-                    Arc::new(#multi_val_multi_idx_fetch_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        idxs_vals: idx_vals,
-                        index_size,
-                    })
-                }
-                #result_mv_mi_create_arm
-            }
-        }
-        fn #multi_val_multi_idx_id_new_name() -> std::any::TypeId {
-            std::any::TypeId::of::<#typeident>()
-        }
-        inventory::submit! {
-            #lamellar::array::multi_val_multi_idx_ops_new{
-                id: #multi_val_multi_idx_id_new_name,
-                op: #create_multi_val_multi_idx_name,
-            }
-        }
+//         fn #sv_mi_id_fn() -> std::any::TypeId { std::any::TypeId::of::<#typeident>() }
+//         fn #sv_mi_create_fn(
+//             array: #lamellar::array::LamellarByteArray,
+//             op: #lamellar::array::ArrayOpCmd<Vec<u8>>,
+//             val_bytes: Vec<u8>,
+//             idxs: Vec<u8>,
+//             index_size: u8,
+//             return_type: #lamellar::array::BatchReturnType,
+//         ) -> Arc<dyn RemoteActiveMessage + Sync + Send> {
+//             match return_type {
+//                 #lamellar::array::BatchReturnType::None => Arc::new(#sv_mi_void_am  { data: Into::into(array), op, val_bytes, idxs, index_size, pod_type: #pod_variant }),
+//                 #lamellar::array::BatchReturnType::Vals => Arc::new(#sv_mi_fetch_am { data: Into::into(array), op, val_bytes, idxs, index_size, pod_type: #pod_variant }),
+//                 #sv_mi_result_arm
+//             }
+//         }
+//         inventory::submit! {
+//             #lamellar::array::single_val_multi_idx_ops_new { id: #sv_mi_id_fn, op: #sv_mi_create_fn }
+//         }
 
-        #[lamellar_impl::AmDataRT(AmGroup(false))]
-        struct #single_val_multi_idx_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            val: #typeident,
-            idxs: Vec<u8>,
-            index_size: u8,
-        }
-        #[lamellar_impl::rt_am]
-        impl LamellarAm for #single_val_multi_idx_name{
-            async fn exec(&self) {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // #single_val_multi_idx_idx_vals
-                match self.op {
-                    #ops_sv_mi
-                    _ => panic!("Invalid op: {:#?}", self.op)
-                }
-            }
-        }
-        #[lamellar_impl::AmDataRT(AmGroup(false))]
-        struct #single_val_multi_idx_fetch_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            val: #typeident,
-            idxs: Vec<u8>,
-            index_size: u8,
-        }
-        #[lamellar_impl::rt_am]
-        impl LamellarAm for #single_val_multi_idx_fetch_name{
-            async fn exec(&self) -> Vec<#typeident> {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // #single_val_multi_idx_idx_vals
-                match self.op {
-                    #fetch_ops_sv_mi
-                    _ => panic!("Invalid op: {:#?}", self.op)
-                }
-            }
-        }
-        #result_sv_mi_struct_impl
-        fn #create_single_val_multi_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, val_bytes: Vec<u8>, idxs: Vec<u8>, index_size: u8, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
-            match return_type {
-                #lamellar::array::BatchReturnType::None => {
-                    Arc::new(#single_val_multi_idx_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)},
-                        idxs: idxs,
-                        index_size,
-                    })
-                }
-                #lamellar::array::BatchReturnType::Vals => {
-                    Arc::new(#single_val_multi_idx_fetch_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)},
-                        idxs: idxs,
-                        index_size,
-                    })
-                }
-                #result_sv_mi_create_arm
-            }
-        }
-        fn #single_val_multi_idx_id_new_name() -> std::any::TypeId {
-            std::any::TypeId::of::<#typeident>()
-        }
-        inventory::submit! {
-            #lamellar::array::single_val_multi_idx_ops_new{
-                id: #single_val_multi_idx_id_new_name,
-                op: #create_single_val_multi_idx_name,
-            }
-        }
+//         fn #mv_si_id_fn() -> std::any::TypeId { std::any::TypeId::of::<#typeident>() }
+//         fn #mv_si_create_fn(
+//             array: #lamellar::array::LamellarByteArray,
+//             op: #lamellar::array::ArrayOpCmd<Vec<u8>>,
+//             vals: (*const u8, usize, usize),
+//             idx: usize,
+//             return_type: #lamellar::array::BatchReturnType,
+//         ) -> Arc<dyn RemoteActiveMessage + Sync + Send> {
+//             let vals_t = unsafe { Vec::from_raw_parts(vals.0 as *mut #typeident, vals.1, vals.2) };
+//             let vals_bytes = crate::array::operations::vec_t_to_bytes::<#typeident>(vals_t);
+//             match return_type {
+//                 #lamellar::array::BatchReturnType::None => Arc::new(#mv_si_void_am  { data: Into::into(array), op, idx, vals_bytes, pod_type: #pod_variant }),
+//                 #lamellar::array::BatchReturnType::Vals => Arc::new(#mv_si_fetch_am { data: Into::into(array), op, idx, vals_bytes, pod_type: #pod_variant }),
+//                 #mv_si_result_arm
+//             }
+//         }
+//         inventory::submit! {
+//             #lamellar::array::multi_val_single_idx_ops_new { id: #mv_si_id_fn, op: #mv_si_create_fn }
+//         }
+//     }
+// }
 
-        #[allow(non_camel_case_types)]
-        #[#am_data(AmGroup(false))]
-        struct #multi_val_single_idx_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            idx: usize,
-            vals: Vec<#typeident>,
-        }
+// pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
+//     let mut output = quote! {};
+//     let items = item
+//         .to_string()
+//         .split(",")
+//         .map(|i| i.to_owned())
+//         .collect::<Vec<String>>();
+//     let mut op_types = vec![
+//         OpType::ReadOnly,
+//         OpType::Access,
+//         OpType::Arithmetic,
+//         OpType::CompExEps,
+//     ];
+//     let mut opt_op_types = vec![OpType::ReadOnly, OpType::Access];
+//     let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
+//         if val.value {
+//             op_types.push(OpType::Bitwise);
+//             op_types.push(OpType::Shift);
+//         }
+//         // true
+//         val.value
+//     } else {
+//         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
+//     };
+//     let _native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[1]) {
+//         val.value
+//     } else {
+//         panic!("second argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
+//     };
 
-        #[#am(AmGroup(false))]
-        impl LamellarAm for #multi_val_single_idx_name{
-            async fn exec(&self) {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
-                match self.op {
-                    #ops_mv_si
-                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
-                }
-            }
-        }
-        #[allow(non_camel_case_types)]
-        #[#am_data(AmGroup(false))]
-        struct #multi_val_single_idx_fetch_name{
-            data: LamellarByteArray,
-            op: ArrayOpCmd<#typeident>,
-            idx: usize,
-            vals: Vec<#typeident>,
-        }
+//     let impl_eq = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[2]) {
+//         if val.value {
+//             op_types.push(OpType::CompEx);
+//             opt_op_types.push(OpType::CompEx);
+//         }
+//         val.value
+//     } else {
+//         panic!("third argument of generate_ops_for_type expects 'true' or 'false' specifying whether types implement eq");
+//     };
+//     for t in items[3..].iter() {
+//         let the_type = syn::parse_str::<syn::Type>(t).unwrap();
+//         let typeident = quote::format_ident!("{:}", t.trim());
+//         output.extend(quote! {
+//             impl Dist for #typeident {}
+//             // impl Remote for #typeident {}
+//             // impl Dist for Option< #typeident > {}
+//             impl crate::array::operations::ArrayOps for #typeident {}
+//             // impl crate::array::operations::ArrayOps for Option< #typeident > {}
+//             impl ElementArithmeticOps for #typeident {}
+//             impl ElementComparePartialEqOps for #typeident {}
+//             // impl ElementComparePartialEqOps for Option< #typeident > {}
+//         });
+//         if bitwise {
+//             output.extend(quote! {
+//                 impl ElementBitWiseOps for #typeident {}
+//                 impl ElementShiftOps for #typeident {}
+//             });
+//         }
+//         if impl_eq {
+//             output.extend(quote! {
+//                 impl ElementCompareEqOps for #typeident {}
+//                 impl ElementCompareEqOps for Option< #typeident > {}
+//             })
+//         }
+//         // output.extend(create_buffered_ops(
+//         //     the_type.clone(),
+//         //     op_types.clone(),
+//         //     native,
+//         //     true,
+//         // ));
+//         let opt_type: syn::Type = syn::parse_str::<syn::Type>(&format!("Option<{}>", t)).unwrap();
+//         // output.extend(create_buffered_ops(
+//         //     opt_type.clone(),
+//         //     opt_op_types.clone(),
+//         //     false,
+//         //     true,
+//         // ));
 
-        #[#am(AmGroup(false))]
-        impl LamellarAm for #multi_val_single_idx_fetch_name{
-            async fn exec(&self) -> Vec<#typeident> {
-                let mut data = self.data.clone();
-                // let mut local_data = data.mut_local_data::<#typeident>().await;
-                // let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
-                match self.op {
-                    #fetch_ops_mv_si
-                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
-                }
-            }
-        }
-        #result_mv_si_struct_impl
-        fn #create_multi_val_single_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: (*const u8,usize,usize), idx: usize, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
-            let vals = unsafe {Vec::from_raw_parts(vals.0 as *mut #typeident,vals.1,vals.2)};
-            match return_type {
-                #lamellar::array::BatchReturnType::None => {
-                    Arc::new(#multi_val_single_idx_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        idx,
-                        vals,
-                    })
-                }
-                #lamellar::array::BatchReturnType::Vals => {
-                    Arc::new(#multi_val_single_idx_fetch_name{
-                        data: Into::into(array),
-                        op: op.into(),
-                        idx,
-                        vals,
-                    })
-                }
-                #result_mv_si_create_arm
-            }
-        }
-        fn #multi_val_single_idx_id_new_name() -> std::any::TypeId {
-            std::any::TypeId::of::<#typeident>()
-        }
+//         if !op_types.is_empty() {
+//             output.extend(test_ops(the_type.clone(), op_types.clone()));
+//         }
+//         if !opt_op_types.is_empty() {
+//             output.extend(test_ops(opt_type.clone(), opt_op_types.clone()));
+//         }
 
-        inventory::submit! {
-            #lamellar::array::multi_val_single_idx_ops_new{
-                id: #multi_val_single_idx_id_new_name,
-                op: #create_multi_val_single_idx_name,
-            }
-        }
-    }
-}
+//         // output.extend(gen_atomic_rdma(typeident.clone(), true));
+//     }
+//     TokenStream::from(output)
+// }
 
-pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
-    let mut output = quote! {};
-    let items = item
-        .to_string()
-        .split(",")
-        .map(|i| i.to_owned())
-        .collect::<Vec<String>>();
-    let mut op_types = vec![
-        OpType::ReadOnly,
-        OpType::Access,
-        OpType::Arithmetic,
-        OpType::CompExEps,
-    ];
-    let mut opt_op_types = vec![OpType::ReadOnly, OpType::Access];
-    let bitwise = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
-        if val.value {
-            op_types.push(OpType::Bitwise);
-            op_types.push(OpType::Shift);
-        }
-        // true
-        val.value
-    } else {
-        panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
-    };
-    let _native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[1]) {
-        val.value
-    } else {
-        panic!("second argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
-    };
+// pub(crate) fn __generate_ops_for_bool_rt() -> TokenStream {
+//     let mut output = quote! {};
+//     let op_types = vec![
+//         OpType::ReadOnly,
+//         OpType::Access,
+//         OpType::CompEx,
+//         OpType::Bitwise,
+//     ];
 
-    let impl_eq = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[2]) {
-        if val.value {
-            op_types.push(OpType::CompEx);
-            opt_op_types.push(OpType::CompEx);
-        }
-        val.value
-    } else {
-        panic!("third argument of generate_ops_for_type expects 'true' or 'false' specifying whether types implement eq");
-    };
-    for t in items[3..].iter() {
-        let the_type = syn::parse_str::<syn::Type>(t).unwrap();
-        let typeident = quote::format_ident!("{:}", t.trim());
-        output.extend(quote! {
-            impl Dist for #typeident {}
-            // impl Remote for #typeident {}
-            // impl Dist for Option< #typeident > {}
-            impl crate::array::operations::ArrayOps for #typeident {}
-            // impl crate::array::operations::ArrayOps for Option< #typeident > {}
-            impl ElementArithmeticOps for #typeident {}
-            impl ElementComparePartialEqOps for #typeident {}
-            // impl ElementComparePartialEqOps for Option< #typeident > {}
-        });
-        if bitwise {
-            output.extend(quote! {
-                impl ElementBitWiseOps for #typeident {}
-                impl ElementShiftOps for #typeident {}
-            });
-        }
-        if impl_eq {
-            output.extend(quote! {
-                impl ElementCompareEqOps for #typeident {}
-                impl ElementCompareEqOps for Option< #typeident > {}
-            })
-        }
-        // output.extend(create_buffered_ops(
-        //     the_type.clone(),
-        //     op_types.clone(),
-        //     native,
-        //     true,
-        // ));
-        let opt_type: syn::Type = syn::parse_str::<syn::Type>(&format!("Option<{}>", t)).unwrap();
-        // output.extend(create_buffered_ops(
-        //     opt_type.clone(),
-        //     opt_op_types.clone(),
-        //     false,
-        //     true,
-        // ));
-
-        if !op_types.is_empty() {
-            output.extend(test_ops(the_type.clone(), op_types.clone()));
-        }
-        if !opt_op_types.is_empty() {
-            output.extend(test_ops(opt_type.clone(), opt_op_types.clone()));
-        }
-
-        // output.extend(gen_atomic_rdma(typeident.clone(), true));
-    }
-    TokenStream::from(output)
-}
-
-pub(crate) fn __generate_ops_for_bool_rt() -> TokenStream {
-    let mut output = quote! {};
-    let op_types = vec![
-        OpType::ReadOnly,
-        OpType::Access,
-        OpType::CompEx,
-        OpType::Bitwise,
-    ];
-
-    // let bool_type = syn::Type::
-    let the_type = syn::parse_str::<syn::Type>("bool").unwrap();
-    output.extend(quote! {
-        impl Dist for bool {}
-        // impl Remote for bool {}
-        impl crate::array::operations::ArrayOps for bool {}
-        impl ElementBitWiseOps for bool {}
-        impl ElementCompareEqOps for bool {}
-    });
-    output.extend(create_buffered_ops(
-        the_type.clone(),
-        op_types.clone(),
-        false,
-        true,
-    ));
-    // output.extend(gen_atomic_rdma(typeident.clone(), true));
-    TokenStream::from(output)
-}
+//     // let bool_type = syn::Type::
+//     let the_type = syn::parse_str::<syn::Type>("bool").unwrap();
+//     output.extend(quote! {
+//         impl Dist for bool {}
+//         // impl Remote for bool {}
+//         impl crate::array::operations::ArrayOps for bool {}
+//         impl ElementBitWiseOps for bool {}
+//         impl ElementCompareEqOps for bool {}
+//     });
+//     output.extend(create_buffered_ops(
+//         the_type.clone(),
+//         op_types.clone(),
+//         false,
+//         true,
+//     ));
+//     // output.extend(gen_atomic_rdma(typeident.clone(), true));
+//     TokenStream::from(output)
+// }
 
 pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     // println!("__derive_arrayops called");
