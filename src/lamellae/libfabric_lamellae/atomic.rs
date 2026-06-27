@@ -317,7 +317,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             remote_pe: pe,
             offset,
             op: op,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -331,7 +331,7 @@ impl CommAllocAtomic for LibfabricAlloc {
         pe: usize,
         offset: usize,
     ) -> T {
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         let mut_result_slice = std::slice::from_mut(&mut result);
         LibfabricAlloc::atomic_fetch_op_inner(self, pe, offset, &mut op, mut_result_slice, true)
             .unwrap();
@@ -352,7 +352,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             offset,
             current: Box::pin(current),
             new: Box::pin(new),
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
@@ -367,7 +367,7 @@ impl CommAllocAtomic for LibfabricAlloc {
         pe: usize,
         offset: usize,
     ) -> Result<T, T> {
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         LibfabricAlloc::atomic_compare_exchange_op_inner(
             self,
             pe,
@@ -465,7 +465,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             remote_pe: pe,
             offset,
             op: op,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -484,7 +484,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             "blocking atomic fetch op called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         let mut_result_slice = std::slice::from_mut(&mut result);
         LibfabricAlloc::atomic_fetch_op_inner(
             &self.alloc,
@@ -517,7 +517,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             offset,
             current: Box::pin(current),
             new: Box::pin(new),
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
@@ -537,7 +537,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             "blocking atomic compare exchange called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         LibfabricAlloc::atomic_compare_exchange_op_inner(
             &self.alloc,
             pe,

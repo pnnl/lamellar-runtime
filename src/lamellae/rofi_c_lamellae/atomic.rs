@@ -371,7 +371,7 @@ impl CommAllocAtomic for RofiCAlloc {
             remote_pe: pe,
             offset,
             op,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
@@ -387,7 +387,7 @@ impl CommAllocAtomic for RofiCAlloc {
         pe: usize,
         offset: usize,
     ) -> T {
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         exec_rofi_atomic_fetch(self, pe, offset, &mut op, &mut result);
         self.wait().expect("rofi-c atomic wait failed");
         result

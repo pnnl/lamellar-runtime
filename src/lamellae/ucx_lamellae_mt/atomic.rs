@@ -375,7 +375,7 @@ impl CommAllocAtomic for UcxMtAlloc {
             remote_pe: pe,
             offset,
             op: op,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -391,7 +391,7 @@ impl CommAllocAtomic for UcxMtAlloc {
         pe: usize,
         offset: usize,
     ) -> T {
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         UcxMtAlloc::inner_atomic_fetch_op(
             self,
             pe,
@@ -532,7 +532,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             remote_pe: pe,
             offset,
             op: op,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -553,7 +553,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             "atomic fetch op called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         UcxMtAlloc::inner_atomic_fetch_op(
             &self.alloc,
             pe,

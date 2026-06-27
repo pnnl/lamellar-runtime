@@ -281,7 +281,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
             alloc: self.clone(),
             offset,
             op,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
@@ -296,7 +296,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         offset: usize,
     ) -> T {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         net_atomic_fetch_op(&op, &CommAllocAddr(self.start() + offset), &mut result);
         result
     }

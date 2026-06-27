@@ -301,7 +301,7 @@ impl CommAllocAtomic for ShmemAlloc {
         ShmemAtomicFetchFuture {
             op,
             dst: CommAllocAddr(remote_dst_addr),
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -319,7 +319,7 @@ impl CommAllocAtomic for ShmemAlloc {
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
         let remote_dst_addr = remote_dst_base + offset;
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         net_atomic_fetch_op(&op, &CommAllocAddr(remote_dst_addr), &mut result as *mut T);
         result
     }
@@ -452,7 +452,7 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         ShmemAtomicFetchFuture {
             op,
             dst: CommAllocAddr(remote_dst_addr),
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -475,7 +475,7 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.start();
         let remote_dst_addr = remote_dst_base + offset;
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         net_atomic_fetch_op(&op, &CommAllocAddr(remote_dst_addr), &mut result as *mut T);
         result
     }
