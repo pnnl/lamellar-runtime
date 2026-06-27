@@ -86,8 +86,8 @@ impl LamellarRequestResult {
                             let _temp: Darc<()> = darc.into();
                         }
                         RemotePtr::NetMemRegionHandle(mr) => {
-                            let temp: Arc<MemRegionHandleInner> = mr.into();
-                            temp.local_ref.fetch_add(1, Ordering::SeqCst);
+                            // let temp: Arc<MemRegionHandleInner> = mr.into();
+                            // temp.local_ref.fetch_add(1, Ordering::SeqCst);
                         }
                     }
                 }

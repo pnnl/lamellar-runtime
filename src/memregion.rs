@@ -79,7 +79,7 @@ pub type MemResult<T> = Result<T, MemRegionError>;
 ///
 /// as well as [Copy] so we can perform bitwise copies
 pub trait Dist:
-    AmDist + Remote + Sync + serde::ser::Serialize + serde::de::DeserializeOwned + Default
+    AmDist + Remote + Sync + serde::ser::Serialize + serde::de::DeserializeOwned// + Default
 // AmDist + Copy
 {
 }

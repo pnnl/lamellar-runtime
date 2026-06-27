@@ -193,8 +193,20 @@ impl crate::active_messaging::DarcSerde for MemRegionHandle {
             self.inner.grand_parent_id
         );
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
-        self.inner.team.ser(num_pes, darcs);
-        darcs.push(RemotePtr::NetMemRegionHandle(self.inner.clone().into()));
+        // The team Darc is serialized exactly once, inside the payload bytes (via the
+        // memregion_handle_serde::serialize -> NetMemRegionHandle::serialize path). On the receiver
+        // that single copy is deserialized through From<NetMemRegionHandle> -> team.into(), which
+        // calls inc_pe_ref_count(orig_pe, 1) and ultimately drives one FinishedAm back per receiver.
+        // So increment dist_cnt by num_pes to match.
+        //
+        // We intentionally do NOT push a RemotePtr::NetMemRegionHandle into the darcs vec: its
+        // process_result arm is a no-op, but serializing it onto the wire would serialize the team
+        // Darc a SECOND time, producing an extra inc_pe_ref_count (and FinishedAm) on the receiver.
+        // That second copy only appears on AM paths that serialize the darcs vec (e.g. the return AM
+        // but not the request AM), which made the dist_cnt bookkeeping asymmetric between the two PEs
+        // and deadlocked the world-drop barrier.
+        self.inner.team.serialize_update_cnts(num_pes);
+        let _ = darcs;
     }
 }
 
@@ -1048,7 +1060,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         SubRegion::sub_region(self, range)
     }
 
-    pub(crate) unsafe fn to_base<B: Dist>(self) -> OneSidedMemoryRegion<B> {
+    pub(crate) unsafe fn to_base<B: Remote>(self) -> OneSidedMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         OneSidedMemoryRegion {

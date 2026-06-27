@@ -139,8 +139,8 @@ impl<T: AmDist> AmHandle<T> {
                                 temp.inc_local_cnt(1);
                             }
                             RemotePtr::NetMemRegionHandle(mr) => {
-                                let temp: Arc<MemRegionHandleInner> = mr.into();
-                                temp.local_ref.fetch_add(2, Ordering::SeqCst);
+                                // let temp: Arc<MemRegionHandleInner> = mr.into();
+                                // temp.local_ref.fetch_add(1, Ordering::SeqCst);
                             }
                         }
                     }
@@ -578,8 +578,8 @@ impl<T: AmDist> MultiAmHandle<T> {
                                 temp.inc_local_cnt(1);
                             }
                             RemotePtr::NetMemRegionHandle(mr) => {
-                                let temp: Arc<MemRegionHandleInner> = mr.into();
-                                temp.local_ref.fetch_add(2, Ordering::SeqCst);
+                                // let temp: Arc<MemRegionHandleInner> = mr.into();
+                                // temp.local_ref.fetch_add(1, Ordering::SeqCst);
                             }
                         }
                     }
