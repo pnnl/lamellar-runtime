@@ -552,14 +552,14 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             local_op: pe == self.ofi.my_pe,
         }
         .into()
     }
 
     fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
-        let mut val = T::default();
+        let mut val: T = unsafe { std::mem::zeroed() };
         let val_slice = std::slice::from_mut(&mut val);
         unsafe {
             LibfabricAlloc::inner_get_small(self, pe, offset, val_slice, true)
@@ -595,7 +595,7 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             local_op: pe == self.ofi.my_pe,
         }
         .into()
@@ -607,7 +607,7 @@ impl CommAllocRdma for LibfabricAlloc {
         offset: usize,
         len: usize,
     ) -> Vec<T> {
-        let mut dst = vec![T::default(); len];
+        let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         unsafe {
             self.inner_get(pe, offset, &mut dst, true)
                 .expect("error in blocking_get_buffer")
@@ -807,7 +807,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             local_op: pe == self.alloc.ofi.my_pe,
         }
         .into()
@@ -818,7 +818,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             "blocking_get called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        let mut val = T::default();
+        let mut val: T = unsafe { std::mem::zeroed() };
         let val_slice = std::slice::from_mut(&mut val);
         unsafe {
             LibfabricAlloc::inner_get_small(&self.alloc, pe, offset, val_slice, true)
@@ -847,7 +847,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             local_op: pe == self.alloc.ofi.my_pe,
         }
         .into()
@@ -864,7 +864,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             "blocking_get_buffer called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        let mut dst = vec![T::default(); len];
+        let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         unsafe {
             self.alloc
                 .inner_get(pe, offset, &mut dst, true)

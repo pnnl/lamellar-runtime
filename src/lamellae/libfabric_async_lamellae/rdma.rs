@@ -238,7 +238,7 @@ impl<T: Remote> GetBufferFutureData<T> {
     async fn exec_at(mut self) -> Vec<T> {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
-            let mut dst = vec![T::default(); self.len];
+            let mut dst: Vec<T> = (0..self.len).map(|_| unsafe { std::mem::zeroed() }).collect();
             // let dst_mut_slice = std::slice::from_raw_parts_mut(dst.as_mut_ptr(), self.len);
 
             // dst.set_len(self.len);
@@ -647,7 +647,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         .into()
     }
     fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         _scheduler.clone().block_on(async {
             unsafe {
                 LibfabricAsyncAlloc::inner_get(self, pe, offset, std::slice::from_mut(&mut result))
@@ -702,7 +702,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         offset: usize,
         len: usize,
     ) -> Vec<T> {
-        let mut dst = vec![T::default(); len];
+        let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         _scheduler.clone().block_on(async {
             unsafe {
                 LibfabricAsyncAlloc::inner_get(self, pe, offset, &mut dst)
@@ -935,7 +935,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         .into()
     }
     fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
-        let mut result = T::default();
+        let mut result: T = unsafe { std::mem::zeroed() };
         _scheduler.clone().block_on(async {
             unsafe {
                 LibfabricAsyncAlloc::inner_get(
@@ -985,7 +985,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         offset: usize,
         len: usize,
     ) -> Vec<T> {
-        let mut dst = vec![T::default(); len];
+        let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         _scheduler.clone().block_on(async {
             unsafe {
                 LibfabricAsyncAlloc::inner_get(&self.alloc, pe, offset, &mut dst)

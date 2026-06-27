@@ -1100,7 +1100,11 @@ impl<T: Dist + 'static> LamellarAm for NetworkAtomicInitGetBufferAm<T> {
         match self.array.array.inner.distribution {
             Distribution::Block => unsafe { buf.as_slice().to_vec() },
             Distribution::Cyclic => {
-                let mut data = vec![T::default(); self.len];
+                let mut data: Vec<T> = unsafe {
+                    let mut v = Vec::with_capacity(self.len);
+                    v.set_len(self.len);
+                    v
+                };
                 for (k, buf) in bufs.iter().enumerate() {
                     let buf_slice = unsafe { buf.as_slice() };
                     for (i, val) in buf_slice.iter().enumerate() {

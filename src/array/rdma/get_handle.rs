@@ -229,7 +229,11 @@ impl<T: Dist> ArrayRdmaGetBufferHandle<T> {
                     // let mut results = Vec::with_capacity(tasks.len());
                     let results = tasks.await;
                     let num_elems = results.iter().map(|data| data.len()).sum();
-                    let mut dst = vec![T::default(); num_elems];
+                    let mut dst: Vec<T> = unsafe {
+                        let mut v = Vec::with_capacity(num_elems);
+                        v.set_len(num_elems);
+                        v
+                    };
                     let results_len = results.len();
                     for (k, data) in results.into_iter().enumerate() {
                         for (i, v) in data.into_iter().enumerate() {
@@ -291,7 +295,11 @@ impl<T: Dist> ArrayRdmaGetBufferHandle<T> {
                     let results = tasks.await;
                     let results_len = results.len();
                     let num_elems = results.iter().map(|data| data.len()).sum();
-                    let mut dst = vec![T::default(); num_elems];
+                    let mut dst: Vec<T> = unsafe {
+                        let mut v = Vec::with_capacity(num_elems);
+                        v.set_len(num_elems);
+                        v
+                    };
 
                     //results are ordered based on the pe where the first index was located, so we need to interleave them
                     for (k, data) in results.into_iter().enumerate() {
@@ -333,7 +341,11 @@ impl<T: Dist> Future for ArrayRdmaGetBufferHandle<T> {
                     Poll::Ready(mut results) => {
                         let num_elems = results.iter().map(|data| data.len()).sum();
                         let results_len = results.len();
-                        let mut dst = vec![T::default(); num_elems];
+                        let mut dst: Vec<T> = unsafe {
+                            let mut v = Vec::with_capacity(num_elems);
+                            v.set_len(num_elems);
+                            v
+                        };
                         for (k, data) in results.drain(..).enumerate() {
                             for (i, v) in data.into_iter().enumerate() {
                                 dst[i * results_len + k] = v;

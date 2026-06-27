@@ -583,7 +583,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             counters,
             spawned: false,
             issued_network: false,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             alloc: self.clone(),
             wait_cnt: None,
         }
@@ -591,7 +591,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     }
 
     fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
-        let mut val: T = T::default();
+        let mut val: T = unsafe { std::mem::zeroed() };
         let val_slice = std::slice::from_mut(&mut val);
         let src = (self.start() + offset * std::mem::size_of::<T>()) as usize;
         if pe == self.my_pe {
@@ -621,7 +621,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             counters,
             spawned: false,
             issued_network: false,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             alloc: self.clone(),
             wait_cnt: None,
         }
@@ -635,7 +635,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         offset: usize,
         len: usize,
     ) -> Vec<T> {
-        let mut dst = vec![T::default(); len];
+        let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         let src = (self.start() + offset * std::mem::size_of::<T>()) as usize;
         if pe == self.my_pe {
             unsafe { std::ptr::copy(src as *const T, dst.as_mut_ptr(), len) }

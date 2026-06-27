@@ -458,7 +458,7 @@ impl CommAllocRdma for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
         }
         .into()
     }
@@ -489,7 +489,7 @@ impl CommAllocRdma for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
         }
         .into()
     }
@@ -504,7 +504,7 @@ impl CommAllocRdma for ShmemAlloc {
         assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
-        let mut dst = vec![T::default(); len];
+        let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         unsafe {
             let src_slice = std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), len);
             dst.copy_from_slice(src_slice);
@@ -707,7 +707,7 @@ impl CommAllocRdma for OneSidedShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
         }
         .into()
     }
@@ -748,7 +748,7 @@ impl CommAllocRdma for OneSidedShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
         }
         .into()
     }
@@ -769,7 +769,7 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         let remote_src_base = self.start();
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         unsafe {
-            let mut dst = vec![T::default(); len];
+            let mut dst: Vec<T> = (0..len).map(|_| std::mem::zeroed()).collect();
             let src_slice = std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), len);
             dst.copy_from_slice(src_slice);
             dst

@@ -424,7 +424,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
         }
         .into()
     }
@@ -448,7 +448,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
         }
         .into()
     }

@@ -691,14 +691,14 @@ impl CommAllocRdma for UcxMtAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             request: None,
         }
         .into()
     }
 
     fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
-        let mut val = T::default();
+        let mut val: T = unsafe { std::mem::zeroed() };
         let val_slice = std::slice::from_mut(&mut val);
         let _ = unsafe { self.inner_get(pe, offset, true, val_slice) };
         val
@@ -729,7 +729,7 @@ impl CommAllocRdma for UcxMtAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             request: None,
         }
         .into()
@@ -742,7 +742,7 @@ impl CommAllocRdma for UcxMtAlloc {
         offset: usize,
         len: usize,
     ) -> Vec<T> {
-        let mut buf = vec![T::default(); len];
+        let mut buf: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         let _ = unsafe { self.inner_get(pe, offset, true, buf.as_mut_slice()) };
         buf
     }
@@ -977,7 +977,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(T::default()),
+            result: Box::new(unsafe { std::mem::zeroed() }),
             request: None,
         }
         .into()
@@ -989,7 +989,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
             "blocking_get called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        let mut val = T::default();
+        let mut val: T = unsafe { std::mem::zeroed() };
         let val_slice = std::slice::from_mut(&mut val);
         let _ = unsafe { self.alloc.inner_get(pe, offset, true, val_slice) };
         val
@@ -1016,7 +1016,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: vec![T::default(); len],
+            result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             request: None,
         }
         .into()
@@ -1034,7 +1034,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
             "blocking_get_buffer called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        let mut dst = vec![T::default(); len];
+        let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         unsafe {
             dst.set_len(len);
             if pe != self.alloc.my_pe {
