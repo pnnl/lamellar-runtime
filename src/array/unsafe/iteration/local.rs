@@ -3,7 +3,7 @@ use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::private::*;
 use crate::array::iterator::Schedule;
 use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
-use crate::array::{ArrayOps, AsyncTeamFrom, Distribution};
+use crate::array::{ArrayOps,ElementArithmeticOps, AsyncTeamFrom, Distribution};
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::Dist;
 use crate::LamellarTeam;
@@ -160,7 +160,7 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
     consumer_impl!(
         sum<I>(iter: &I);
         [LocalIterSumHandle<I::Item>];
-        [I: LocalIterator + 'static, I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>  , ];
+        [I: LocalIterator + 'static, I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + ElementArithmeticOps + std::iter::Sum<I::Item>, ];
         [
             Sum {
                 iter: iter.iter_clone(Sealed),

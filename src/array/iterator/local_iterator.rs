@@ -35,7 +35,7 @@ use zip::*;
 pub(crate) use consumer::*;
 
 use crate::array::iterator::{private::*, Schedule};
-use crate::array::{operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
+use crate::array::{operations::{ElementArithmeticOps,ArrayOps}, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
 use crate::memregion::Dist;
 use crate::LamellarTeam;
 
@@ -109,7 +109,7 @@ pub trait LocalIteratorLauncher: InnerArray {
     consumer_impl!(
         sum<I>(iter: &I);
         [LocalIterSumHandle<I::Item>];
-        [I: LocalIterator + 'static, I::Item: SyncSend +  for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>, ]);
+        [I: LocalIterator + 'static, I::Item: SyncSend +  for<'a> std::iter::Sum<&'a I::Item> + ElementArithmeticOps + std::iter::Sum<I::Item>, ]);
 
     //#[doc(hidden)]
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
@@ -696,7 +696,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> LocalIterSumHandle<Self::Item>
     where
-        Self::Item: SyncSend + for<'a> std::iter::Sum<&'a Self::Item> + std::iter::Sum<Self::Item>,
+        Self::Item: SyncSend + for<'a> std::iter::Sum<&'a Self::Item> + ElementArithmeticOps + std::iter::Sum<Self::Item>,
     {
         self.array().sum(self)
     }
@@ -723,7 +723,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum_with_schedule(&self, sched: Schedule) -> LocalIterSumHandle<Self::Item>
     where
-        Self::Item: SyncSend + for<'a> std::iter::Sum<&'a Self::Item> + std::iter::Sum<Self::Item>,
+        Self::Item: SyncSend + for<'a> std::iter::Sum<&'a Self::Item> + ElementArithmeticOps + std::iter::Sum<Self::Item>,
     {
         self.array().sum_with_schedule(sched, self)
     }

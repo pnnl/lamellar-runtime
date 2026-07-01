@@ -3,7 +3,7 @@ use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::private::*;
 use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
-use crate::array::{ArrayOps, Distribution, UnsafeArray};
+use crate::array::{ArrayOps, Distribution, UnsafeArray,ElementArithmeticOps};
 use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
@@ -37,7 +37,7 @@ impl<I: InnerIter> InnerIter for Sum<I> {
 impl<I> IterConsumer for Sum<I>
 where
     I: DistributedIterator + 'static,
-    I::Item: Dist + ArrayOps + std::iter::Sum,
+    I::Item: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum,
 {
     type AmOutput = I::Item;
     type Output = I::Item;
@@ -90,7 +90,7 @@ enum InnerState<T> {
 
 impl<T> InnerDistIterSumHandle<T>
 where
-    T: Dist + ArrayOps + std::iter::Sum + Default,
+    T: Dist + ArrayOps + ElementArithmeticOps + Default,
 {
     async fn async_reduce_remote_vals(local_sum: T, team: Darc<LamellarTeamRT>) -> T {
         let local_sums = UnsafeArray::<T>::async_new(
@@ -132,7 +132,7 @@ where
 
 impl<T> Future for InnerDistIterSumHandle<T>
 where
-    T: Dist + ArrayOps + std::iter::Sum + Default,
+    T: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum + Default,
 {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -203,7 +203,7 @@ impl<T> PinnedDrop for DistIterSumHandle<T> {
 
 impl<T> DistIterSumHandle<T>
 where
-    T: Dist + ArrayOps + std::iter::Sum + Default,
+    T: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum + Default,
 {
     pub(crate) fn new(
         lock: Option<IterLockFuture>,
@@ -276,7 +276,7 @@ enum State<T> {
 }
 impl<T> Future for DistIterSumHandle<T>
 where
-    T: Dist + ArrayOps + std::iter::Sum + Default,
+    T: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum + Default,
 {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -336,7 +336,7 @@ impl<I: InnerIter> InnerIter for SumAm<I> {
 impl<I> LamellarAm for SumAm<I>
 where
     I: DistributedIterator + 'static,
-    I::Item: Dist + ArrayOps + std::iter::Sum,
+    I::Item: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum,
 {
     async fn exec(&self) -> I::Item {
         let iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));

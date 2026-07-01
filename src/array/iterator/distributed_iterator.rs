@@ -38,7 +38,7 @@ pub(crate) use consumer::*;
 
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::{private::*, Schedule};
-use crate::array::{operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
+use crate::array::{operations::{ElementArithmeticOps,ArrayOps}, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
 use crate::memregion::Dist;
 use crate::LamellarTeam;
 
@@ -110,7 +110,7 @@ pub trait DistIteratorLauncher: InnerArray {
     consumer_impl!(
         sum<I>(iter: &I);
         [DistIterSumHandle<I::Item>];
-        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum + Default, ]);
+        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum + Default, ]);
 
     //#[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
@@ -734,7 +734,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> DistIterSumHandle<Self::Item>
     where
-        Self::Item: Dist + ArrayOps + std::iter::Sum + Default,
+        Self::Item: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum + Default,
     {
         self.array().sum(self)
     }
@@ -763,7 +763,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn sum_with_schedule(&self, sched: Schedule) -> DistIterSumHandle<Self::Item>
     where
-        Self::Item: Dist + ArrayOps + std::iter::Sum + Default,
+        Self::Item: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum + Default,
     {
         self.array().sum_with_schedule(sched, self)
     }

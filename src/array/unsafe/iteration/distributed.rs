@@ -3,7 +3,7 @@ use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::private::Sealed;
 use crate::array::iterator::Schedule;
 use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
-use crate::array::{ArrayOps, AsyncTeamFrom, Distribution, InnerArray};
+use crate::array::{ArrayOps,ElementArithmeticOps, AsyncTeamFrom, Distribution, InnerArray};
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::Dist;
 use crate::{LamellarTeam, Remote};
@@ -181,7 +181,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
     consumer_impl!(
         sum<I>(iter: &I);
         [DistIterSumHandle<I::Item>];
-        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum + Default, ];
+        [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + ElementArithmeticOps + std::iter::Sum + Default, ];
         [
             Sum {
                 iter: iter.iter_clone(Sealed),
