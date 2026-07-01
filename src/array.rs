@@ -734,6 +734,21 @@ pub enum LamellarByteArray {
     GlobalLockArray(__GlobalLockByteArray),
 }
 
+impl std::fmt::Debug for LamellarByteArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LamellarByteArray::UnsafeArray(_) => write!(f, "LamellarByteArray::UnsafeArray"),
+            LamellarByteArray::ReadOnlyArray(_) => write!(f, "LamellarByteArray::ReadOnlyArray"),
+            LamellarByteArray::AtomicArray(_) => write!(f, "LamellarByteArray::AtomicArray"),
+            LamellarByteArray::NativeAtomicArray(_) => write!(f, "LamellarByteArray::NativeAtomicArray"),
+            LamellarByteArray::GenericAtomicArray(_) => write!(f, "LamellarByteArray::GenericAtomicArray"),
+            LamellarByteArray::NetworkAtomicArray(_) => write!(f, "LamellarByteArray::NetworkAtomicArray"),
+            LamellarByteArray::LocalLockArray(_) => write!(f, "LamellarByteArray::LocalLockArray"),
+            LamellarByteArray::GlobalLockArray(_) => write!(f, "LamellarByteArray::GlobalLockArray"),
+        }
+    }
+}
+
 impl LamellarByteArray {
     pub fn type_id(&self) -> std::any::TypeId {
         match self {
@@ -2065,10 +2080,10 @@ where
     ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.reduce("sum").block().expect("array len > 0"); // equivalent to calling array.sum()
+    /// let sum = array.registered_reduce("sum").block().expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
-    fn reduce(&self, reduction: &str) -> Self::Handle;
+    fn registered_reduce(&self, reduction: &str) -> Self::Handle;
 }
 
 /// This procedural macro is used to enable the execution of user defined reductions on LamellarArrays.
@@ -2109,7 +2124,7 @@ where
 /// }).block();
 /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
 /// let sum =array.sum().block();
-/// let my_sum = array.reduce("my_sum").block(); //pass a &str containing the reduction to use
+/// let my_sum = array.registered_reduce("my_sum").block(); //pass a &str containing the reduction to use
 /// assert_eq!(sum,my_sum);
 ///```
 pub use lamellar_impl::register_reduction;

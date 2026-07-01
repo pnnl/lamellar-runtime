@@ -1407,7 +1407,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
 
 impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
     #[doc(hidden)]
-    pub fn reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
+    pub fn registered_reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
         self.array.reduce_data_user(op, self.clone().into())
     }
 }

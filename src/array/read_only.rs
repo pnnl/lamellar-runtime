@@ -495,11 +495,11 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     /// }).block();
     /// array.wait_all();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.reduce("sum").block().expect("array len > 0"); // equivalent to calling array.sum()
+    /// let sum = array.registered_reduce("sum").block().expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
+    pub fn registered_reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
         self.array.reduce_data_user(op, self.clone().into())
     }
 }

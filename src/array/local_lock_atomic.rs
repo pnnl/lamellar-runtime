@@ -1045,7 +1045,7 @@ impl<T: Dist + AmDist> LocalLockArrayReduceHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.block_on(array.reduce("sum"));
+    /// let handle = array.block_on(array.registered_reduce("sum"));
     ///```
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Option<T>> {
@@ -1060,7 +1060,7 @@ impl<T: Dist + AmDist> LocalLockArrayReduceHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world, 100, Distribution::Block).block();
-    /// let result = array.reduce("sum").block();
+    /// let result = array.registered_reduce("sum").block();
     ///```
     pub fn block(self) -> Option<T> {
         RuntimeWarning::BlockingCall(
@@ -1127,10 +1127,10 @@ impl<T: Dist + AmDist + 'static> LocalLockReadGuard<T> {
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block).block();
     /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let prod = read_guard.reduce("prod").block();
+    /// let prod = read_guard.registered_reduce("prod").block();
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn reduce(self, op: &str) -> LocalLockArrayReduceHandle<T> {
+    pub fn registered_reduce(self, op: &str) -> LocalLockArrayReduceHandle<T> {
         LocalLockArrayReduceHandle {
             req: self.array.array.reduce_data_user(op, self.array.clone().into()),
             lock_guard: self,

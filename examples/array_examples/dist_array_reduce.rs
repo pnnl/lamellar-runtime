@@ -148,8 +148,8 @@ fn main() {
             cyclic_sum, cyclic_dist_time, block_sum, block_dist_time, calculated_sum
         );
 
-        let block_min = unsafe { block_array.reduce("my_min").block() };
-        let cyclic_min = unsafe { block_array.reduce("my_min").block() };
+        let block_min = unsafe { block_array.registered_reduce("my_min").block() };
+        let cyclic_min = unsafe { block_array.registered_reduce("my_min").block() };
         println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
 

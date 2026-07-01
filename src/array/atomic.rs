@@ -1628,15 +1628,15 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     /// }).block();
     /// world.wait_all();
     /// world.barrier();
-    /// let sum = array.reduce("sum").block().expect("array has length > 0"); // equivalent to calling array.sum()
+    /// let sum = array.registered_reduce("sum").block().expect("array has length > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub fn reduce(&self, reduction: &str) -> crate::array::ArrayReduceHandle<T> {
+    pub fn registered_reduce(&self, reduction: &str) -> crate::array::ArrayReduceHandle<T> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
-            AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
-            AtomicArray::NetworkAtomicArray(array) => array.reduce(reduction),
+            AtomicArray::NativeAtomicArray(array) => array.registered_reduce(reduction),
+            AtomicArray::GenericAtomicArray(array) => array.registered_reduce(reduction),
+            AtomicArray::NetworkAtomicArray(array) => array.registered_reduce(reduction),
         }
     }
 }

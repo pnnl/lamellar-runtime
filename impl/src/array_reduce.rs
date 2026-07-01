@@ -27,21 +27,21 @@ fn create_reduction(
     // Recursive branch: left/right return Option<Vec<u8>>; deserialize, apply op, re-serialize.
     let array_impls = quote! {
         #[allow(non_camel_case_types)]
-        #[#am_data(Clone,Debug)]
+        #[#am_data(Clone,Debug,AmGroup(false))]
         struct #reduction_name {
             data: #lamellar::array::LamellarByteArray,
             start_pe: usize,
             end_pe: usize,
         }
 
-        #[#am]
+        #[#am(AmGroup(false))]
         impl LamellarAM for #reduction_name {
             async fn exec(&self) -> Vec<u8> {
                 if self.start_pe == self.end_pe {
                     let local = self.data.local_data::<#typeident>().await;
                     match local.reduce(#op){
                         None => Vec::new(),
-                        Some(v) => crate::serialize(&v, true).expect("failed to serialize reduction result"),
+                        Some(v) => #lamellar::serialize(&v, true).expect("failed to serialize reduction result"),
                     }
 
                 } else {
@@ -55,10 +55,18 @@ fn create_reduction(
                     });
                     let left_bytes = left.await;
                     let right_bytes = right.await;
-                    let left_val = left_bytes.ref_from_bytes::<#typeident>().expect("merge_scalar des left");
-                    let right_val = right_bytes.ref_from_bytes::<#typeident>().expect("merge_scalar des right");
-                    let res =op(*left_val, *right_val);
-                    crate::serialize(&res, true).expect("failed to serialize reduction result")
+                    if left_bytes.is_empty() && right_bytes.is_empty() {
+                        Vec::new()
+                    } else if left_bytes.is_empty() {
+                        right_bytes
+                    } else if right_bytes.is_empty() {
+                        left_bytes
+                    } else {
+                        let left_val = #lamellar::deserialize::<#typeident>(&left_bytes, true).expect("merge_scalar des left");
+                        let right_val = #lamellar::deserialize::<#typeident>(&right_bytes, true).expect("merge_scalar des right");
+                        let res = op(left_val, right_val);
+                        #lamellar::serialize(&res, true).expect("failed to serialize reduction result")
+                    }
                 }
             }
         }
