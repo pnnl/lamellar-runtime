@@ -3,8 +3,8 @@ use crate::memregion::{OneSidedMemoryRegion};
 use crate::array::operations::handle::*;
 use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
-use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
- use crate::array::pod::{PodPrimType,PackedIndicies,PackedIdxVal,PodMultiIdxSingleValAm, PodMultiIdxMultiValAm, PodSingleIdxMultiValAm,PodMultiIdxSingleValAmReturn, PodMultiIdxMultiValAmReturn, PodSingleIdxMultiValAmReturn};
+use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv,ScalarType};
+ use crate::array::scalar_impls::{PackedIndicies,PackedIdxVal,PodMultiIdxSingleValAm, PodMultiIdxMultiValAm, PodSingleIdxMultiValAm,PodMultiIdxSingleValAmReturn, PodMultiIdxMultiValAmReturn, PodSingleIdxMultiValAmReturn};
 use crate::env_var::{config, IndexType};
 use crate::lamellae::AtomicOp;
 use crate::AmHandle;
@@ -949,7 +949,7 @@ struct SingleValMultiIndex {
     val: Vec<u8>,
     op: ArrayOpCmd<Vec<u8>>,
     index_size: usize,
-    prim_type: Option<(PodPrimType,bool)>, // type and whether it is wrapped in an option
+    scalar_type: Option<(ScalarType,bool)>, // type and whether it is wrapped in an option
 }
 
 impl SingleValMultiIndex {
@@ -960,8 +960,8 @@ impl SingleValMultiIndex {
         val: Vec<u8>,
         index_size: usize,
     ) -> Self {
-        let prim_type = PodPrimType::get_type::<T>();
-        let (indices_mr, indices_u8) = if prim_type.is_some() {
+        let scalar_type = ScalarType::get_type::<T>();
+        let (indices_mr, indices_u8) = if scalar_type.is_some() {
             let mut mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
             while let None = mem_region {
                 // println!("Failed to allocate mem region, retrying...");
@@ -992,12 +992,12 @@ impl SingleValMultiIndex {
             val,
             op: op.into(),
             index_size,
-            prim_type: PodPrimType::get_type::<T>(),
+            scalar_type: ScalarType::get_type::<T>(),
         }
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        if let Some((prim_type,opt)) = self.prim_type { //built in Pod support 
+        if let Some((scalar_type,opt)) = self.scalar_type { //built in Pod support 
             match ret {
                 BatchReturnType::None => 
                     Arc::new(PodMultiIdxSingleValAm{
@@ -1005,7 +1005,7 @@ impl SingleValMultiIndex {
                         val: self.val,
                         indices: self.indices.unwrap(),
                         idx_size: self.index_size,
-                        prim_type,
+                        scalar_type,
                         opt,
                         op: self.op,
                     }),
@@ -1015,7 +1015,7 @@ impl SingleValMultiIndex {
                         val: self.val,
                         indices: self.indices.unwrap(),
                         idx_size: self.index_size,
-                        prim_type,
+                        scalar_type,
                         opt,
                         op: self.op,
                     }),
@@ -1042,7 +1042,7 @@ struct MultiValSingleIndex {
     vals: Option<OneSidedMemoryRegion<u8>>,
     val_u8: Option<Vec<u8>>,
     op: ArrayOpCmd<Vec<u8>>,
-    prim_type: Option<(PodPrimType,bool)>, // type and whether it is wrapped in an option
+    scalar_type: Option<(ScalarType,bool)>, // type and whether it is wrapped in an option
 }
 
 impl MultiValSingleIndex {
@@ -1052,8 +1052,8 @@ impl MultiValSingleIndex {
         index: usize,
         val: Vec<T>,
     ) -> Self {
-        let prim_type = PodPrimType::get_type::<T>();
-            let(vals,val_u8) = if prim_type.is_some() {
+        let scalar_type = ScalarType::get_type::<T>();
+            let(vals,val_u8) = if scalar_type.is_some() {
             let mut mem_region = array.team().try_alloc_one_sided_mem_region(val.len());
             while let None = mem_region {
                 // println!("Failed to allocate mem region, retrying...");
@@ -1085,19 +1085,19 @@ impl MultiValSingleIndex {
             vals,
             val_u8,
             op: op.into(),
-            prim_type,
+            scalar_type,
         }
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-         if let Some((prim_type,opt)) = self.prim_type { //built in Pod support 
+         if let Some((scalar_type,opt)) = self.scalar_type { //built in Pod support 
             match ret {
                 BatchReturnType::None => 
                     Arc::new(PodSingleIdxMultiValAm{
                         array: self.array,
                         index: self.idx,
                         vals: self.vals.unwrap(),
-                        prim_type,
+                        scalar_type,
                         opt,
                         op: self.op,
                     }),
@@ -1106,7 +1106,7 @@ impl MultiValSingleIndex {
                         array: self.array,
                         index: self.idx,
                         vals: self.vals.unwrap(),
-                        prim_type,
+                        scalar_type,
                         opt,
                         op: self.op,
                     }),
@@ -1132,7 +1132,7 @@ struct MultiValMultiIndex {
     idx_vals_u8: Option<Vec<u8>>,
     op: ArrayOpCmd<Vec<u8>>,
     index_size: usize,
-    prim_type: Option<(PodPrimType,bool)>, // type and whether it is wrapped in an option
+    scalar_type: Option<(ScalarType,bool)>, // type and whether it is wrapped in an option
 }
 
 impl MultiValMultiIndex {
@@ -1142,7 +1142,8 @@ impl MultiValMultiIndex {
         idxs_vals: &mut PackedIdxVal,
         index_size: usize,
     ) -> Self {
-        let (idx_vals_mr, idx_vals_u8) = if let Some((prim_type,opt)) = PodPrimType::get_type::<T>() {
+        let scalar_type = ScalarType::get_type::<T>();
+        let (idx_vals_mr, idx_vals_u8) = if let Some(_) = &scalar_type {
             let mut mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
             while let None = mem_region {
                 // println!("Failed to allocate mem region, retrying...");
@@ -1173,19 +1174,19 @@ impl MultiValMultiIndex {
             idx_vals_u8,
             op: op.into(),
             index_size,
-            prim_type: PodPrimType::get_type::<T>(),
+            scalar_type,
         } //, type_id: TypeId::of::<T>() }
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        if let Some((prim_type,opt)) = PodPrimType::get_type::<T>() { //built in Pod support 
+        if let Some((scalar_type,opt)) = self.scalar_type { //built in Pod support 
             match ret {
                 BatchReturnType::None => 
                     Arc::new(PodMultiIdxMultiValAm{
                         array: self.array,
                         idx_val: self.idxs_vals.unwrap(),
                         idx_size: self.index_size,
-                        prim_type,
+                        scalar_type,
                         opt,
                         op: self.op,
                     }),
@@ -1194,7 +1195,7 @@ impl MultiValMultiIndex {
                         array: self.array,
                         idx_val: self.idxs_vals.unwrap(),
                         idx_size: self.index_size,
-                        prim_type,
+                        scalar_type,
                         opt,
                         op: self.op,
                     }),

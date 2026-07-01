@@ -1,64 +1,18 @@
 use crate::OneSidedMemoryRegion;
 use crate::array::*;
 
-/// Runtime tag for the 14 primitive scalar types that support array ops.
-#[doc(hidden)]
-#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
-#[allow(non_camel_case_types)]
-pub(crate) enum PodPrimType {
-    u8, u16, u32, u64, usize,
-    u128,
-    i8, i16, i32, i64, isize,
-    i128,
-    f32, f64,
-    bool,
-}
 
-impl PodPrimType {
-    pub(crate) fn get_type<T: 'static>() -> Option<(Self,bool)> {
-        match std::any::TypeId::of::<T>() {
-            id if id == std::any::TypeId::of::<u8>() => Some((PodPrimType::u8,false)),
-            id if id == std::any::TypeId::of::<u16>() => Some((PodPrimType::u16,false)),
-            id if id == std::any::TypeId::of::<u32>() => Some((PodPrimType::u32,false)),
-            id if id == std::any::TypeId::of::<u64>() => Some((PodPrimType::u64,false)),
-            id if id == std::any::TypeId::of::<usize>() => Some((PodPrimType::usize,false)),
-            id if id == std::any::TypeId::of::<u128>() => Some((PodPrimType::u128,false)),
-            id if id == std::any::TypeId::of::<i8>() => Some((PodPrimType::i8,false)),
-            id if id == std::any::TypeId::of::<i16>() => Some((PodPrimType::i16,false)),
-            id if id == std::any::TypeId::of::<i32>() => Some((PodPrimType::i32,false)),
-            id if id == std::any::TypeId::of::<i64>() => Some((PodPrimType::i64,false)),
-            id if id == std::any::TypeId::of::<isize>() => Some((PodPrimType::isize,false)),
-            id if id == std::any::TypeId::of::<i128>() => Some((PodPrimType::i128,false)),
-            id if id == std::any::TypeId::of::<f32>() => Some((PodPrimType::f32,false)),
-            id if id == std::any::TypeId::of::<f64>() => Some((PodPrimType::f64,false)),
-            id if id == std::any::TypeId::of::<bool>() => Some((PodPrimType::bool,false)),
-            id if id == std::any::TypeId::of::<Option<u8>>() => Some((PodPrimType::u8,true)),
-            id if id == std::any::TypeId::of::<Option<u16>>() => Some((PodPrimType::u16,true)),
-            id if id == std::any::TypeId::of::<Option<u32>>() => Some((PodPrimType::u32,true)),
-            id if id == std::any::TypeId::of::<Option<u64>>() => Some((PodPrimType::u64,true)),
-            id if id == std::any::TypeId::of::<Option<usize>>() => Some((PodPrimType::usize,true)),
-            id if id == std::any::TypeId::of::<Option<u128>>() => Some((PodPrimType::u128,true)),
-            id if id == std::any::TypeId::of::<Option<i8>>() => Some((PodPrimType::i8,true)),
-            id if id == std::any::TypeId::of::<Option<i16>>() => Some((PodPrimType::i16,true)),
-            id if id == std::any::TypeId::of::<Option<i32>>() => Some((PodPrimType::i32,true)),
-            id if id == std::any::TypeId::of::<Option<i64>>() => Some((PodPrimType::i64,true)),
-            id if id == std::any::TypeId::of::<Option<isize>>() => Some((PodPrimType::isize,true)),
-            id if id == std::any::TypeId::of::<Option<i128>>() => Some((PodPrimType::i128,true)),
-            id if id == std::any::TypeId::of::<Option<f32>>() => Some((PodPrimType::f32,true)),
-            id if id == std::any::TypeId::of::<Option<f64>>() => Some((PodPrimType::f64,true)),
-            id if id == std::any::TypeId::of::<Option<bool>>() => Some((PodPrimType::bool,true)),
-            _ => None,
-        }
-    }
-}
+
+
 
 #[crabtime::function]
-fn impl_prim_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty,$result:expr): _) {
+fn impl_ops_scalar_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty,$result:expr): _) {
     let mut match_arms = Vec::new();
     let bytes = stringify!($bytes);
     let bytes_type = stringify!($bytes_type);
     let result = stringify!($result);
-    let (aritmetic_ops, bitwise_ops, shift_ops, read_ops, write_ops, comp_ex_op, comp_ex_eps_op,return_type) = if result == "false" {
+
+    let (aritmetic_ops, bitwise_ops, shift_ops, read_ops, write_ops, comp_ex_op, comp_ex_eps_op,return_type) = if result == "false" { //false means not returning anything, true means returning a OneSidedMemoryRegion<u8>
         let aritmetic_ops = crabtime::quote!{
             ArrayOpCmd::Add => {array.mut_local_data().await.local_add(idx_vals);},
             ArrayOpCmd::Sub => {array.mut_local_data().await.local_sub(idx_vals);},
@@ -142,7 +96,7 @@ fn impl_prim_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty,$result:e
             };
         }
         match_arms.push(crabtime::quote!{ 
-            PodPrimType::{{ty}} => {
+            ScalarType::{{ty}} => {
                 let idx_vals = self.idx_vals::<{{ty}}>({{bytes}});
                 let op: ArrayOpCmd<{{ty}}> = self.op.clone().into();
                 match op {
@@ -156,7 +110,7 @@ fn impl_prim_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty,$result:e
     let match_arms = match_arms.join("\n");
     crabtime::output!{
         async fn bare_type(&self, mut bytes: {{bytes_type}}, mut array: LamellarByteArray) {{return_type}} {
-            match self.prim_type {
+            match self.scalar_type {
                 {{match_arms}}
                 _ => panic!("invalid type for bare array")
             }
@@ -166,7 +120,7 @@ fn impl_prim_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty,$result:e
 }
 
 #[crabtime::function]
-fn impl_option_prim_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty, $result:expr): _) {
+fn impl_ops_option_scalar_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty, $result:expr): _) {
     let mut match_arms = Vec::new();
     let bytes = stringify!($bytes);
     let bytes_type = stringify!($bytes_type);
@@ -193,7 +147,7 @@ fn impl_option_prim_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty, $
              comp_ex_arm = comp_ex_ops.clone();
         }
         match_arms.push(crabtime::quote!{ 
-            PodPrimType::{{ty}} => {
+            ScalarType::{{ty}} => {
                 let idx_vals = self.idx_vals::<Option<{{ty}}>>({{bytes}});
                 let op: ArrayOpCmd<Option<{{ty}}>> = self.op.clone().into();
                 match op {
@@ -207,7 +161,7 @@ fn impl_option_prim_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty, $
     let match_arms = match_arms.join("\n");
     crabtime::output!{
         async fn option_type(&self, mut bytes: {{bytes_type}}, mut array: LamellarByteArray) {{return_type}} {
-            match self.prim_type {
+            match self.scalar_type {
                 {{match_arms}}
                 _ => panic!("invalid type for option array")
             }
@@ -340,7 +294,7 @@ pub(crate) struct PodSingleIdxMultiValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) index: usize,
     pub(crate) vals: OneSidedMemoryRegion<u8>,
-    pub(crate) prim_type: PodPrimType,
+    pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
@@ -353,8 +307,8 @@ impl PodSingleIdxMultiValAm {
         });
         std::iter::repeat(self.index).zip(vals)
     }
-    impl_option_prim_type_match!(&bytes,Vec<u8>,false);
-    impl_prim_type_match!(&bytes,Vec<u8>,false);
+    impl_ops_option_scalar_type_match!(&bytes,Vec<u8>,false);
+    impl_ops_scalar_type_match!(&bytes,Vec<u8>,false);
     
 }
 
@@ -379,7 +333,7 @@ pub(crate) struct PodSingleIdxMultiValAmReturn {
     pub(crate) array: LamellarByteArray,
     pub(crate) index: usize,
     pub(crate) vals: OneSidedMemoryRegion<u8>,
-    pub(crate) prim_type: PodPrimType,
+    pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
@@ -393,8 +347,8 @@ impl PodSingleIdxMultiValAmReturn {
         std::iter::repeat(self.index).zip(vals)
     }
     impl_vec_to_bytes!();
-    impl_option_prim_type_match!(&bytes,Vec<u8>,true);
-    impl_prim_type_match!(&bytes,Vec<u8>,true);
+    impl_ops_option_scalar_type_match!(&bytes,Vec<u8>,true);
+    impl_ops_scalar_type_match!(&bytes,Vec<u8>,true);
     
 }
 
@@ -419,7 +373,7 @@ pub(crate) struct PodMultiIdxSingleValAm {
     pub(crate) val: Vec<u8>,
     pub(crate) indices: OneSidedMemoryRegion<u8>,
     pub(crate) idx_size: usize,
-    pub(crate) prim_type: PodPrimType,
+    pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
@@ -429,8 +383,8 @@ impl PodMultiIdxSingleValAm {
         let val = unsafe { std::ptr::read_unaligned(self.val.as_ptr() as *const T) };
         indices.zip(std::iter::repeat(val))
     }
-    impl_option_prim_type_match!(bytes,impl Iterator<Item=usize>,false);        
-    impl_prim_type_match!(bytes,impl Iterator<Item=usize>,false);
+    impl_ops_option_scalar_type_match!(bytes,impl Iterator<Item=usize>,false);        
+    impl_ops_scalar_type_match!(bytes,impl Iterator<Item=usize>,false);
 }
 
 #[lamellar_impl::rt_am]
@@ -459,7 +413,7 @@ pub(crate) struct PodMultiIdxSingleValAmReturn {
     pub(crate) val: Vec<u8>,
     pub(crate) indices: OneSidedMemoryRegion<u8>,
     pub(crate) idx_size: usize,
-    pub(crate) prim_type: PodPrimType,
+    pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
@@ -470,8 +424,8 @@ impl PodMultiIdxSingleValAmReturn {
         indices.zip(std::iter::repeat(val))
     }
     impl_vec_to_bytes!();
-    impl_option_prim_type_match!(bytes,impl Iterator<Item=usize>,true);        
-    impl_prim_type_match!(bytes,impl Iterator<Item=usize>,true);
+    impl_ops_option_scalar_type_match!(bytes,impl Iterator<Item=usize>,true);        
+    impl_ops_scalar_type_match!(bytes,impl Iterator<Item=usize>,true);
 }
 
 #[lamellar_impl::rt_am]
@@ -499,7 +453,7 @@ pub(crate) struct PodMultiIdxMultiValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) idx_val: OneSidedMemoryRegion<u8>,
     pub(crate) idx_size: usize,
-    pub(crate) prim_type: PodPrimType,
+    pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
@@ -509,8 +463,8 @@ impl PodMultiIdxMultiValAm {
        PackedIdxVal::slice_as_iter::<T>(self.idx_size, bytes)
     }
 
-    impl_option_prim_type_match!(&bytes,Vec<u8>,false);
-    impl_prim_type_match!(&bytes,Vec<u8>,false);
+    impl_ops_option_scalar_type_match!(&bytes,Vec<u8>,false);
+    impl_ops_scalar_type_match!(&bytes,Vec<u8>,false);
 }
 
 #[lamellar_impl::rt_am]
@@ -534,7 +488,7 @@ pub(crate) struct PodMultiIdxMultiValAmReturn{
     pub(crate) array: LamellarByteArray,
     pub(crate) idx_val: OneSidedMemoryRegion<u8>,
     pub(crate) idx_size: usize,
-    pub(crate) prim_type: PodPrimType,
+    pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
@@ -545,8 +499,8 @@ impl PodMultiIdxMultiValAmReturn {
     }
 
     impl_vec_to_bytes!();
-    impl_option_prim_type_match!(&bytes,Vec<u8>,true);
-    impl_prim_type_match!(&bytes,Vec<u8>,true);
+    impl_ops_option_scalar_type_match!(&bytes,Vec<u8>,true);
+    impl_ops_scalar_type_match!(&bytes,Vec<u8>,true);
 }
 
 #[lamellar_impl::rt_am]

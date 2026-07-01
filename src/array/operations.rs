@@ -9,22 +9,13 @@ use crate::array::*;
 use crate::config;
 
 
-pub(crate) mod pod;
+pub(crate) mod scalar_impls;
 
 // use crate::lamellar_request::LamellarRequest;
 // use crate::scheduler::Scheduler;
 // use crate::LamellarTeamRT;
 
-pub(crate) mod am_ops_helpers;
-pub use am_ops_helpers::{
-    OptionPodType, PodPrimType,
-    // OptMvMiFetchAm, OptMvMiResultAm, OptMvMiVoidAm,
-    // OptMvSiFetchAm, OptMvSiResultAm, OptMvSiVoidAm,
-    // OptSvMiFetchAm, OptSvMiResultAm, OptSvMiVoidAm,
-    // PodMvMiFetchAm, PodMvMiResultAm, PodMvMiVoidAm,
-    // PodMvSiFetchAm, PodMvSiResultAm, PodMvSiVoidAm,
-    // PodSvMiFetchAm, PodSvMiResultAm, PodSvMiVoidAm,
-};
+
 
 pub(crate) mod handle;
 pub use handle::{
