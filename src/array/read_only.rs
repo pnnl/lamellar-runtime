@@ -500,7 +500,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
-        self.array.reduce_data(op, self.clone().into())
+        self.array.reduce_data_user(op, self.clone().into())
     }
 }
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
@@ -533,7 +533,10 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("sum")
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Sum))),
+            None => self.array.reduce_data_user("sum", self.clone().into()),
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -562,7 +565,10 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("prod")
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Prod))),
+            None => self.array.reduce_data_user("prod", self.clone().into()),
+        }
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
@@ -590,7 +596,10 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn max(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("max")
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Max))),
+            None => self.array.reduce_data_user("max", self.clone().into()),
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -617,7 +626,96 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn min(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("min")
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Min))),
+            None => self.array.reduce_data_user("min", self.clone().into()),
+        }
+    }
+}
+
+impl<T: Dist + AmDist + ElementBitWiseOps + 'static> ReadOnlyArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise AND reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("and")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `And` active messages on the other PEs associated with the array.
+    /// The returned bitwise AND reduction result is only available on the calling PE.
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// let _ = array.dist_iter().for_each(|elem| elem.store(0xFF)).block();
+    /// let array = array.into_read_only().block();
+    /// let and_result = array.and().block().expect("array len > 0");
+    /// assert_eq!(0xFF_u8, and_result);
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn and(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::And))),
+            None => self.array.reduce_data_user("and", self.clone().into()),
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise OR reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("or")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Or` active messages on the other PEs associated with the array.
+    /// The returned bitwise OR reduction result is only available on the calling PE.
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// let _ = array.dist_iter().enumerate().for_each(|(i, elem)| elem.store(i as u8)).block();
+    /// let array = array.into_read_only().block();
+    /// let or_result = array.or().block().expect("array len > 0");
+    /// // or_result is the bitwise OR of all elements
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn or(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Or))),
+            None => self.array.reduce_data_user("or", self.clone().into()),
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise XOR reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("xor")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Xor` active messages on the other PEs associated with the array.
+    /// The returned bitwise XOR reduction result is only available on the calling PE.
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// let _ = array.dist_iter().enumerate().for_each(|(i, elem)| elem.store(i as u8)).block();
+    /// let array = array.into_read_only().block();
+    /// let xor_result = array.xor().block().expect("array len > 0");
+    /// // xor_result is the bitwise XOR of all elements
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn xor(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Xor))),
+            None => self.array.reduce_data_user("xor", self.clone().into()),
+        }
     }
 }
 

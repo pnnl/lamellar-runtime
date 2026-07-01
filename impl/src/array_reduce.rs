@@ -11,51 +11,18 @@ fn create_reduction(
     reduction: String,
     op: proc_macro2::TokenStream,
     array_types: &Vec<syn::Ident>,
-    rt: bool,
-    native: bool,
 ) -> proc_macro2::TokenStream {
-    let lamellar = if rt {
-        quote::format_ident!("crate")
-    } else {
-        quote::format_ident!("__lamellar")
-    };
+    let lamellar = 
+        quote::format_ident!("__lamellar");
 
-    let (am_data, am): (syn::Path, syn::Path) = if rt {
-        (
-            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
-            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
-        )
-    } else {
-        (
-            syn::parse("lamellar::AmData".parse().unwrap()).unwrap(),
-            syn::parse("lamellar::am".parse().unwrap()).unwrap(),
-        )
-    };
+    let am_data: syn::Path = syn::parse("lamellar::AmData".parse().unwrap()).unwrap();
+    let am: syn::Path = syn::parse("lamellar::am".parse().unwrap()).unwrap();
     let reduction = quote::format_ident!("{:}", reduction);
     let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
     let reduction_id_gen = quote::format_ident!("{:}_{:}_reduction_id", typeident, reduction);
 
-    // Single struct for all array variants — array type is erased into LamellarByteArray.
-    // exec() returns Option<Vec<u8>> (serialized T) so the AM return type is independent of T's
-    // concrete type; ArrayReduceHandle<T> on the call side deserializes back to Option<T>.
     let reduction_name =
         quote::format_ident!("{:}_{:}_reduction", typeident, reduction);
-
-    let mut gen_match_stmts = quote! {};
-
-    if !native {
-        gen_match_stmts.extend(quote! {
-            #lamellar::array::LamellarByteArray::NativeAtomicArray(_) => panic!("this type is not a native atomic"),
-            #lamellar::array::LamellarByteArray::NetworkAtomicArray(_) => panic!("this type is not a network atomic"),
-        });
-    }
-    for array_type in array_types {
-        gen_match_stmts.extend(quote! {
-            #lamellar::array::LamellarByteArray::#array_type(_) => std::sync::Arc::new(#reduction_name {
-                data: data.clone(), start_pe: 0, end_pe: num_pes - 1
-            }),
-        });
-    }
 
     // Recursive branch: left/right return Option<Vec<u8>>; deserialize, apply op, re-serialize.
     let array_impls = quote! {
@@ -69,9 +36,14 @@ fn create_reduction(
 
         #[#am]
         impl LamellarAM for #reduction_name {
-            async fn exec(&self) -> Option<Vec<u8>> {
+            async fn exec(&self) -> Vec<u8> {
                 if self.start_pe == self.end_pe {
-                    #lamellar::array::reduce_local_data(self.data.local_data::<#typeident>().await, #op)
+                    let local = self.data.local_data::<#typeident>().await;
+                    match local.reduce(#op){
+                        None => Vec::new(),
+                        Some(v) => crate::serialize(&v, true).expect("failed to serialize reduction result"),
+                    }
+
                 } else {
                     let mid_pe = (self.start_pe + self.end_pe) / 2;
                     let op = #op;
@@ -83,14 +55,29 @@ fn create_reduction(
                     });
                     let left_bytes = left.await;
                     let right_bytes = right.await;
-                    let left_val = left_bytes.map(|b| #lamellar::deserialize::<#typeident>(&b, true).expect("reduce deserialize left"));
-                    let right_val = right_bytes.map(|b| #lamellar::deserialize::<#typeident>(&b, true).expect("reduce deserialize right"));
-                    #lamellar::array::merge_reduction(left_val, right_val, op)
-                        .map(|v| #lamellar::serialize(&v, true).expect("reduce serialize result"))
+                    let left_val = left_bytes.ref_from_bytes::<#typeident>().expect("merge_scalar des left");
+                    let right_val = right_bytes.ref_from_bytes::<#typeident>().expect("merge_scalar des right");
+                    let res =op(*left_val, *right_val);
+                    crate::serialize(&res, true).expect("failed to serialize reduction result")
                 }
             }
         }
     };
+
+     let mut gen_match_stmts = quote! {};
+
+    
+    gen_match_stmts.extend(quote! {
+        #lamellar::array::LamellarByteArray::NativeAtomicArray(_) => panic!("this type is not a native atomic"),
+        #lamellar::array::LamellarByteArray::NetworkAtomicArray(_) => panic!("this type is not a network atomic"),
+    });
+    for array_type in array_types {
+        gen_match_stmts.extend(quote! {
+            #lamellar::array::LamellarByteArray::#array_type(_) => std::sync::Arc::new(#reduction_name {
+                data: data.clone(), start_pe: 0, end_pe: num_pes - 1
+            }),
+        });
+    }
 
     let expanded = quote! {
         fn  #reduction_gen (data: #lamellar::array::LamellarByteArray, num_pes: usize)
@@ -176,8 +163,6 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
             args.name.to_string(),
             quote! {#closure},
             &array_types,
-            false,
-            false, // "lamellar".to_string(),
         ));
     }
     TokenStream::from(output)
@@ -234,84 +219,84 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
 //     TokenStream::from(output)
 // }
 
-fn pod_type_variant(type_str: &str) -> proc_macro2::TokenStream {
-    match type_str.trim() {
-        "u8"    => quote! { crate::array::PodType::U8    },
-        "u16"   => quote! { crate::array::PodType::U16   },
-        "u32"   => quote! { crate::array::PodType::U32   },
-        "u64"   => quote! { crate::array::PodType::U64   },
-        "usize" => quote! { crate::array::PodType::Usize },
-        "u128"  => quote! { crate::array::PodType::U128  },
-        "i8"    => quote! { crate::array::PodType::I8    },
-        "i16"   => quote! { crate::array::PodType::I16   },
-        "i32"   => quote! { crate::array::PodType::I32   },
-        "i64"   => quote! { crate::array::PodType::I64   },
-        "isize" => quote! { crate::array::PodType::Isize },
-        "i128"  => quote! { crate::array::PodType::I128  },
-        "f32"   => quote! { crate::array::PodType::F32   },
-        "f64"   => quote! { crate::array::PodType::F64   },
-        other   => panic!("unknown primitive type for builtin reduction: {}", other),
-    }
-}
+// fn pod_type_variant(type_str: &str) -> proc_macro2::TokenStream {
+//     match type_str.trim() {
+//         "u8"    => quote! { crate::array::PodType::U8    },
+//         "u16"   => quote! { crate::array::PodType::U16   },
+//         "u32"   => quote! { crate::array::PodType::U32   },
+//         "u64"   => quote! { crate::array::PodType::U64   },
+//         "usize" => quote! { crate::array::PodType::Usize },
+//         "u128"  => quote! { crate::array::PodType::U128  },
+//         "i8"    => quote! { crate::array::PodType::I8    },
+//         "i16"   => quote! { crate::array::PodType::I16   },
+//         "i32"   => quote! { crate::array::PodType::I32   },
+//         "i64"   => quote! { crate::array::PodType::I64   },
+//         "isize" => quote! { crate::array::PodType::Isize },
+//         "i128"  => quote! { crate::array::PodType::I128  },
+//         "f32"   => quote! { crate::array::PodType::F32   },
+//         "f64"   => quote! { crate::array::PodType::F64   },
+//         other   => panic!("unknown primitive type for builtin reduction: {}", other),
+//     }
+// }
 
-pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
-    let mut output = quote! {};
-    let items = item
-        .to_string()
-        .split(",")
-        .map(|i| i.to_owned())
-        .collect::<Vec<String>>();
-    let _native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
-        val.value
-    } else {
-        panic!("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
-    };
+// pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
+//     let mut output = quote! {};
+//     let items = item
+//         .to_string()
+//         .split(",")
+//         .map(|i| i.to_owned())
+//         .collect::<Vec<String>>();
+//     let _native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[0]) {
+//         val.value
+//     } else {
+//         panic!("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
+//     };
 
-    // Emit only ReduceKey inventory entries — the single PodBuiltinReductionAm struct
-    // in reduce_helpers.rs handles all types and operations via runtime dispatch.
-    for t in items[1..].iter() {
-        let t = t.trim().to_string();
-        let typeident = quote::format_ident!("{}", t.trim());
-        let pod_variant = pod_type_variant(&t);
+//     // Emit only ReduceKey inventory entries — the single PodBuiltinReductionAm struct
+//     // in reduce_helpers.rs handles all types and operations via runtime dispatch.
+//     for t in items[1..].iter() {
+//         let t = t.trim().to_string();
+//         let typeident = quote::format_ident!("{}", t.trim());
+//         let pod_variant = pod_type_variant(&t);
 
-        for (op_name, builtin_op) in &[
-            ("sum",  quote! { crate::array::BuiltinOp::Sum  }),
-            ("prod", quote! { crate::array::BuiltinOp::Prod }),
-            ("max",  quote! { crate::array::BuiltinOp::Max  }),
-            ("min",  quote! { crate::array::BuiltinOp::Min  }),
-        ] {
-            let reduction_gen = quote::format_ident!("{}_{}_{}_reduction_gen", typeident, op_name, "pod");
-            let reduction_id_gen = quote::format_ident!("{}_{}_{}_reduction_id", typeident, op_name, "pod");
-            let op_name_lit = *op_name;
-            let pod = pod_variant.clone();
-            let bop = builtin_op.clone();
+//         for (op_name, builtin_op) in &[
+//             ("sum",  quote! { crate::array::BuiltinOp::Sum  }),
+//             ("prod", quote! { crate::array::BuiltinOp::Prod }),
+//             ("max",  quote! { crate::array::BuiltinOp::Max  }),
+//             ("min",  quote! { crate::array::BuiltinOp::Min  }),
+//         ] {
+//             let reduction_gen = quote::format_ident!("{}_{}_{}_reduction_gen", typeident, op_name, "pod");
+//             let reduction_id_gen = quote::format_ident!("{}_{}_{}_reduction_id", typeident, op_name, "pod");
+//             let op_name_lit = *op_name;
+//             let pod = pod_variant.clone();
+//             let bop = builtin_op.clone();
 
-            output.extend(quote! {
-                fn #reduction_gen(data: crate::array::LamellarByteArray, num_pes: usize)
-                    -> std::sync::Arc<dyn crate::active_messaging::RemoteActiveMessage + Sync + Send>
-                {
-                    std::sync::Arc::new(crate::array::PodBuiltinReductionAm {
-                        data,
-                        start_pe: 0,
-                        end_pe: num_pes - 1,
-                        pod_type: #pod,
-                        op: #bop,
-                    })
-                }
+//             output.extend(quote! {
+//                 fn #reduction_gen(data: crate::array::LamellarByteArray, num_pes: usize)
+//                     -> std::sync::Arc<dyn crate::active_messaging::RemoteActiveMessage + Sync + Send>
+//                 {
+//                     std::sync::Arc::new(crate::array::PodBuiltinReductionAm {
+//                         data,
+//                         start_pe: 0,
+//                         end_pe: num_pes - 1,
+//                         pod_type: #pod,
+//                         op: #bop,
+//                     })
+//                 }
 
-                fn #reduction_id_gen() -> std::any::TypeId {
-                    std::any::TypeId::of::<#typeident>()
-                }
+//                 fn #reduction_id_gen() -> std::any::TypeId {
+//                     std::any::TypeId::of::<#typeident>()
+//                 }
 
-                crate::inventory::submit! {
-                    crate::array::ReduceKey {
-                        id: #reduction_id_gen,
-                        name: #op_name_lit,
-                        gen: #reduction_gen,
-                    }
-                }
-            });
-        }
-    }
-    TokenStream::from(output)
-}
+//                 crate::inventory::submit! {
+//                     crate::array::ReduceKey {
+//                         id: #reduction_id_gen,
+//                         name: #op_name_lit,
+//                         gen: #reduction_gen,
+//                     }
+//                 }
+//             });
+//         }
+//     }
+//     TokenStream::from(output)
+// }

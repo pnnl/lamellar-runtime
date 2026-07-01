@@ -1508,22 +1508,27 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
             .get(&(std::any::TypeId::of::<T>(), op))
             .expect("unexpected reduction type")(byte_array, self.inner.data.team.num_pes())
     }
-    pub(crate) fn reduce_data(
+    pub(crate) fn reduce_data_user(
         &self,
         op: &str,
         byte_array: LamellarByteArray,
     ) -> crate::array::ArrayReduceHandle<T> {
-        let func = self.get_reduction_op(op, byte_array);
+        self.reduce_data(self.get_reduction_op(op, byte_array))
+    }
+    pub(crate) fn reduce_data(
+        &self,
+        am: LamellarArcAm,
+    ) -> crate::array::ArrayReduceHandle<T> {
         let raw = if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
-            self.inner.data.team.exec_arc_am_pe::<Option<Vec<u8>>>(
+            self.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
                 my_pe,
-                func,
+                am,
                 Some(self.inner.data.array_counters.clone()),
             )
         } else {
-            self.inner.data.team.exec_arc_am_pe::<Option<Vec<u8>>>(
+            self.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
                 0,
-                func,
+                am,
                 Some(self.inner.data.array_counters.clone()),
             )
         };
@@ -1568,10 +1573,12 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    pub unsafe fn reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce_data(op, self.clone().into())
+    pub unsafe fn registered_reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
+        self.reduce_data_user(op, self.clone().into())
     }
+}
 
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> UnsafeArray<T> {
     #[doc(alias("One-sided", "onesided"))]
     /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
     ///
@@ -1607,7 +1614,14 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("sum")
+        match ScalarType::get_type::<T>(){
+            Some((scalar_type,_)) => {
+                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Sum)))
+            }
+            None => {
+                self.reduce_data_user("sum", self.clone().into())
+            }
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1644,9 +1658,18 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("prod")
+        match ScalarType::get_type::<T>(){
+            Some((scalar_type,_)) => {
+                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Prod)))
+            }
+            None => {
+                self.reduce_data_user("prod", self.clone().into())
+            }
+        }
     }
+}
 
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> UnsafeArray<T> {
     #[doc(alias("One-sided", "onesided"))]
     /// Find the max element in the entire destributed array, returning to the calling PE
     ///
@@ -1677,7 +1700,14 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn max(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("max")
+        match ScalarType::get_type::<T>(){
+            Some((scalar_type,_)) => {
+                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Max)))
+            }
+            None => {
+                self.reduce_data_user("max", self.clone().into())
+            }
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1710,7 +1740,136 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn min(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("min")
+        match ScalarType::get_type::<T>(){
+            Some((scalar_type,_)) => {
+                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Min)))
+            }
+            None => {
+                self.reduce_data_user("min", self.clone().into())
+            }
+        }
+    }
+}
+
+impl<T: Dist + AmDist + ElementBitWiseOps + 'static> UnsafeArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise AND reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("and")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `And` active messages on the other PEs associated with the array.
+    /// The returned bitwise AND reduction result is only available on the calling PE.
+    ///
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = UnsafeArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// unsafe {
+    ///     let _ = array.dist_iter_mut().for_each(|elem| *elem = 0xFF).spawn();
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// let and_result = unsafe { array.and().block().expect("array len > 0") };
+    /// assert_eq!(0xFF_u8, and_result);
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub unsafe fn and(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => {
+                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::And)))
+            }
+            None => {
+                self.reduce_data_user("and", self.clone().into())
+            }
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise OR reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("or")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Or` active messages on the other PEs associated with the array.
+    /// The returned bitwise OR reduction result is only available on the calling PE.
+    ///
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = UnsafeArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// unsafe {
+    ///     let _ = array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i as u8).spawn();
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// let or_result = unsafe { array.or().block().expect("array len > 0") };
+    /// // or_result is the bitwise OR of all elements
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub unsafe fn or(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => {
+                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Or)))
+            }
+            None => {
+                self.reduce_data_user("or", self.clone().into())
+            }
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise XOR reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("xor")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Xor` active messages on the other PEs associated with the array.
+    /// The returned bitwise XOR reduction result is only available on the calling PE.
+    ///
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = UnsafeArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// unsafe {
+    ///     let _ = array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i as u8).spawn();
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// let xor_result = unsafe { array.xor().block().expect("array len > 0") };
+    /// // xor_result is the bitwise XOR of all elements
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub unsafe fn xor(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => {
+                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Xor)))
+            }
+            None => {
+                self.reduce_data_user("xor", self.clone().into())
+            }
+        }
     }
 }
 

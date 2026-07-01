@@ -557,11 +557,11 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 // }
 
 //#[doc(hidden)]
-#[proc_macro_error]
-#[proc_macro]
-pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
-    array_reduce::__generate_reductions_for_type_rt(item)
-}
+// #[proc_macro_error]
+// #[proc_macro]
+// pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
+//     array_reduce::__generate_reductions_for_type_rt(item)
+// }
 
 // / This macro automatically implements various LamellarArray "Op" traits for user defined types
 // /

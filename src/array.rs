@@ -164,6 +164,15 @@ pub use iterator::one_sided_iterator::OneSidedIterator;
 pub(crate) mod operations;
 pub use operations::*;
 
+pub(crate)  mod scalar_one_sided_reduce;
+pub use scalar_one_sided_reduce::*;
+
+// pub(crate) mod reduce_helpers;
+// pub use reduce_helpers::{
+//     merge_reduction, reduce_copied, reduce_iter, reduce_local_data,
+//     BuiltinOp, PodBuiltinReductionAm, PodType,
+// };
+
 pub(crate) mod handle;
 pub use handle::*;
 
@@ -186,6 +195,7 @@ lazy_static! {
         }
         temp
     };
+    
 }
 
 type ReduceIdGen = fn() -> std::any::TypeId;
@@ -196,6 +206,61 @@ pub struct ReduceKey {
     pub gen: ReduceGen,
 }
 crate::inventory::collect!(ReduceKey);
+
+
+/// Runtime tag for the 14 primitive scalar types that support array ops.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+#[allow(non_camel_case_types)]
+pub(crate) enum ScalarType {
+    u8, u16, u32, u64, usize,
+    u128,
+    i8, i16, i32, i64, isize,
+    i128,
+    f32, f64,
+    bool,
+}
+
+impl ScalarType {
+    pub(crate) fn get_type<T: 'static>() -> Option<(Self,bool)> { // returns (ScalarType, is_option)
+        match std::any::TypeId::of::<T>() {
+            id if id == std::any::TypeId::of::<u8>() => Some((ScalarType::u8,false)),
+            id if id == std::any::TypeId::of::<u16>() => Some((ScalarType::u16,false)),
+            id if id == std::any::TypeId::of::<u32>() => Some((ScalarType::u32,false)),
+            id if id == std::any::TypeId::of::<u64>() => Some((ScalarType::u64,false)),
+            id if id == std::any::TypeId::of::<usize>() => Some((ScalarType::usize,false)),
+            id if id == std::any::TypeId::of::<u128>() => Some((ScalarType::u128,false)),
+            id if id == std::any::TypeId::of::<i8>() => Some((ScalarType::i8,false)),
+            id if id == std::any::TypeId::of::<i16>() => Some((ScalarType::i16,false)),
+            id if id == std::any::TypeId::of::<i32>() => Some((ScalarType::i32,false)),
+            id if id == std::any::TypeId::of::<i64>() => Some((ScalarType::i64,false)),
+            id if id == std::any::TypeId::of::<isize>() => Some((ScalarType::isize,false)),
+            id if id == std::any::TypeId::of::<i128>() => Some((ScalarType::i128,false)),
+            id if id == std::any::TypeId::of::<f32>() => Some((ScalarType::f32,false)),
+            id if id == std::any::TypeId::of::<f64>() => Some((ScalarType::f64,false)),
+            id if id == std::any::TypeId::of::<bool>() => Some((ScalarType::bool,false)),
+            id if id == std::any::TypeId::of::<Option<u8>>() => Some((ScalarType::u8,true)),
+            id if id == std::any::TypeId::of::<Option<u16>>() => Some((ScalarType::u16,true)),
+            id if id == std::any::TypeId::of::<Option<u32>>() => Some((ScalarType::u32,true)),
+            id if id == std::any::TypeId::of::<Option<u64>>() => Some((ScalarType::u64,true)),
+            id if id == std::any::TypeId::of::<Option<usize>>() => Some((ScalarType::usize,true)),
+            id if id == std::any::TypeId::of::<Option<u128>>() => Some((ScalarType::u128,true)),
+            id if id == std::any::TypeId::of::<Option<i8>>() => Some((ScalarType::i8,true)),
+            id if id == std::any::TypeId::of::<Option<i16>>() => Some((ScalarType::i16,true)),
+            id if id == std::any::TypeId::of::<Option<i32>>() => Some((ScalarType::i32,true)),
+            id if id == std::any::TypeId::of::<Option<i64>>() => Some((ScalarType::i64,true)),
+            id if id == std::any::TypeId::of::<Option<isize>>() => Some((ScalarType::isize,true)),
+            id if id == std::any::TypeId::of::<Option<i128>>() => Some((ScalarType::i128,true)),
+            id if id == std::any::TypeId::of::<Option<f32>>() => Some((ScalarType::f32,true)),
+            id if id == std::any::TypeId::of::<Option<f64>>() => Some((ScalarType::f64,true)),
+            id if id == std::any::TypeId::of::<Option<bool>>() => Some((ScalarType::bool,true)),
+            _ => None,
+        }
+    }
+}
+
+
+
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
@@ -216,20 +281,20 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 // // //------------------------------------
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
-lamellar_impl::generate_ops_for_bool_rt!();
+// lamellar_impl::generate_ops_for_bool_rt!();
 
 impl<T: Dist + ArrayOps> Dist for Option<T> {}
 impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
@@ -730,7 +795,7 @@ impl LamellarByteArray {
         }
     }
 
-    async fn local_data<'a, T: Dist>(&'a self) -> __LamellarLocalData<'a, T> {
+    pub async fn local_data<'a, T: Dist>(&'a self) -> __LamellarLocalData<'a, T> {
         match self {
             LamellarByteArray::UnsafeArray(array) => __LamellarLocalData::Slice(array.local_data()),
             LamellarByteArray::ReadOnlyArray(array) => {
@@ -857,13 +922,31 @@ enum __LamellarMutLocalData<'a, T: Dist> {
 /// The enum exists to expose storage (slices, local locks, atomics) to serialization and
 /// AM dispatch logic, even though user code should remain on the public-facing
 /// `AtomicLocalData`/`LamellarArray::local_data` APIs.
-enum __LamellarLocalData<'a, T: Dist> {
+#[doc(hidden)]
+pub enum __LamellarLocalData<'a, T: Dist> {
     Slice(&'a [T]),
     LocalLock(LocalLockLocalData<T>),
     GlobalLock(GlobalLockLocalData<T>),
     NativeAtomic(__NativeAtomicLocalData<T>),
     GenericAtomic(__GenericAtomicLocalData<T>),
     NetworkAtomic(__NetworkAtomicLocalData<T>),
+}
+
+
+impl<T: Dist> __LamellarLocalData<'_ , T> {
+    pub fn reduce<Op>(self, reduce: Op) -> Option<T>
+    where
+        Op: Fn(T, T) -> T,
+    {
+        match self {
+            __LamellarLocalData::Slice(slice) => slice.iter().copied().reduce(reduce),
+            __LamellarLocalData::LocalLock(local_lock) => local_lock.iter().copied().reduce(reduce),
+            __LamellarLocalData::GlobalLock(global_lock) => global_lock.iter().copied().reduce(reduce),
+            __LamellarLocalData::NativeAtomic(native_atomic) => native_atomic.iter().map(|e| e.load()).reduce(reduce),
+            __LamellarLocalData::GenericAtomic(generic_atomic) => generic_atomic.iter().map(|e| e.load()).reduce(reduce),
+            __LamellarLocalData::NetworkAtomic(network_atomic) => network_atomic.iter().map(|e| e.load()).reduce(reduce),
+        }
+    }
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {

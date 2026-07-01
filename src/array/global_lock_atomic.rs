@@ -1193,7 +1193,7 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn reduce(self, op: &str) -> GlobalLockArrayReduceHandle<T> {
         GlobalLockArrayReduceHandle {
-            req: self.array.array.reduce_data(op, self.array.clone().into()),
+            req: self.array.array.reduce_data_user(op, self.array.clone().into()),
             lock_guard: self,
         }
     }
@@ -1225,7 +1225,11 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn sum(self) -> GlobalLockArrayReduceHandle<T> {
-        self.reduce("sum")
+        let req = match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Sum))),
+            None => self.array.array.reduce_data_user("sum", self.array.clone().into()),
+        };
+        GlobalLockArrayReduceHandle { req, lock_guard: self }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1254,7 +1258,11 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn prod(self) -> GlobalLockArrayReduceHandle<T> {
-        self.reduce("prod")
+        let req = match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Prod))),
+            None => self.array.array.reduce_data_user("prod", self.array.clone().into()),
+        };
+        GlobalLockArrayReduceHandle { req, lock_guard: self }
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuard<T> {
@@ -1284,7 +1292,11 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn max(self) -> GlobalLockArrayReduceHandle<T> {
-        self.reduce("max")
+        let req = match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Max))),
+            None => self.array.array.reduce_data_user("max", self.array.clone().into()),
+        };
+        GlobalLockArrayReduceHandle { req, lock_guard: self }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1313,6 +1325,107 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn min(self) -> GlobalLockArrayReduceHandle<T> {
-        self.reduce("min")
+        let req = match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Min))),
+            None => self.array.array.reduce_data_user("min", self.array.clone().into()),
+        };
+        GlobalLockArrayReduceHandle { req, lock_guard: self }
+    }
+}
+impl<T: Dist + AmDist + ElementBitWiseOps + 'static> GlobalLockReadGuard<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise AND reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("and")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `And` active messages on the other PEs associated with the array.
+    /// The returned bitwise AND reduction result is only available on the calling PE.
+    ///
+    /// # Safety
+    /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = GlobalLockArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// array.dist_iter_mut().for_each(|elem| *elem = 0xFF).block();
+    /// let read_guard = array.read_lock().block();
+    /// let and_result = read_guard.and().block().expect("array has > 0 elements");
+    /// assert_eq!(0xFF_u8, and_result);
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn and(self) -> GlobalLockArrayReduceHandle<T> {
+        let req = match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::And))),
+            None => self.array.array.reduce_data_user("and", self.array.clone().into()),
+        };
+        GlobalLockArrayReduceHandle { req, lock_guard: self }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise OR reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("or")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Or` active messages on the other PEs associated with the array.
+    /// The returned bitwise OR reduction result is only available on the calling PE.
+    ///
+    /// # Safety
+    /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = GlobalLockArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i as u8).block();
+    /// let read_guard = array.read_lock().block();
+    /// let or_result = read_guard.or().block().expect("array has > 0 elements");
+    /// // or_result is the bitwise OR of all elements
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn or(self) -> GlobalLockArrayReduceHandle<T> {
+        let req = match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Or))),
+            None => self.array.array.reduce_data_user("or", self.array.clone().into()),
+        };
+        GlobalLockArrayReduceHandle { req, lock_guard: self }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise XOR reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("xor")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Xor` active messages on the other PEs associated with the array.
+    /// The returned bitwise XOR reduction result is only available on the calling PE.
+    ///
+    /// # Safety
+    /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, `spawn()` or `block()`
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = GlobalLockArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i as u8).block();
+    /// let read_guard = array.read_lock().block();
+    /// let xor_result = read_guard.xor().block().expect("array has > 0 elements");
+    /// // xor_result is the bitwise XOR of all elements
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn xor(self) -> GlobalLockArrayReduceHandle<T> {
+        let req = match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Xor))),
+            None => self.array.array.reduce_data_user("xor", self.array.clone().into()),
+        };
+        GlobalLockArrayReduceHandle { req, lock_guard: self }
     }
 }

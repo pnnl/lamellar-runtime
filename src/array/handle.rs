@@ -1038,22 +1038,26 @@ impl<T: Dist> Future for IntoReadOnlyArrayHandle<T> {
 
 /// Handle returned by array reduce operations.
 ///
-/// The AM executes internally with `Option<Vec<u8>>` as its return type so a single
+/// The AM executes internally with `Vec<u8>` as its return type so a single
 /// AM struct can serve all array variants. This handle deserializes the bytes back to
 /// `Option<T>` when polled, keeping the public API identical to before.
 #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
 pub struct ArrayReduceHandle<T: AmDist> {
-    pub(crate) req: AmHandle<Option<Vec<u8>>>,
+    pub(crate) req: AmHandle<Vec<u8>>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
 impl<T: AmDist> ArrayReduceHandle<T> {
-    pub(crate) fn new(req: AmHandle<Option<Vec<u8>>>) -> Self {
+    pub(crate) fn new(req: AmHandle<Vec<u8>>) -> Self {
         Self { req, _phantom: std::marker::PhantomData }
     }
 
-    fn deserialize(bytes: Option<Vec<u8>>) -> Option<T> {
-        bytes.map(|b| crate::deserialize::<T>(&b, true).expect("failed to deserialize reduction result"))
+    fn deserialize(bytes: Vec<u8>) -> Option<T> {
+        if bytes.is_empty() {
+            None
+        } else {
+            Some(crate::deserialize::<T>(&bytes, true).expect("failed to deserialize reduction result"))
+        }
     }
 
     /// Spawn the reduction on the work queue.

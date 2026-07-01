@@ -1408,27 +1408,62 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
 impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
     #[doc(hidden)]
     pub fn reduce(&self, op: &str) -> crate::array::ArrayReduceHandle<T> {
-        self.array.reduce_data(op, self.clone().into())
+        self.array.reduce_data_user(op, self.clone().into())
     }
 }
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GenericAtomicArray<T> {
     #[doc(hidden)]
     pub fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("sum")
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Sum))),
+            None => self.array.reduce_data_user("sum", self.clone().into()),
+        }
     }
     #[doc(hidden)]
     pub fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("prod")
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Prod))),
+            None => self.array.reduce_data_user("prod", self.clone().into()),
+        }
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GenericAtomicArray<T> {
     #[doc(hidden)]
     pub fn max(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("max")
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Max))),
+            None => self.array.reduce_data_user("max", self.clone().into()),
+        }
     }
     #[doc(hidden)]
     pub fn min(&self) -> crate::array::ArrayReduceHandle<T> {
-        self.reduce("min")
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Min))),
+            None => self.array.reduce_data_user("min", self.clone().into()),
+        }
+    }
+}
+impl<T: Dist + AmDist + ElementBitWiseOps + 'static> GenericAtomicArray<T> {
+    #[doc(hidden)]
+    pub fn and(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::And))),
+            None => self.array.reduce_data_user("and", self.clone().into()),
+        }
+    }
+    #[doc(hidden)]
+    pub fn or(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Or))),
+            None => self.array.reduce_data_user("or", self.clone().into()),
+        }
+    }
+    #[doc(hidden)]
+    pub fn xor(&self) -> crate::array::ArrayReduceHandle<T> {
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Xor))),
+            None => self.array.reduce_data_user("xor", self.clone().into()),
+        }
     }
 }
 

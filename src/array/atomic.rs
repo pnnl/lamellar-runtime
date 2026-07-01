@@ -1821,6 +1821,116 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
     }
 }
 
+impl<T: Dist + AmDist + ElementBitWiseOps + 'static> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise AND reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("and")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `And` active messages on the other PEs associated with the array.
+    /// The returned bitwise AND reduction result is only available on the calling PE.
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// let _ = array.dist_iter().for_each(|elem| elem.store(0xFF)).block();
+    /// let and_result = array.and().block().expect("array has length > 0");
+    /// assert_eq!(0xFF_u8, and_result);
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn and(&self) -> crate::array::ArrayReduceHandle<T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.and(),
+            AtomicArray::GenericAtomicArray(array) => array.and(),
+            AtomicArray::NetworkAtomicArray(array) => array.and(),
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise OR reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("or")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Or` active messages on the other PEs associated with the array.
+    /// The returned bitwise OR reduction result is only available on the calling PE.
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// let _ = array.dist_iter().enumerate().for_each(|(i, elem)| elem.store(i as u8)).block();
+    /// let or_result = array.or().block().expect("array has length > 0");
+    /// // or_result is the bitwise OR of all elements
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn or(&self) -> crate::array::ArrayReduceHandle<T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.or(),
+            AtomicArray::GenericAtomicArray(array) => array.or(),
+            AtomicArray::NetworkAtomicArray(array) => array.or(),
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a bitwise XOR reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This is equivalent to `reduce("xor")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Xor` active messages on the other PEs associated with the array.
+    /// The returned bitwise XOR reduction result is only available on the calling PE.
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = AtomicArray::<u8>::new(&world, 10, Distribution::Block).block();
+    /// let _ = array.dist_iter().enumerate().for_each(|(i, elem)| elem.store(i as u8)).block();
+    /// let xor_result = array.xor().block().expect("array has length > 0");
+    /// // xor_result is the bitwise XOR of all elements
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn xor(&self) -> crate::array::ArrayReduceHandle<T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.xor(),
+            AtomicArray::GenericAtomicArray(array) => array.xor(),
+            AtomicArray::NetworkAtomicArray(array) => array.xor(),
+        }
+    }
+}
+
 impl<T: Dist> LamellarWrite for AtomicArray<T> {}
 impl<T: Dist> LamellarRead for AtomicArray<T> {}
 
