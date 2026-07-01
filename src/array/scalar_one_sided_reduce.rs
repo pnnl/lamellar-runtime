@@ -88,8 +88,12 @@ fn impl_reduce_scalar_type_match(){
             left: Vec<u8>,
             right: Vec<u8>,
         ) -> Vec<u8> {
-            if left.is_empty() || right.is_empty() {
+            if left.is_empty() && right.is_empty() {
                 Vec::new()
+            } else if left.is_empty() {
+                right
+            } else if right.is_empty() {
+                left
             } else {
                 match self.scalar_type {
                     {{merge_match_arms}}
@@ -148,7 +152,7 @@ impl LamellarAM for ScalarBuiltinReductionAm {
 }
 
 impl ScalarBuiltinReductionAm {
-    fn new(
+    pub(crate) fn new(
         data: LamellarByteArray,
         scalar_type: ScalarType,
         op: BuiltinOp,
