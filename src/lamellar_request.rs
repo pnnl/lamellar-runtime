@@ -1,10 +1,8 @@
 use crate::active_messaging::{AmHandleInner, LamellarAny, MultiAmHandleInner, RemotePtr};
 use crate::darc::Darc;
 use crate::lamellar_task_group::{TaskGroupAmHandleInner, TaskGroupMultiAmHandleInner};
-use crate::memregion::one_sided::MemRegionHandleInner;
 
 use futures_util::Future;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::task::Waker;
 
@@ -85,7 +83,7 @@ impl LamellarRequestResult {
                         RemotePtr::NetworkDarc(darc) => {
                             let _temp: Darc<()> = darc.into();
                         }
-                        RemotePtr::NetMemRegionHandle(mr) => {
+                        RemotePtr::NetMemRegionHandle(_mr) => {
                             // let temp: Arc<MemRegionHandleInner> = mr.into();
                             // temp.local_ref.fetch_add(1, Ordering::SeqCst);
                         }

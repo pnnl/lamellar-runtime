@@ -278,17 +278,17 @@ impl Future for ArrayBatchOpHandle {
 
 
 
- fn bytes_to_vec_t<T: Copy>(bytes: Vec<u8>) -> Vec<T> {
-        let elem_size = std::mem::size_of::<T>();
-        if elem_size == 0 || bytes.is_empty() {
-            return Vec::new();
-        }
-        let len = bytes.len() / elem_size;
-        let cap = bytes.capacity() / elem_size;
-        let ptr = bytes.as_ptr() as *mut T;
-        std::mem::forget(bytes);
-        unsafe { Vec::from_raw_parts(ptr, len, cap) }
-    }
+//  fn bytes_to_vec_t<T: Copy>(bytes: Vec<u8>) -> Vec<T> {
+//         let elem_size = std::mem::size_of::<T>();
+//         if elem_size == 0 || bytes.is_empty() {
+//             return Vec::new();
+//         }
+//         let len = bytes.len() / elem_size;
+//         let cap = bytes.capacity() / elem_size;
+//         let ptr = bytes.as_ptr() as *mut T;
+//         std::mem::forget(bytes);
+//         unsafe { Vec::from_raw_parts(ptr, len, cap) }
+//     }
 
 
 /// a task handle for a single array operation that returns a value
@@ -305,13 +305,13 @@ pub struct ArrayFetchOpHandle<R: Dist> {
 //need to add a Memregion Variant
 #[pin_project(project = FetchOpStateProj)]
 pub(crate) enum FetchOpState<R: Remote> {
-    Req(#[pin] AmHandle<Vec<R>>),
-    ByteReq(#[pin] AmHandle<Vec<u8>>),
+    // Req(#[pin] AmHandle<Vec<R>>),
+    // ByteReq(#[pin] AmHandle<Vec<u8>>),
     OneSidedMemoryRegionReq(#[pin] AmHandle<OneSidedMemoryRegion<u8>>),
     Rdma(#[pin] RdmaGetHandle<R>),
     Network(#[pin] AtomicFetchOpHandle<R>),
     AmLaunched(#[pin] LamellarTask<Vec<R>>),
-    ByteLaunched(#[pin] LamellarTask<Vec<u8>>),
+    // ByteLaunched(#[pin] LamellarTask<Vec<u8>>),
     OneSidedMemoryRegionLaunched(#[pin] LamellarTask<OneSidedMemoryRegion<u8>>),
 }
 
@@ -335,14 +335,14 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<R> {
         match self.state {
-            FetchOpState::Req(req) => {
-                self.state = FetchOpState::AmLaunched(req.spawn());
-                self.array.team().spawn(self)
-            }
-            FetchOpState::ByteReq(req) => {
-                self.state = FetchOpState::ByteLaunched(req.spawn());
-                self.array.team().spawn(self)
-            }
+            // FetchOpState::Req(req) => {
+            //     self.state = FetchOpState::AmLaunched(req.spawn());
+            //     self.array.team().spawn(self)
+            // }
+            // FetchOpState::ByteReq(req) => {
+            //     self.state = FetchOpState::ByteLaunched(req.spawn());
+            //     self.array.team().spawn(self)
+            // }
             FetchOpState::OneSidedMemoryRegionReq(op_handle) => {
                 self.state = FetchOpState::OneSidedMemoryRegionLaunched(op_handle.spawn());
                 self.array.team().spawn(self)
@@ -373,10 +373,10 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
         )
         .print();
         match self.state {
-            FetchOpState::Req(req) => req.block().pop().expect("should have a single request"),
-            FetchOpState::ByteReq(req) => {
-                bytes_to_vec_t::<R>(req.block()).pop().expect("should have a single request")
-            }
+            // FetchOpState::Req(req) => req.block().pop().expect("should have a single request"),
+            // FetchOpState::ByteReq(req) => {
+            //     bytes_to_vec_t::<R>(req.block()).pop().expect("should have a single request")
+            // }
             FetchOpState::OneSidedMemoryRegionReq(req) => {
                 let mem_region = req.block();
                 let data = unsafe{ mem_region.clone().to_base::<R>().get(0).block() };
@@ -387,9 +387,9 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
             FetchOpState::AmLaunched(req) => {
                 req.block().pop().expect("should have a single request")
             }
-            FetchOpState::ByteLaunched(req) => {
-                bytes_to_vec_t::<R>(req.block()).pop().expect("should have a single request")
-            }
+            // FetchOpState::ByteLaunched(req) => {
+            //     bytes_to_vec_t::<R>(req.block()).pop().expect("should have a single request")
+            // }
             FetchOpState::OneSidedMemoryRegionLaunched(req) => {
                 let mem_region = req.block();
                 let data = unsafe{ mem_region.clone().to_base::<R>().get(0).block() };
@@ -404,14 +404,14 @@ impl<R: Dist> Future for ArrayFetchOpHandle<R> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut  this = self.project();
         match this.state.as_mut().project() {
-            FetchOpStateProj::Req(req) => {
-                let mut result = ready!(req.poll(cx));
-                return Poll::Ready(result.pop().unwrap());
-            }
-            FetchOpStateProj::ByteReq(req) => {
-                let bytes = ready!(req.poll(cx));
-                return Poll::Ready(bytes_to_vec_t::<R>(bytes).pop().unwrap());
-            }
+            // FetchOpStateProj::Req(req) => {
+            //     let mut result = ready!(req.poll(cx));
+            //     return Poll::Ready(result.pop().unwrap());
+            // }
+            // FetchOpStateProj::ByteReq(req) => {
+            //     let bytes = ready!(req.poll(cx));
+            //     return Poll::Ready(bytes_to_vec_t::<R>(bytes).pop().unwrap());
+            // }
             FetchOpStateProj::OneSidedMemoryRegionReq(req) => {
                 let mem_region = ready!(req.poll(cx));
                 this.state.set(FetchOpState::Rdma(unsafe{ mem_region.clone().to_base::<R>().get(0) }));
@@ -423,10 +423,10 @@ impl<R: Dist> Future for ArrayFetchOpHandle<R> {
                 let mut result = ready!(req.poll(cx));
                 return Poll::Ready(result.pop().unwrap());
             }
-            FetchOpStateProj::ByteLaunched(req) => {
-                let bytes = ready!(req.poll(cx));
-                return Poll::Ready(bytes_to_vec_t::<R>(bytes).pop().unwrap());
-            }
+            // FetchOpStateProj::ByteLaunched(req) => {
+            //     let bytes = ready!(req.poll(cx));
+            //     return Poll::Ready(bytes_to_vec_t::<R>(bytes).pop().unwrap());
+            // }
             FetchOpStateProj::OneSidedMemoryRegionLaunched(req) => {
                 let mem_region = ready!(req.poll(cx));
                 this.state.set(FetchOpState::Rdma(unsafe{ mem_region.clone().to_base::<R>().get(0) }));
@@ -448,11 +448,11 @@ pub struct ArrayFetchBatchOpHandle<R: AmDist + Dist> {
 }
 
 pub(crate) enum FetchBatchOpState<R: AmDist + Dist> {
-    Reqs(VecDeque<(AmHandle<Vec<R>>, Vec<usize>)>),
-    ByteReqs(VecDeque<(AmHandle<Vec<u8>>, Vec<usize>)>),
+    // Reqs(VecDeque<(AmHandle<Vec<R>>, Vec<usize>)>),
+    // ByteReqs(VecDeque<(AmHandle<Vec<u8>>, Vec<usize>)>),
     OneSidedMemoryRegionReqs(VecDeque<(AmHandle<OneSidedMemoryRegion<u8>>, Vec<usize>)>),
     Launched(VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>),
-    ByteLaunched(VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>),
+    // ByteLaunched(VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>),
     OneSidedMemoryRegionLaunched(VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>,Option<LamellarTask<Vec<R>>>, Vec<usize>)>),
 }
 
@@ -461,18 +461,18 @@ impl<R: AmDist + Dist> PinnedDrop for ArrayFetchBatchOpHandle<R> {
     fn drop(self: Pin<&mut Self>) {
         let mut this = self.project();
         match &mut this.state {
-            FetchBatchOpState::Reqs(reqs) => {
-                RuntimeWarning::disable_warnings();
-                for _ in reqs.drain(0..) {}
-                RuntimeWarning::enable_warnings();
-                RuntimeWarning::DroppedHandle("an ArrayFetchBatchOpHandle").print();
-            }
-            FetchBatchOpState::ByteReqs(reqs) => {
-                RuntimeWarning::disable_warnings();
-                for _ in reqs.drain(0..) {}
-                RuntimeWarning::enable_warnings();
-                RuntimeWarning::DroppedHandle("an ArrayFetchBatchOpHandle").print();
-            }
+            // FetchBatchOpState::Reqs(reqs) => {
+            //     RuntimeWarning::disable_warnings();
+            //     for _ in reqs.drain(0..) {}
+            //     RuntimeWarning::enable_warnings();
+            //     RuntimeWarning::DroppedHandle("an ArrayFetchBatchOpHandle").print();
+            // }
+            // FetchBatchOpState::ByteReqs(reqs) => {
+            //     RuntimeWarning::disable_warnings();
+            //     for _ in reqs.drain(0..) {}
+            //     RuntimeWarning::enable_warnings();
+            //     RuntimeWarning::DroppedHandle("an ArrayFetchBatchOpHandle").print();
+            // }
             FetchBatchOpState::OneSidedMemoryRegionReqs(reqs) => {
                 RuntimeWarning::disable_warnings();
                 for _ in reqs.drain(0..) {}
@@ -504,30 +504,30 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Vec<R>> {
         match &mut self.state {
-            FetchBatchOpState::Reqs(reqs) => {
+            // FetchBatchOpState::Reqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>>();
+            //     self.state = FetchBatchOpState::Launched(launched);
+            //     self.array.team().spawn(self)
+            // }
+            // FetchBatchOpState::ByteReqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
+            //     self.state = FetchBatchOpState::ByteLaunched(launched);
+            //     self.array.team().spawn(self)
+            // }
+            FetchBatchOpState::OneSidedMemoryRegionReqs(reqs) => {
                 let launched = reqs
                     .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>>();
-                self.state = FetchBatchOpState::Launched(launched);
+                    .map(|(am, res)| (Some(am.spawn()),None, res))
+                    .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<R>>>, Vec<usize>)>>();
+                self.state = FetchBatchOpState::OneSidedMemoryRegionLaunched(launched);
                 self.array.team().spawn(self)
             }
-            FetchBatchOpState::ByteReqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
-                self.state = FetchBatchOpState::ByteLaunched(launched);
-                self.array.team().spawn(self)
-            }
-                FetchBatchOpState::OneSidedMemoryRegionReqs(reqs) => {
-                    let launched = reqs
-                        .drain(..)
-                        .map(|(am, res)| (Some(am.spawn()),None, res))
-                        .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<R>>>, Vec<usize>)>>();
-                    self.state = FetchBatchOpState::OneSidedMemoryRegionLaunched(launched);
-                    self.array.team().spawn(self)
-                }
             _ => panic!("ArrayFetchBatchOpHandle should already have been spawned"),
         }
     }
@@ -552,22 +552,22 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
         )
         .print();
         match &mut self.state {
-            FetchBatchOpState::Reqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>>();
-                self.state = FetchBatchOpState::Launched(launched);
-                self.array.team().block_on(self)
-            }
-            FetchBatchOpState::ByteReqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
-                self.state = FetchBatchOpState::ByteLaunched(launched);
-                self.array.team().block_on(self)
-            }
+            // FetchBatchOpState::Reqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>>();
+            //     self.state = FetchBatchOpState::Launched(launched);
+            //     self.array.team().block_on(self)
+            // }
+            // FetchBatchOpState::ByteReqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
+            //     self.state = FetchBatchOpState::ByteLaunched(launched);
+            //     self.array.team().block_on(self)
+            // }
             FetchBatchOpState::OneSidedMemoryRegionReqs(reqs) => {
                 let launched = reqs
                     .drain(..)
@@ -576,7 +576,7 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
                 self.state = FetchBatchOpState::OneSidedMemoryRegionLaunched(launched);
                 self.array.team().block_on(self)
             }
-            FetchBatchOpState::Launched(_) | FetchBatchOpState::ByteLaunched(_) | FetchBatchOpState::OneSidedMemoryRegionLaunched(_)    => {
+            FetchBatchOpState::Launched(_)  | FetchBatchOpState::OneSidedMemoryRegionLaunched(_)    => {
                 self.array.team().block_on(self)
             }
         }
@@ -586,14 +586,14 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
 impl<R: Dist> From<ArrayFetchBatchOpHandle<R>> for ArrayFetchOpHandle<R> {
     fn from(mut req: ArrayFetchBatchOpHandle<R>) -> Self {
         let handle = match &mut req.state {
-            FetchBatchOpState::Reqs(reqs) => Self {
-                array: req.array.clone(),
-                state: FetchOpState::Req(reqs.pop_front().unwrap().0),
-            },
-            FetchBatchOpState::ByteReqs(reqs) => Self {
-                array: req.array.clone(),
-                state: FetchOpState::ByteReq(reqs.pop_front().unwrap().0),
-            },
+            // FetchBatchOpState::Reqs(reqs) => Self {
+            //     array: req.array.clone(),
+            //     state: FetchOpState::Req(reqs.pop_front().unwrap().0),
+            // },
+            // FetchBatchOpState::ByteReqs(reqs) => Self {
+            //     array: req.array.clone(),
+            //     state: FetchOpState::ByteReq(reqs.pop_front().unwrap().0),
+            // },
             FetchBatchOpState::OneSidedMemoryRegionReqs(reqs) => Self {
                 array: req.array.clone(),
                 state: FetchOpState::OneSidedMemoryRegionReq(reqs.pop_front().unwrap().0),
@@ -602,10 +602,10 @@ impl<R: Dist> From<ArrayFetchBatchOpHandle<R>> for ArrayFetchOpHandle<R> {
                 array: req.array.clone(),
                 state: FetchOpState::AmLaunched(reqs.pop_front().unwrap().0),
             },
-            FetchBatchOpState::ByteLaunched(reqs) => Self {
-                array: req.array.clone(),
-                state: FetchOpState::ByteLaunched(reqs.pop_front().unwrap().0),
-            },
+            // FetchBatchOpState::ByteLaunched(reqs) => Self {
+            //     array: req.array.clone(),
+            //     state: FetchOpState::ByteLaunched(reqs.pop_front().unwrap().0),
+            // },
             FetchBatchOpState::OneSidedMemoryRegionLaunched(reqs) => Self {
                 array: req.array.clone(),
                 state: FetchOpState::OneSidedMemoryRegionLaunched(reqs.pop_front().unwrap().0.expect("Expected a launched task")),
@@ -617,21 +617,21 @@ impl<R: Dist> From<ArrayFetchBatchOpHandle<R>> for ArrayFetchOpHandle<R> {
 }
 
 impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
-    pub(crate) fn new(
-        array: LamellarByteArray,
-        reqs: VecDeque<(AmHandle<Vec<R>>, Vec<usize>)>,
-        max_index: usize,
-    ) -> Self {
-        let mut results = Vec::with_capacity(max_index);
-        unsafe {
-            results.set_len(max_index);
-        }
-        Self {
-            array,
-            state: FetchBatchOpState::Reqs(reqs),
-            results,
-        }
-    }
+    // pub(crate) fn new(
+    //     array: LamellarByteArray,
+    //     reqs: VecDeque<(AmHandle<Vec<R>>, Vec<usize>)>,
+    //     max_index: usize,
+    // ) -> Self {
+    //     let mut results = Vec::with_capacity(max_index);
+    //     unsafe {
+    //         results.set_len(max_index);
+    //     }
+    //     Self {
+    //         array,
+    //         state: FetchBatchOpState::Reqs(reqs),
+    //         results,
+    //     }
+    // }
 
     pub(crate) fn new_one_sided_memory_region(
         array: LamellarByteArray,
@@ -649,21 +649,21 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
         }
     }
 
-    pub(crate) fn new_bytes(
-        array: LamellarByteArray,
-        reqs: VecDeque<(AmHandle<Vec<u8>>, Vec<usize>)>,
-        max_index: usize,
-    ) -> Self {
-        let mut results = Vec::with_capacity(max_index);
-        unsafe {
-            results.set_len(max_index);
-        }
-        Self {
-            array,
-            state: FetchBatchOpState::ByteReqs(reqs),
-            results,
-        }
-    }
+    // pub(crate) fn new_bytes(
+    //     array: LamellarByteArray,
+    //     reqs: VecDeque<(AmHandle<Vec<u8>>, Vec<usize>)>,
+    //     max_index: usize,
+    // ) -> Self {
+    //     let mut results = Vec::with_capacity(max_index);
+    //     unsafe {
+    //         results.set_len(max_index);
+    //     }
+    //     Self {
+    //         array,
+    //         state: FetchBatchOpState::ByteReqs(reqs),
+    //         results,
+    //     }
+    // }
 }
 
 impl<R: AmDist + Dist> Future for ArrayFetchBatchOpHandle<R> {
@@ -671,33 +671,33 @@ impl<R: AmDist + Dist> Future for ArrayFetchBatchOpHandle<R> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
         match &mut this.state {
-            FetchBatchOpState::Reqs(reqs) => {
+            // FetchBatchOpState::Reqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>>();
+            //     *this.state = FetchBatchOpState::Launched(launched);
+            //     cx.waker().wake_by_ref();
+            //     return Poll::Pending;
+            // }
+            // FetchBatchOpState::ByteReqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
+            //     *this.state = FetchBatchOpState::ByteLaunched(launched);
+            //     cx.waker().wake_by_ref();
+            //     return Poll::Pending;
+            // }
+            FetchBatchOpState::OneSidedMemoryRegionReqs(reqs) => {
                 let launched = reqs
                     .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>>();
-                *this.state = FetchBatchOpState::Launched(launched);
+                    .map(|(am, res)| (Some(am.spawn()), None, res))
+                    .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<R>>>, Vec<usize>)>>();
+                *this.state = FetchBatchOpState::OneSidedMemoryRegionLaunched(launched);
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
-            FetchBatchOpState::ByteReqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
-                *this.state = FetchBatchOpState::ByteLaunched(launched);
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
-                FetchBatchOpState::OneSidedMemoryRegionReqs(reqs) => {
-                    let launched = reqs
-                        .drain(..)
-                        .map(|(am, res)| (Some(am.spawn()), None, res))
-                        .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<R>>>, Vec<usize>)>>();
-                    *this.state = FetchBatchOpState::OneSidedMemoryRegionLaunched(launched);
-                    cx.waker().wake_by_ref();
-                    return Poll::Pending;
-                }
             FetchBatchOpState::Launched(reqs) => {
                 while let Some(mut req) = reqs.pop_front() {
                     match Future::poll(Pin::new(&mut req.0), cx) {
@@ -713,22 +713,22 @@ impl<R: AmDist + Dist> Future for ArrayFetchBatchOpHandle<R> {
                     }
                 }
             }
-            FetchBatchOpState::ByteLaunched(reqs) => {
-                while let Some(mut req) = reqs.pop_front() {
-                    match Future::poll(Pin::new(&mut req.0), cx) {
-                        Poll::Pending => {
-                            reqs.push_front(req);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(bytes) => {
-                            let mut res = bytes_to_vec_t::<R>(bytes);
-                            for (val, idx) in res.drain(..).zip(req.1.iter()) {
-                                this.results[*idx] = val;
-                            }
-                        }
-                    }
-                }
-            }
+            // FetchBatchOpState::ByteLaunched(reqs) => {
+            //     while let Some(mut req) = reqs.pop_front() {
+            //         match Future::poll(Pin::new(&mut req.0), cx) {
+            //             Poll::Pending => {
+            //                 reqs.push_front(req);
+            //                 return Poll::Pending;
+            //             }
+            //             Poll::Ready(bytes) => {
+            //                 let mut res = bytes_to_vec_t::<R>(bytes);
+            //                 for (val, idx) in res.drain(..).zip(req.1.iter()) {
+            //                     this.results[*idx] = val;
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
             FetchBatchOpState::OneSidedMemoryRegionLaunched(reqs) => {
                 while let Some(mut req) = reqs.pop_front() {
                     if let Some(mem_region) = req.0.as_mut() {
@@ -765,9 +765,9 @@ impl<R: AmDist + Dist> Future for ArrayFetchBatchOpHandle<R> {
 
 
 
-fn bytes_to_result_vec<T: Dist>( bytes: Vec<u8>) -> Vec<Result<T, T>> {
-    crate::deserialize(&bytes, true).expect("failed to deserialize result vec")
-}
+// fn bytes_to_result_vec<T: Dist>( bytes: Vec<u8>) -> Vec<Result<T, T>> {
+//     crate::deserialize(&bytes, true).expect("failed to deserialize result vec")
+// }
 
 /// a task handle for a single array operation that returns a result
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
@@ -778,12 +778,12 @@ pub struct ArrayResultOpHandle<R: Dist + PartialEq> {
 }
 
 pub(crate) enum ResultOpState<R: Remote + PartialEq> {
-    Req(AmHandle<Vec<Result<R, R>>>),
-    ByteReq(AmHandle<Vec<u8>>),
+    // Req(AmHandle<Vec<Result<R, R>>>),
+    // ByteReq(AmHandle<Vec<u8>>),
     OneSidedMemoryRegionReq(AmHandle<OneSidedMemoryRegion<u8>>),
     Network(AtomicCompareExchangeOpHandle<R>),
     Launched(LamellarTask<Vec<Result<R, R>>>),
-    ByteLaunched(LamellarTask<Vec<u8>>),
+    // ByteLaunched(LamellarTask<Vec<u8>>),
     OneSidedMemoryRegionLaunched(LamellarTask<OneSidedMemoryRegion<u8>>),
 
 }
@@ -808,14 +808,14 @@ impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Result<R, R>> {
         match self.state {
-            ResultOpState::Req(req) => {
-                self.state = ResultOpState::Launched(req.spawn());
-                self.array.team().spawn(self)
-            }
-            ResultOpState::ByteReq(req) => {
-                self.state = ResultOpState::ByteLaunched(req.spawn());
-                self.array.team().spawn(self)
-            }
+            // ResultOpState::Req(req) => {
+            //     self.state = ResultOpState::Launched(req.spawn());
+            //     self.array.team().spawn(self)
+            // }
+            // ResultOpState::ByteReq(req) => {
+            //     self.state = ResultOpState::ByteLaunched(req.spawn());
+            //     self.array.team().spawn(self)
+            // }
             ResultOpState::OneSidedMemoryRegionReq(op_handle) => {
                 self.state = ResultOpState::OneSidedMemoryRegionLaunched(op_handle.spawn());
                 self.array.team().spawn(self)
@@ -845,14 +845,14 @@ impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
         )
         .print();
         match self.state {
-            ResultOpState::ByteReq(req) => {
-                self.state = ResultOpState::ByteLaunched(req.spawn());
-                self.array.team().block_on(self)
-            }
-            ResultOpState::Req(req) => {
-                self.state = ResultOpState::Launched(req.spawn());
-                self.array.team().block_on(self)
-            }
+            // ResultOpState::ByteReq(req) => {
+            //     self.state = ResultOpState::ByteLaunched(req.spawn());
+            //     self.array.team().block_on(self)
+            // }
+            // ResultOpState::Req(req) => {
+            //     self.state = ResultOpState::Launched(req.spawn());
+            //     self.array.team().block_on(self)
+            // }
             ResultOpState::OneSidedMemoryRegionReq(op_handle) => {
                 self.state = ResultOpState::OneSidedMemoryRegionLaunched(op_handle.spawn());
                 self.array.team().block_on(self)
@@ -861,9 +861,9 @@ impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
             ResultOpState::Launched(ref _req) => {
                 self.array.team().block_on(self)
             }
-            ResultOpState::ByteLaunched(ref _req) => {
-                self.array.team().block_on(self)
-            }
+            // ResultOpState::ByteLaunched(ref _req) => {
+            //     self.array.team().block_on(self)
+            // }
             ResultOpState::OneSidedMemoryRegionLaunched(ref _req) => {
                 self.array.team().block_on(self)
             }
@@ -875,19 +875,19 @@ impl<R: Dist + PartialEq> Future for ArrayResultOpHandle<R> {
     type Output = Result<R, R>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match &mut self.state {
-            ResultOpState::Req(req) => {
-                if req.ready_or_set_waker(cx.waker()) {
-                    return Poll::Ready(req.val().pop().expect("should have a single request"));
-                }
-            }
-            ResultOpState::ByteReq(req) => {
-                if req.ready_or_set_waker(cx.waker()) {
-                    let bytes = req.val();
-                    return Poll::Ready(
-                        bytes_to_result_vec::<R>(bytes).pop().expect("should have a single request"),
-                    );
-                }
-            }
+            // ResultOpState::Req(req) => {
+            //     if req.ready_or_set_waker(cx.waker()) {
+            //         return Poll::Ready(req.val().pop().expect("should have a single request"));
+            //     }
+            // }
+            // ResultOpState::ByteReq(req) => {
+            //     if req.ready_or_set_waker(cx.waker()) {
+            //         let bytes = req.val();
+            //         return Poll::Ready(
+            //             bytes_to_result_vec::<R>(bytes).pop().expect("should have a single request"),
+            //         );
+            //     }
+            // }
             ResultOpState::OneSidedMemoryRegionReq(req) => {
                 if req.ready_or_set_waker(cx.waker()) {
                     let mem_region = req.val();
@@ -903,13 +903,13 @@ impl<R: Dist + PartialEq> Future for ArrayResultOpHandle<R> {
                     return Poll::Ready(res.pop().expect("should have a single request"));
                 }
             }
-            ResultOpState::ByteLaunched(req) => {
-                if let Poll::Ready(bytes) = Future::poll(Pin::new(req), cx) {
-                    return Poll::Ready(
-                        bytes_to_result_vec::<R>(bytes).pop().expect("should have a single request"),
-                    );
-                }
-            }
+            // ResultOpState::ByteLaunched(req) => {
+            //     if let Poll::Ready(bytes) = Future::poll(Pin::new(req), cx) {
+            //         return Poll::Ready(
+            //             bytes_to_result_vec::<R>(bytes).pop().expect("should have a single request"),
+            //         );
+            //     }
+            // }
             ResultOpState::OneSidedMemoryRegionLaunched(req) => {
                 if let Poll::Ready(mem_region) = Future::poll(Pin::new(req), cx) {
                     let data = unsafe { mem_region.clone().to_base::<Result<R, R>>().get(0).block() };
@@ -931,11 +931,11 @@ pub struct ArrayResultBatchOpHandle<R: AmDist> {
 }
 
 pub(crate) enum BatchResultOpState<R> {
-    Reqs(VecDeque<(AmHandle<Vec<Result<R, R>>>, Vec<usize>)>),
-    ByteReqs(VecDeque<(AmHandle<Vec<u8>>, Vec<usize>)>),
+    // Reqs(VecDeque<(AmHandle<Vec<Result<R, R>>>, Vec<usize>)>),
+    // ByteReqs(VecDeque<(AmHandle<Vec<u8>>, Vec<usize>)>),
     OneSidedMemoryRegionReqs(VecDeque<(AmHandle<OneSidedMemoryRegion<u8>>, Vec<usize>)>),
     Launched(VecDeque<(LamellarTask<Vec<Result<R, R>>>, Vec<usize>)>),
-    ByteLaunched(VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>),
+    // ByteLaunched(VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>),
     OneSidedMemoryRegionLaunched(VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<Result<R, R>>>>, Vec<usize>)>),
 
 }
@@ -945,18 +945,18 @@ impl<R: AmDist> PinnedDrop for ArrayResultBatchOpHandle<R> {
     fn drop(self: Pin<&mut Self>) {
         let mut this = self.project();
         match &mut this.state {
-            BatchResultOpState::Reqs(reqs) => {
-                RuntimeWarning::disable_warnings();
-                for _ in reqs.drain(0..) {}
-                RuntimeWarning::enable_warnings();
-                RuntimeWarning::DroppedHandle("an ArrayResultBatchOpHandle").print();
-            }
-            BatchResultOpState::ByteReqs(reqs) => {
-                RuntimeWarning::disable_warnings();
-                for _ in reqs.drain(0..) {}
-                RuntimeWarning::enable_warnings();
-                RuntimeWarning::DroppedHandle("an ArrayResultBatchOpHandle").print();
-            }
+            // BatchResultOpState::Reqs(reqs) => {
+            //     RuntimeWarning::disable_warnings();
+            //     for _ in reqs.drain(0..) {}
+            //     RuntimeWarning::enable_warnings();
+            //     RuntimeWarning::DroppedHandle("an ArrayResultBatchOpHandle").print();
+            // }
+            // BatchResultOpState::ByteReqs(reqs) => {
+            //     RuntimeWarning::disable_warnings();
+            //     for _ in reqs.drain(0..) {}
+            //     RuntimeWarning::enable_warnings();
+            //     RuntimeWarning::DroppedHandle("an ArrayResultBatchOpHandle").print();
+            // }
             BatchResultOpState::OneSidedMemoryRegionReqs(reqs) => {
                 RuntimeWarning::disable_warnings();
                 for _ in reqs.drain(0..) {}
@@ -988,22 +988,22 @@ impl<R: AmDist + Dist> ArrayResultBatchOpHandle<R> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<Vec<Result<R, R>>> {
         match &mut self.state {
-            BatchResultOpState::Reqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<Result<R, R>>>, Vec<usize>)>>();
-                self.state = BatchResultOpState::Launched(launched);
-                self.array.team().spawn(self)
-            }
-            BatchResultOpState::ByteReqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
-                self.state = BatchResultOpState::ByteLaunched(launched);
-                self.array.team().spawn(self)
-            }
+            // BatchResultOpState::Reqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<Result<R, R>>>, Vec<usize>)>>();
+            //     self.state = BatchResultOpState::Launched(launched);
+            //     self.array.team().spawn(self)
+            // }
+            // BatchResultOpState::ByteReqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
+            //     self.state = BatchResultOpState::ByteLaunched(launched);
+            //     self.array.team().spawn(self)
+            // }
             BatchResultOpState::OneSidedMemoryRegionReqs(reqs) => {
                 let launched = reqs
                     .drain(..)
@@ -1036,22 +1036,22 @@ impl<R: AmDist + Dist> ArrayResultBatchOpHandle<R> {
         )
         .print();
         match &mut self.state {
-            BatchResultOpState::Reqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<Result<R, R>>>, Vec<usize>)>>();
-                self.state = BatchResultOpState::Launched(launched);
-                self.array.team().block_on(self)
-            }
-            BatchResultOpState::ByteReqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
-                self.state = BatchResultOpState::ByteLaunched(launched);
-                self.array.team().block_on(self)
-            }
+            // BatchResultOpState::Reqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<Result<R, R>>>, Vec<usize>)>>();
+            //     self.state = BatchResultOpState::Launched(launched);
+            //     self.array.team().block_on(self)
+            // }
+            // BatchResultOpState::ByteReqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
+            //     self.state = BatchResultOpState::ByteLaunched(launched);
+            //     self.array.team().block_on(self)
+            // }
             BatchResultOpState::OneSidedMemoryRegionReqs(reqs) => {
                 let launched = reqs
                     .drain(..)
@@ -1060,7 +1060,7 @@ impl<R: AmDist + Dist> ArrayResultBatchOpHandle<R> {
                 self.state = BatchResultOpState::OneSidedMemoryRegionLaunched(launched);
                 self.array.team().block_on(self)
             }
-            BatchResultOpState::Launched(_) | BatchResultOpState::ByteLaunched(_) | BatchResultOpState::OneSidedMemoryRegionLaunched(_) => {
+            BatchResultOpState::Launched(_) |  BatchResultOpState::OneSidedMemoryRegionLaunched(_) => {
                 self.array.team().block_on(self)
             }
         }
@@ -1070,14 +1070,14 @@ impl<R: AmDist + Dist> ArrayResultBatchOpHandle<R> {
 impl<R: Dist + PartialEq> From<ArrayResultBatchOpHandle<R>> for ArrayResultOpHandle<R> {
     fn from(mut req: ArrayResultBatchOpHandle<R>) -> Self {
         let handle = match &mut req.state {
-            BatchResultOpState::Reqs(reqs) => Self {
-                array: req.array.clone(),
-                state: ResultOpState::Req(reqs.pop_front().unwrap().0),
-            },
-            BatchResultOpState::ByteReqs(reqs) => Self {
-                array: req.array.clone(),
-                state: ResultOpState::ByteReq(reqs.pop_front().unwrap().0),
-            },
+            // BatchResultOpState::Reqs(reqs) => Self {
+            //     array: req.array.clone(),
+            //     state: ResultOpState::Req(reqs.pop_front().unwrap().0),
+            // },
+            // BatchResultOpState::ByteReqs(reqs) => Self {
+            //     array: req.array.clone(),
+            //     state: ResultOpState::ByteReq(reqs.pop_front().unwrap().0),
+            // },
             BatchResultOpState::OneSidedMemoryRegionReqs(reqs) => Self {
                 array: req.array.clone(),
                 state: ResultOpState::OneSidedMemoryRegionReq(reqs.pop_front().unwrap().0),
@@ -1086,10 +1086,10 @@ impl<R: Dist + PartialEq> From<ArrayResultBatchOpHandle<R>> for ArrayResultOpHan
                 array: req.array.clone(),
                 state: ResultOpState::Launched(reqs.pop_front().unwrap().0),
             },
-            BatchResultOpState::ByteLaunched(reqs) => Self {
-                array: req.array.clone(),
-                state: ResultOpState::ByteLaunched(reqs.pop_front().unwrap().0),
-            },
+            // BatchResultOpState::ByteLaunched(reqs) => Self {
+            //     array: req.array.clone(),
+            //     state: ResultOpState::ByteLaunched(reqs.pop_front().unwrap().0),
+            // },
             BatchResultOpState::OneSidedMemoryRegionLaunched(reqs) => Self {
                 array: req.array.clone(),
                 state: ResultOpState::OneSidedMemoryRegionLaunched(reqs.pop_front().unwrap().0.expect("Expected a launched task")),
@@ -1101,21 +1101,21 @@ impl<R: Dist + PartialEq> From<ArrayResultBatchOpHandle<R>> for ArrayResultOpHan
 }
 
 impl<R: AmDist> ArrayResultBatchOpHandle<R> {
-    pub(crate) fn new(
-        array: LamellarByteArray,
-        reqs: VecDeque<(AmHandle<Vec<Result<R, R>>>, Vec<usize>)>,
-        max_index: usize,
-    ) -> Self {
-        let mut results = Vec::with_capacity(max_index);
-        unsafe {
-            results.set_len(max_index);
-        }
-        Self {
-            array,
-            state: BatchResultOpState::Reqs(reqs),
-            results,
-        }
-    }
+    // pub(crate) fn new(
+    //     array: LamellarByteArray,
+    //     reqs: VecDeque<(AmHandle<Vec<Result<R, R>>>, Vec<usize>)>,
+    //     max_index: usize,
+    // ) -> Self {
+    //     let mut results = Vec::with_capacity(max_index);
+    //     unsafe {
+    //         results.set_len(max_index);
+    //     }
+    //     Self {
+    //         array,
+    //         state: BatchResultOpState::Reqs(reqs),
+    //         results,
+    //     }
+    // }
 
     pub(crate) fn new_one_sided_memory_region(
         array: LamellarByteArray,
@@ -1133,21 +1133,21 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
         }
     }
 
-    pub(crate) fn new_bytes(
-        array: LamellarByteArray,
-        reqs: VecDeque<(AmHandle<Vec<u8>>, Vec<usize>)>,
-        max_index: usize,
-    ) -> Self {
-        let mut results = Vec::with_capacity(max_index);
-        unsafe {
-            results.set_len(max_index);
-        }
-        Self {
-            array,
-            state: BatchResultOpState::ByteReqs(reqs),
-            results,
-        }
-    }
+    // pub(crate) fn new_bytes(
+    //     array: LamellarByteArray,
+    //     reqs: VecDeque<(AmHandle<Vec<u8>>, Vec<usize>)>,
+    //     max_index: usize,
+    // ) -> Self {
+    //     let mut results = Vec::with_capacity(max_index);
+    //     unsafe {
+    //         results.set_len(max_index);
+    //     }
+    //     Self {
+    //         array,
+    //         state: BatchResultOpState::ByteReqs(reqs),
+    //         results,
+    //     }
+    // }
 }
 
 impl<R: AmDist + Dist> Future for ArrayResultBatchOpHandle<R> {
@@ -1155,24 +1155,24 @@ impl<R: AmDist + Dist> Future for ArrayResultBatchOpHandle<R> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
         match &mut this.state {
-            BatchResultOpState::Reqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<Result<R, R>>>, Vec<usize>)>>();
-                *this.state = BatchResultOpState::Launched(launched);
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
-            BatchResultOpState::ByteReqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
-                *this.state = BatchResultOpState::ByteLaunched(launched);
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
+            // BatchResultOpState::Reqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<Result<R, R>>>, Vec<usize>)>>();
+            //     *this.state = BatchResultOpState::Launched(launched);
+            //     cx.waker().wake_by_ref();
+            //     return Poll::Pending;
+            // }
+            // BatchResultOpState::ByteReqs(reqs) => {
+            //     let launched = reqs
+            //         .drain(..)
+            //         .map(|(am, res)| (am.spawn(), res))
+            //         .collect::<VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>>();
+            //     *this.state = BatchResultOpState::ByteLaunched(launched);
+            //     cx.waker().wake_by_ref();
+            //     return Poll::Pending;
+            // }
             BatchResultOpState::OneSidedMemoryRegionReqs(reqs) => {
                 let launched = reqs
                     .drain(..)
@@ -1197,22 +1197,22 @@ impl<R: AmDist + Dist> Future for ArrayResultBatchOpHandle<R> {
                     }
                 }
             }
-            BatchResultOpState::ByteLaunched(reqs) => {
-                while let Some(mut req) = reqs.pop_front() {
-                    match Future::poll(Pin::new(&mut req.0), cx) {
-                        Poll::Pending => {
-                            reqs.push_front(req);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(bytes) => {
-                            let mut res = bytes_to_result_vec::<R>(bytes);
-                            for (val, idx) in res.drain(..).zip(req.1.iter()) {
-                                this.results[*idx] = val;
-                            }
-                        }
-                    }
-                }
-            }
+            // BatchResultOpState::ByteLaunched(reqs) => {
+            //     while let Some(mut req) = reqs.pop_front() {
+            //         match Future::poll(Pin::new(&mut req.0), cx) {
+            //             Poll::Pending => {
+            //                 reqs.push_front(req);
+            //                 return Poll::Pending;
+            //             }
+            //             Poll::Ready(bytes) => {
+            //                 let mut res = bytes_to_result_vec::<R>(bytes);
+            //                 for (val, idx) in res.drain(..).zip(req.1.iter()) {
+            //                     this.results[*idx] = val;
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
             BatchResultOpState::OneSidedMemoryRegionLaunched(reqs) => {
                 while let Some(mut req) = reqs.pop_front() {
                     if let Some(mem_region) = req.0.as_mut() {

@@ -8,7 +8,6 @@ use crate::{
     lamellar_request::LamellarRequest,
     lamellar_request::*,
     lamellar_team::{IntoLamellarTeam, LamellarTeam, LamellarTeamRT},
-    memregion::one_sided::MemRegionHandleInner,
     scheduler::{LamellarTask, ReqId, Scheduler},
     warnings::RuntimeWarning,
     Darc,
@@ -131,7 +130,7 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
                                 let temp: Darc<()> = darc.into();
                                 temp.inc_local_cnt(1);
                             }
-                            RemotePtr::NetMemRegionHandle(mr) => {
+                            RemotePtr::NetMemRegionHandle(_mr) => {
                                 // let temp: Arc<MemRegionHandleInner> = mr.into();
                                 // temp.local_ref.fetch_add(2, Ordering::SeqCst);
                             }
@@ -408,7 +407,7 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
                                 let temp: Darc<()> = darc.into();
                                 temp.inc_local_cnt(1);
                             }
-                            RemotePtr::NetMemRegionHandle(mr) => {
+                            RemotePtr::NetMemRegionHandle(_mr) => {
                                 // let temp: Arc<MemRegionHandleInner> = mr.into();
                                 // temp.local_ref.fetch_add(1, Ordering::SeqCst);
                             }

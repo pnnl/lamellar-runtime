@@ -201,9 +201,9 @@ pub(crate) struct PackedIndicies {
 }
 
 impl PackedIndicies {
-    pub(crate) fn new(byte_width: usize) -> PackedIndicies {
-        PackedIndicies { data: Vec::new(), byte_width , estimated_elems: 0}
-    }
+    // pub(crate) fn new(byte_width: usize) -> PackedIndicies {
+    //     PackedIndicies { data: Vec::new(), byte_width , estimated_elems: 0}
+    // }
     pub(crate) fn new_with_capacity(byte_width: usize, estimated_elems: usize) -> PackedIndicies {
         let data = Vec::with_capacity(byte_width * estimated_elems);
         PackedIndicies { data, byte_width, estimated_elems }
@@ -227,13 +227,13 @@ impl PackedIndicies {
     pub(crate) fn clear(&mut self) {
         self.data.clear();
     }
-    pub(crate) fn slice_as_iter<T>(byte_width: usize, data: &[u8]) -> impl Iterator<Item=T> + '_ {
-        data.chunks_exact(byte_width).map(move |chunk| {
-            let mut data = vec![0; std::mem::size_of::<T>()];
-            data[..chunk.len()].copy_from_slice(chunk);
-            unsafe { std::ptr::read_unaligned(data.as_ptr() as *const T) }
-        })
-    }
+    // pub(crate) fn slice_as_iter<T>(byte_width: usize, data: &[u8]) -> impl Iterator<Item=T> + '_ {
+    //     data.chunks_exact(byte_width).map(move |chunk| {
+    //         let mut data = vec![0; std::mem::size_of::<T>()];
+    //         data[..chunk.len()].copy_from_slice(chunk);
+    //         unsafe { std::ptr::read_unaligned(data.as_ptr() as *const T) }
+    //     })
+    // }
 }
 
 #[lamellar_impl::AmDataRT(Clone,AmGroup(false))]
@@ -243,9 +243,9 @@ pub(crate) struct PackedIdxVal {
 }
 
 impl PackedIdxVal {
-    pub(crate) fn new(idx_byte_width: usize) -> PackedIdxVal {
-        PackedIdxVal { data: Vec::new(), idx_byte_width }
-    }
+    // pub(crate) fn new(idx_byte_width: usize) -> PackedIdxVal {
+    //     PackedIdxVal { data: Vec::new(), idx_byte_width }
+    // }
     pub(crate) fn new_with_capacity<T>(idx_byte_width: usize, estimated_elems: usize) -> PackedIdxVal {
         let data = Vec::with_capacity(idx_byte_width * estimated_elems + std::mem::size_of::<T>()* estimated_elems);
         PackedIdxVal { data, idx_byte_width }

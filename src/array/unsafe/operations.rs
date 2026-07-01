@@ -90,202 +90,202 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, Copy, Clone)]
-enum IndexSize {
-    U8,
-    U16,
-    U32,
-    U64,
-    Usize,
-}
+// #[derive(Debug, Copy, Clone)]
+// enum IndexSize {
+//     U8,
+//     U16,
+//     U32,
+//     U64,
+//     Usize,
+// }
 
-impl From<usize> for IndexSize {
-    fn from(size: usize) -> Self {
-        match config().array_index_size {
-            IndexType::Dynamic => {
-                if size <= u8::MAX as usize {
-                    IndexSize::U8
-                } else if size <= u16::MAX as usize {
-                    IndexSize::U16
-                } else if size <= u32::MAX as usize {
-                    IndexSize::U32
-                } else if size <= u64::MAX as usize {
-                    IndexSize::U64
-                } else {
-                    IndexSize::Usize
-                }
-            }
-            IndexType::Static => IndexSize::Usize,
-        }
-    }
-}
+// impl From<usize> for IndexSize {
+//     fn from(size: usize) -> Self {
+//         match config().array_index_size {
+//             IndexType::Dynamic => {
+//                 if size <= u8::MAX as usize {
+//                     IndexSize::U8
+//                 } else if size <= u16::MAX as usize {
+//                     IndexSize::U16
+//                 } else if size <= u32::MAX as usize {
+//                     IndexSize::U32
+//                 } else if size <= u64::MAX as usize {
+//                     IndexSize::U64
+//                 } else {
+//                     IndexSize::Usize
+//                 }
+//             }
+//             IndexType::Static => IndexSize::Usize,
+//         }
+//     }
+// }
 
-impl IndexSize {
-    fn len(&self) -> usize {
-        match self {
-            IndexSize::U8 => 1,
-            IndexSize::U16 => 2,
-            IndexSize::U32 => 4,
-            IndexSize::U64 => 8,
-            IndexSize::Usize => 8,
-        }
-    }
-    #[allow(dead_code)]
-    fn as_bytes(&self, val: &usize) -> &[u8] {
-        match self {
-            IndexSize::U8 => unsafe {
-                std::slice::from_raw_parts(val as *const usize as *const u8, 1)
-            },
-            IndexSize::U16 => unsafe {
-                std::slice::from_raw_parts(val as *const usize as *const u8, 2)
-            },
-            IndexSize::U32 => unsafe {
-                std::slice::from_raw_parts(val as *const usize as *const u8, 4)
-            },
-            IndexSize::U64 => unsafe {
-                std::slice::from_raw_parts(val as *const usize as *const u8, 8)
-            },
-            IndexSize::Usize => unsafe {
-                std::slice::from_raw_parts(val as *const usize as *const u8, 8)
-            },
-        }
-    }
+// impl IndexSize {
+//     fn len(&self) -> usize {
+//         match self {
+//             IndexSize::U8 => 1,
+//             IndexSize::U16 => 2,
+//             IndexSize::U32 => 4,
+//             IndexSize::U64 => 8,
+//             IndexSize::Usize => 8,
+//         }
+//     }
+//     #[allow(dead_code)]
+//     fn as_bytes(&self, val: &usize) -> &[u8] {
+//         match self {
+//             IndexSize::U8 => unsafe {
+//                 std::slice::from_raw_parts(val as *const usize as *const u8, 1)
+//             },
+//             IndexSize::U16 => unsafe {
+//                 std::slice::from_raw_parts(val as *const usize as *const u8, 2)
+//             },
+//             IndexSize::U32 => unsafe {
+//                 std::slice::from_raw_parts(val as *const usize as *const u8, 4)
+//             },
+//             IndexSize::U64 => unsafe {
+//                 std::slice::from_raw_parts(val as *const usize as *const u8, 8)
+//             },
+//             IndexSize::Usize => unsafe {
+//                 std::slice::from_raw_parts(val as *const usize as *const u8, 8)
+//             },
+//         }
+//     }
 
-    fn create_buf(&self, num_elems: usize) -> IndexBuf {
-        let num_bytes = num_elems * self.len();
-        match self {
-            IndexSize::U8 => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::U8(0, vec)
-            }
-            IndexSize::U16 => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::U16(0, vec)
-            }
-            IndexSize::U32 => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::U32(0, vec)
-            }
-            IndexSize::U64 => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::U64(0, vec)
-            }
-            IndexSize::Usize => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::Usize(0, vec)
-            }
-        }
-    }
-}
+//     fn create_buf(&self, num_elems: usize) -> IndexBuf {
+//         let num_bytes = num_elems * self.len();
+//         match self {
+//             IndexSize::U8 => {
+//                 let mut vec = Vec::with_capacity(num_bytes);
+//                 unsafe {
+//                     vec.set_len(num_bytes);
+//                 }
+//                 IndexBuf::U8(0, vec)
+//             }
+//             IndexSize::U16 => {
+//                 let mut vec = Vec::with_capacity(num_bytes);
+//                 unsafe {
+//                     vec.set_len(num_bytes);
+//                 }
+//                 IndexBuf::U16(0, vec)
+//             }
+//             IndexSize::U32 => {
+//                 let mut vec = Vec::with_capacity(num_bytes);
+//                 unsafe {
+//                     vec.set_len(num_bytes);
+//                 }
+//                 IndexBuf::U32(0, vec)
+//             }
+//             IndexSize::U64 => {
+//                 let mut vec = Vec::with_capacity(num_bytes);
+//                 unsafe {
+//                     vec.set_len(num_bytes);
+//                 }
+//                 IndexBuf::U64(0, vec)
+//             }
+//             IndexSize::Usize => {
+//                 let mut vec = Vec::with_capacity(num_bytes);
+//                 unsafe {
+//                     vec.set_len(num_bytes);
+//                 }
+//                 IndexBuf::Usize(0, vec)
+//             }
+//         }
+//     }
+// }
 
-#[derive(Debug, Clone)]
-enum IndexBuf {
-    U8(usize, Vec<u8>),
-    U16(usize, Vec<u8>),
-    U32(usize, Vec<u8>),
-    U64(usize, Vec<u8>),
-    Usize(usize, Vec<u8>),
-}
+// #[derive(Debug, Clone)]
+// enum IndexBuf {
+//     U8(usize, Vec<u8>),
+//     U16(usize, Vec<u8>),
+//     U32(usize, Vec<u8>),
+//     U64(usize, Vec<u8>),
+//     Usize(usize, Vec<u8>),
+// }
 
-impl IndexBuf {
-    fn push(&mut self, val: usize) {
-        match self {
-            IndexBuf::U8(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8;
-                unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as u8);
-                }
-                *i += 1;
-            }
-            IndexBuf::U16(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u16;
-                unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as u16);
-                }
-                *i += 1;
-            }
-            IndexBuf::U32(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u32;
-                unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as u32);
-                }
-                *i += 1;
-            }
-            IndexBuf::U64(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u64;
-                unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as u64);
-                }
-                *i += 1;
-            }
-            IndexBuf::Usize(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut usize;
-                unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as usize);
-                }
-                *i += 1;
-            }
-        }
-    }
-    fn len(&self) -> usize {
-        match self {
-            IndexBuf::U8(i, _) => *i,
-            IndexBuf::U16(i, _) => *i,
-            IndexBuf::U32(i, _) => *i,
-            IndexBuf::U64(i, _) => *i,
-            IndexBuf::Usize(i, _) => *i,
-        }
-    }
-    fn to_vec(self) -> Vec<u8> {
-        match self {
-            IndexBuf::U8(i, mut vec) => {
-                unsafe {
-                    vec.set_len(i);
-                }
-                vec
-            }
-            IndexBuf::U16(i, mut vec) => {
-                unsafe {
-                    vec.set_len(i * std::mem::size_of::<u16>());
-                }
-                vec
-            }
-            IndexBuf::U32(i, mut vec) => {
-                unsafe {
-                    vec.set_len(i * std::mem::size_of::<u32>());
-                }
-                vec
-            }
-            IndexBuf::U64(i, mut vec) => {
-                unsafe {
-                    vec.set_len(i * std::mem::size_of::<u64>());
-                }
-                vec
-            }
-            IndexBuf::Usize(i, mut vec) => {
-                unsafe {
-                    vec.set_len(i * std::mem::size_of::<usize>());
-                }
-                vec
-            }
-        }
-    }
-}
+// impl IndexBuf {
+//     fn push(&mut self, val: usize) {
+//         match self {
+//             IndexBuf::U8(i, vec) => {
+//                 let vec_ptr = vec.as_mut_ptr() as *mut u8;
+//                 unsafe {
+//                     std::ptr::write(vec_ptr.offset(*i as isize), val as u8);
+//                 }
+//                 *i += 1;
+//             }
+//             IndexBuf::U16(i, vec) => {
+//                 let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u16;
+//                 unsafe {
+//                     std::ptr::write(vec_ptr.offset(*i as isize), val as u16);
+//                 }
+//                 *i += 1;
+//             }
+//             IndexBuf::U32(i, vec) => {
+//                 let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u32;
+//                 unsafe {
+//                     std::ptr::write(vec_ptr.offset(*i as isize), val as u32);
+//                 }
+//                 *i += 1;
+//             }
+//             IndexBuf::U64(i, vec) => {
+//                 let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u64;
+//                 unsafe {
+//                     std::ptr::write(vec_ptr.offset(*i as isize), val as u64);
+//                 }
+//                 *i += 1;
+//             }
+//             IndexBuf::Usize(i, vec) => {
+//                 let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut usize;
+//                 unsafe {
+//                     std::ptr::write(vec_ptr.offset(*i as isize), val as usize);
+//                 }
+//                 *i += 1;
+//             }
+//         }
+//     }
+//     fn len(&self) -> usize {
+//         match self {
+//             IndexBuf::U8(i, _) => *i,
+//             IndexBuf::U16(i, _) => *i,
+//             IndexBuf::U32(i, _) => *i,
+//             IndexBuf::U64(i, _) => *i,
+//             IndexBuf::Usize(i, _) => *i,
+//         }
+//     }
+//     fn to_vec(self) -> Vec<u8> {
+//         match self {
+//             IndexBuf::U8(i, mut vec) => {
+//                 unsafe {
+//                     vec.set_len(i);
+//                 }
+//                 vec
+//             }
+//             IndexBuf::U16(i, mut vec) => {
+//                 unsafe {
+//                     vec.set_len(i * std::mem::size_of::<u16>());
+//                 }
+//                 vec
+//             }
+//             IndexBuf::U32(i, mut vec) => {
+//                 unsafe {
+//                     vec.set_len(i * std::mem::size_of::<u32>());
+//                 }
+//                 vec
+//             }
+//             IndexBuf::U64(i, mut vec) => {
+//                 unsafe {
+//                     vec.set_len(i * std::mem::size_of::<u64>());
+//                 }
+//                 vec
+//             }
+//             IndexBuf::Usize(i, mut vec) => {
+//                 unsafe {
+//                     vec.set_len(i * std::mem::size_of::<usize>());
+//                 }
+//                 vec
+//             }
+//         }
+//     }
+// }
 
 type IdGenNew = fn() -> TypeId;
 #[doc(hidden)]

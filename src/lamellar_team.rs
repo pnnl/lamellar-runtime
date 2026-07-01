@@ -1633,12 +1633,12 @@ impl LamellarTeamRT {
         let mut world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
         let mut world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
 
-        // println!(
-        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
-        //     self.world_pe,
-        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-        // );
+        trace!(
+            "in team wait_all mype: {:?} cnt: {:?} {:?}",
+            self.world_pe,
+            self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+            self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        );
         let mut done = false;
         while !done {
             while self.panic.load(Ordering::SeqCst) == 0
@@ -1710,12 +1710,12 @@ impl LamellarTeamRT {
             }
             done = true;
         }
-        // println!(
-        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
-        //     self.world_pe,
-        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-        // );
+        trace!(
+            "leaving team wait_all mype: {:?} cnt: {:?} {:?}",
+            self.world_pe,
+            self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+            self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        );
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -2709,6 +2709,17 @@ impl Darc<LamellarTeamRT> {
         }
         trace!(target: "lamellae_debug", "allocated one sided mem region lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         lmr.expect("out of memory")
+    }
+
+    pub(crate) fn try_alloc_one_sided_mem_region<T: Dist>(
+        &self,
+        size: usize,
+    ) -> Option<OneSidedMemoryRegion<T>> {
+        let lmr = OneSidedMemoryRegion::try_new(size, self);
+        if lmr.is_ok() {
+            trace!(target: "lamellae_debug", "allocated one sided mem region lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
+        }
+        lmr.ok()
     }
 
     // pub(crate) fn print_cnt(self: &Darc<LamellarTeamRT>) {
