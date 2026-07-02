@@ -290,7 +290,7 @@ impl PackedIdxVal {
 }
 
 #[lamellar_impl::AmDataRT(AmGroup(false))]
-pub(crate) struct PodSingleIdxMultiValAm {
+pub(crate) struct ScalarSingleIdxMultiValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) index: usize,
     pub(crate) vals: OneSidedMemoryRegion<u8>,
@@ -299,7 +299,7 @@ pub(crate) struct PodSingleIdxMultiValAm {
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
 
-impl PodSingleIdxMultiValAm {
+impl ScalarSingleIdxMultiValAm {
     fn idx_vals<'a, T: Dist + Sized>(&self, bytes: &'a [u8]) ->  impl Iterator<Item=(usize, T)> + 'a {
         let vals = bytes.chunks_exact(std::mem::size_of::<T>()).map(|chunk| {
             let data = chunk.to_vec();
@@ -313,7 +313,7 @@ impl PodSingleIdxMultiValAm {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAM for PodSingleIdxMultiValAm {
+impl LamellarAM for ScalarSingleIdxMultiValAm {
     async fn exec(&self) {
         let num_bytes = self.vals.len();
         let bytes = unsafe { self.vals.get_buffer(0, num_bytes).await };
@@ -329,7 +329,7 @@ impl LamellarAM for PodSingleIdxMultiValAm {
 
 
 #[lamellar_impl::AmDataRT(AmGroup(false))]
-pub(crate) struct PodSingleIdxMultiValAmReturn {
+pub(crate) struct ScalarSingleIdxMultiValAmReturn {
     pub(crate) array: LamellarByteArray,
     pub(crate) index: usize,
     pub(crate) vals: OneSidedMemoryRegion<u8>,
@@ -338,7 +338,7 @@ pub(crate) struct PodSingleIdxMultiValAmReturn {
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
 
-impl PodSingleIdxMultiValAmReturn {
+impl ScalarSingleIdxMultiValAmReturn {
     fn idx_vals<'a, T: Dist + Sized>(&self, bytes: &'a [u8]) ->  impl Iterator<Item=(usize, T)> + 'a {
         let vals = bytes.chunks_exact(std::mem::size_of::<T>()).map(|chunk| {
             let data = chunk.to_vec();
@@ -353,7 +353,7 @@ impl PodSingleIdxMultiValAmReturn {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAM for PodSingleIdxMultiValAmReturn {
+impl LamellarAM for ScalarSingleIdxMultiValAmReturn {
     async fn exec(&self) -> OneSidedMemoryRegion<u8> {
         let num_bytes = self.vals.len();
         let bytes = unsafe { self.vals.get_buffer(0, num_bytes).await };
@@ -368,7 +368,7 @@ impl LamellarAM for PodSingleIdxMultiValAmReturn {
 }
 
 #[lamellar_impl::AmDataRT(AmGroup(false))]
-pub(crate) struct PodMultiIdxSingleValAm {
+pub(crate) struct ScalarMultiIdxSingleValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) val: Vec<u8>,
     pub(crate) indices: OneSidedMemoryRegion<u8>,
@@ -378,7 +378,7 @@ pub(crate) struct PodMultiIdxSingleValAm {
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
 
-impl PodMultiIdxSingleValAm {
+impl ScalarMultiIdxSingleValAm {
     fn idx_vals<'a, T: Dist + Sized>(&self,  indices: impl Iterator<Item=usize> + 'a) ->  impl Iterator<Item=(usize, T)> + 'a {
         let val = unsafe { std::ptr::read_unaligned(self.val.as_ptr() as *const T) };
         indices.zip(std::iter::repeat(val))
@@ -388,7 +388,7 @@ impl PodMultiIdxSingleValAm {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAM for PodMultiIdxSingleValAm {
+impl LamellarAM for ScalarMultiIdxSingleValAm {
     async fn exec(&self) {
         let num_bytes = self.indices.len();
         let array = self.array.clone();
@@ -408,7 +408,7 @@ impl LamellarAM for PodMultiIdxSingleValAm {
 }
 
 #[lamellar_impl::AmDataRT(AmGroup(false))]
-pub(crate) struct PodMultiIdxSingleValAmReturn {
+pub(crate) struct ScalarMultiIdxSingleValAmReturn {
     pub(crate) array: LamellarByteArray,
     pub(crate) val: Vec<u8>,
     pub(crate) indices: OneSidedMemoryRegion<u8>,
@@ -418,7 +418,7 @@ pub(crate) struct PodMultiIdxSingleValAmReturn {
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
 
-impl PodMultiIdxSingleValAmReturn {
+impl ScalarMultiIdxSingleValAmReturn {
     fn idx_vals<'a, T: Dist + Sized>(&self,  indices: impl Iterator<Item=usize> + 'a) ->  impl Iterator<Item=(usize, T)> + 'a {
         let val = unsafe { std::ptr::read_unaligned(self.val.as_ptr() as *const T) };
         indices.zip(std::iter::repeat(val))
@@ -429,7 +429,7 @@ impl PodMultiIdxSingleValAmReturn {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAM for PodMultiIdxSingleValAmReturn {
+impl LamellarAM for ScalarMultiIdxSingleValAmReturn {
     async fn exec(&self) -> OneSidedMemoryRegion<u8> {
         let num_bytes = self.indices.len();
         let array = self.array.clone();
@@ -449,7 +449,7 @@ impl LamellarAM for PodMultiIdxSingleValAmReturn {
 }
 
 #[lamellar_impl::AmDataRT(AmGroup(false))]
-pub(crate) struct PodMultiIdxMultiValAm {
+pub(crate) struct ScalarMultiIdxMultiValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) idx_val: OneSidedMemoryRegion<u8>,
     pub(crate) idx_size: usize,
@@ -458,7 +458,7 @@ pub(crate) struct PodMultiIdxMultiValAm {
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
 
-impl PodMultiIdxMultiValAm {
+impl ScalarMultiIdxMultiValAm {
     fn idx_vals<'a, T: Dist + Sized>(&self, bytes: &'a [u8]) ->  impl Iterator<Item=(usize, T)> + 'a {
        PackedIdxVal::slice_as_iter::<T>(self.idx_size, bytes)
     }
@@ -468,7 +468,7 @@ impl PodMultiIdxMultiValAm {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAM for PodMultiIdxMultiValAm {
+impl LamellarAM for ScalarMultiIdxMultiValAm {
     async fn exec(&self) {
         let num_bytes = self.idx_val.len();
         let bytes = unsafe { self.idx_val.get_buffer(0, num_bytes).await };
@@ -484,7 +484,7 @@ impl LamellarAM for PodMultiIdxMultiValAm {
 
 
 #[lamellar_impl::AmDataRT(AmGroup(false))]
-pub(crate) struct PodMultiIdxMultiValAmReturn{
+pub(crate) struct ScalarMultiIdxMultiValAmReturn{
     pub(crate) array: LamellarByteArray,
     pub(crate) idx_val: OneSidedMemoryRegion<u8>,
     pub(crate) idx_size: usize,
@@ -493,7 +493,7 @@ pub(crate) struct PodMultiIdxMultiValAmReturn{
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
 }
 
-impl PodMultiIdxMultiValAmReturn {
+impl ScalarMultiIdxMultiValAmReturn {
     fn idx_vals<'a, T: Dist + Sized>(&self, bytes: &'a [u8]) ->  impl Iterator<Item=(usize, T)> + 'a {
        PackedIdxVal::slice_as_iter::<T>(self.idx_size, bytes)
     }
@@ -504,7 +504,7 @@ impl PodMultiIdxMultiValAmReturn {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAM for PodMultiIdxMultiValAmReturn {
+impl LamellarAM for ScalarMultiIdxMultiValAmReturn {
     async fn exec(&self) -> OneSidedMemoryRegion<u8> {
         let num_bytes = self.idx_val.len();
         let bytes = unsafe { self.idx_val.get_buffer(0, num_bytes).await };
