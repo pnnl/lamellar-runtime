@@ -737,6 +737,7 @@ impl<R: AmDist + Dist> Future for ArrayFetchBatchOpHandle<R> {
                             let data_task = unsafe{mem_region.clone().to_base::<R>().get_buffer(0,num_bytes/std::mem::size_of::<R>()).spawn()};
                             req.0 = None;
                             req.1 = Some(data_task);
+                            cx.waker().wake_by_ref();
                         }
                         reqs.push_front(req);
                         return Poll::Pending;
@@ -1218,9 +1219,10 @@ impl<R: AmDist + Dist> Future for ArrayResultBatchOpHandle<R> {
                     if let Some(mem_region) = req.0.as_mut() {
                         if let Poll::Ready(mem_region) = Future::poll(Pin::new(mem_region), cx) {
                             let num_bytes = mem_region.len();
-                            let data_task = unsafe{mem_region.clone().to_base::<Result<R, R>>().get_buffer(0,num_bytes).spawn()};
+                            let data_task = unsafe{mem_region.clone().to_base::<Result<R, R>>().get_buffer(0,num_bytes/std::mem::size_of::<Result<R,R>>()).spawn()};
                             req.0 = None;
                             req.1 = Some(data_task);
+                            cx.waker().wake_by_ref();
                         }
                         reqs.push_front(req);
                         return Poll::Pending;
