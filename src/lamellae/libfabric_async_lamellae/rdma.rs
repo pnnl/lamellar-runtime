@@ -238,7 +238,7 @@ impl<T: Remote> GetBufferFutureData<T> {
     async fn exec_at(mut self) -> Vec<T> {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
-            let mut dst: Vec<T> = (0..self.len).map(|_| unsafe { std::mem::zeroed() }).collect();
+            let mut dst: Vec<T> = (0..self.len).map(|_| std::mem::zeroed() ).collect();
             // let dst_mut_slice = std::slice::from_raw_parts_mut(dst.as_mut_ptr(), self.len);
 
             // dst.set_len(self.len);
