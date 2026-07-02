@@ -4,7 +4,7 @@ use crate::array::operations::handle::*;
 use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv,ScalarType};
- use crate::array::scalar_impls::{PackedIndicies,PackedIdxVal,PodMultiIdxSingleValAm, PodMultiIdxMultiValAm, PodSingleIdxMultiValAm,PodMultiIdxSingleValAmReturn, PodMultiIdxMultiValAmReturn, PodSingleIdxMultiValAmReturn};
+ use crate::array::scalar_impls::{PackedIndicies,PackedIdxVal,ScalarMultiIdxSingleValAm, ScalarMultiIdxMultiValAm, ScalarSingleIdxMultiValAm,ScalarMultiIdxSingleValAmReturn, ScalarMultiIdxMultiValAmReturn, ScalarSingleIdxMultiValAmReturn};
 use crate::env_var::{config, IndexType};
 use crate::lamellae::AtomicOp;
 use crate::AmHandle;
@@ -395,10 +395,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // let index_size = IndexSize::from(max_local_size);
         let index_size = match config().array_index_size {
             IndexType::Dynamic => {
-                //calculate smallest integer type that can hold max_local_size
-                // let bits_needed = usize::BITS as usize - max_local_size.leading_zeros() as usize;
-                // bits_needed.div_ceil(8)
-                4
+                let bits_needed = usize::BITS as usize - max_local_size.leading_zeros() as usize;
+                bits_needed.div_ceil(8).next_power_of_two().min(8)
             },
             IndexType::Static => std::mem::size_of::<usize>(),
         };
@@ -471,7 +469,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let index_size = match config().array_index_size {
             IndexType::Dynamic => {
                 let bits_needed = usize::BITS as usize - max_local_size.leading_zeros() as usize;
-                bits_needed.div_ceil(8)
+                bits_needed.div_ceil(8).next_power_of_two().min(8)
             },
             IndexType::Static => std::mem::size_of::<usize>(),
         };
@@ -541,11 +539,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let index_size = match config().array_index_size {
             IndexType::Dynamic => {
                 let bits_needed = usize::BITS as usize - max_local_size.leading_zeros() as usize;
-                bits_needed.div_ceil(8)
+                bits_needed.div_ceil(8).next_power_of_two().min(8)
             },
             IndexType::Static => std::mem::size_of::<usize>(),
         };
-        
+
 
         let res: VecDeque<(AmHandle<OneSidedMemoryRegion<u8>>, Vec<usize>)> = if v_len == 1 && i_len == 1 {
             //one to one
@@ -997,10 +995,10 @@ impl SingleValMultiIndex {
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        if let Some((scalar_type,opt)) = self.scalar_type { //built in Pod support 
+        if let Some((scalar_type,opt)) = self.scalar_type { //built in Scalar support 
             match ret {
                 BatchReturnType::None => 
-                    Arc::new(PodMultiIdxSingleValAm{
+                    Arc::new(ScalarMultiIdxSingleValAm{
                         array: self.array,
                         val: self.val,
                         indices: self.indices.unwrap(),
@@ -1010,7 +1008,7 @@ impl SingleValMultiIndex {
                         op: self.op,
                     }),
                 BatchReturnType::Vals | BatchReturnType::Result => 
-                    Arc::new(PodMultiIdxSingleValAmReturn{
+                    Arc::new(ScalarMultiIdxSingleValAmReturn{
                         array: self.array,
                         val: self.val,
                         indices: self.indices.unwrap(),
@@ -1090,10 +1088,10 @@ impl MultiValSingleIndex {
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-         if let Some((scalar_type,opt)) = self.scalar_type { //built in Pod support 
+         if let Some((scalar_type,opt)) = self.scalar_type { //built in Scalar support 
             match ret {
                 BatchReturnType::None => 
-                    Arc::new(PodSingleIdxMultiValAm{
+                    Arc::new(ScalarSingleIdxMultiValAm{
                         array: self.array,
                         index: self.idx,
                         vals: self.vals.unwrap(),
@@ -1102,7 +1100,7 @@ impl MultiValSingleIndex {
                         op: self.op,
                     }),
                 BatchReturnType::Vals | BatchReturnType::Result => 
-                    Arc::new(PodSingleIdxMultiValAmReturn{
+                    Arc::new(ScalarSingleIdxMultiValAmReturn{
                         array: self.array,
                         index: self.idx,
                         vals: self.vals.unwrap(),
@@ -1179,10 +1177,10 @@ impl MultiValMultiIndex {
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        if let Some((scalar_type,opt)) = self.scalar_type { //built in Pod support 
+        if let Some((scalar_type,opt)) = self.scalar_type { //built in Scalar support 
             match ret {
                 BatchReturnType::None => 
-                    Arc::new(PodMultiIdxMultiValAm{
+                    Arc::new(ScalarMultiIdxMultiValAm{
                         array: self.array,
                         idx_val: self.idxs_vals.unwrap(),
                         idx_size: self.index_size,
@@ -1191,7 +1189,7 @@ impl MultiValMultiIndex {
                         op: self.op,
                     }),
                 BatchReturnType::Vals | BatchReturnType::Result => 
-                    Arc::new(PodMultiIdxMultiValAmReturn{
+                    Arc::new(ScalarMultiIdxMultiValAmReturn{
                         array: self.array,
                         idx_val: self.idxs_vals.unwrap(),
                         idx_size: self.index_size,
