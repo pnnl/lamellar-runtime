@@ -880,6 +880,18 @@ impl __AtomicByteArray {
             __AtomicByteArray::NetworkAtomicByteArray(array) => array.array.inner.num_elems_local(),
         }
     }
+
+    pub(crate) fn spawn<F>(&self, f: F) -> crate::LamellarTask<F::Output>
+    where
+        F: std::future::Future + Send + 'static,
+        F::Output: Send,
+    {
+        match self {
+            __AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.spawn(f),
+            __AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.spawn(f),
+            __AtomicByteArray::NetworkAtomicByteArray(array) => array.array.inner.spawn(f),
+        }
+    }
 }
 
 impl crate::active_messaging::DarcSerde for __AtomicByteArray {

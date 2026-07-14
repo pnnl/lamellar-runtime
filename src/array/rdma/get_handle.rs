@@ -68,7 +68,7 @@ impl<T: Dist> ArrayRdmaGetHandle<T> {
             ArrayRdmaGetState::LocalAmGet(req) => req.spawn(),
             ArrayRdmaGetState::RemoteAmGet(req) => {
                 let task = req.spawn();
-                self.array.team().spawn(async move {
+                self.array.spawn(async move {
                     let data = task.await;
                     // println!("data: {:?}", data);
                     if data.len() != std::mem::size_of::<T>() {
@@ -208,7 +208,7 @@ impl<T: Dist> ArrayRdmaGetBufferHandle<T> {
             ArrayRdmaGetBufferState::LocalAmGet(req) => req.spawn(),
             ArrayRdmaGetBufferState::RemoteAmGet(req, mr) => {
                 let task = req.spawn();
-                self.array.team().spawn(async move {
+                self.array.spawn(async move {
                     let _ = task.await;
                     unsafe { mr.as_slice().to_vec() }
                 })
@@ -217,7 +217,7 @@ impl<T: Dist> ArrayRdmaGetBufferHandle<T> {
             ArrayRdmaGetBufferState::MultiRdmaBlockGet(ref mut reqs) => {
                 let mut tasks = FuturesOrdered::new().collect();
                 std::mem::swap(&mut tasks, reqs);
-                self.array.team().spawn(async move {
+                self.array.spawn(async move {
                     let data = tasks.await;
                     data.into_iter().flatten().collect()
                 })
@@ -225,7 +225,7 @@ impl<T: Dist> ArrayRdmaGetBufferHandle<T> {
             ArrayRdmaGetBufferState::MultiRdmaCyclicGet(ref mut reqs) => {
                 let mut tasks = FuturesOrdered::new().collect();
                 std::mem::swap(&mut tasks, reqs);
-                self.array.team().spawn(async move {
+                self.array.spawn(async move {
                     // let mut results = Vec::with_capacity(tasks.len());
                     let results = tasks.await;
                     let num_elems = results.iter().map(|data| data.len()).sum();
@@ -423,7 +423,7 @@ impl<T: Dist, B: AsLamellarBuffer<T> + 'static> ArrayRdmaGetIntoBufferHandle<T, 
             ArrayRdmaGetIntoBufferState::LocalAmGet(req) => req.spawn(),
             ArrayRdmaGetIntoBufferState::RemoteAmGet(mut buf, req) => {
                 let task = req.spawn();
-                self.array.team().spawn(async move {
+                self.array.spawn(async move {
                     let data = task.await;
                     let buf_slice = buf.as_mut_slice();
                     let buf_slice_u8 = unsafe {
@@ -439,7 +439,7 @@ impl<T: Dist, B: AsLamellarBuffer<T> + 'static> ArrayRdmaGetIntoBufferHandle<T, 
             ArrayRdmaGetIntoBufferState::MultiRdmaBlockGet(ref mut reqs) => {
                 let mut tasks = FuturesOrdered::new().collect();
                 std::mem::swap(&mut tasks, reqs);
-                self.array.team().spawn(async move {
+                self.array.spawn(async move {
                     tasks.await;
                 })
             }
@@ -447,7 +447,7 @@ impl<T: Dist, B: AsLamellarBuffer<T> + 'static> ArrayRdmaGetIntoBufferHandle<T, 
                 let mut tasks = FuturesOrdered::new().collect();
                 std::mem::swap(&mut tasks, reqs);
                 let mut tmp_dst = dst.split_off(0); //poor mans clone
-                self.array.team().spawn(async move {
+                self.array.spawn(async move {
                     let results = tasks.await;
                     let dst_slice = tmp_dst.as_mut_slice();
                     let results_len = results.len();

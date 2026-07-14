@@ -806,6 +806,23 @@ impl LamellarByteArray {
         }
     }
 
+    pub(crate) fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        match self {
+            LamellarByteArray::UnsafeArray(array) => array.inner.spawn(f),
+            LamellarByteArray::ReadOnlyArray(array) => array.array.inner.spawn(f),
+            LamellarByteArray::AtomicArray(array) => array.spawn(f),
+            LamellarByteArray::NativeAtomicArray(array) => array.array.inner.spawn(f),
+            LamellarByteArray::GenericAtomicArray(array) => array.array.inner.spawn(f),
+            LamellarByteArray::LocalLockArray(array) => array.array.inner.spawn(f),
+            LamellarByteArray::GlobalLockArray(array) => array.array.inner.spawn(f),
+            LamellarByteArray::NetworkAtomicArray(array) => array.array.inner.spawn(f),
+        }
+    }
+
     pub async fn local_data<'a, T: Dist>(&'a self) -> __LamellarLocalData<'a, T> {
         match self {
             LamellarByteArray::UnsafeArray(array) => __LamellarLocalData::Slice(array.local_data()),

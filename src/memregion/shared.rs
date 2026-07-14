@@ -227,6 +227,38 @@ impl<T: Remote> SharedMemoryRegion<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Copy `src` into the local (to the calling PE) data of the memory region.
+    ///
+    /// Equivalent to `unsafe { mem_region.as_mut_slice().copy_from_slice(src) }`, except that on
+    /// backends whose RDMA `get` is not itself ordered against local stores (e.g. the shmem
+    /// backend, where a "get" is just a cross-process pointer read with no NIC-enforced
+    /// completion ordering) this also issues the fence needed to make the write visible to a
+    /// remote PE that reads this region via RDMA. Prefer this over `as_mut_slice().copy_from_slice()`
+    /// whenever the buffer may be read remotely.
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is only written on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
+    /// unsafe { mem_region.local_copy_from_slice(&[0usize; 1000]) };
+    ///```
+    pub unsafe fn local_copy_from_slice(&self, src: &[T]) {
+        self.as_mut_slice().copy_from_slice(src);
+        if let crate::lamellae::Lamellae::Shmem(_) = &*self.lamellae() {
+            std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Return a ptr to the local (to the calling PE) data of the memory region
     ///
     /// Returns an error if the PE does not contain any local data associated with this memory region

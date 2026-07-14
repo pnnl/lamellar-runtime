@@ -438,6 +438,35 @@ impl<T: Dist> LocalLockArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of a single element at the given global `index`, blocking
+    /// the calling thread until the transfer completes.
+    ///
+    /// Acquires a read lock on the affected element's PE, allowing concurrent reads but excluding
+    /// writes for the duration of the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world, num_pes, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let val = array.blocking_get(0);
+    /// println!("PE{my_pe} got array[0] = {val}");
+    ///```
+    pub fn blocking_get(&self, index: usize) -> T {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get(self, index, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a get of `num_elems` elements starting at global `index`.
     ///
     /// Acquires a read lock on each target PE for its portion of the transfer. Returns an
@@ -463,6 +492,34 @@ impl<T: Dist> LocalLockArray<T> {
     ///```
     pub fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of `num_elems` elements starting at global `index`, blocking
+    /// the calling thread until the transfer completes.
+    ///
+    /// Acquires a read lock on each target PE for its portion of the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let data = array.blocking_get_buffer(0, 10);
+    /// println!("PE{my_pe} first 10 elements: {:?}", data);
+    ///```
+    pub fn blocking_get_buffer(&self, index: usize, num_elems: usize) -> Vec<T> {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get_buffer(self, index, num_elems, Sealed) }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -501,6 +558,41 @@ impl<T: Dist> LocalLockArray<T> {
         data: LamellarBuffer<T, B>,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of elements starting at global `index` into the provided
+    /// pre-allocated [`LamellarBuffer`], blocking the calling thread until the transfer completes.
+    ///
+    /// The number of elements transferred equals `data.len()`.
+    /// Use [`LamellarBuffer::from_vec`] to wrap an owned `Vec` as the destination buffer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let dst: Vec<usize> = vec![0usize; 10];
+    /// let buf = LamellarBuffer::from_vec(dst);
+    /// array.blocking_get_into_buffer(0, buf);
+    ///```
+    pub fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer(self, index, data, Sealed) }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -571,6 +663,34 @@ impl<T: Dist> LocalLockArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of a single element directly from PE `pe` at `offset`,
+    /// blocking the calling thread until the transfer completes.
+    ///
+    /// Acquires a read lock on PE `pe` for the duration of the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let val = array.blocking_get_pe(0, 0);
+    /// println!("PE{my_pe} read PE0[0] = {val}");
+    ///```
+    pub fn blocking_get_pe(&self, pe: usize, offset: usize) -> T {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get_pe(self, pe, offset, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a get of `num_elems` elements from PE `pe` starting at `offset`.
     ///
     /// Acquires a read lock on PE `pe` for the duration of the transfer. Returns an
@@ -601,6 +721,36 @@ impl<T: Dist> LocalLockArray<T> {
         num_elems: usize,
     ) -> ArrayRdmaGetBufferHandle<T> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of `num_elems` elements from PE `pe` starting at `offset`,
+    /// blocking the calling thread until the transfer completes.
+    ///
+    /// Acquires a read lock on PE `pe` for the duration of the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let data = array.blocking_get_buffer_pe(0, 0, 5);
+    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", data);
+    ///```
+    pub fn blocking_get_buffer_pe(&self, pe: usize, offset: usize, num_elems: usize) -> Vec<T> {
+        unsafe {
+            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(self, pe, offset, num_elems, Sealed)
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -640,6 +790,47 @@ impl<T: Dist> LocalLockArray<T> {
         data: LamellarBuffer<T, B>,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get from PE `pe` at `offset` into the provided pre-allocated
+    /// [`LamellarBuffer`], blocking the calling thread until the transfer completes.
+    ///
+    /// Acquires a read lock on PE `pe` for the duration of the transfer. The number of elements
+    /// transferred equals `data.len()`.
+    /// Use [`LamellarBuffer::from_one_sided_memory_region`] or [`LamellarBuffer::from_vec`] to
+    /// construct the destination buffer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let dst = world.alloc_one_sided_mem_region::<usize>(5);
+    /// let buf = unsafe { LamellarBuffer::from_one_sided_memory_region(dst.clone()) };
+    /// array.blocking_get_into_buffer_pe(0, 0, buf);
+    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", unsafe { dst.as_slice() });
+    ///```
+    pub fn blocking_get_into_buffer_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        unsafe {
+            <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(self, pe, offset, data, Sealed)
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -858,13 +1049,12 @@ impl<T: Dist> LamellarRdmaPut<T> for LocalLockArray<T> {
 
 impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
     unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
-        if let Some((pe, _offset)) = self.pe_and_offset_for_global_index(index) {
-            let sub_array = self.sub_array(index..index + 1);
-
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             let req = self.exec_am_pe_tg(
                 pe,
                 LocalLockGetPeAm {
-                    array: sub_array.into(),
+                    array: self.clone().into(),
+                    local_index: offset,
                 },
             );
             ArrayRdmaGetHandle {
@@ -939,8 +1129,8 @@ impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
         let req = self.exec_am_pe_tg(
             pe,
             LocalLockGetPeAm {
-                array: self.sub_array(offset..offset + 1).into(), //inner of the indices we need to place data into
-                                                                  // local_index: offset,
+                array: self.clone().into(), //inner of the indices we need to place data into
+                local_index: offset,
             },
         );
         ArrayRdmaGetHandle {
@@ -964,7 +1154,7 @@ impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
         let req = self.exec_am_pe_tg(
             pe,
             LocalLockRemoteGetBufferPeAm {
-                array: self.sub_array(offset..offset + num_elems).into(),
+                array: self.clone().into(),
                 offset,
                 num_elems,
                 buf: unsafe { buf.clone().to_base::<u8>() },
@@ -996,7 +1186,7 @@ impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
         let req = self.exec_am_pe_tg(
             pe,
             LocalLockRemoteGetIntoBufferPeAm {
-                array: self.sub_array(offset..offset + data.len()).into(),
+                array: self.clone().into(),
                 offset,
                 num_elems: data.len(),
             },
@@ -1030,16 +1220,20 @@ impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockGetPeAm {
-    array: __LocalLockByteArray, //sub array specific to the elements we need to get
-                                 // local_index: usize,        //local index
+    array: __LocalLockByteArray, //inner of the indices we need to place data into
+    local_index: usize,         //local index
 }
 
 #[lamellar_impl::rt_am]
 impl LamellarAm for LocalLockGetPeAm<T> {
     async fn exec(self) -> Vec<u8> {
         let _lock = self.array.lock.read().await;
-
-        self.array.array.local_data().to_vec()
+        unsafe {
+            self.array
+                .array
+                .element_for_local_index(self.local_index)
+                .to_vec()
+        }
     }
 }
 #[lamellar_impl::AmLocalDataRT]
@@ -1156,7 +1350,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm for LocalLockInitGetI
         unsafe {
             match self.array.array.inner.distribution {
                 Distribution::Block => {
-                    let cur_index = 0;
+                    let mut cur_index = 0;
 
                     let buf_slice = buf.as_mut_slice();
                     let buf_u8_slice = std::slice::from_raw_parts_mut(
@@ -1166,6 +1360,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm for LocalLockInitGetI
                     for req in reqs.drain(..) {
                         let data = req.await;
                         buf_u8_slice[cur_index..(cur_index + data.len())].copy_from_slice(&data);
+                        cur_index += data.len();
                     }
                 }
                 Distribution::Cyclic => {

@@ -439,6 +439,35 @@ impl<T: Dist> GlobalLockArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of a single element at the given global `index`, blocking
+    /// the calling thread until the transfer completes.
+    ///
+    /// Acquires the global read lock on the affected PE, allowing concurrent reads but excluding
+    /// writes for the duration of the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, num_pes, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let val = array.blocking_get(0);
+    /// println!("PE{my_pe} got array[0] = {val}");
+    ///```
+    pub fn blocking_get(&self, index: usize) -> T {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get(self, index, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a get of `num_elems` elements starting at global `index`.
     ///
     /// Acquires the global read lock on each target PE for its portion of the transfer. Returns
@@ -464,6 +493,34 @@ impl<T: Dist> GlobalLockArray<T> {
     ///```
     pub fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of `num_elems` elements starting at global `index`, blocking
+    /// the calling thread until the transfer completes.
+    ///
+    /// Acquires the global read lock on each target PE for its portion of the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let data = array.blocking_get_buffer(0, 10);
+    /// println!("PE{my_pe} first 10 elements: {:?}", data);
+    ///```
+    pub fn blocking_get_buffer(&self, index: usize, num_elems: usize) -> Vec<T> {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get_buffer(self, index, num_elems, Sealed) }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -502,6 +559,41 @@ impl<T: Dist> GlobalLockArray<T> {
         data: LamellarBuffer<T, B>,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of elements starting at global `index` into the provided
+    /// pre-allocated [`LamellarBuffer`], blocking the calling thread until the transfer completes.
+    ///
+    /// The number of elements transferred equals `data.len()`.
+    /// Use [`LamellarBuffer::from_vec`] to wrap an owned `Vec` as the destination buffer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfers.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let dst: Vec<usize> = vec![0usize; 10];
+    /// let buf = LamellarBuffer::from_vec(dst);
+    /// array.blocking_get_into_buffer(0, buf);
+    ///```
+    pub fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer(self, index, data, Sealed) }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -572,6 +664,34 @@ impl<T: Dist> GlobalLockArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of a single element directly from PE `pe` at `offset`,
+    /// blocking the calling thread until the transfer completes.
+    ///
+    /// Acquires the global read lock on PE `pe` for the duration of the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let val = array.blocking_get_pe(0, 0);
+    /// println!("PE{my_pe} read PE0[0] = {val}");
+    ///```
+    pub fn blocking_get_pe(&self, pe: usize, offset: usize) -> T {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get_pe(self, pe, offset, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Performs a get of `num_elems` elements from PE `pe` starting at `offset`.
     ///
     /// Acquires the global read lock on PE `pe` for the duration of the transfer. Returns an
@@ -602,6 +722,36 @@ impl<T: Dist> GlobalLockArray<T> {
         num_elems: usize,
     ) -> ArrayRdmaGetBufferHandle<T> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get of `num_elems` elements from PE `pe` starting at `offset`,
+    /// blocking the calling thread until the transfer completes.
+    ///
+    /// Acquires the global read lock on PE `pe` for the duration of the transfer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let data = array.blocking_get_buffer_pe(0, 0, 5);
+    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", data);
+    ///```
+    pub fn blocking_get_buffer_pe(&self, pe: usize, offset: usize, num_elems: usize) -> Vec<T> {
+        unsafe {
+            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(self, pe, offset, num_elems, Sealed)
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -641,6 +791,47 @@ impl<T: Dist> GlobalLockArray<T> {
         data: LamellarBuffer<T, B>,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed) }
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Synchronously performs a get from PE `pe` at `offset` into the provided pre-allocated
+    /// [`LamellarBuffer`], blocking the calling thread until the transfer completes.
+    ///
+    /// Acquires the global read lock on PE `pe` for the duration of the transfer. The number of
+    /// elements transferred equals `data.len()`.
+    /// Use [`LamellarBuffer::from_one_sided_memory_region`] or [`LamellarBuffer::from_vec`] to
+    /// construct the destination buffer.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the remote transfer.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.barrier();
+    ///
+    /// let dst = world.alloc_one_sided_mem_region::<usize>(5);
+    /// let buf = unsafe { LamellarBuffer::from_one_sided_memory_region(dst.clone()) };
+    /// array.blocking_get_into_buffer_pe(0, 0, buf);
+    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", unsafe { dst.as_slice() });
+    ///```
+    pub fn blocking_get_into_buffer_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        unsafe {
+            <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(self, pe, offset, data, Sealed)
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
