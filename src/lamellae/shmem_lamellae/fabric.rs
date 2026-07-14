@@ -447,6 +447,9 @@ pub(crate) struct OneSidedShmemAlloc {
     pub(crate) data: *mut u8, // this is the actual address to the data on the remote PE (since we are in shared memory this is directly accessible)
     pub(crate) data_num_bytes: usize,
     pub(crate) remote_pe: usize,
+    // keeps the backing allocation's ref count bumped for the lifetime of this
+    // one-sided view, so it can't be freed while a get/put against `data` is in flight
+    pub(crate) alloc: ShmemAlloc,
 }
 
 //safety is managed via higher level abstractions or marked unsafe
@@ -469,6 +472,7 @@ impl OneSidedShmemAlloc {
             data: new_data,
             data_num_bytes: len,
             remote_pe: self.remote_pe,
+            alloc: self.alloc.clone(),
         };
         Ok(alloc)
     }
@@ -887,6 +891,7 @@ impl ShmemAllocator {
                     data: (remote_src_addr) as *mut u8,
                     data_num_bytes: num_bytes,
                     remote_pe,
+                    alloc: alloc.clone(),
                 }
                 .into();
             }

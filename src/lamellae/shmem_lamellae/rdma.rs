@@ -1,6 +1,9 @@
 use std::{
     pin::Pin,
-    sync::Arc,
+    sync::{
+        atomic::{fence, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
 };
 
@@ -48,21 +51,26 @@ impl<T: Remote> ShmemFuture<T> {
             src.len(),
             src.len() * std::mem::size_of::<T>()
         );
-        let dst_slice = unsafe { std::slice::from_raw_parts_mut(dst.as_mut_ptr::<T>(), src.len()) };
-        dst_slice.copy_from_slice(src.as_slice());
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                src.as_ptr() as *const u8,
+                dst.as_mut_ptr::<T>() as *mut u8,
+                src.len() * std::mem::size_of::<T>(),
+            )
+        };
     }
 
     fn exec_op(&mut self) {
         match &mut self.op {
             Op::Put(src, dst) => unsafe {
-                dst.as_mut_ptr::<T>().write(*src);
+                dst.as_mut_ptr::<T>().write_unaligned(*src);
             },
             Op::PutBuf(src, dst) => {
                 ShmemFuture::inner_put_buf(src, dst);
             }
             Op::PutAll(src, dsts) => {
                 for dst in dsts {
-                    unsafe { dst.as_mut_ptr::<T>().write(*src) };
+                    unsafe { dst.as_mut_ptr::<T>().write_unaligned(*src) };
                 }
             }
             Op::PutAllBuf(src, dsts) => {
@@ -71,6 +79,10 @@ impl<T: Remote> ShmemFuture<T> {
                 }
             }
         }
+        // Ensure the payload write above is visible to other PEs (separate
+        // processes over shmem) before any completion notification referencing
+        // it can be observed.
+        fence(Ordering::SeqCst);
 
         self.spawned = true;
     }
@@ -114,6 +126,7 @@ impl<T: Remote> Future for ShmemFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemGetFuture<T> {
     src: CommAllocAddr,
+    alloc: Option<super::fabric::ShmemAlloc>,
     scheduler: Arc<Scheduler>,
     counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
@@ -124,8 +137,13 @@ impl<T: Remote> ShmemGetFuture<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting src: {:?} ", self.src);
+        // The completion signal telling us this data is ready to read arrives
+        // over a separate shmem write (the command queue's CmdMsg); pair with
+        // the fence(Release) in put_unmanaged/exec_op to guarantee the payload
+        // write is visible before we read it here.
+        fence(Ordering::SeqCst);
         unsafe {
-            *self.result = self.src.as_ptr::<T>().read();
+            *self.result = self.src.as_ptr::<T>().read_unaligned();
         }
         self.spawned = true;
     }
@@ -172,6 +190,7 @@ impl<T: Remote> Future for ShmemGetFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemGetBufferFuture<T> {
     src: CommAllocAddr,
+    alloc: Option<super::fabric::ShmemAlloc>,
     len: usize,
     scheduler: Arc<Scheduler>,
     counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -183,9 +202,13 @@ impl<T: Remote> ShmemGetBufferFuture<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting src: {:?} ", self.src);
+        fence(Ordering::SeqCst);
         unsafe {
-            let src_slice = std::slice::from_raw_parts(self.src.as_ptr::<T>(), self.len);
-            self.result.copy_from_slice(src_slice);
+            std::ptr::copy(
+                self.src.as_ptr::<T>() as *const u8,
+                self.result.as_mut_ptr() as *mut u8,
+                self.len * std::mem::size_of::<T>(),
+            );
         }
         self.spawned = true;
     }
@@ -233,6 +256,7 @@ impl<T: Remote> Future for ShmemGetBufferFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     src: CommAllocAddr,
+    alloc: Option<super::fabric::ShmemAlloc>,
     buffer: LamellarBuffer<T, B>,
     scheduler: Arc<Scheduler>,
     counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -241,9 +265,15 @@ pub(crate) struct ShmemGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
 
 impl<T: Remote, B: AsLamellarBuffer<T>> ShmemGetIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
+        fence(Ordering::SeqCst);
         let dst = self.buffer.as_mut_slice();
-        let src_slice = unsafe { std::slice::from_raw_parts(self.src.as_ptr::<T>(), dst.len()) };
-        dst.copy_from_slice(src_slice);
+        unsafe {
+            std::ptr::copy(
+                self.src.as_ptr::<T>() as *const u8,
+                dst.as_mut_ptr() as *mut u8,
+                dst.len() * std::mem::size_of::<T>(),
+            );
+        }
         self.spawned = true;
     }
     pub(crate) fn block(mut self) {
@@ -318,8 +348,9 @@ impl CommAllocRdma for ShmemAlloc {
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
         unsafe {
-            dst.as_mut_ptr::<T>().write(src);
+            dst.as_mut_ptr::<T>().write_unaligned(src);
         }
+        fence(Ordering::SeqCst);
     }
     fn put_buffer<T: Remote>(
         &self,
@@ -357,6 +388,7 @@ impl CommAllocRdma for ShmemAlloc {
                 std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
             }
         }
+        fence(Ordering::SeqCst);
     }
     fn put_all<T: Remote>(
         &self,
@@ -390,9 +422,10 @@ impl CommAllocRdma for ShmemAlloc {
             let real_dst_addr = real_dst_base + offset;
             let dst = CommAllocAddr(real_dst_addr);
             unsafe {
-                dst.as_mut_ptr::<T>().write(src);
+                dst.as_mut_ptr::<T>().write_unaligned(src);
             }
         }
+        fence(Ordering::SeqCst);
     }
     fn put_all_buffer<T: Remote>(
         &self,
@@ -439,6 +472,7 @@ impl CommAllocRdma for ShmemAlloc {
                 }
             }
         }
+        fence(Ordering::SeqCst);
     }
 
     fn get<T: Remote>(
@@ -454,7 +488,7 @@ impl CommAllocRdma for ShmemAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetFuture {
             src: remote_src_addr,
-
+            alloc: Some(self.clone()),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -468,7 +502,8 @@ impl CommAllocRdma for ShmemAlloc {
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
-        unsafe { remote_src_addr.as_ptr::<T>().read() }
+        fence(Ordering::SeqCst);
+        unsafe { remote_src_addr.as_ptr::<T>().read_unaligned() }
     }
 
     fn get_buffer<T: Remote>(
@@ -485,6 +520,7 @@ impl CommAllocRdma for ShmemAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetBufferFuture {
             src: remote_src_addr,
+            alloc: Some(self.clone()),
             len,
             spawned: false,
             scheduler: scheduler.clone(),
@@ -505,9 +541,13 @@ impl CommAllocRdma for ShmemAlloc {
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
+        fence(Ordering::SeqCst);
         unsafe {
-            let src_slice = std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), len);
-            dst.copy_from_slice(src_slice);
+            std::ptr::copy(
+                remote_src_addr.as_ptr::<T>() as *const u8,
+                dst.as_mut_ptr() as *mut u8,
+                len * std::mem::size_of::<T>(),
+            );
         }
         dst
     }
@@ -526,6 +566,7 @@ impl CommAllocRdma for ShmemAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetIntoBufferFuture {
             src: remote_src_addr,
+            alloc: Some(self.clone()),
             buffer: dst,
             spawned: false,
             scheduler: scheduler.clone(),
@@ -545,9 +586,14 @@ impl CommAllocRdma for ShmemAlloc {
         assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
-        let src_slice =
-            unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
-        dst.as_mut_slice().copy_from_slice(src_slice);
+        fence(Ordering::SeqCst);
+        unsafe {
+            std::ptr::copy(
+                remote_src_addr.as_ptr::<T>() as *const u8,
+                dst.as_mut_slice().as_mut_ptr() as *mut u8,
+                dst.len() * std::mem::size_of::<T>(),
+            );
+        }
     }
 
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
@@ -560,10 +606,14 @@ impl CommAllocRdma for ShmemAlloc {
         assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
-        let src_slice =
-            unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
-
-        dst.as_mut_slice().copy_from_slice(src_slice);
+        fence(Ordering::SeqCst);
+        unsafe {
+            std::ptr::copy(
+                remote_src_addr.as_ptr::<T>() as *const u8,
+                dst.as_mut_slice().as_mut_ptr() as *mut u8,
+                dst.len() * std::mem::size_of::<T>(),
+            );
+        }
     }
 }
 
@@ -610,8 +660,9 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let dst = CommAllocAddr(self.start() + offset);
         unsafe {
-            dst.as_mut_ptr::<T>().write(src);
+            dst.as_mut_ptr::<T>().write_unaligned(src);
         }
+        fence(Ordering::SeqCst);
     }
     fn put_buffer<T: Remote>(
         &self,
@@ -655,6 +706,7 @@ impl CommAllocRdma for OneSidedShmemAlloc {
                 std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
             }
         }
+        fence(Ordering::SeqCst);
     }
     fn put_all<T: Remote>(
         &self,
@@ -703,7 +755,7 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetFuture {
             src: remote_src_addr,
-
+            alloc: Some(self.alloc.clone()),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -722,7 +774,8 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.start();
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
-        unsafe { remote_src_addr.as_ptr::<T>().read() }
+        fence(Ordering::SeqCst);
+        unsafe { remote_src_addr.as_ptr::<T>().read_unaligned() }
     }
 
     fn get_buffer<T: Remote>(
@@ -744,6 +797,7 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetBufferFuture {
             src: remote_src_addr,
+            alloc: Some(self.alloc.clone()),
             len,
             spawned: false,
             scheduler: scheduler.clone(),
@@ -768,12 +822,16 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.start();
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
+        fence(Ordering::SeqCst);
         unsafe {
-            let mut dst: Vec<T> = (0..len).map(|_| std::mem::zeroed()).collect();
-            let src_slice = std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), len);
-            dst.copy_from_slice(src_slice);
-            dst
+            std::ptr::copy(
+                remote_src_addr.as_ptr::<T>() as *const u8,
+                dst.as_mut_ptr() as *mut u8,
+                len * std::mem::size_of::<T>(),
+            );
         }
+        dst
     }
 
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
@@ -795,6 +853,7 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetIntoBufferFuture {
             src: remote_src_addr,
+            alloc: Some(self.alloc.clone()),
             buffer: dst,
             spawned: false,
             scheduler: scheduler.clone(),
@@ -819,10 +878,14 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.start();
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
-        let src_slice =
-            unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
-
-        dst.as_mut_slice().copy_from_slice(src_slice);
+        fence(Ordering::SeqCst);
+        unsafe {
+            std::ptr::copy(
+                remote_src_addr.as_ptr::<T>() as *const u8,
+                dst.as_mut_slice().as_mut_ptr() as *mut u8,
+                dst.len() * std::mem::size_of::<T>(),
+            );
+        }
     }
 
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
@@ -836,9 +899,13 @@ impl CommAllocRdma for OneSidedShmemAlloc {
         assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.start();
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
-        let src_slice =
-            unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
-
-        dst.as_mut_slice().copy_from_slice(src_slice);
+        fence(Ordering::SeqCst);
+        unsafe {
+            std::ptr::copy(
+                remote_src_addr.as_ptr::<T>() as *const u8,
+                dst.as_mut_slice().as_mut_ptr() as *mut u8,
+                dst.len() * std::mem::size_of::<T>(),
+            );
+        }
     }
 }
