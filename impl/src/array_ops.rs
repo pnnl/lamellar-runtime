@@ -750,7 +750,7 @@ fn create_buf_ops(
                 }
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
-                    async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
+                    async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                         // println!("in multi val multi idx result exec");
                         #slice
                         let mut res = Vec::new();
@@ -786,7 +786,18 @@ fn create_buf_ops(
                                 }
                             }
                         };
-                        res
+                        let byte_len = res.len() * std::mem::size_of::<Result<#typeident,#typeident>>();
+                        let mut mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                        while mem_region.is_err() {
+                            async_std::task::yield_now().await;
+                            mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                        }
+                        let mem_region = mem_region.unwrap();
+                        unsafe {
+                            let res_bytes = std::slice::from_raw_parts(res.as_ptr() as *const u8, byte_len);
+                            mem_region.local_copy_from_slice(res_bytes);
+                        }
+                        mem_region
                     }
                 }
                 #[allow(non_snake_case)]
@@ -818,7 +829,7 @@ fn create_buf_ops(
                 }
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #single_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
-                    async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
+                    async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                         // println!("in single val multi idx result exec");
                         #slice
                         let val = self.val;
@@ -856,7 +867,18 @@ fn create_buf_ops(
                             }
                         }
                         // println!("done in in single val multi idx result exec");
-                        res
+                        let byte_len = res.len() * std::mem::size_of::<Result<#typeident,#typeident>>();
+                        let mut mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                        while mem_region.is_err() {
+                            async_std::task::yield_now().await;
+                            mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                        }
+                        let mem_region = mem_region.unwrap();
+                        unsafe {
+                            let res_bytes = std::slice::from_raw_parts(res.as_ptr() as *const u8, byte_len);
+                            mem_region.local_copy_from_slice(res_bytes);
+                        }
+                        mem_region
                     }
                 }
                 #[allow(non_snake_case)]
@@ -890,7 +912,7 @@ fn create_buf_ops(
                 }
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_single_idx_am_buf_result_name{ //eventually we can return fetchs here too...
-                    async fn exec(&self) -> Vec<Result<#typeident,#typeident>>  {
+                    async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                         // println!("in multi val single idx result exec");
                         #slice
                         let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
@@ -899,7 +921,18 @@ fn create_buf_ops(
                         match self.op {
                             #multi_val_single_idx_result_match_stmts
                         }
-                        res
+                        let byte_len = res.len() * std::mem::size_of::<Result<#typeident,#typeident>>();
+                        let mut mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                        while mem_region.is_err() {
+                            async_std::task::yield_now().await;
+                            mem_region = self.data.team().try_alloc_one_sided_mem_region(byte_len);
+                        }
+                        let mem_region = mem_region.unwrap();
+                        unsafe {
+                            let res_bytes = std::slice::from_raw_parts(res.as_ptr() as *const u8, byte_len);
+                            mem_region.local_copy_from_slice(res_bytes);
+                        }
+                        mem_region
                     }
                 }
                 #[allow(non_snake_case)]
@@ -980,11 +1013,8 @@ fn create_buf_ops(
                 }
                 let mem_region = mem_region.unwrap();
                 unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        res.as_ptr() as *const u8,
-                        mem_region.as_ptr().unwrap() as *mut u8,
-                        byte_len,
-                    );
+                    let res_bytes = std::slice::from_raw_parts(res.as_ptr() as *const u8, byte_len);
+                    mem_region.local_copy_from_slice(res_bytes);
                 }
                 mem_region
             }
@@ -1074,11 +1104,8 @@ fn create_buf_ops(
                 }
                 let mem_region = mem_region.unwrap();
                 unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        res.as_ptr() as *const u8,
-                        mem_region.as_ptr().unwrap() as *mut u8,
-                        byte_len,
-                    );
+                    let res_bytes = std::slice::from_raw_parts(res.as_ptr() as *const u8, byte_len);
+                    mem_region.local_copy_from_slice(res_bytes);
                 }
                 mem_region
             }
@@ -1135,11 +1162,8 @@ fn create_buf_ops(
                 }
                 let mem_region = mem_region.unwrap();
                 unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        res.as_ptr() as *const u8,
-                        mem_region.as_ptr().unwrap() as *mut u8,
-                        byte_len,
-                    );
+                    let res_bytes = std::slice::from_raw_parts(res.as_ptr() as *const u8, byte_len);
+                    mem_region.local_copy_from_slice(res_bytes);
                 }
                 mem_region
             }

@@ -1,5 +1,7 @@
 use crate::OneSidedMemoryRegion;
 use crate::array::*;
+use crate::Remote;
+use crate::memregion::{RegisteredMemoryRegion, MemRegionId};
 
 
 
@@ -172,22 +174,17 @@ fn impl_ops_option_scalar_type_match(crabtime::pattern!($bytes:expr, $bytes_type
 
 macro_rules! impl_vec_to_bytes {
     () => {
-        async fn vec_to_bytes<T: Copy>(&self, result: Vec<T>) -> OneSidedMemoryRegion<u8> {
-            let byte_len = result.len() * std::mem::size_of::<T>();
-            let mut mem_region = self.array.team().try_alloc_one_sided_mem_region(byte_len);
+        async fn vec_to_bytes<T: Remote>(&self, result: Vec<T>) -> OneSidedMemoryRegion<u8> {
+            let mut mem_region = self.array.team().try_alloc_one_sided_mem_region::<T>(result.len());
             while let None = mem_region {
                 async_std::task::yield_now().await;
-                mem_region = self.array.team().try_alloc_one_sided_mem_region(byte_len);
+                mem_region = self.array.team().try_alloc_one_sided_mem_region::<T>(result.len());
             }
             let mem_region = mem_region.unwrap();
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    result.as_ptr() as *const u8,
-                    mem_region.as_ptr().unwrap() as *mut u8,
-                    byte_len,
-                );
+                mem_region.local_copy_from_slice(&result);
+                mem_region.to_base::<u8>()
             }
-            mem_region
         }
     };
 }

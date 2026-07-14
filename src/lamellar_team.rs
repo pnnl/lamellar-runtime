@@ -2711,7 +2711,7 @@ impl Darc<LamellarTeamRT> {
         lmr.expect("out of memory")
     }
 
-    pub(crate) fn try_alloc_one_sided_mem_region<T: Dist>(
+    pub(crate) fn try_alloc_one_sided_mem_region<T: Remote>(
         &self,
         size: usize,
     ) -> Option<OneSidedMemoryRegion<T>> {
