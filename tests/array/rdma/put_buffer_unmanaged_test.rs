@@ -9,7 +9,7 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
     unsafe {
         let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
         for elem in memregion.as_mut_slice() {
-            elem = i;
+            *elem = i;
             i += inc_val;
         }
     }
@@ -112,7 +112,7 @@ macro_rules! put_buffer_unmanaged_test{
                 for tx in (my_pe..num_txs).step_by(num_pes){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    unsafe { sub_array.put_buffered_unmanaged(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)))};
+                    unsafe { sub_array.put_buffer_unmanaged(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)))};
                 }
                 array.wait_all();
                 sub_array.barrier();
@@ -149,7 +149,7 @@ macro_rules! put_buffer_unmanaged_test{
                     for tx in (my_pe..num_txs).step_by(num_pes){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
                         #[allow(unused_unsafe)]
-                        unsafe { sub_array.put_buffered_unmanaged(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)))};
+                        unsafe { sub_array.put_buffer_unmanaged(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)))};
                     }
                     array.wait_all();
                     sub_array.barrier();
@@ -178,6 +178,7 @@ macro_rules! put_buffer_unmanaged_test{
     }
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
