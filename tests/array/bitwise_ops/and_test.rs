@@ -169,6 +169,7 @@ macro_rules! and_test{
     }
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
@@ -241,7 +242,7 @@ fn main() {
             "i64" => and_test!(GlobalLockArray, i64, len, dist_type),
             "i128" => and_test!(GlobalLockArray, i128, len, dist_type),
             "isize" => and_test!(GlobalLockArray, isize, len, dist_type),
-            _ => {} //eprintln!("unsupported element type"),
+            _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),
     }
