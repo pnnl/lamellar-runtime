@@ -2281,8 +2281,7 @@ impl LibfabricAsyncAlloc {
             "PE {} is not part of the sub allocation group",
             pe
         ));
-        let remote_dst_addr =
-            unsafe { remote_alloc_info.mem_address().as_type::<OFI>().add(offset) };
+        let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
         match op {
@@ -2330,8 +2329,7 @@ impl LibfabricAsyncAlloc {
             "PE {} is not part of the sub allocation group",
             pe
         ));
-        let remote_dst_addr =
-            unsafe { remote_alloc_info.mem_address().as_type::<OFI>().add(offset) };
+        let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
         match op {
