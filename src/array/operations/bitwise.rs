@@ -1243,7 +1243,7 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for &mut [T] {
                     .collect(),
             )
         } else {
-            let _ = idx_vals.map(|(i, val)| {
+            idx_vals.for_each(|(i, val)| {
                 self[i] &= val;
             });
             None
@@ -1266,7 +1266,7 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for &mut [T] {
                     .collect(),
             )
         } else {
-            let _ = idx_vals.map(|(i, val)| {
+            idx_vals.for_each(|(i, val)| {
                 self[i] |= val;
             });
             None
@@ -1289,7 +1289,7 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for &mut [T] {
                     .collect(),
             )
         } else {
-            let _ = idx_vals.map(|(i, val)| {
+            idx_vals.for_each(|(i, val)| {
                 self[i] ^= val;
             });
             None
