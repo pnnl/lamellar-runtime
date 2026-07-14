@@ -89,7 +89,7 @@ macro_rules! rem_test {
 
         let max_updates = max_updates!($t, num_pes);
         let max_val = 2u128.pow((max_updates * num_pes) as u32) as $t;
-        let one = 1 as $t;
+        let zero = 0 as $t;
         let init_val = max_val as $t;
         initialize_array!($array, array, init_val);
         array.wait_all();
@@ -99,7 +99,7 @@ macro_rules! rem_test {
             for _i in 0..(max_updates as usize) {
                 #[allow(unused_unsafe)]
                 unsafe {
-                    array.rem(idx, 2 as $t)
+                    let _ = array.rem(idx, 2 as $t).spawn();
                 };
             }
         }
@@ -109,9 +109,9 @@ macro_rules! rem_test {
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, array).into_iter().enumerate() } {
             let val = elem;
-            check_val!($array, val, one, success);
+            check_val!($array, val, zero, success);
             if !success {
-                eprintln!("full {:?} {:?} {:?}", i, val, one);
+                eprintln!("full {:?} {:?} {:?}", i, val, zero);
             }
         }
 
@@ -128,7 +128,7 @@ macro_rules! rem_test {
             for _i in 0..(max_updates as usize) {
                 #[allow(unused_unsafe)]
                 unsafe {
-                    sub_array.rem(idx, 2 as $t)
+                    let _ = sub_array.rem(idx, 2 as $t).spawn();
                 };
             }
         }
@@ -137,9 +137,9 @@ macro_rules! rem_test {
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
             let val = elem;
-            check_val!($array, val, one, success);
+            check_val!($array, val, zero, success);
             if !success {
-                eprintln!("half {:?} {:?} {:?}", i, val, one);
+                eprintln!("half {:?} {:?} {:?}", i, val, zero);
             }
         }
         sub_array.barrier();
@@ -156,7 +156,7 @@ macro_rules! rem_test {
                 for _i in 0..(max_updates as usize) {
                     #[allow(unused_unsafe)]
                     unsafe {
-                        sub_array.rem(idx, 2 as $t)
+                        let _ = sub_array.rem(idx, 2 as $t).spawn();
                     };
                 }
             }
@@ -165,9 +165,9 @@ macro_rules! rem_test {
             #[allow(unused_unsafe)]
             for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
                 let val = elem;
-                check_val!($array, val, one, success);
+                check_val!($array, val, zero, success);
                 if !success {
-                    eprintln!("pe {:?} {:?} {:?}", i, val, one);
+                    eprintln!("pe {:?} {:?} {:?}", i, val, zero);
                 }
             }
             sub_array.barrier();
@@ -180,6 +180,7 @@ macro_rules! rem_test {
     }};
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
