@@ -336,8 +336,9 @@ impl RofiCAlloc {
         let rt_ref_cnt_offset = fabric_ref_cnt_offset;
         let sub_data = base_data;
 
-        // total bytes allocated at base_data = user data + padding -- padding includes the refcount size
-        let base_data_num_bytes = data_num_bytes + padding;
+        // num_bytes() must report the original user-requested size, not size+padding,
+        // since padding now absorbs full alignment slack (see calc_alloc_padding_size_align)
+        let base_data_num_bytes = data_num_bytes;
 
         let alloc = RofiCAlloc {
             base_data,

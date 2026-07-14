@@ -162,7 +162,7 @@ impl<T: Remote> RofiCGetFuture<T> {
         trace!("rofi_c get at: {:?} {:?}", self.pe, self.offset);
         let src = (self.addr.0 + self.offset * std::mem::size_of::<T>()) as usize;
         if self.pe == self.my_pe {
-            unsafe { std::ptr::copy(src as *const T, &mut *self.result as *mut T, 1) }
+            unsafe { std::ptr::copy(src as *const u8, &mut *self.result as *mut T as *mut u8, std::mem::size_of::<T>()) }
             self.issued_network = false;
         } else {
             unsafe {
@@ -246,7 +246,7 @@ impl<T: Remote> RofiCGetBufferFuture<T> {
         trace!("rofi_c get buffer at: {:?} {:?}", self.pe, self.offset);
         let src = (self.addr.0 + self.offset * std::mem::size_of::<T>()) as usize;
         if self.pe == self.my_pe {
-            unsafe { std::ptr::copy(src as *const T, self.result.as_mut_ptr(), self.len) }
+            unsafe { std::ptr::copy(src as *const u8, self.result.as_mut_ptr() as *mut u8, self.len * std::mem::size_of::<T>()) }
             self.issued_network = false;
         } else {
             unsafe { rofi_c_get(src, &mut self.result, self.pe).expect("rofi_c_get failed") };
@@ -327,9 +327,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RofiCGetIntoBufferFuture<T, B> {
         if self.pe == self.my_pe {
             unsafe {
                 std::ptr::copy(
-                    src as *const T,
-                    self.dst.as_mut_slice().as_mut_ptr(),
-                    self.dst.len(),
+                    src as *const u8,
+                    self.dst.as_mut_slice().as_mut_ptr() as *mut u8,
+                    self.dst.len() * std::mem::size_of::<T>(),
                 )
             }
             self.issued_network = false;
@@ -595,7 +595,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         let val_slice = std::slice::from_mut(&mut val);
         let src = (self.start() + offset * std::mem::size_of::<T>()) as usize;
         if pe == self.my_pe {
-            unsafe { std::ptr::copy(src as *const T, &mut val as *mut T, 1) }
+            unsafe { std::ptr::copy(src as *const u8, &mut val as *mut T as *mut u8, std::mem::size_of::<T>()) }
         } else {
             unsafe { rofi_c_get(src, val_slice, pe).expect("rofi_c_get failed") };
             self.wait().expect("rofi_c_wait failed");
@@ -638,7 +638,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         let mut dst: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
         let src = (self.start() + offset * std::mem::size_of::<T>()) as usize;
         if pe == self.my_pe {
-            unsafe { std::ptr::copy(src as *const T, dst.as_mut_ptr(), len) }
+            unsafe { std::ptr::copy(src as *const u8, dst.as_mut_ptr() as *mut u8, len * std::mem::size_of::<T>()) }
         } else {
             unsafe { rofi_c_get(src, &mut dst, pe).expect("rofi_c_get failed") };
             self.wait().expect("rofi_c_wait failed");

@@ -87,10 +87,16 @@ pub(crate) fn calc_alloc_padding_size_align(size: usize, align: usize) -> (usize
     // add space for ref count
     let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
     let ref_cnt_align = std::mem::align_of::<AtomicUsize>();
-    let padding = (ref_cnt_align - (size % ref_cnt_align)) % ref_cnt_align;
-    let size = size + ref_cnt_size + padding;
     let align = std::cmp::max(align, ref_cnt_align);
-    (padding, size, align)
+    // padding absorbs ALL alignment slack (not just the ref-cnt-alignment portion),
+    // so `total - padding - ref_cnt_size == size` always holds exactly. Every
+    // backend's rt_alloc derives its reported byte count that way, and primary
+    // alloc constructors report `size` (the original request) directly - both
+    // rely on this invariant surviving align_of::<T>() > ref_cnt_align (e.g. i128).
+    let unaligned_total = size + ref_cnt_size;
+    let total = (unaligned_total + align - 1) / align * align;
+    let padding = total - size - ref_cnt_size;
+    (padding, total, align)
 }
 //
 
