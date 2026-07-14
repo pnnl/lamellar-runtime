@@ -1052,21 +1052,19 @@ impl MultiValSingleIndex {
     ) -> Self {
         let scalar_type = ScalarType::get_type::<T>();
             let(vals,val_u8) = if scalar_type.is_some() {
-            let mut mem_region = array.team().try_alloc_one_sided_mem_region(val.len());
+            let mut mem_region = array.team().try_alloc_one_sided_mem_region::<T>(val.len());
             while let None = mem_region {
                 // println!("Failed to allocate mem region, retrying...");
                 // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
                 async_std::task::yield_now().await;
-                mem_region = array.team().try_alloc_one_sided_mem_region(val.len());
+                mem_region = array.team().try_alloc_one_sided_mem_region::<T>(val.len());
             }
             let mem_region = mem_region.unwrap();
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    val.as_ptr() as *const u8,
-                    mem_region.as_mut_ptr().unwrap(),
-                    val.len() * std::mem::size_of::<T>(),
-                );
-            }(Some(mem_region), None)
+            let mem_region = unsafe {
+                mem_region.as_mut_slice().copy_from_slice(&val);
+                mem_region.to_base::<u8>()
+            };
+            (Some(mem_region), None)
         }
         else{
             let val_u8 = unsafe{
@@ -1215,12 +1213,12 @@ impl MultiValMultiIndex {
 impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
     unsafe fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic store");
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             unsafe {
                 let handle = self.mem_region.get(pe, offset);
                 ArrayFetchOpHandle {
                     array: self.clone().into(),
-                    state: FetchOpState::Rdma(handle),
+                    state: FetchOpState::Rdma(handle, None),
                 }
             }
         } else {
@@ -1235,7 +1233,7 @@ impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
 impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
     unsafe fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         // println!("in Network atomic store");
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             // let mut buf: OneSidedMemoryRegion<T> =
             //     self.array.team_rt().alloc_one_sided_mem_region(1);
             unsafe {
@@ -1256,7 +1254,7 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
 
     unsafe fn blocking_store(&self, index: usize, val: T) {
         // println!("in Network atomic blocking store");
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             unsafe {
                 self.mem_region.put_blocking(pe, offset, val);
             }
@@ -1269,7 +1267,7 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
     }
 
     unsafe fn store_unmanaged(&self, index: usize, val: T) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             unsafe {
                 self.mem_region.put_unmanaged(pe, offset, val);
             }
@@ -1283,7 +1281,7 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
 
     unsafe fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic swap");
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             if self.atomic_support.swap {
                 let handle =
                     self.mem_region
@@ -1305,7 +1303,7 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
     }
     unsafe fn blocking_swap(&self, index: usize, val: T) -> T {
         // println!("in Network atomic blocking swap");
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             if self.atomic_support.swap {
                 self.mem_region
                     .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(Box::pin(val)))
@@ -1327,7 +1325,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
         if !self.atomic_support.add {
             return self.initiate_op(val, index, ArrayOpCmd::Add, self.clone().into());
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle = self
                 .mem_region
                 .atomic_op(pe, offset, AtomicOp::Sum(Box::pin(val)));
@@ -1349,7 +1347,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .block();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_blocking(pe, offset, AtomicOp::Sum(Box::pin(val)));
         } else {
@@ -1367,7 +1365,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .spawn();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_unmanaged(pe, offset, AtomicOp::Sum(Box::pin(val)));
         } else {
@@ -1382,7 +1380,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
         if !self.atomic_support.add {
             return self.initiate_op(val, index, ArrayOpCmd::Sub, self.clone().into());
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle = self
                 .mem_region
                 .atomic_op(pe, offset, AtomicOp::Sub(Box::pin(val)));
@@ -1405,7 +1403,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .spawn();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_unmanaged(pe, offset, AtomicOp::Sub(Box::pin(val)));
         } else {
@@ -1422,7 +1420,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .block();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_blocking(pe, offset, AtomicOp::Sub(Box::pin(val)));
         } else {
@@ -1439,7 +1437,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchAdd, self.clone().into())
                 .into();
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle =
                 self.mem_region
                     .atomic_fetch_op(pe, offset, AtomicOp::FetchSum(Box::pin(val)));
@@ -1461,7 +1459,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchAdd, self.clone().into())
                 .block()[0];
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_fetch_op_blocking(pe, offset, AtomicOp::FetchSum(Box::pin(val)))
         } else {
@@ -1478,7 +1476,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchSub, self.clone().into())
                 .into();
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle =
                 self.mem_region
                     .atomic_fetch_op(pe, offset, AtomicOp::FetchSub(Box::pin(val)));
@@ -1500,7 +1498,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchSub, self.clone().into())
                 .block()[0];
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_fetch_op_blocking(pe, offset, AtomicOp::FetchSub(Box::pin(val)))
         } else {
@@ -1515,7 +1513,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
         if !self.atomic_support.prod {
             return self.initiate_op(val, index, ArrayOpCmd::Mul, self.clone().into());
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle = self
                 .mem_region
                 .atomic_op(pe, offset, AtomicOp::Prod(Box::pin(val)));
@@ -1537,7 +1535,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .block();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_blocking(pe, offset, AtomicOp::Prod(Box::pin(val)));
         } else {
@@ -1555,7 +1553,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .spawn();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_unmanaged(pe, offset, AtomicOp::Prod(Box::pin(val)));
         } else {
@@ -1572,7 +1570,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchMul, self.clone().into())
                 .into();
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle =
                 self.mem_region
                     .atomic_fetch_op(pe, offset, AtomicOp::FetchProd(Box::pin(val)));
@@ -1594,7 +1592,7 @@ impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchMul, self.clone().into())
                 .block()[0];
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_fetch_op_blocking(pe, offset, AtomicOp::FetchProd(Box::pin(val)))
         } else {
@@ -1611,7 +1609,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
         if !self.atomic_support.bit_and {
             return self.initiate_op(val, index, ArrayOpCmd::And, self.clone().into());
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle = self
                 .mem_region
                 .atomic_op(pe, offset, AtomicOp::BitAnd(Box::pin(val)));
@@ -1633,7 +1631,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .block();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_blocking(pe, offset, AtomicOp::BitAnd(Box::pin(val)));
         } else {
@@ -1651,7 +1649,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .spawn();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_unmanaged(pe, offset, AtomicOp::BitAnd(Box::pin(val)));
         } else {
@@ -1668,7 +1666,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchAnd, self.clone().into())
                 .block()[0];
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region.atomic_fetch_op_blocking(
                 pe,
                 offset,
@@ -1688,7 +1686,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchAnd, self.clone().into())
                 .into();
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle =
                 self.mem_region
                     .atomic_fetch_op(pe, offset, AtomicOp::FetchBitAnd(Box::pin(val)));
@@ -1708,7 +1706,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
         if !self.atomic_support.bit_or {
             return self.initiate_op(val, index, ArrayOpCmd::Or, self.clone().into());
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle = self
                 .mem_region
                 .atomic_op(pe, offset, AtomicOp::BitOr(Box::pin(val)));
@@ -1730,7 +1728,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .block();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_blocking(pe, offset, AtomicOp::BitOr(Box::pin(val)));
         } else {
@@ -1748,7 +1746,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .spawn();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_unmanaged(pe, offset, AtomicOp::BitOr(Box::pin(val)));
         } else {
@@ -1765,7 +1763,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchOr, self.clone().into())
                 .block()[0];
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region.atomic_fetch_op_blocking(
                 pe,
                 offset,
@@ -1785,7 +1783,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchOr, self.clone().into())
                 .into();
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle =
                 self.mem_region
                     .atomic_fetch_op(pe, offset, AtomicOp::FetchBitOr(Box::pin(val)));
@@ -1805,7 +1803,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
         if !self.atomic_support.bit_xor {
             return self.initiate_op(val, index, ArrayOpCmd::Xor, self.clone().into());
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle = self
                 .mem_region
                 .atomic_op(pe, offset, AtomicOp::BitXor(Box::pin(val)));
@@ -1827,7 +1825,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .block();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_blocking(pe, offset, AtomicOp::BitXor(Box::pin(val)));
         } else {
@@ -1845,7 +1843,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .spawn();
             return;
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_op_unmanaged(pe, offset, AtomicOp::BitXor(Box::pin(val)));
         } else {
@@ -1862,7 +1860,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchXor, self.clone().into())
                 .into();
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle =
                 self.mem_region
                     .atomic_fetch_op(pe, offset, AtomicOp::FetchBitXor(Box::pin(val)));
@@ -1884,7 +1882,7 @@ impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
                 .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchXor, self.clone().into())
                 .block()[0];
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region.atomic_fetch_op_blocking(
                 pe,
                 offset,
@@ -1918,7 +1916,7 @@ impl<T: ElementCompareEqOps + 'static> UnsafeCompareExchangeOps<T> for UnsafeArr
                 )
                 .into();
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             let handle = self
                 .mem_region
                 .atomic_compare_exchange(pe, offset, current, new);
@@ -1945,7 +1943,7 @@ impl<T: ElementCompareEqOps + 'static> UnsafeCompareExchangeOps<T> for UnsafeArr
                 )
                 .block()[0];
         }
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, offset)) = self.pe_and_rdma_offset_for_global_index(index) {
             self.mem_region
                 .atomic_compare_exchange_blocking(pe, offset, current, new)
         } else {
