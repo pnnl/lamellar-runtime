@@ -121,6 +121,7 @@ macro_rules! fetch_add_test {
         let rand_idx = Uniform::try_from(0..array_total_len).unwrap();
         #[allow(unused_mut)]
         let mut success = true;
+        let mut overall_success = true;
         let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
             .block()
             .into(); //convert into abstract LamellarArray, distributed len is total_len
@@ -132,6 +133,7 @@ macro_rules! fetch_add_test {
         array.wait_all();
         array.barrier();
         for idx in 0..array.len() {
+            // println!("-----new idx: {}----------------", idx);
             let mut reqs = vec![];
             for _i in 0..(pe_max_val as usize) {
                 #[allow(unused_unsafe)]
@@ -140,12 +142,17 @@ macro_rules! fetch_add_test {
             #[allow(unused_mut)]
             let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
             for req in reqs {
-                let val = world.block_on(req) as u128;
+                let val_o = world.block_on(req);
+                let val = val_o as u128;
+                // println!("idx: {}, val: {} val_o: {:?}", idx, val, val_o);
                 if !insert_prev!($array, val, prevs) {
-                    eprintln!("full 1: {:?} {:?}", val, prevs);
+                    eprintln!("full 1 idx: {}: {:?} {:?}", idx, val, prevs);
+                    // println!("full 1 idx: {}: {:?}", idx, prevs);
                     success = false;
+                    overall_success = false;
                 }
             }
+            // println!("idx: {}, prevs: {:?}", idx, prevs);
         }
         // array.wait_all();
         array.barrier();
@@ -158,6 +165,7 @@ macro_rules! fetch_add_test {
             }
         }
         array.barrier();
+        success = true;
         // println!("1------------");
         initialize_array!($array, array, init_val);
         array.wait_all();
@@ -183,12 +191,14 @@ macro_rules! fetch_add_test {
         let tot_updates = num_updates * num_pes;
         check_val!($array, sum, tot_updates, success);
         if !success {
+            overall_success = false;
             eprintln!("full 4: {:?} {:?}", sum, tot_updates);
         }
         world.wait_all();
         world.barrier();
         // println!("2------------");
         initialize_array!($array, array, init_val);
+        success = true;
 
         let half_len = array_total_len / 2;
         let start_i = half_len / 2;
@@ -206,9 +216,12 @@ macro_rules! fetch_add_test {
             let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
             for req in reqs {
                 let val = world.block_on(req) as u128;
+                println!("half 1 idx: {}, val: {}", idx, val);
                 if !insert_prev!($array, val, prevs) {
                     eprintln!("half 1: {:?} {:?}", val, prevs);
+                    println!("half 1: {:?} {:?}", val, prevs);
                     success = false;
+                    overall_success = false;
                 }
             }
         }
@@ -224,6 +237,7 @@ macro_rules! fetch_add_test {
         array.barrier();
         // println!("3------------");
         initialize_array!($array, array, init_val);
+        success = true;
         array.wait_all();
         array.barrier();
         let num_updates = max_updates!($t, num_pes);
@@ -246,6 +260,7 @@ macro_rules! fetch_add_test {
         let tot_updates = num_updates * num_pes;
         check_val!($array, sum, tot_updates, success);
         if !success {
+            overall_success = false;
             eprintln!("half 4: {:?} {:?}", sum, tot_updates);
         }
         array.wait_all();
@@ -257,6 +272,7 @@ macro_rules! fetch_add_test {
 
         let pe_len = array_total_len / num_pes;
         for pe in 0..num_pes {
+            success = true;
             let len = std::cmp::max(pe_len / 2, 1);
             let start_i = (pe * pe_len) + len / 2;
             let end_i = start_i + len;
@@ -273,8 +289,11 @@ macro_rules! fetch_add_test {
                 let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
                 for req in reqs {
                     let val = world.block_on(req) as u128;
+                    println!("pe_a {pe} idx: {}, val: {}", idx, val);
                     if !insert_prev!($array, val, prevs) {
-                        eprintln!("pe 1: {:?} {:?}", val, prevs);
+                        eprintln!("pe_a {pe}: {:?} {:?}", val, prevs);
+                        println!("pe_a {pe}: {:?} {:?}", val, prevs);
+                        overall_success = false;
                         success = false;
                     }
                 }
@@ -285,12 +304,13 @@ macro_rules! fetch_add_test {
                 let val = elem;
                 check_val!($array, val, max_val, success);
                 if !success {
-                    eprintln!("pe 2 {:?} {:?} {:?}", i, val, max_val);
+                    eprintln!("pe_b {pe} {:?} {:?} {:?}", i, val, max_val);
                 }
             }
             sub_array.barrier();
             // println!("5------------");
             initialize_array!($array, array, init_val);
+            success = true;
             sub_array.wait_all();
             sub_array.barrier();
             let num_updates = max_updates!($t, num_pes);
@@ -313,6 +333,7 @@ macro_rules! fetch_add_test {
             let tot_updates = num_updates * num_pes;
             check_val!($array, sum, tot_updates, success);
             if !success {
+                overall_success = false;
                 eprintln!("pe 4 {:?} {:?}", sum, tot_updates);
             }
             sub_array.wait_all();
@@ -321,7 +342,7 @@ macro_rules! fetch_add_test {
             initialize_array!($array, array, init_val);
         }
 
-        if !success {
+        if !overall_success {
             eprintln!("failed");
         }
     }};
@@ -475,22 +496,25 @@ macro_rules! input_test {
             };
         }
         array.barrier();
+        
         //individual T------------------------------
+        println!("Individual usize------------------------------");
         let mut reqs = vec![];
         for i in 0..array.len() {
             #[allow(unused_unsafe)]
             reqs.push(unsafe { array.batch_fetch_add(i, 1).spawn() });
         }
-        check_results!($array, array, num_pes, reqs, "T");
-        //individual T------------------------------
+        check_results!($array, array, num_pes, reqs, "usize");
+        //individual &T------------------------------
+        println!("Individual &usize------------------------------");
         let mut reqs = vec![];
         for i in 0..array.len() {
             #[allow(unused_unsafe)]
             reqs.push(unsafe { array.batch_fetch_add(&i, 1).spawn() });
         }
-        check_results!($array, array, num_pes, reqs, "&T");
-        //&[T]------------------------------
+        check_results!($array, array, num_pes, reqs, "&usize");
         // multi_idx single val
+        println!("multi_idx single val (&[usize],T) ------------------------------");
         let idx = (0..array.len()).collect::<Vec<usize>>();
         let idx_slice = &idx[..];
         let vals = vec![1; array.len()];
@@ -499,70 +523,79 @@ macro_rules! input_test {
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(idx_slice, 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "&[T]");
+        check_results!($array, array, num_pes, reqs, "&[usize],T");
         // single_idx multi_ val
+        println!("single_idx multi_ val (usize,&[T]) ------------------------------");
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(_my_pe, &vals).spawn() });
         let real_val = array.len();
-        check_results!($array, array, num_pes, real_val, reqs, "&[T]");
+        check_results!($array, array, num_pes, real_val, reqs, "usize,&[T]");
         // multi_idx multi_ val
+        println!("multi_idx multi_ val (&[usize],&[T]) ------------------------------");
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(idx_slice, vals_slice).spawn() });
 
-        check_results!($array, array, num_pes, reqs, "&[T]");
-        //scoped &[T]------------------------------
+        check_results!($array, array, num_pes, reqs, "&[usize],&[T]");
+        //scoped &[usize]------------------------------
         let mut reqs = vec![];
         {
+            println!("scoped &[usize]------------------------------");
             let vec = (0..array.len()).collect::<Vec<usize>>();
             let slice = &vec[..];
             #[allow(unused_unsafe)]
             reqs.push(unsafe { array.batch_fetch_add(slice, 1).spawn() });
         }
-        check_results!($array, array, num_pes, reqs, "scoped &[T]");
-        // Vec<T>------------------------------
+        check_results!($array, array, num_pes, reqs, "scoped &[usize]");
+        // Vec<usize>------------------------------
+        println!("Vec<usize>------------------------------");
         let vec = (0..array.len()).collect::<Vec<usize>>();
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(vec, 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "Vec<T>");
-        // &Vec<T>------------------------------
+        check_results!($array, array, num_pes, reqs, "Vec<usize>");
+        // &Vec<usize>------------------------------
+        println!("&Vec<usize>------------------------------");
         let mut reqs = vec![];
         let vec = (0..array.len()).collect::<Vec<usize>>();
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(&vec, 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "&Vec<T>");
-        // Scoped Vec<T>------------------------------
+        check_results!($array, array, num_pes, reqs, "&Vec<usize>");
+        // Scoped Vec<usize>------------------------------
         let mut reqs = vec![];
         {
+            println!("Scoped Vec<usize>------------------------------");
             let vec = (0..array.len()).collect::<Vec<usize>>();
             #[allow(unused_unsafe)]
             reqs.push(unsafe { array.batch_fetch_add(vec, 1).spawn() });
         }
-        check_results!($array, array, num_pes, reqs, "scoped Vec<T>");
-        // Scoped &Vec<T>------------------------------
+        check_results!($array, array, num_pes, reqs, "scoped Vec<usize>");
+        // Scoped &Vec<usize>------------------------------
         let mut reqs = vec![];
         {
+            println!("Scoped &Vec<usize>------------------------------");
             let vec = (0..array.len()).collect::<Vec<usize>>();
             #[allow(unused_unsafe)]
             reqs.push(unsafe { array.batch_fetch_add(&vec, 1).spawn() });
         }
-        check_results!($array, array, num_pes, reqs, "scoped &Vec<T>");
+        check_results!($array, array, num_pes, reqs, "scoped &Vec<usize>");
 
-        // scoped &LMR<T>------------------------------
+        // scoped &LMR<usize>------------------------------
         let mut reqs = vec![];
         unsafe {
+            println!("scoped &LMR<usize>------------------------------");
             let lmr = world.alloc_one_sided_mem_region(array.len());
             let slice = lmr.as_mut_slice();
             for i in 0..array.len() {
                 slice[i] = i;
             }
             reqs.push(array.batch_fetch_add(slice, 1).spawn());
-            check_results!($array, array, num_pes, reqs, "scoped &LMR<T>");
+            check_results!($array, array, num_pes, reqs, "scoped &LMR<usize>");
         }
 
-        // scoped SMR<T>------------------------------
+        // scoped SMR<usize>------------------------------
         let mut reqs = vec![];
         unsafe {
+            println!("scoped SMR<usize>------------------------------");
             let smr = world.alloc_shared_mem_region(array.len()).block();
             let slice = smr.as_mut_slice();
             for i in 0..array.len() {
@@ -570,17 +603,18 @@ macro_rules! input_test {
             }
 
             reqs.push(array.batch_fetch_add(slice, 1).spawn());
-            check_results!($array, array, num_pes, reqs, "scoped SMR<T>");
+            check_results!($array, array, num_pes, reqs, "scoped SMR<usize>");
         }
         // UnsafeArray<T>------------------------------
         // let mut reqs = vec![];
         // reqs.push(array.fetch_add(input_array.clone(),1));
         // check_results!($array,array,num_pes,reqs,"UnsafeArray<T>");
-        // UnsafeArray<T>------------------------------
+        // UnsafeArray<usize>.local_data()------------------------------
+        println!("UnsafeArray<usize>.local_data()------------------------------");
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(input_array.local_data(), 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "&UnsafeArray<T>");
+        check_results!($array, array, num_pes, reqs, "UnsafeArray<usize>.local_data()");
 
         // ReadOnlyArray<T>------------------------------
         // let mut reqs = vec![];
@@ -588,11 +622,12 @@ macro_rules! input_test {
         // println!("read only array len: {:?}", input_array.len());
         // reqs.push(array.fetch_add(input_array.clone(),1));
         // check_results!($array,array,num_pes,reqs,"ReadOnlyArray<T>");
-        // ReadOnlyArray<T>------------------------------
+        // ReadOnlyArray<usize>.local_data()------------------------------
+        println!("ReadOnlyArray<usize>.local_data()------------------------------");
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(input_array.local_data(), 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "&ReadOnlyArray<T>");
+        check_results!($array, array, num_pes, reqs, "ReadOnlyArray<usize>.local_data()");
 
         // AtomicArray<T>------------------------------
         // let mut reqs = vec![];
@@ -600,11 +635,12 @@ macro_rules! input_test {
         // println!("atomic array len: {:?}", input_array.len());
         // reqs.push(array.fetch_add(input_array.clone(),1));
         // check_results!($array,array,num_pes,reqs,"AtomicArray<T>");
-        // AtomicArray<T>------------------------------
+        // AtomicArray<usize>.local_data()------------------------------
+        println!("AtomicArray<usize>.local_data()------------------------------");
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(&input_array.local_data(), 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "&AtomicArray<T>");
+        check_results!($array, array, num_pes, reqs, "AtomicArray<usize>.local_data()");
 
         // LocalLockArray<T>------------------------------
         //  let mut reqs = vec![];
@@ -612,14 +648,15 @@ macro_rules! input_test {
         //  println!("local lock array len: {:?}", input_array.len());
         //  reqs.push(array.fetch_add(input_array.clone(),1));
         //  check_results!($array,array,num_pes,reqs,"LocalLockArray<T>");
-        // LocalLockArray<T>------------------------------
+        // LocalLockArray<usize>.local_data()------------------------------
+        println!("LocalLockArray<usize>.local_data()------------------------------");
         let mut reqs = vec![];
         let local_data = input_array.read_local_data().block();
         // println!("local lock array len: {:?}", local_data.deref());
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(&local_data, 1).spawn() });
         drop(local_data);
-        check_results!($array, array, num_pes, reqs, "&LocalLockArray<T>");
+        check_results!($array, array, num_pes, reqs, "LocalLockArray<usize>.local_data()");
 
         // GlobalLockArray<T>------------------------------
         //  let mut reqs = vec![];
@@ -627,7 +664,7 @@ macro_rules! input_test {
         // println!("global lock array len: {:?}", input_array.len());
         //  reqs.push(array.fetch_add(input_array.clone(),1));
         //  check_results!($array,array,num_pes,reqs,"GlobalLockArray<T>");
-        // GlobalLockArray<T>------------------------------
+        // GlobalLockArray<usize>.local_data()------------------------------
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe {
@@ -635,10 +672,11 @@ macro_rules! input_test {
                 .batch_fetch_add(&input_array.read_local_data().block(), 1)
                 .spawn()
         });
-        check_results!($array, array, num_pes, reqs, "&GlobalLockArray<T>");
+        check_results!($array, array, num_pes, reqs, "GlobalLockArray<usize>.local_data()");
     }};
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
