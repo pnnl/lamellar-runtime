@@ -13,6 +13,9 @@ use super::{
     CommandQueue,
 };
 
+#[cfg(feature = "pmi")]
+use pmi::pmi::{Pmi, PmiBuilder};
+
 use parking_lot::RwLock;
 
 use std::env;
@@ -37,18 +40,19 @@ const RT_MEM: usize = 100 * 1024 * 1024;
 impl ShmemComm {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new() -> ShmemComm {
-        let num_pes = match env::var("LAMELLAR_NUM_PES") {
-            Ok(val) => val.parse::<usize>().unwrap(),
-            Err(_e) => 1,
+        #[cfg(feature = "pmi")]
+        let pmi_info = PmiBuilder::init().ok();
+
+        #[cfg(feature = "pmi")]
+        let (num_pes, my_pe, job_id) = if let Some(ref pmi) = pmi_info {
+            (pmi.ranks().len(), pmi.rank(), pmi.job_id())
+        } else {
+            Self::pe_info_from_env()
         };
-        let my_pe = match env::var("LAMELLAR_PE_ID") {
-            Ok(val) => val.parse::<usize>().unwrap(),
-            Err(_e) => 0,
-        };
-        let job_id = match env::var("LAMELLAR_JOB_ID") {
-            Ok(val) => val.parse::<usize>().unwrap(),
-            Err(_e) => 0,
-        };
+
+        #[cfg(not(feature = "pmi"))]
+        let (num_pes, my_pe, job_id) = Self::pe_info_from_env();
+
         if let Some(size) = config().heap_size {
             SHMEM_SIZE.store(size, Ordering::SeqCst);
         }
@@ -66,6 +70,11 @@ impl ShmemComm {
             )
         };
 
+        #[cfg(feature = "pmi")]
+        if let Some(ref pmi) = pmi_info {
+            pmi.barrier(false).expect("PMI barrier failed during shmem init");
+        }
+
         let shmem = ShmemComm {
             runtime_allocs: RwLock::new(vec![(
                 alloc.clone(),
@@ -82,6 +91,22 @@ impl ShmemComm {
             .1
             .init(alloc.start(), mem_per_pe);
         shmem
+    }
+
+    fn pe_info_from_env() -> (usize, usize, usize) {
+        let num_pes = match env::var("LAMELLAR_NUM_PES") {
+            Ok(val) => val.parse::<usize>().unwrap(),
+            Err(_) => 1,
+        };
+        let my_pe = match env::var("LAMELLAR_PE_ID") {
+            Ok(val) => val.parse::<usize>().unwrap(),
+            Err(_) => 0,
+        };
+        let job_id = match env::var("LAMELLAR_JOB_ID") {
+            Ok(val) => val.parse::<usize>().unwrap(),
+            Err(_) => 0,
+        };
+        (num_pes, my_pe, job_id)
     }
 }
 
