@@ -189,6 +189,7 @@ macro_rules! max_at_pe_test{
     }
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();

@@ -192,6 +192,7 @@ macro_rules! prod_scatter_test{
     }
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();

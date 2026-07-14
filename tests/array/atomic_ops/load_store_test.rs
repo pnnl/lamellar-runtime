@@ -80,6 +80,7 @@ macro_rules! load_store_test {
         initialize_array!($array, array, init_val);
         array.wait_all();
         array.barrier();
+        // array.print();
         for idx in 0..array.len() {
             if idx % num_pes == my_pe {
                 #[allow(unused_unsafe)]
@@ -88,6 +89,7 @@ macro_rules! load_store_test {
         }
         array.wait_all();
         array.barrier();
+        // array.print();
         let mut reqs = vec![];
         for idx in 0..array.len() {
             #[allow(unused_unsafe)]
@@ -112,6 +114,7 @@ macro_rules! load_store_test {
         let start_i = half_len / 2;
         let end_i = start_i + half_len;
         let sub_array = array.sub_array(start_i..end_i);
+        // println!("sub_array");
         sub_array.barrier();
         for idx in 0..sub_array.len() {
             if idx % num_pes == my_pe {
@@ -141,6 +144,7 @@ macro_rules! load_store_test {
         initialize_array!($array, array, init_val);
         sub_array.wait_all();
         sub_array.barrier();
+        // println!("sub_array 2");
 
         let pe_len = array_total_len / num_pes;
         for pe in 0..num_pes {
@@ -177,6 +181,7 @@ macro_rules! load_store_test {
             initialize_array!($array, array, init_val);
             sub_array.wait_all();
             sub_array.barrier();
+            // println!("sub_array 3 {:?} {:?}", start_i, end_i);
         }
 
         if !success {
@@ -185,6 +190,7 @@ macro_rules! load_store_test {
     }};
 }
 
+#[lamellar::main] 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
