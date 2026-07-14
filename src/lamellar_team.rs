@@ -1876,7 +1876,7 @@ impl Darc<LamellarTeamRT> {
         // trace!("[{:?}] team exec am all request", self.world_pe);
         // event!(Level::TRACE, "team exec am all request");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
-            task_group_cnts.inc_send_req(1);
+            task_group_cnts.inc_send_req(self.num_pes);
         }
         let req = Arc::new(MultiAmHandleInner {
             cnt: AtomicUsize::new(self.num_pes),
@@ -1948,7 +1948,7 @@ impl Darc<LamellarTeamRT> {
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
             task_group_cnts.inc_outstanding(self.num_pes);
             task_group_cnts.inc_launched(self.num_pes);
-            task_group_cnts.inc_send_req(1);
+            task_group_cnts.inc_send_req(self.num_pes);
         }
         let req = Arc::new(MultiAmHandleInner {
             cnt: AtomicUsize::new(self.num_pes),
@@ -2026,7 +2026,7 @@ impl Darc<LamellarTeamRT> {
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
             task_group_cnts.inc_outstanding(self.num_pes);
             task_group_cnts.inc_launched(self.num_pes);
-            task_group_cnts.inc_send_req(1);
+            task_group_cnts.inc_send_req(self.num_pes);
         }
 
         let req = Arc::new(MultiAmHandleInner {
@@ -2322,7 +2322,7 @@ impl Darc<LamellarTeamRT> {
         self.scheduler.increment_stall_mark();
         // println!("team exec arc am pe");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
-            task_group_cnts.inc_send_req(1);
+            task_group_cnts.inc_send_req(self.num_pes);
         }
         let req = Arc::new(MultiAmHandleInner {
             cnt: AtomicUsize::new(self.num_pes),
