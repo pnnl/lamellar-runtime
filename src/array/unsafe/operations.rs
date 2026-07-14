@@ -401,9 +401,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             IndexType::Static => std::mem::size_of::<usize>(),
         };
 
-        if self.inner.data.team.my_pe() == 0 {
-            println!("max_local_size: {:?} index_size: {:?}", max_local_size, index_size);
-        }
+        // if self.inner.data.team.my_pe() == 0 {
+        //     println!("max_local_size: {:?} index_size: {:?}", max_local_size, index_size);
+        // }
         let res = if v_len == 1 && i_len == 1 {
             //one to one
             self.single_val_single_index::<()>(
