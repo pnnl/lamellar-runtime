@@ -1516,8 +1516,9 @@ impl<T: Dist> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).swap(42);
     ///```
     pub fn swap(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() = val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard = val;
         old
     }
 }
@@ -1533,8 +1534,9 @@ impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_add(1);
     ///```
     pub fn fetch_add(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() += val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard += val;
         old
     }
     /// Atomically subtract `val` from the current value, returning the previous value
@@ -1548,8 +1550,9 @@ impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_sub(1);
     ///```
     pub fn fetch_sub(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() -= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard -= val;
         old
     }
     /// Atomically multiply the current value by `val`, returning the previous value
@@ -1563,8 +1566,9 @@ impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_mul(2);
     ///```
     pub fn fetch_mul(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() *= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard *= val;
         old
     }
     /// Atomically divide the current value by `val`, returning the previous value
@@ -1578,8 +1582,9 @@ impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_div(2);
     ///```
     pub fn fetch_div(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() /= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard /= val;
         old
     }
     /// Atomically compute the remainder of the current value divided by `val`, returning the previous value
@@ -1593,8 +1598,9 @@ impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_rem(3);
     ///```
     pub fn fetch_rem(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() %= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard %= val;
         old
     }
 }
@@ -1613,9 +1619,10 @@ impl<T: Dist + std::cmp::Eq> LocalGenericAtomicElement<T> {
     /// let result = local_data.at(0).compare_exchange(0, 42);
     ///```
     pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
-        let current_val = *self.val.lock();
+        let mut guard = self.val.lock();
+        let current_val = *guard;
         if current_val == current {
-            *self.val.lock() = new;
+            *guard = new;
 
             Ok(current_val)
         } else {
@@ -1639,14 +1646,15 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
     /// let result = local_data.at(0).compare_exchange_epsilon(0.0, 1.0, 0.01);
     ///```
     pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
-        let current_val = *self.val.lock();
+        let mut guard = self.val.lock();
+        let current_val = *guard;
         let same = if current_val > current {
             current_val - current < eps
         } else {
             current - current_val < eps
         };
         if same {
-            *self.val.lock() = new;
+            *guard = new;
 
             Ok(current_val)
         } else {
@@ -1667,8 +1675,9 @@ impl<T: ElementBitWiseOps + 'static> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_and(0b1010);
     ///```
     pub fn fetch_and(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() &= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard &= val;
         old
     }
     /// Atomically perform a bitwise OR of `val` and the current value, returning the previous value
@@ -1682,8 +1691,9 @@ impl<T: ElementBitWiseOps + 'static> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_or(0b0101);
     ///```
     pub fn fetch_or(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() |= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard |= val;
         old
     }
     /// Atomically perform a bitwise XOR of `val` and the current value, returning the previous value
@@ -1697,8 +1707,9 @@ impl<T: ElementBitWiseOps + 'static> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_xor(0b1111);
     ///```
     pub fn fetch_xor(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() ^= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard ^= val;
         old
     }
 }
@@ -1715,13 +1726,15 @@ impl<T: ElementShiftOps + 'static> LocalGenericAtomicElement<T> {
     /// let old = local_data.at(0).fetch_shl(2);
     ///```
     pub fn fetch_shl(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() <<= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard <<= val;
         old
     }
     pub fn fetch_shr(&self, val: T) -> T {
-        let old = *self.val.lock();
-        *self.val.lock() >>= val;
+        let mut guard = self.val.lock();
+        let old = *guard;
+        *guard >>= val;
         old
     }
 }
