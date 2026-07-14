@@ -19,7 +19,6 @@
 
 use assert_cmd::Command;
 use serial_test::serial;
-use std::path::PathBuf;
 
 macro_rules! create_test {
     ( $array:ty, $dist:expr, $elem:ty, $num_pes:expr, $len:expr) => {
@@ -27,17 +26,18 @@ macro_rules! create_test {
             #[test]
             #[serial]
             #[allow(non_snake_case)]
-            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ blocking_get>](){
-                let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-                d.push("lamellar_run.sh");
-                let result = Command::new(d.into_os_string())
-                    .arg(format!("-N={}",$num_pes))
-                    .arg("-T=4")
-                    .arg("./target/release/examples/blocking_get_test")
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len __blocking_get>](){
+                let profile = std::env::var("LAMELLAR_TEST_PROFILE").unwrap_or_else(|_| "release".to_string());
+                let result = Command::new(format!("./target/{}/examples/blocking_get_test",profile))
                     .arg(stringify!($array))
                     .arg($dist)
                     .arg(stringify!($elem))
                     .arg(stringify!($len))
+                    .arg("--")
+                    .arg("--map-by")
+                    .arg("node:PE=4")
+                    .arg("--np")
+                    .arg(format!("{}", $num_pes))
                     .assert();
                 println!("{:?}",result);
                 result.stderr("").success();

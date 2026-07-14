@@ -1,6 +1,5 @@
 use assert_cmd::Command;
 use serial_test::serial;
-use std::path::PathBuf;
 
 macro_rules! create_test {
     ($array1:ty,$array2:ty) => {
@@ -9,14 +8,15 @@ macro_rules! create_test {
             #[serial]
             #[allow(non_snake_case)]
             fn [<$array1 _ into _ $array2>](){
-                let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-                d.push("lamellar_run.sh");
-                let result = Command::new(d.into_os_string())
-                    .arg("-N=2")
-                    .arg("-T=4")
-                    .arg("./target/release/examples/array_into_test")
+                let profile = std::env::var("LAMELLAR_TEST_PROFILE").unwrap_or_else(|_| "release".to_string());
+                let result = Command::new(format!("./target/{}/examples/array_into_test",profile))
                     .arg(stringify!($array1))
                     .arg(stringify!($array2))
+                    .arg("--")
+                    .arg("--map-by")
+                    .arg("node:PE=4")
+                    .arg("--np")
+                    .arg("2")
                     .assert();
                 println!("{:?}",result);
                 result.stderr("").success();
