@@ -476,6 +476,7 @@ pub(crate) enum AtomicOp<T> {
     FetchBitOr(Pin<Box<T>>),
     FetchBitXor(Pin<Box<T>>),
     FetchBitAnd(Pin<Box<T>>),
+    #[allow(unused)]
     Read(Pin<Box<T>>), // ucx requires us to do a fetch-add with an addend of 0 in order to do a remote read, so we can use the FetchSum variant with an addend of 0 for that case, but we want to be able to distinguish that from an actual fetch-add operation where the addend is 0, so we have a separate Read variant for that case
     // Compare-and-swap  we have a CAS variant to report if the backend supports native CAS, but the actual old and new values will be passed directly to the CommAllocAtomic::atomic_compare_exchange method rather than being stored in the AtomicOp variant
     Cas,
