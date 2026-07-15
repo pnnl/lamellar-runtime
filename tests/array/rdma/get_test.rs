@@ -155,7 +155,7 @@ macro_rules! get_test{
         let mut reqs = vec![];
         for tx in (0..half_len){
             #[allow(unused_unsafe)]
-            unsafe { reqs.push(array.get(tx).spawn()); }
+            unsafe { reqs.push(sub_array.get(tx).spawn()); }
         }
         sub_array.wait_all();
         sub_array.barrier();
@@ -192,7 +192,7 @@ macro_rules! get_test{
             let mut reqs = vec![];
             for tx in (0..len){
                 #[allow(unused_unsafe)]
-                unsafe { reqs.push(array.get(tx).spawn()) };
+                unsafe { reqs.push(sub_array.get(tx).spawn()) };
 
             }
             sub_array.wait_all();
@@ -216,6 +216,7 @@ macro_rules! get_test{
     }};
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
