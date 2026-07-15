@@ -1,0 +1,103 @@
+// #[test]
+// fn array() {
+//     let t = trybuild::TestCases::new();
+//     t.compile_fail("tests/array/local_only/immutable_borrow.rs");
+//     t.compile_fail("tests/array/local_only/clone.rs");
+// }
+
+// #[test]
+// fn unsafe_array(){
+
+// }
+// mod array{
+//     mod r#unsafe{
+//         mod block{
+//             mod put;
+//         }
+//     }
+// }
+
+use assert_cmd::Command;
+use serial_test::serial;
+
+macro_rules! create_test {
+    ( $array:ty, $dist:expr, $elem:ty, $num_pes:expr, $len:expr) => {
+        paste::paste! {
+            #[test]
+            #[serial]
+            #[allow(non_snake_case)]
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ put _ all _ buffer _ unmanaged>](){
+                let profile = std::env::var("LAMELLAR_TEST_PROFILE").unwrap_or_else(|_| "release".to_string());
+                let result = Command::new(format!("./target/{}/examples/put_all_buffer_unmanaged_test",profile))
+                    .arg(stringify!($array))
+                    .arg($dist)
+                    .arg(stringify!($elem))
+                    .arg(stringify!($len))
+                    .arg("--")
+                    .arg("--map-by")
+                    .arg("node:PE=4")
+                    .arg("--np")
+                    .arg(format!("{}", $num_pes))
+                    .assert();
+                println!("{:?}",result);
+                result.stderr("").success();
+            }
+        }
+    };
+}
+
+macro_rules! iter_lens{
+    ( $array:ty, $dist:expr, $elem:ty, $num_pes:expr, ($($len:expr),*)) =>{
+        $(
+            // println!("{:?} {:?} {:?} {:?}",stringify!($array),stringify!($elem),stringify!($num_pes),stringify!($len));
+            create_test!($array,$dist,$elem,$num_pes,$len);
+        )*
+    }
+}
+
+macro_rules! iter_num_pes {
+    ( $array:ty, $dist:expr, $elem:ty, ($($num_pes:expr),*), $len:tt) =>{
+        $(
+            // println!("{:?} {:?} {:?} {:?}",stringify!($array),stringify!($elem),stringify!($num_pes),stringify!($len));
+            iter_lens!($array,$dist,$elem,$num_pes,$len);
+        )*
+    }
+}
+
+macro_rules! iter_elem_types {
+    ( $array:ty, $dist:expr, ($($elem:ty),*), $num_pes:tt, $len:tt) =>{
+        $(
+            iter_num_pes!($array,$dist,$elem,$num_pes,$len);
+        )*
+    }
+}
+
+macro_rules! iter_dist_types {
+    ( $array:ty, ($($dist:expr),*),  $elem:tt, $num_pes:tt, $len:tt) =>{
+        $(
+            iter_elem_types!($array,$dist,$elem,$num_pes,$len);
+        )*
+    }
+}
+
+macro_rules! create_put_tests {
+    ( ($($array:ty),*), $dist:tt, $elem:tt, $num_pes:tt, $len:tt) =>{
+        $(iter_dist_types!($array,$dist,$elem,$num_pes,$len);)*
+    }
+}
+
+create_put_tests!(
+    (UnsafeArray, LocalLockArray, AtomicArray), // (UnsafeArray, AtomicArray, GenericAtomicArray, LocalLockArray),
+    ("Block", "Cyclic"),
+    (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
+    (2, 3, 4),
+    (4, 19, 128)
+);
+
+create_put_tests!(
+    (GlobalLockArray),
+    ("Block", "Cyclic"),
+    (u8, f64),
+    (4),
+    (4, 9)
+);
