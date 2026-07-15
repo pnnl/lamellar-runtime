@@ -141,10 +141,10 @@ macro_rules! get_into_buffer_unmanaged_test{
                 for tx in (0..num_txs){
                     let buf = buffer.split_off(std::cmp::min(mem_seg_len,(tx+1)*tx_size)- tx*tx_size);
                     #[allow(unused_unsafe)]
-                    unsafe {array.get_into_buffer(tx*tx_size,buffer).block();}
+                    unsafe {array.get_into_buffer_unmanaged(tx*tx_size,buffer);}
                     buffer = buf;
                 }
-                // array.wait_all();
+                array.wait_all();
                 array.barrier();
                 shared_mem_region = buffer.try_unwrap().expect("could not unwrap buffer into mem_region").into();
                 unsafe{
@@ -181,10 +181,10 @@ macro_rules! get_into_buffer_unmanaged_test{
                 for tx in (0..num_txs){
                     let buf = buffer.split_off( std::cmp::min(half_len,(tx+1)*tx_size)- tx*tx_size);
                     #[allow(unused_unsafe)]
-                    unsafe {sub_array.get_into_buffer(tx*tx_size,buffer).block();}
+                    unsafe {sub_array.get_into_buffer_unmanaged(tx*tx_size,buffer);}
                     buffer = buf;
                 }
-                // sub_array.wait_all();
+                sub_array.wait_all();
                 sub_array.barrier();
                 shared_mem_region = buffer.try_unwrap().expect("could not unwrap buffer into mem_region");
                 // unsafe{println!("{:?}",shared_mem_region.as_slice());}
@@ -229,10 +229,10 @@ macro_rules! get_into_buffer_unmanaged_test{
                     for tx in (0..num_txs){
                         let buf = buffer.split_off(std::cmp::min(half_len,(tx+1)*tx_size)- tx*tx_size);
                         #[allow(unused_unsafe)]
-                        unsafe {sub_array.get_into_buffer(tx*tx_size,buffer).block();}
+                        unsafe {sub_array.get_into_buffer_unmanaged(tx*tx_size,buffer);}
                         buffer = buf;
                     }
-                    // sub_array.wait_all();
+                    sub_array.wait_all();
                     sub_array.barrier();
                     shared_mem_region = buffer.try_unwrap().expect("could not unwrap buffer into mem_region");
                     unsafe{
@@ -261,6 +261,7 @@ macro_rules! get_into_buffer_unmanaged_test{
     };
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
