@@ -29,28 +29,28 @@ libfabric = { git = "https://github.com/pnnl/lamellar.git", features = [
     "threading-thread-safe",
 ], optional = true }
 libfabric-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-# pmi = { git = "https://github.com/pnnl/lamellar.git", branch="dev", optional = true }
-# pmix-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true, features = [
-#     "vendored",
-# ] }
-# prrte-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-# lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-# lamellar-ucc-sys = { git = "https://github.com/pnnl/lamellar.git", branch="dev", optional = true }
-# rofisys = { git = "https://github.com/pnnl/rofi-sys.git", optional = true }
+pmi = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
+pmix-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true, features = [
+    "vendored",
+] }
+prrte-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+lamellar-ucc-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
+rofisys = { git = "https://github.com/pnnl/rofi-sys.git", optional = true }
 
 # libfabric = { path = "../lamellar-repo/communication_frameworks/libfabric", features = [
 #     # "use-async-std",
 #     "threading-thread-safe",
 # ], optional = true }
 # libfabric-sys = { path = "../lamellar-repo/communication_frameworks/libfabric-sys", optional = true }
-pmi = { path = "../lamellar-repo/process_management/pmi", optional = true }
-pmix-sys = { path = "../lamellar-repo/process_management/pmix-sys", optional = true, features = [
-    "vendored",
-] }
-prrte-sys = { path = "../lamellar-repo/process_management/prrte-sys", optional = true }
-lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
-lamellar-ucc-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucc-sys", optional = true }
-rofisys = { path = "../lamellar-repo/communication_frameworks/rofi-sys", optional = true }
+#pmi = { path = "../lamellar-repo/process_management/pmi", optional = true }
+# pmix-sys = { path = "../lamellar-repo/process_management/pmix-sys", optional = true, features = [
+#     "vendored",
+# ] }
+#prrte-sys = { path = "../lamellar-repo/process_management/prrte-sys", optional = true }
+# lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
+#lamellar-ucc-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucc-sys", optional = true }
+#rofisys = { path = "../lamellar-repo/communication_frameworks/rofi-sys", optional = true }
 
 
 memmap = "0.7.0"
@@ -192,8 +192,8 @@ codegen-units = 1
 [profile.release-dev]
 inherits = "release"
 opt-level = 3
-lto = "thin"
-codegen-units = 16
+lto = false
+codegen-units = 256
 
 [profile.release-debug]
 inherits = "release-dev"
@@ -227,6 +227,10 @@ name = "get_test"
 path = "tests/array/rdma/get_test.rs"
 
 [[example]]
+name = "blocking_get_test"
+path = "tests/array/rdma/blocking_get_test.rs"
+
+[[example]]
 name = "get_buffer_test"
 path = "tests/array/rdma/get_buffer_test.rs"
 
@@ -237,6 +241,90 @@ path = "tests/array/rdma/get_into_buffer_test.rs"
 [[example]]
 name = "get_into_buffer_unmanaged_test"
 path = "tests/array/rdma/get_into_buffer_unmanaged_test.rs"
+
+[[example]]
+name = "put_buffer_test"
+path = "tests/array/rdma/put_buffer_test.rs"
+
+[[example]]
+name = "put_buffer_unmanaged_test"
+path = "tests/array/rdma/put_buffer_unmanaged_test.rs"
+
+[[example]]
+name = "get_pe_test"
+path = "tests/array/rdma/get_pe_test.rs"
+
+[[example]]
+name = "blocking_get_pe_test"
+path = "tests/array/rdma/blocking_get_pe_test.rs"
+
+[[example]]
+name = "get_buffer_pe_test"
+path = "tests/array/rdma/get_buffer_pe_test.rs"
+
+[[example]]
+name = "blocking_get_buffer_pe_test"
+path = "tests/array/rdma/blocking_get_buffer_pe_test.rs"
+
+[[example]]
+name = "get_into_buffer_pe_test"
+path = "tests/array/rdma/get_into_buffer_pe_test.rs"
+
+[[example]]
+name = "blocking_get_into_buffer_pe_test"
+path = "tests/array/rdma/blocking_get_into_buffer_pe_test.rs"
+
+[[example]]
+name = "get_into_buffer_unmanaged_pe_test"
+path = "tests/array/rdma/get_into_buffer_unmanaged_pe_test.rs"
+
+[[example]]
+name = "blocking_get_buffer_test"
+path = "tests/array/rdma/blocking_get_buffer_test.rs"
+
+[[example]]
+name = "blocking_get_into_buffer_test"
+path = "tests/array/rdma/blocking_get_into_buffer_test.rs"
+
+[[example]]
+name = "put_unmanaged_test"
+path = "tests/array/rdma/put_unmanaged_test.rs"
+
+[[example]]
+name = "put_pe_test"
+path = "tests/array/rdma/put_pe_test.rs"
+
+[[example]]
+name = "put_pe_unmanaged_test"
+path = "tests/array/rdma/put_pe_unmanaged_test.rs"
+
+[[example]]
+name = "put_pe_buffer_test"
+path = "tests/array/rdma/put_pe_buffer_test.rs"
+
+[[example]]
+name = "put_pe_buffer_unmanaged_test"
+path = "tests/array/rdma/put_pe_buffer_unmanaged_test.rs"
+
+[[example]]
+name = "put_all_test"
+path = "tests/array/rdma/put_all_test.rs"
+
+[[example]]
+name = "put_all_unmanaged_test"
+path = "tests/array/rdma/put_all_unmanaged_test.rs"
+
+[[example]]
+name = "put_all_buffer_test"
+path = "tests/array/rdma/put_all_buffer_test.rs"
+
+[[example]]
+name = "put_all_buffer_unmanaged_test"
+path = "tests/array/rdma/put_all_buffer_unmanaged_test.rs"
+
+[[example]]
+name = "array_into_test"
+path = "tests/array/array_into_test.rs"
 
 [[example]]
 name = "add_test"
@@ -271,6 +359,14 @@ name = "fetch_div_test"
 path = "tests/array/arithmetic_ops/fetch_div_test.rs"
 
 [[example]]
+name = "rem_test"
+path = "tests/array/arithmetic_ops/rem_test.rs"
+
+[[example]]
+name = "fetch_rem_test"
+path = "tests/array/arithmetic_ops/fetch_rem_test.rs"
+
+[[example]]
 name = "and_test"
 path = "tests/array/bitwise_ops/and_test.rs"
 
@@ -285,6 +381,13 @@ path = "tests/array/bitwise_ops/or_test.rs"
 [[example]]
 name = "fetch_or_test"
 path = "tests/array/bitwise_ops/fetch_or_test.rs"
+
+[[example]]
+name = "xor_test"
+path = "tests/array/bitwise_ops/xor_test.rs"
+[[example]]
+name = "fetch_xor_test"
+path = "tests/array/bitwise_ops/fetch_xor_test.rs"
 
 [[example]]
 name = "load_store_test"
@@ -533,6 +636,10 @@ name = "am_local"
 path = "examples/active_message_examples/am_local.rs"
 
 [[example]]
+name = "am_local_thread"
+path = "examples/active_message_examples/am_local_thread.rs"
+
+[[example]]
 name = "am_local_memregions"
 path = "examples/active_message_examples/am_local_memregions.rs"
 
@@ -714,6 +821,10 @@ path = "examples/darc_examples/stress_test.rs"
 [[example]]
 name = "string_darc"
 path = "examples/darc_examples/string_darc.rs"
+
+[[example]]
+name = "collective_write"
+path = "examples/darc_examples/collective_write.rs"
 
 ##------------ Hello Worlds examples ------------------##
 [[example]]
