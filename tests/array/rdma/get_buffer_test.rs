@@ -121,7 +121,7 @@ macro_rules! get_buffer_test{
             let mut reqs = vec![];
             for tx in (0..num_txs){
                 #[allow(unused_unsafe)]
-                unsafe { reqs.push(array.get_buffer(tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size)).spawn()); }
+                unsafe { reqs.push(array.get_buffer(tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size)-tx*tx_size).spawn()); }
             }
             array.wait_all();
             array.barrier();
@@ -164,7 +164,7 @@ macro_rules! get_buffer_test{
             let mut reqs = vec![];
             for tx in (0..num_txs){
                 #[allow(unused_unsafe)]
-                unsafe { reqs.push(array.get_buffer(tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size)).spawn());}
+                unsafe { reqs.push(sub_array.get_buffer(tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size)-tx*tx_size).spawn());}
 
             }
             sub_array.wait_all();
@@ -210,7 +210,7 @@ macro_rules! get_buffer_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    unsafe {reqs.push(array.get_buffer(tx*tx_size,std::cmp::min(len,(tx+1)*tx_size)).spawn())};
+                    unsafe {reqs.push(sub_array.get_buffer(tx*tx_size,std::cmp::min(len,(tx+1)*tx_size)-tx*tx_size).spawn())};
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
@@ -243,6 +243,7 @@ macro_rules! get_buffer_test{
     }};
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();
