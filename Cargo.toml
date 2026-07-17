@@ -24,17 +24,17 @@ lamellar-impl = { version = "0.8.0", path = "impl" }
 lamellar_main = { path = "./lamellar_main", optional = true }
 lamellar-prof = { path = "./lamellar-prof" }
 
-libfabric = { git = "https://github.com/pnnl/lamellar.git", features = [
+libfabric = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", features = [
     # "use-async-std",
     "threading-thread-safe",
 ], optional = true }
-libfabric-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+libfabric-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
 pmi = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
-pmix-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true, features = [
+pmix-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true, features = [
     "vendored",
 ] }
-prrte-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+prrte-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
+lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
 lamellar-ucc-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
 rofisys = { git = "https://github.com/pnnl/rofi-sys.git", optional = true }
 
