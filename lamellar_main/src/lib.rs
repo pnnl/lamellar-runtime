@@ -58,8 +58,7 @@ fn create_binary_update_block() -> impl ToTokens {
                                 // Copy binary to temporary location since we can't patchelf a running binary
                                 // Create temp file in same directory as the binary to avoid cross-filesystem rename issues
                                 let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
-                                let tmp_dir = std::env::temp_dir();
-                                let temp_exe = tmp_dir.join(format!("lamellar_exe_{}.tmp", std::process::id()));
+                                let temp_exe = exe_dir.join(format!("lamellar_exe_{}.tmp", std::process::id()));
                                 let temp_exe_str = temp_exe.to_string_lossy().to_string();
 
                                 if let Err(err) = std::fs::copy(&exe_path, &temp_exe) {
