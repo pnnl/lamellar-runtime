@@ -49,7 +49,7 @@ macro_rules! lock_if_needed {
     };
 }
 
-macro_rules! gather_to_pe_test{
+macro_rules! gather_at_pe_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
@@ -188,42 +188,42 @@ fn main() {
 
     match array.as_str() {
         // "UnsafeArray" => match elem.as_str() {
-        //     "u8" => gather_to_pe_test!(UnsafeArray, u8, len, dist_type),
+        //     "u8" => gather_at_pe_test!(UnsafeArray, u8, len, dist_type),
         //     // other types omitted for brevity
         //     _ => eprintln!("unsupported element type"),
         // },
         "AtomicArray" => match elem.as_str() {
-            "u8" => gather_to_pe_test!(AtomicArray, u8, len, dist_type),
-            "u16" => gather_to_pe_test!(AtomicArray, u16, len, dist_type),
-            "u32" => gather_to_pe_test!(AtomicArray, u32, len, dist_type),
-            "u64" => gather_to_pe_test!(AtomicArray, u64, len, dist_type),
-            "u128" => gather_to_pe_test!(AtomicArray, u128, len, dist_type),
-            "usize" => gather_to_pe_test!(AtomicArray, usize, len, dist_type),
-            "i8" => gather_to_pe_test!(AtomicArray, i8, len, dist_type),
-            "i16" => gather_to_pe_test!(AtomicArray, i16, len, dist_type),
-            "i32" => gather_to_pe_test!(AtomicArray, i32, len, dist_type),
-            "i64" => gather_to_pe_test!(AtomicArray, i64, len, dist_type),
-            "i128" => gather_to_pe_test!(AtomicArray, i128, len, dist_type),
-            "isize" => gather_to_pe_test!(AtomicArray, isize, len, dist_type),
-            "f32" => gather_to_pe_test!(AtomicArray, f32, len, dist_type),
-            "f64" => gather_to_pe_test!(AtomicArray, f64, len, dist_type),
+            "u8" => gather_at_pe_test!(AtomicArray, u8, len, dist_type),
+            "u16" => gather_at_pe_test!(AtomicArray, u16, len, dist_type),
+            "u32" => gather_at_pe_test!(AtomicArray, u32, len, dist_type),
+            "u64" => gather_at_pe_test!(AtomicArray, u64, len, dist_type),
+            "u128" => gather_at_pe_test!(AtomicArray, u128, len, dist_type),
+            "usize" => gather_at_pe_test!(AtomicArray, usize, len, dist_type),
+            "i8" => gather_at_pe_test!(AtomicArray, i8, len, dist_type),
+            "i16" => gather_at_pe_test!(AtomicArray, i16, len, dist_type),
+            "i32" => gather_at_pe_test!(AtomicArray, i32, len, dist_type),
+            "i64" => gather_at_pe_test!(AtomicArray, i64, len, dist_type),
+            "i128" => gather_at_pe_test!(AtomicArray, i128, len, dist_type),
+            "isize" => gather_at_pe_test!(AtomicArray, isize, len, dist_type),
+            "f32" => gather_at_pe_test!(AtomicArray, f32, len, dist_type),
+            "f64" => gather_at_pe_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("from test unsupported element type"),
         },
         "GlobalLockArray" => match elem.as_str() {
-            "u8" => gather_to_pe_test!(GlobalLockArray, u8, len, dist_type),
-            "u16" => gather_to_pe_test!(GlobalLockArray, u16, len, dist_type),
-            "u32" => gather_to_pe_test!(GlobalLockArray, u32, len, dist_type),
-            "u64" => gather_to_pe_test!(GlobalLockArray, u64, len, dist_type),
-            "u128" => gather_to_pe_test!(GlobalLockArray, u128, len, dist_type),
-            "usize" => gather_to_pe_test!(GlobalLockArray, usize, len, dist_type),
-            "i8" => gather_to_pe_test!(GlobalLockArray, i8, len, dist_type),
-            "i16" => gather_to_pe_test!(GlobalLockArray, i16, len, dist_type),
-            "i32" => gather_to_pe_test!(GlobalLockArray, i32, len, dist_type),
-            "i64" => gather_to_pe_test!(GlobalLockArray, i64, len, dist_type),
-            "i128" => gather_to_pe_test!(GlobalLockArray, i128, len, dist_type),
-            "isize" => gather_to_pe_test!(GlobalLockArray, isize, len, dist_type),
-            "f32" => gather_to_pe_test!(GlobalLockArray, f32, len, dist_type),
-            "f64" => gather_to_pe_test!(GlobalLockArray, f64, len, dist_type),
+            "u8" => gather_at_pe_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => gather_at_pe_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => gather_at_pe_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => gather_at_pe_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => gather_at_pe_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => gather_at_pe_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => gather_at_pe_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => gather_at_pe_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => gather_at_pe_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => gather_at_pe_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => gather_at_pe_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => gather_at_pe_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => gather_at_pe_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => gather_at_pe_test!(GlobalLockArray, f64, len, dist_type),
             _ => eprintln!("from test unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

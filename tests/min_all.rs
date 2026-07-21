@@ -19,6 +19,8 @@ macro_rules! create_test {
                     .arg("node:PE=4")
                     .arg("--np")
                     .arg(format!("{}", $num_pes))
+                    .arg("--timeout")
+                    .arg("30")
                     .assert();
                 println!("Result:  {:?}",result);
                 result.stderr("").success();

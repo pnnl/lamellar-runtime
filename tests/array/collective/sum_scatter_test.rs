@@ -68,13 +68,14 @@ macro_rules! sum_scatter_test{
 
             // world.barrier();
 
-            for tx_size in (1..=mem_seg_len).step_by(num_pes){
+            for tx_size in (num_pes..=mem_seg_len).step_by(num_pes){
                 let num_txs = mem_seg_len/tx_size;
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
-                    let chunk_size = (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
+                    let interval_len = std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size;
+                    let chunk_size = interval_len/num_pes;
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array_or_lock!($array, array, _lock).sum_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
+                    reqs.push((unsafe { array_or_lock!($array, array, _lock).sum_scatter(tx * tx_size, interval_len).spawn()}, chunk_size));
                 }
                 for req in reqs.drain(..){
                     let buf =req.0.block();

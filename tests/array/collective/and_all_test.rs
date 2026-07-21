@@ -76,8 +76,10 @@ macro_rules! bit_and_all_test{
                     // println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} ",tx_size,tx, tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size));
                     reqs.push(unsafe { array_or_lock!($array, array, _lock).bit_and_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                 }
-                for req in reqs.drain(..){
+                for (i, req) in reqs.drain(..).enumerate(){
+                    println!("  [AND ALL TEST] tx_size {tx_size}/{mem_seg_len} req {i}/{num_txs} before block" );
                     let buf =req.block();
+                    println!("  [AND ALL TEST] tx_size {tx_size}/{mem_seg_len} req {i}/{num_txs} after block" );
                     for (i, elem) in buf.as_slice().iter().enumerate(){
                         if ((final_val as $t  - elem) as f32).abs() > 0.0001 {
                             eprintln!("{:?} {:?} {:?}",i as $t,elem,((final_val as $t - elem) as f32).abs());
@@ -88,12 +90,18 @@ macro_rules! bit_and_all_test{
                 // array.barrier();
                 // array.print();
                 // initialize_array!($array, array, init_val);
+                println!("[AND ALL TEST] tx_size {:?}/{} before wait all",tx_size, mem_seg_len);
                 array.wait_all();
                 array.barrier();
+                println!("[AND ALL TEST] tx_size {:?}/{} after barrier",tx_size, mem_seg_len);
             }
+            println!("[AND ALL TEST] before array barrier");
             array.barrier();
+            println!("[AND ALL TEST] after array barrier");
             world.wait_all();
+            println!("[AND ALL TEST] before world barrier");
             world.barrier();
+            println!("[AND ALL TEST] after world barrier");
 
 
 

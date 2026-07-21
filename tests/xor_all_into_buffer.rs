@@ -1,0 +1,76 @@
+use assert_cmd::Command;
+use serial_test::serial;
+
+macro_rules! create_test {
+    ( $array:ty, $dist:expr, $elem:ty, $num_pes:expr, $len:expr) => {
+        paste::paste! {
+            #[test]
+            #[serial]
+            #[allow(non_snake_case)]
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ xor_all_into_buffer>](){
+                let profile = std::env::var("LAMELLAR_TEST_PROFILE").unwrap_or_else(|_| "release".to_string());
+                let result = Command::new(format!("./target/{}/examples/xor_all_into_buffer_test",profile))
+                    .arg(stringify!($array))
+                    .arg($dist)
+                    .arg(stringify!($elem))
+                    .arg(stringify!($len))
+                    .arg("--")
+                    .arg("--map-by")
+                    .arg("node:PE=4")
+                    .arg("--np")
+                    .arg(format!("{}", $num_pes))
+                    .arg("--timeout")
+                    .arg("30")
+                    .assert();
+                println!("Result:  {:?}",result);
+                result.stderr("").success();
+            }
+        }
+    };
+}
+
+macro_rules! iter_lens{
+    ( $array:ty, $dist:expr, $elem:ty, $num_pes:expr, ($($len:expr),*)) =>{
+        $(
+            create_test!($array,$dist,$elem,$num_pes,$len);
+        )*
+    }
+}
+
+macro_rules! iter_num_pes {
+    ( $array:ty, $dist:expr, $elem:ty, ($($num_pes:expr),*), $len:tt) =>{
+        $(
+            iter_lens!($array,$dist,$elem,$num_pes,$len);
+        )*
+    }
+}
+
+macro_rules! iter_elem_types {
+    ( $array:ty, $dist:expr, ($($elem:ty),*), $num_pes:tt, $len:tt) =>{
+        $(
+            iter_num_pes!($array,$dist,$elem,$num_pes,$len);
+        )*
+    }
+}
+
+macro_rules! iter_dist_types {
+    ( $array:ty, ($($dist:expr),*),  $elem:tt, $num_pes:tt, $len:tt) =>{
+        $(
+            iter_elem_types!($array,$dist,$elem,$num_pes,$len);
+        )*
+    }
+}
+
+macro_rules! create_xor_all_into_buffer_tests {
+    ( ($($array:ty),*), $dist:tt, $elem:tt, $num_pes:tt, $len:tt) =>{
+        $(iter_dist_types!($array,$dist,$elem,$num_pes,$len);)*
+    }
+}
+
+create_xor_all_into_buffer_tests!(
+    (AtomicArray, GlobalLockArray),
+    ("Block", "Cyclic"),
+    (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize),
+    (2, 3, 4),
+    (4, 19, 128)
+);

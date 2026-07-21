@@ -20,6 +20,8 @@ macro_rules! create_test {
                     .arg("node:PE=4")
                     .arg("--np")
                     .arg(format!("{}", $num_pes))
+                    .arg("--timeout")
+                    .arg("30")
                     // .arg("--output-dir")
                     // .arg("test_results/fetch_add")
                     .assert();
