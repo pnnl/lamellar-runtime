@@ -49,15 +49,19 @@ More details can be found in the [Memory Region](https://docs.rs/lamellar/latest
 # Network Backends
 
 Lamellar relies on network providers called Lamellae to perform the transfer of data throughout the system.
-Currently three such Lamellae exist: 
-- `local` -  used for single-PE (single system, single process) development (this is the default), 
+Currently the following Lamellae exist:
+- `local` -  used for single-PE (single system, single process) development (this is the default),
 - `shmem` -  used for multi-PE (single system, multi-process) development, useful for emulating distributed environments (communicates through shared memory)
-- `rofi` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
-    - By default support for Rofi is disabled as using it relies on both the Rofi C-library and the libfabrics library, which may not be installed on your system.
-    - It can be enabled by adding ```features = ["enable-rofi"]``` to the lamellar entry in your `Cargo.toml` file
+- `rofi_c` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
+    - Enabled by adding ```features = ["enable-rofi-c"]``` (or `enable-rofi-c-shared` / `enable-rofi-rust`) to the lamellar entry in your `Cargo.toml` file
+- `libfabric` / `libfabric-sys` / `libfabric-async` - used for multi-PE distributed development directly against libfabric.
+    - Enabled by adding ```features = ["enable-libfabric"]``` (see Cargo.toml for the `-sys`/`-async` variants) to the lamellar entry in your `Cargo.toml` file
+- `ucx` - used for multi-PE distributed development based on [UCX](https://github.com/openucx/ucx).
+    - Enabled by adding ```features = ["enable-ucx"]``` to the lamellar entry in your `Cargo.toml` file
+    - All of the above distributed backends rely on system libraries (e.g. libfabric, ROFI, UCX) which may not be installed on your system.
 
-The long term goal for lamellar is that you can develop using the `local` backend and then when you are ready to run distributed switch to the `rofi` backend with no changes to your code.
-Currently the inverse is true, if it compiles and runs using `rofi` it will compile and run when using `local` and `shmem` with no changes.
+The long term goal for lamellar is that you can develop using the `local` backend and then when you are ready to run distributed switch to a distributed backend (e.g. `rofi_c`, `libfabric`, `ucx`) with no changes to your code.
+Currently the inverse is true, if it compiles and runs using a distributed backend it will compile and run when using `local` and `shmem` with no changes.
 
 Additional information on using each of the lamellae backends can be found below in the `Running Lamellar Applications` section
 
@@ -69,14 +73,18 @@ Commonly used variables include:
  - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE, defaults to [std::thread::available_parallelism] if available or else 4
  - `LAMELLAR_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
      - possible values
-         - `local` -- default (if `enable-local` feature is not active)
+         - `local` -- default
          - `shmem`
-         - `rofi`  -- only available with the `enable-rofi` feature in which case it is the default backend
+         - `rofi_c`  -- only available with the `enable-rofi-c` (or related `enable-rofi-*`) feature
+         - `libfabric-sys` / `libfabric` / `libfabric-async` -- only available with the corresponding `enable-libfabric*` feature
+         - `ucx` -- only available with the `enable-ucx` feature
  - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
      - possible values
          - `lamellar` -- default, work stealing backend
          - `async_std` -- alternative backend from async_std
          - `tokio` -- only available with the `tokio-executor` feature in which case it is the default executor
+
+See [env_var.rs] for additional feature-gated variables (e.g. `enable-stats`, `enable-prof`, `enable-on-node-shmem`, `with-pmi*`).
 
 
 Examples 
@@ -94,15 +102,15 @@ You can select which backend to use at runtime as shown below:
 use lamellar::Backend;
 fn main(){
  let mut world = lamellar::LamellarWorldBuilder::new()
-        .with_lamellae( Default::default() ) //if "enable-rofi" feature is active default is rofi, otherwise  default is `Local`
-        //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi,
+        .with_lamellae( Default::default() ) //default is `Local` unless a distributed backend feature is active
+        //.with_lamellae( Backend::RofiC ) //explicity set the lamellae backend to rofi_c,
         //.with_lamellae( Backend::Local ) //explicity set the lamellae backend to local
         //.with_lamellae( Backend::Shmem ) //explicity set the lamellae backend to use shared memory
         .build();
 }
 ```
 or by setting the following envrionment variable:
-```LAMELLAE_BACKEND="lamellae"``` where lamellae is one of `local`, `shmem`, or `rofi`.
+```LAMELLAR_BACKEND="backend"``` where backend is one of `local`, `shmem`, `rofi_c`, `libfabric-sys`, `libfabric`, `libfabric-async`, or `ucx`.
 
 # Creating and executing a Registered Active Message
 Please refer to the [Active Messaging](https://docs.rs/lamellar/latest/lamellar/active_messaging) documentation for more details and examples
@@ -153,7 +161,7 @@ fn main(){
     block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i) ).block(); //simultaneosuly initialize array accross all pes, each pe only updates its local data
     block_array.barrier();
     if my_pe == 0{
-        for (i,elem) in block_onesided_iter!($array,array).into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
+        for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
             println!("i: {} = {})",i,elem);
         }
     }
@@ -182,11 +190,11 @@ fn main(){
     let mut world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let cnt = Darc::new(&world, AtomicUsize::new()).block().expect("calling pe is in the world);
+    let cnt = Darc::new(&world, AtomicUsize::new(0)).block().expect("calling pe is in the world");
     for pe in 0..num_pes{
         world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}).spawn(); // explicitly launch on each PE
     }
-    world.exec_am_all(am.clone()).spawn(); //also possible to execute on every PE with a single call
+    world.exec_am_all(DarcAm{cnt: cnt.clone()}).spawn(); //also possible to execute on every PE with a single call
     cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
     world.wait_all(); // wait for all active messages to finish
     world.barrier();  // synchronize with other PEs
@@ -197,11 +205,11 @@ fn main(){
 Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 
-``` lamellar = "0.7.0-rc.1" ```
+``` lamellar = "0.8.0" ```
 
 If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
 
-```lamellar = { version = "0.7.0-rc.1", features = ["enable-rofi"]}```
+```lamellar = { version = "0.8.0", features = ["enable-rofi-c"]}```
 
 NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
 If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR envrionment variable.
@@ -238,6 +246,7 @@ All other branches are active feature branches and may or may not be in a workin
 
 NEWS
 ----
+* v0.8.0
 * November 2024: Alpha release -- v0.7.1
 * February 2023: Alpha release -- v0.6.1
 * November 2023: Alpha release -- v0.6
@@ -299,6 +308,17 @@ Note: we do an explicit build instead of `cargo run --examples` as they are inte
 
 HISTORY
 -------
+- version 0.8.0
+  - new UCX lamellae backend (`enable-ucx`), including sub-team allocation, on-node fastpath, and UCC-based network-accelerated collectives
+  - new libfabric lamellae backends (standard/`-sys`/`-async` variants) with network-accelerated collectives (allreduce, gather, scatter, alltoall, broadcast)
+  - ROFI backend refactored into a `rofi_c` design with improved lifecycle/drop handling and atomic-op fixes
+  - new `shmem`/`local` backends with PMI-based PE discovery and their own collective implementations
+  - new `lamellar_main` launcher crate/macro for automated distributed session launch (srun/mpirun-style), with vendored PMIx/PRRTE
+  - opt-in runtime statistics (`enable-stats`) and profiling (`enable-prof`) features, gating counters behind them to reduce overhead when disabled
+  - network-accelerated atomics and `compare_exchange` support across all backends
+  - blocking/async comm APIs unified through a shared `Scheduler`
+  - reduced costly `Darc`/`Arc` clones in array iteration and request metadata paths for better hot-path performance
+  - various optimizations and fixes
 - version 0.7.0
   - add support for integration with various async executor backends including tokio and async-std
   - 'handle' based api, allowing for 'spawn()'ing, 'block()'ing, and 'await'ing remote operations.
