@@ -18,6 +18,7 @@ use crate::{
     },
     memregion::MemregionRdmaInputInner,
     scheduler::Scheduler,
+    warnings::RuntimeWarning,
     AsLamellarBuffer, LamellarBuffer, LamellarTask, RdmaHandle, Remote,
 };
 
@@ -34,7 +35,6 @@ struct PutFutureData<T: Remote> {
     op: AllocOp<T>,
     scheduler: Arc<Scheduler>,
     counters: Option<Arc<[Arc<AMCounters>]>>,
-    spawned: bool,
 }
 
 #[pin_project(PinnedDrop)]
@@ -104,13 +104,11 @@ impl<T: Remote> PutFutureData<T> {
     }
 
     pub(crate) fn block(mut self) {
-        self.spawned = true;
         self.scheduler.clone().block_on(async move {
             self.exec_op().await;
         });
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
@@ -127,19 +125,11 @@ struct GetFutureData<T> {
     offset: usize,
     scheduler: Arc<Scheduler>,
     counters: Option<Arc<[Arc<AMCounters>]>>,
-    spawned: bool,
     result: MaybeUninit<T>,
 }
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricAsyncGetFuture<T> {
-    // alloc: LibfabricAsyncAlloc,
-    // pe: usize,
-    // offset: usize,
-    // scheduler: Arc<Scheduler>,
-    // counters: Option<Arc<[Arc<AMCounters>]>>,
-    // spawned: bool,
-    // result: MaybeUninit<T>,
     fut: Option<Pin<Box<dyn Future<Output = T> + Send>>>,
     fut_data: Option<GetFutureData<T>>,
 }
@@ -175,13 +165,11 @@ impl<T: Remote> GetFutureData<T> {
     }
 
     pub(crate) fn block(mut self) -> T {
-        self.spawned = true;
         self.scheduler
             .clone()
             .block_on(async { self.exec_at().await })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
-        self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler
             .clone()
@@ -212,7 +200,6 @@ struct GetBufferFutureData<T> {
     len: usize,
     scheduler: Arc<Scheduler>,
     counters: Option<Arc<[Arc<AMCounters>]>>,
-    spawned: bool,
     result: MaybeUninit<Vec<T>>,
 }
 
@@ -255,13 +242,11 @@ impl<T: Remote> GetBufferFutureData<T> {
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
-        self.spawned = true;
         self.scheduler
             .clone()
             .block_on(async { self.exec_at().await })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
-        self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler
             .clone()
@@ -292,7 +277,6 @@ struct GetIntoBufferFutureData<T: Remote, B: AsLamellarBuffer<T>> {
     dst: LamellarBuffer<T, B>,
     scheduler: Arc<Scheduler>,
     counters: Option<Arc<[Arc<AMCounters>]>>,
-    spawned: bool,
 }
 
 #[pin_project(PinnedDrop)]
@@ -328,13 +312,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> GetIntoBufferFutureData<T, B> {
     }
 
     pub(crate) fn block(mut self) {
-        self.spawned = true;
         self.scheduler.clone().block_on(async move {
             self.exec_op().await;
         });
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
@@ -364,9 +346,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricAsyncGetIntoBufferFu
 #[pinned_drop]
 impl<T: Remote> PinnedDrop for LibfabricAsyncPutFuture<T> {
     fn drop(self: Pin<&mut Self>) {
-        // if !self.spawned {
-        //     RuntimeWarning::DroppedHandle("a RdmaHandle").print();
-        // }
+        if self.fut_data.is_some() {
+            RuntimeWarning::DroppedHandle("a LibfabricAsyncPutFuture").print();
+        }
     }
 }
 
@@ -397,9 +379,9 @@ impl<T: Remote> Future for LibfabricAsyncPutFuture<T> {
 #[pinned_drop]
 impl<T> PinnedDrop for LibfabricAsyncGetFuture<T> {
     fn drop(self: Pin<&mut Self>) {
-        // if !self.spawned {
-        //     RuntimeWarning::DroppedHandle("a RdmaHandle").print();
-        // }
+        if self.fut_data.is_some() {
+            RuntimeWarning::DroppedHandle("a LibfabricAsyncGetFuture").print();
+        }
     }
 }
 
@@ -414,9 +396,9 @@ impl<T: Remote> From<LibfabricAsyncGetFuture<T>> for RdmaGetHandle<T> {
 #[pinned_drop]
 impl<T> PinnedDrop for LibfabricAsyncGetBufferFuture<T> {
     fn drop(self: Pin<&mut Self>) {
-        // if !self.spawned {
-        //     RuntimeWarning::DroppedHandle("a RdmaHandle").print();
-        // }
+        if self.fut_data.is_some() {
+            RuntimeWarning::DroppedHandle("a LibfabricAsyncGetBufferFuture").print();
+        }
     }
 }
 
@@ -431,9 +413,9 @@ impl<T: Remote> From<LibfabricAsyncGetBufferFuture<T>> for RdmaGetBufferHandle<T
 #[pinned_drop]
 impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for LibfabricAsyncGetIntoBufferFuture<T, B> {
     fn drop(self: Pin<&mut Self>) {
-        // if !self.spawned {
-        //     RuntimeWarning::DroppedHandle("a RdmaHandle").print();
-        // }
+        if self.fut_data.is_some() {
+            RuntimeWarning::DroppedHandle("a LibfabricAsyncGetIntoBufferFuture").print();
+        }
     }
 }
 
@@ -463,7 +445,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                 op: AllocOp::Put(pe, src),
                 scheduler: scheduler.clone(),
                 counters,
-                spawned: false,
             }),
             fut: None,
         }
@@ -509,7 +490,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 offset,
                 op: AllocOp::PutBuf(pe, src.into()),
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -543,7 +523,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 offset,
                 op: AllocOp::PutAll(pes, src.into()),
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -583,7 +562,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 offset,
                 op: AllocOp::PutAllBuf(pes, src.into()),
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -637,7 +615,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 pe,
                 offset,
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
                 result: MaybeUninit::uninit(),
@@ -686,7 +663,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                 pe,
                 offset,
                 len,
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
                 result: MaybeUninit::uninit(),
@@ -726,7 +702,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                 pe,
                 offset,
                 dst,
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -786,7 +761,6 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
                 alloc: self.alloc.clone(),
                 offset: offset,
                 op: AllocOp::Put(pe, src),
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -854,7 +828,6 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
                 alloc: self.alloc.clone(),
                 offset,
                 op: AllocOp::PutBuf(pe, src.into()),
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -925,7 +898,6 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
                 alloc: self.alloc.clone(),
                 pe,
                 offset,
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
                 result: MaybeUninit::uninit(),
@@ -969,7 +941,6 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
                 pe,
                 offset,
                 len,
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
                 result: MaybeUninit::uninit(),
@@ -1014,7 +985,6 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
                 pe,
                 offset,
                 dst,
-                spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),

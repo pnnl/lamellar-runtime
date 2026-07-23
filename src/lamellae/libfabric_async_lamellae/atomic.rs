@@ -10,6 +10,7 @@ use crate::{
         CommAllocAtomic,
     },
     scheduler::Scheduler,
+    warnings::RuntimeWarning,
     AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, LamellarTask, Remote,
 };
 
@@ -69,14 +70,12 @@ impl<T: Remote + Send + 'static> AtomicFetchOpFutureData<T> {
         *self.result
     }
     pub(crate) fn block(self) -> T {
-        // self.spawned = true;
         self.scheduler
             .clone()
             .block_on(async move { self.exec_op().await })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<T> {
-        // self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler
             .clone()
@@ -107,9 +106,9 @@ impl<T: Remote + Send + 'static> Future for LibfabricAsyncAtomicFetchFuture<T> {
 #[pinned_drop]
 impl<T> PinnedDrop for LibfabricAsyncAtomicFetchFuture<T> {
     fn drop(self: Pin<&mut Self>) {
-        // if !self.spawned {
-        //     RuntimeWarning::DroppedHandle("a RdmaHandle").print();
-        // }
+        if self.fut_data.is_some() {
+            RuntimeWarning::DroppedHandle("a LibfabricAsyncAtomicFetchFuture").print();
+        }
     }
 }
 
@@ -134,13 +133,6 @@ struct AtomicOpFutureData<T> {
 pub(crate) struct LibfabricAsyncAtomicFuture<T> {
     fut_data: Option<AtomicOpFutureData<T>>,
     fut: Option<Pin<Box<dyn std::future::Future<Output = ()> + Send>>>,
-    // pub(crate) alloc: LibfabricAsyncAlloc,
-    // pub(super) remote_pes: Vec<usize>,
-    // pub(crate) offset: usize,
-    // pub(super) op: AtomicOp<T>,
-    // pub(crate) scheduler: Arc<Scheduler>,
-    // pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
-    // pub(crate) spawned: bool,
 }
 
 impl<T: Remote + Send + 'static> LibfabricAsyncAtomicFuture<T> {
@@ -169,13 +161,11 @@ impl<T: Remote + Send + 'static> AtomicOpFutureData<T> {
         }
     }
     pub(crate) fn block(self) {
-        // self.spawned = true;
         self.scheduler.clone().block_on(async move {
             self.exec_op().await;
         });
     }
     pub(crate) fn spawn(self) -> LamellarTask<()> {
-        // self.spawned = true;
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
@@ -209,9 +199,9 @@ impl<T: Remote + Send + 'static> Future for LibfabricAsyncAtomicFuture<T> {
 #[pinned_drop]
 impl<T> PinnedDrop for LibfabricAsyncAtomicFuture<T> {
     fn drop(self: Pin<&mut Self>) {
-        // if !self.spawned {
-        //     RuntimeWarning::DroppedHandle("a RdmaHandle").print();
-        // }
+        if self.fut_data.is_some() {
+            RuntimeWarning::DroppedHandle("a LibfabricAsyncAtomicFuture").print();
+        }
     }
 }
 
@@ -303,7 +293,11 @@ impl<T: Remote + Send + PartialEq + 'static> Future
 
 #[pinned_drop]
 impl<T> PinnedDrop for LibfabricAsyncAtomicCompareExchangeFuture<T> {
-    fn drop(self: Pin<&mut Self>) {}
+    fn drop(self: Pin<&mut Self>) {
+        if self.fut_data.is_some() {
+            RuntimeWarning::DroppedHandle("a LibfabricAsyncAtomicCompareExchangeFuture").print();
+        }
+    }
 }
 
 impl<T> From<LibfabricAsyncAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeOpHandle<T> {
@@ -329,7 +323,6 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
                 remote_pes: vec![pe],
                 offset,
                 op,
-                // spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -358,7 +351,6 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
                 remote_pes: (0..self.num_pes()).collect(),
                 offset,
                 op,
-                // spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -386,7 +378,6 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
                 offset,
                 op,
                 result: Box::new(unsafe { std::mem::zeroed() }),
-                // spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -497,7 +488,6 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
                 remote_pes: vec![pe],
                 offset,
                 op,
-                // spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -568,7 +558,6 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
                 offset,
                 op,
                 result: Box::new(unsafe { std::mem::zeroed() }),
-                // spawned: false,
                 scheduler: scheduler.clone(),
                 counters,
             }),
