@@ -647,8 +647,6 @@ use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, ReqId};
 use async_trait::async_trait;
 use futures_util::future::join_all;
 use futures_util::Future;
-use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tracing::trace;
@@ -977,12 +975,15 @@ impl AMCounters {
     pub(crate) fn inc_launched(&self, num: usize) {
         self.launched_req_cnt.fetch_add(num, Ordering::SeqCst);
     }
+
     pub(crate) fn inc_outstanding(&self, num: usize) {
         self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
     }
+
     pub(crate) fn dec_outstanding(&self, num: usize) {
         self.outstanding_reqs.fetch_sub(num, Ordering::SeqCst);
     }
+
     pub(crate) fn inc_send_req(&self, num: usize) {
         self.send_req_cnt.fetch_add(num, Ordering::SeqCst);
     }

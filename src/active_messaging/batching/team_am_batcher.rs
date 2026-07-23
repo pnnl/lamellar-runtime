@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::{
@@ -13,6 +14,7 @@ use batching::*;
 use tracing::trace;
 
 use async_trait::async_trait;
+use parking_lot::Mutex;
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
 
