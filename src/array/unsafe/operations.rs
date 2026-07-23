@@ -912,22 +912,34 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let mut idx_val = PackedIdxVal::new_with_capacity::<T>(index_size,1);
         idx_val.push(local_index, val);
         let res_buff = vec![0];
-        let am = self.inner
-                .data
-                .team
-                .scheduler
-                .block_on(
-                    async move {
-                        MultiValMultiIndex::new(byte_array.clone(), op, &mut idx_val, index_size).await
-                    .into_am::<T>(ret)
-                    }
-                );
-        let req = self.inner.data.team.exec_arc_am_pe::<R>(
-            pe,
-            am,
-            Some(self.inner.data.array_counters.clone()),
-        );
-        VecDeque::from(vec![(req, res_buff)])
+
+        let cnt = Arc::new(AtomicUsize::new(0));
+        let futures = Arc::new(Mutex::new(VecDeque::new()));
+        let cnt2 = cnt.clone();
+        let futures2 = futures.clone();
+        self.inner.data.array_counters.inc_outstanding(1);
+        self.inner.data.team.inc_outstanding(1);
+        let the_array: UnsafeArray<T> = self.clone();
+        self.inner.data.team.scheduler.submit_immediate_task(async move {
+            let am = MultiValMultiIndex::new(byte_array.clone(), op, &mut idx_val, index_size)
+                .await
+                .into_am::<T>(ret);
+            let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
+                pe,
+                am,
+                Some(the_array.inner.data.array_counters.clone()),
+            );
+            futures2.lock().push_back((req, res_buff));
+            cnt2.fetch_add(1, Ordering::SeqCst);
+            the_array.inner.data.array_counters.dec_outstanding(1);
+            the_array.inner.data.team.dec_outstanding(1);
+        });
+
+        while cnt.load(Ordering::SeqCst) < 1 {
+            self.inner.data.team.scheduler.exec_task();
+        }
+        let res = std::mem::take(&mut *futures.lock());
+        res
     }
 }
 
