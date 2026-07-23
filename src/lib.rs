@@ -289,7 +289,7 @@ pub(crate) mod warnings;
 pub mod env_var;
 pub use env_var::config;
 
-pub use crate::lamellae::comm::collective::{BroadcastInput, ScatterInput, RootSrcOrLamellarBuffer};
+pub use crate::lamellae::comm::collective::{BroadcastInput, ScatterInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer};
 pub use crate::lamellae::Backend;
 pub use crate::lamellae::{
     AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, RdmaHandle,
