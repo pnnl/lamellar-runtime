@@ -45,7 +45,6 @@ lazy_static! {
 struct CmdMsg {
     daddr: usize,
     dsize: usize,
-    ack_addr: usize,
     msg_hash: usize,
     cmd_hash: usize,
     cmd: Cmd,
@@ -58,7 +57,6 @@ impl Default for CmdMsg {
         CmdMsg {
             daddr: 0,
             dsize: 0,
-            ack_addr: 0,
             cmd: Cmd::Clear,
             msg_hash: 0,
             cmd_hash: 0,
@@ -120,7 +118,6 @@ impl CmdMsg {
         let mut res = self
             .daddr
             .wrapping_add(self.dsize)
-            .wrapping_add(self.ack_addr)
             .wrapping_add(self.cmd as usize)
             .wrapping_add(self.msg_hash);
         if res == 0 {
@@ -144,14 +141,14 @@ impl std::fmt::Debug for CmdMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "daddr {:#x}({:?}) dsize {:?} ack_addr {:#x} cmd {:?} msg_hash {:?} cmd_hash {:?}",
-            self.daddr, self.daddr, self.dsize, self.ack_addr, self.cmd, self.msg_hash, self.cmd_hash,
+            "daddr {:#x}({:?}) dsize {:?}  cmd {:?} msg_hash {:?} cmd_hash {:?}",
+            self.daddr, self.daddr, self.dsize, self.cmd, self.msg_hash, self.cmd_hash,
         )
     }
 }
 
 struct InnerCQ {
-    send_buffer: Arc<Vec<Mutex<CommSlice<CmdMsg>>>>,
+    send_buffer: Arc<Vec<RwLock<CommSlice<CmdMsg>>>>,
     recv_buffer: Arc<Vec<RwLock<CommSlice<CmdMsg>>>>,
     alloc_buffer: Arc<Vec<Mutex<CommSlice<CmdMsg>>>>,
     panic_buffer: Arc<Mutex<CommSlice<CmdMsg>>>,
@@ -192,11 +189,10 @@ impl InnerCQ {
         for (i, cmd) in send_buffer.clone().iter_mut().enumerate() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
-            (*cmd).ack_addr = 0;
             (*cmd).cmd = Cmd::Clear;
             (*cmd).msg_hash = 0;
             (*cmd).calc_hash();
-            send_buffers.push(Mutex::new(send_buffer.sub_slice(i..=i)));
+            send_buffers.push(RwLock::new(send_buffer.sub_slice(i..=i)));
         }
         trace!("send_buffer init {:?}", send_buffer);
 
@@ -205,7 +201,6 @@ impl InnerCQ {
         for (i, cmd) in recv_buffer.clone().iter_mut().enumerate() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
-            (*cmd).ack_addr = 0;
             (*cmd).cmd = Cmd::Clear;
             (*cmd).msg_hash = 0;
             (*cmd).calc_hash();
@@ -218,7 +213,6 @@ impl InnerCQ {
         for (i, cmd) in alloc_buffer.clone().iter_mut().enumerate() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
-            (*cmd).ack_addr = 0;
             (*cmd).cmd = Cmd::Clear;
             (*cmd).msg_hash = 0;
             (*cmd).calc_hash();
@@ -230,7 +224,6 @@ impl InnerCQ {
         for cmd in panic_buffer.clone().iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
-            (*cmd).ack_addr = 0;
             (*cmd).cmd = Cmd::Clear;
             (*cmd).msg_hash = 0;
             (*cmd).calc_hash();
@@ -240,7 +233,6 @@ impl InnerCQ {
         let mut release_cmd = unsafe { Box::from_raw(release_cmd_alloc.as_mut_ptr::<CmdMsg>()) };
         release_cmd.daddr = 1;
         release_cmd.dsize = 1;
-        release_cmd.ack_addr = 0;
         release_cmd.cmd = Cmd::Release;
         release_cmd.msg_hash = 1;
         release_cmd.calc_hash();
@@ -249,7 +241,6 @@ impl InnerCQ {
         let mut clear_cmd = unsafe { Box::from_raw(clear_cmd_alloc.as_mut_ptr::<CmdMsg>()) };
         clear_cmd.daddr = 0;
         clear_cmd.dsize = 0;
-        clear_cmd.ack_addr = 0;
         clear_cmd.cmd = Cmd::Clear;
         clear_cmd.msg_hash = 0;
         clear_cmd.calc_hash();
@@ -258,7 +249,6 @@ impl InnerCQ {
         let mut free_cmd = unsafe { Box::from_raw(free_cmd_alloc.as_mut_ptr::<CmdMsg>()) };
         free_cmd.daddr = 0;
         free_cmd.dsize = 0;
-        free_cmd.ack_addr = 0;
         free_cmd.cmd = Cmd::Free;
         free_cmd.msg_hash = 0;
         free_cmd.calc_hash();
@@ -291,7 +281,7 @@ impl InnerCQ {
             if dst == self.my_pe {
                 continue;
             }
-            let buf = self.send_buffer[dst].lock().await;
+            let buf = self.send_buffer[dst].read();
             if buf[0].cmd == Cmd::Tx || buf[0].cmd == Cmd::Ready {
                 return false;
             }
@@ -307,9 +297,9 @@ impl InnerCQ {
             match cmd.cmd {
                 Cmd::Clear => None,
                 Cmd::Tx => {
-                    if cmd.daddr == 0 {
-                        return None;
-                    }
+                    // if cmd.daddr == 0 {
+                    //     return None;
+                    // }
                     trace!("received cmd:{:?} from pe {} -- [{:?}]", cmd.cmd, src, cmd);
                     let res = Some(cmd.clone());
                     recv_buffer[0] = **self.clear_cmd;
@@ -326,10 +316,9 @@ impl InnerCQ {
     }
 
     fn available_to_send(&self, pe: usize) -> bool {
-        if let Some(send_buf) = self.send_buffer[pe].try_lock() {
-            if send_buf[0].hash() == self.clear_cmd.hash() {
-                return true;
-            }
+        let send_buf = self.send_buffer[pe].read();
+        if send_buf[0].hash() == self.clear_cmd.hash() {
+            return true;
         }
         false
     }
@@ -371,14 +360,14 @@ impl InnerCQ {
             let mut paniced = false;
             for pe in 0..self.num_pes {
                 if panic_buf[pe].cmd != Cmd::Clear {
-                    debug!(
+                    trace!(
                         "pe {} panic_buf not clear {:?}",
                         pe, &panic_buf[pe] as *const CmdMsg
                     );
-                    debug!("panic_buf {:?}", panic_buf[pe]);
+                    trace!("panic_buf {:?}", panic_buf[pe]);
                 }
                 if panic_buf[pe].check_hash() && panic_buf[pe].cmd == Cmd::Panic {
-                    debug!("panic_buf passed hash check {:?}", panic_buf[pe]);
+                    trace!("panic_buf passed hash check {:?}", panic_buf[pe]);
                     paniced = true;
                     break;
                 }
@@ -391,14 +380,15 @@ impl InnerCQ {
         false
     }
 
-    // Two-phase send:
+
+      // Two-phase send:
     // Phase 1: wait for Clear slot, fill Tx, PUT CmdMsg to dst's recv_buffer.
     // Phase 2: poll send_buffer[dst] for Ready (written by dst after allocating a receive buffer),
     //          then PUT data via put_buffer().await, free source, PUT magic terminator, reset slot.
     //#[tracing::instrument(skip_all, level = "debug")]
     async fn send(&self, data: CommSlice<u8>, dst: usize, hash: usize) {
         stats!(PE_SENDS[0][dst].fetch_add(1, Ordering::SeqCst));
-        debug!("want to send data {:?} {:?} {:x}", data, dst, hash);
+        debug!("want to send data {:?} {:x}", dst, hash);
         let mut printed = false;
 
         // Phase 1: wait for Clear, fill Tx, signal dst
@@ -407,12 +397,10 @@ impl InnerCQ {
                 return;
             }
             {
-                let mut send_buf = self.send_buffer[dst].lock().await;
+                let mut send_buf = self.send_buffer[dst].write();
                 if send_buf[0].hash() == self.clear_cmd.hash() {
-                    let ack_addr = send_buf.usize_addr();
                     send_buf[0].daddr = data.usize_addr();
                     send_buf[0].dsize = data.len();
-                    send_buf[0].ack_addr = ack_addr;
                     send_buf[0].msg_hash = hash;
                     send_buf[0].cmd = Cmd::Tx;
                     send_buf[0].calc_hash();
@@ -421,9 +409,11 @@ impl InnerCQ {
                     stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
                     debug!("sending tx to dst({dst}) {:?}", send_buf[0]);
                     let send_cmd = send_buf[0].clone();
-                    let _ = recv_buffer.put_unmanaged::<CmdMsg>(send_cmd, dst, 0);
+                    drop(send_buf);
+                    let num_bytes = send_cmd.as_bytes().len();
+                    let _ = recv_buffer.put_unmanaged::<CmdMsg>( send_cmd, dst, 0);
                     self.put_amt
-                        .fetch_add(send_buf[0].as_bytes().len(), Ordering::Relaxed);
+                        .fetch_add(num_bytes, Ordering::Relaxed);
                     break;
                 } else {
                     if !printed {
@@ -435,11 +425,14 @@ impl InnerCQ {
                     }
                 }
             }
+            self.comm.thread_flush();
             async_std::task::yield_now().await;
         }
 
         // Phase 2: spawn as a separate regular-priority task so it doesn't hold a
-        // thread slot while polling for Ready, allowing recv_data to be scheduled.
+        // thread slot while polling for Ready.  This lets recv_data (and other tasks
+        // in work_inj) be scheduled between polling iterations, breaking the circular
+        // starvation where all threads are occupied by Phase-2 senders.
         let send_buffer = self.send_buffer.clone();
         let comm = self.comm.clone();
         let scheduler = self.scheduler.clone();
@@ -452,7 +445,7 @@ impl InnerCQ {
                     return;
                 }
                 let maybe_ready = {
-                    let send_buf = send_buffer[dst].lock().await;
+                    let send_buf = send_buffer[dst].read();
                     if send_buf[0].cmd == Cmd::Ready && send_buf[0].check_hash() {
                         Some(send_buf[0].clone())
                     } else {
@@ -460,29 +453,120 @@ impl InnerCQ {
                     }
                 };
                 if let Some(ready) = maybe_ready {
+                    send_buffer[dst].write()[0] = **clear_cmd;
                     debug!("got ready from dst({dst}) {:?}", ready);
 
-                    let dst_data = comm.one_sided_alloc_from_remote_pe_and_addr(
-                        dst, ready.daddr, data.len());
+                    let dst_data_full = comm.one_sided_alloc_from_remote_pe_and_addr(
+                        dst, ready.daddr, data.len() + std::mem::size_of::<u64>());
+                    let dst_data = dst_data_full.comm_slice_at_byte_offset::<u8>(0, data.len());
+                    let magic_data = dst_data_full.comm_slice_at_byte_offset::<u64>(data.len(), 1);
                     dst_data.put_buffer::<u8>(&scheduler, None, data.clone(), dst, 0).await;
+                    magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
 
-                    if data.len() > 0 {
-                        let _alloc = comm
-                            .local_rt_alloc_from_local_addr(data.usize_addr())
-                            .expect("failed to get src alloc after put");
-                    }
-
-                    let dst_done = comm.one_sided_alloc_from_remote_pe_and_addr(
-                        dst, ready.ack_addr, std::mem::size_of::<u64>());
-                    let done_slice: CommSlice<u64> =
-                        dst_done.comm_slice_at_byte_offset::<u64>(0, 1);
-                    done_slice.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
-
-                    let mut send_buf = send_buffer[dst].lock().await;
-                    send_buf[0] = **clear_cmd;
                     sent_cnt.fetch_add(1, Ordering::SeqCst);
                     break;
                 }
+                comm.thread_flush();
+                async_std::task::yield_now().await;
+            }
+        });
+    }
+
+    // Two-phase send:
+    // Phase 1: wait for Clear slot, fill Tx, PUT CmdMsg to dst's recv_buffer.
+    // Phase 2: poll send_buffer[dst] for Ready (written by dst after allocating a receive buffer),
+    //          then PUT data via put_buffer().await, free source, PUT magic terminator, reset slot.
+    //#[tracing::instrument(skip_all, level = "debug")]
+    async fn send_vec(&self, mut data: Vec<u8>, dst: usize, hash: usize) {
+        stats!(PE_SENDS[0][dst].fetch_add(1, Ordering::SeqCst));
+        debug!("want to send data {:?} {:x}", dst, hash);
+        let mut printed = false;
+
+        // Phase 1: wait for Clear, fill Tx, signal dst
+        loop {
+            if self.active.load(Ordering::SeqCst) == CmdQStatus::Panic as u8 {
+                return;
+            }
+            {
+                let mut send_buf = self.send_buffer[dst].write();
+                if send_buf[0].hash() == self.clear_cmd.hash() {
+                    send_buf[0].daddr = 0; // not used in Tx, but set to 0 for cleanliness
+                    send_buf[0].dsize = data.len();
+                    send_buf[0].msg_hash = hash;
+                    send_buf[0].cmd = Cmd::Tx;
+                    send_buf[0].calc_hash();
+
+                    let recv_buffer = self.recv_buffer[self.my_pe].read();
+                    stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
+                    debug!("sending tx to dst({dst}) {:?}", send_buf[0]);
+                    let send_cmd = send_buf[0].clone();
+                    drop(send_buf);
+                    let num_bytes = send_cmd.as_bytes().len();
+                    let _ = recv_buffer.put_unmanaged::<CmdMsg>(send_cmd, dst, 0);
+                    debug!("put cmd msg to dst({dst}) recv buffer, cmd msg size {:?} bytes", num_bytes);
+                    self.put_amt
+                        .fetch_add(num_bytes, Ordering::Relaxed);
+                    break;
+                } else {
+                    if !printed {
+                        printed = true;
+                        debug!(
+                            "send slot busy for dst({dst}), waiting... {:?}",
+                            send_buf[0]
+                        );
+                    }
+                }
+            }
+            self.comm.thread_flush();
+            async_std::task::yield_now().await;
+        }
+
+        // Phase 2: spawn as a separate regular-priority task (same rationale as send()).
+        let send_buffer = self.send_buffer.clone();
+        let comm = self.comm.clone();
+        let scheduler = self.scheduler.clone();
+        let clear_cmd = self.clear_cmd.clone();
+        let sent_cnt = self.sent_cnt.clone();
+        let put_amt = self.put_amt.clone();
+        let active = self.active.clone();
+        self.scheduler.submit_io_task(async move {
+            loop {
+                if active.load(Ordering::SeqCst) == CmdQStatus::Panic as u8 {
+                    return;
+                }
+                let maybe_ready = {
+                    let send_buf = send_buffer[dst].read();
+                    if send_buf[0].cmd == Cmd::Ready && send_buf[0].check_hash() {
+                        Some(send_buf[0].clone())
+                    } else {
+                        None
+                    }
+                };
+                if let Some(ready) = maybe_ready {
+                    send_buffer[dst].write()[0] = **clear_cmd;
+                    debug!("got ready from dst({dst}) {:?}", ready);
+                    data.extend_from_slice(&ready.msg_hash.to_ne_bytes());
+
+                    let dst_data_full = comm.one_sided_alloc_from_remote_pe_and_addr(
+                        dst, ready.daddr, data.len() );
+                    // let dst_data = dst_data_full.comm_slice_at_byte_offset::<u8>(0, data.len());
+                    // let magic_data = dst_data_full.comm_slice_at_byte_offset::<u64>(data.len(), 1);
+
+                    if let Ok(rt_data) = comm.rt_alloc(data.len(), std::mem::align_of::<u8>()) {
+                        let mut data_slice = rt_data.as_comm_slice::<u8>();
+                        data_slice.copy_from_slice(&data);
+                        put_amt.fetch_add(data.len(), Ordering::Relaxed);
+                        dst_data_full.put_buffer::<u8>(&scheduler, None, data_slice, dst, 0).await;
+                    } else {
+                        dst_data_full.put_buffer::<u8>(&scheduler, None, data, dst, 0).await;
+                    }
+
+                    // magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
+
+                    sent_cnt.fetch_add(1, Ordering::SeqCst);
+                    return;
+                }
+                comm.thread_flush();
                 async_std::task::yield_now().await;
             }
         });
@@ -536,7 +620,6 @@ impl InnerCQ {
             if my_alloc_buf[0].hash() == self.clear_cmd.hash() {
                 my_alloc_buf[0].daddr = alloc_id;
                 my_alloc_buf[0].dsize = min_size;
-                my_alloc_buf[0].ack_addr = 0;
                 my_alloc_buf[0].cmd = Cmd::Alloc;
                 my_alloc_buf[0].msg_hash = 0;
                 my_alloc_buf[0].calc_hash();
@@ -575,7 +658,6 @@ impl InnerCQ {
 
             my_alloc_buf[0].daddr = 0;
             my_alloc_buf[0].dsize = 0;
-            my_alloc_buf[0].ack_addr = 0;
             my_alloc_buf[0].cmd = Cmd::Clear;
             my_alloc_buf[0].msg_hash = 0;
             my_alloc_buf[0].calc_hash();
@@ -618,7 +700,6 @@ impl InnerCQ {
             let cmd = &mut panic_buf[self.my_pe];
             cmd.daddr = 0;
             cmd.dsize = 0;
-            cmd.ack_addr = 0;
             cmd.cmd = Cmd::Panic;
             cmd.msg_hash = 0;
             cmd.calc_hash();
@@ -635,24 +716,21 @@ impl InnerCQ {
     // ready.daddr = allocated data buffer address on PE1
     // ready.ack_addr = done flag address on PE1 (PE0 will PUT magic here to signal completion)
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn send_ready(&self, src: usize, cmd: CmdMsg, alloc_addr: usize, done_flag_addr: usize) {
-        trace!(
-            "send_ready to src[{src}]: alloc_addr={alloc_addr:#x} done_flag_addr={done_flag_addr:#x}"
+    fn send_ready(&self, src: usize, cmd: CmdMsg, alloc_addr: usize) {
+        debug!(
+            "send_ready to src[{src}]: alloc_addr={alloc_addr:#x} "
         );
-        let (local_ack_alloc, offset) = self
-            .comm
-            .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.ack_addr);
-        let slot = local_ack_alloc.comm_slice_at_byte_offset::<CmdMsg>(offset, 1);
+        let send_buf = self.send_buffer[self.my_pe].read();
         let mut ready = CmdMsg {
             daddr: alloc_addr,
             dsize: 0,
-            ack_addr: done_flag_addr,
             msg_hash: cmd.msg_hash,
             cmd: Cmd::Ready,
             cmd_hash: 0,
         };
         ready.calc_hash();
-        let _ = slot.put_unmanaged::<CmdMsg>(ready, src, 0);
+        debug!("sending ready cmd to src[{src}]: {:?}", ready);
+        let _ = send_buf.put_unmanaged::<CmdMsg>(ready, src, 0);
     }
 }
 
@@ -712,35 +790,35 @@ impl CQPut {
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        debug!("send_buffer {:?}", send_buffer);
+        trace!("send_buffer {:?}", send_buffer);
         let recv_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        debug!("recv_buffer {:?}", recv_buffer);
+        trace!("recv_buffer {:?}", recv_buffer);
         let alloc_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        debug!("alloc_buffer {:?}", alloc_buffer);
+        trace!("alloc_buffer {:?}", alloc_buffer);
         let panic_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        debug!("panic_buffer {:?}", panic_buffer);
+        trace!("panic_buffer {:?}", panic_buffer);
         let release_cmd = comm
             .rt_alloc(
                 std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        debug!(
+        trace!(
             "release_cmd {:?} {:?} {:?}",
             release_cmd,
             std::mem::size_of::<CmdMsg>(),
@@ -752,14 +830,14 @@ impl CQPut {
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        debug!("clear_cmd {:?}", clear_cmd);
+        trace!("clear_cmd {:?}", clear_cmd);
         let free_cmd = comm
             .rt_alloc(
                 std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        debug!("free_cmd {:?}", free_cmd);
+        trace!("free_cmd {:?}", free_cmd);
 
         let cq = InnerCQ::new(
             send_buffer.clone(),
@@ -807,32 +885,16 @@ impl CQPut {
         let mut hash = calc_hash(data.ser_data_bytes.usize_addr(), data.len());
         if hash == 0 { hash = 1; }
         let data_slice = data.ser_data_bytes.clone();
-        data.leak_alloc()
-            .leak()
-            .expect("failed to leak alloc in send_data");
         self.cq.send(data_slice, dst, hash).await;
     }
 
     pub(crate) async fn send_vec(&self, vec_data: Vec<u8>, dst: usize) {
-        trace!("sending vec_data of len {:?} to dst {:?}", vec_data.len(), dst);
-        let mut data = self.cq.comm.rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
-        while let Err(_) = data {
-            async_std::task::yield_now().await;
-            data = self.cq.comm.rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
-        }
-        let data = data.unwrap();
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                vec_data.as_ptr(),
-                data.as_mut_ptr(),
-                vec_data.len(),
-            );
-        }
-        let data_slice = data.as_comm_slice().clone();
-        let mut hash = calc_hash(data_slice.usize_addr(), data_slice.len());
+        debug!("sending vec_data of len {:?} to dst {:?}", vec_data.len(), dst);
+        
+        let vec_data_addr = vec_data.as_ptr() as usize;
+        let mut hash = calc_hash(vec_data_addr, vec_data.len());
         if hash == 0 { hash = 1; }
-        data.leak().expect("failed to leak alloc in send_vec");
-        self.cq.send(data_slice, dst, hash).await;
+        self.cq.send_vec(vec_data, dst, hash).await;
     }
 
     pub(crate) fn wait_all_print(&self) {
@@ -873,7 +935,7 @@ impl CQPut {
                     .collect::<Vec<_>>()
             );
             println!("PE {pe} sends: {:?} recvs: {:?}", sends, recvs);
-            let send_buffer = self.cq.send_buffer[pe].lock_blocking();
+            let send_buffer = self.cq.send_buffer[pe].read();
             let recv_buffer = self.cq.recv_buffer[pe].read();
             println!(
                 "recv_buffer ptr for pe {pe}: {:x}",
@@ -930,7 +992,7 @@ impl CQPut {
             || self.scheduler.active(0)
         {
             if timer.elapsed().as_secs_f64() > 5.0 {
-                trace!(
+                debug!(
                     "recv_data still running -- cq empty? {:?}  scheduler active? {:?}",
                     self.cq.empty().await,
                     self.scheduler.active(0)
@@ -940,7 +1002,7 @@ impl CQPut {
             for src in 0..num_pes {
                 if src != my_pe {
                     if let Some(cmd) = self.cq.ready(src) {
-                        trace!("recv_data {:?}", cmd);
+                        debug!("recv_data {:?}", cmd);
                         match cmd.cmd {
                             Cmd::Alloc => panic!("should not encounter alloc here"),
                             Cmd::Panic => panic!("should not encounter panic here"),
@@ -948,68 +1010,58 @@ impl CQPut {
                                 panic!("should not be possible to see cmd clear, release, free, or ready here")
                             }
                             Cmd::Tx => {
-                                trace!("got tx from {src}");
+                                let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
+                                let size = cmd.dsize;
+                                debug!("got tx from {src} size={size} msg_id={msg_id}");
+
+                                // INLINE: allocate recv buffer on the recv_data thread so Ready
+                                // is sent without depending on io_task scheduling.  This breaks
+                                // the circular starvation where Phase-2 sender tasks occupy all
+                                // threads while waiting for Ready messages that only io_tasks
+                                // could send.
+                                let mut ser_data = loop {
+                                    match self.cq.comm.new_serialized_data(size + std::mem::size_of::<u64>()) {
+                                        Ok(sd) => break sd,
+                                        Err(_) => {
+                                            debug!("recv_data: waiting for alloc size={size} src={src} msg_id={msg_id}");
+                                            self.cq.send_alloc(size + std::mem::size_of::<u64>());
+                                            self.cq.comm.thread_flush();
+                                            async_std::task::yield_now().await;
+                                        }
+                                    }
+                                };
+
+                                let data_addr = ser_data.ser_data_bytes.usize_addr();
+                                let done_flag_addr = data_addr + size;
+
+                                debug!(
+                                    "recv_data: allocated for src[{src}] size={size} data_addr={data_addr:#x} done_flag_addr={done_flag_addr:#x} msg_id={msg_id}"
+                                );
+
+                                // Zero the done flag before sending Ready so sender can't see
+                                // stale magic from a previous allocation.
+                                unsafe { (done_flag_addr as *mut u64).write_unaligned(0u64) };
+
+                                // INLINE: fire Ready immediately — sender's Phase-2 poll unblocks.
+                                self.cq.send_ready(src, cmd, data_addr);
+                                debug!("recv_data: sent ready to src[{src}] msg_id={msg_id}");
+
+                                // Spawn io_task only for done-flag polling + AM submission.
+                                // By the time this task runs the sender has usually already PUT
+                                // both the data and the magic terminator.
                                 let cq = self.cq.clone();
                                 let lamellae = lamellae.clone();
                                 let scheduler1 = self.scheduler.clone();
                                 let task = async move {
-                                    let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
-                                    let size = cmd.dsize;
-                                    debug!("recv PUT task from {src} size={size} msg_id={msg_id}");
-
-                                    // Allocate receive buffer using SerializedData::new for proper
-                                    // header/payload structure
-                                    let ser_data = loop {
-                                        match cq.comm.new_serialized_data(size) {
-                                            Ok(sd) => break sd,
-                                            Err(_) => {
-                                                cq.send_alloc(size);
-                                                async_std::task::yield_now().await;
-                                            }
-                                        }
-                                    };
-
-                                    // Allocate 8-byte done flag in registered memory
-                                    let done_flag_alloc = loop {
-                                        match cq.comm.rt_alloc(
-                                            std::mem::size_of::<u64>(),
-                                            std::mem::align_of::<u64>(),
-                                        ) {
-                                            Ok(a) => break a,
-                                            Err(_) => {
-                                                cq.send_alloc(std::mem::size_of::<u64>());
-                                                async_std::task::yield_now().await;
-                                            }
-                                        }
-                                    };
-                                    let done_flag_slice: CommSlice<u64> =
-                                        done_flag_alloc.as_comm_slice();
-
-                                    // Zero the done flag to prevent false positive on stale memory
-                                    unsafe {
-                                        (done_flag_slice.usize_addr() as *mut u64)
-                                            .write_volatile(0u64);
-                                    }
-
-                                    let data_addr = ser_data.ser_data_bytes.usize_addr();
-                                    let done_flag_addr = done_flag_slice.usize_addr();
-
-                                    // Tell src where to PUT the data and where the done flag is
-                                    cq.send_ready(src, cmd, data_addr, done_flag_addr);
-
-                                    // Poll done flag locally until magic terminator arrives.
-                                    // src issues the magic PUT only after put_buffer().await
-                                    // (local completion), so RDMA ordering guarantees data arrives first.
                                     let magic = cmd.msg_hash as u64;
-                                    // let done_ptr = done_flag_addr as *const u64;
                                     let mut timer = std::time::Instant::now();
                                     loop {
-                                        let val = unsafe { done_flag_slice.as_mut_ptr().read_volatile() };
+                                        let val = unsafe { (done_flag_addr as *mut u64).read_unaligned() };
                                         if val == magic {
                                             break;
                                         }
                                         if timer.elapsed().as_secs_f64() > 10.0 {
-                                            println!(
+                                            debug!(
                                                 "msg_id: {msg_id} waiting for done flag from {src} magic={magic:#x} cur={val:#x}"
                                             );
                                             timer = std::time::Instant::now();
@@ -1023,12 +1075,12 @@ impl CQPut {
                                         "msg_id: {msg_id} done flag received from {src}, submitting remote am"
                                     );
 
-                                    // done_flag_alloc freed here (goes out of scope)
-                                    drop(done_flag_alloc);
-
                                     cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
-                                    scheduler1.submit_remote_am(ser_data, &lamellae);
-                                    // No send_free needed: src freed the source after put_buffer().await
+                                    scheduler1.submit_remote_am(
+                                        ser_data.drop_payload_bytes(std::mem::size_of::<u64>()),
+                                        &lamellae,
+                                    );
+                                    // No send_free needed: sender freed source after put_buffer().await
                                 };
                                 self.scheduler.submit_io_task(task);
                             }

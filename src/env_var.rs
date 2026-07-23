@@ -45,14 +45,13 @@
 //! - `LAMELLAR_DISABLE_ON_NODE_SHMEM` - set to true or 1 to disable same-node shared-memory fast path (UCX/libfabric), default: false
 //! - `LAMELLAR_CMD_QUEUE` - selects the command queue protocol variant
 //!     - possible values
+//!         - `batched` -- GET-based protocol that batches multiple outgoing commands into shared buffers before flushing
 //!         - `get` -- default, receiver issues RDMA GET for data
-//!         - `get2` -- GET-based protocol with eager send for small messages
-//!         - `getn` -- GET-based protocol with multiple in-flight slots per PE pair
-//!         - `old` -- the original command queue protocol
-//!         - `put` -- receiver allocates a buffer and sender PUTs data directly
-//!         - `put2` -- an optimized version of the PUT-based protocol
-//!         - `put2n` -- PUT2-based protocol with multiple in-flight slots per PE pair
-//!         - `put3` -- an alternative PUT-based protocol variant
+//!         - `geteager` -- GET-based protocol with eager send for small messages
+//!         - `getslots` -- GET-based protocol with multiple in-flight slots per PE pair
+//!         - `put` -- receiver allocates a buffer, sender PUTs data and completion signal directly
+//!         - `putslots` -- PUT-based protocol with multiple in-flight slots per PE pair
+//!         - `puteager` -- PUT-based protocol with eager send for small messages
 use serde::Deserialize;
 use std::sync::OnceLock;
 
@@ -139,19 +138,20 @@ fn default_array_dynamic_index() -> IndexType {
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum CmdQueue {
-    Old,
+    /// GET-based protocol that batches multiple outgoing commands into shared buffers before flushing
+    Batched,
     /// GET-based protocol: receiver GETs data from sender (default)
     Get,
     /// GET-based protocol with eager send for small messages (≤4096 bytes)
-    Get2,
+    GetEager,
     /// GET-based protocol with N=4 in-flight slots per PE pair
-    GetN,
-    /// PUT-based protocol: receiver allocates buffer, sender PUTs data directly
+    GetSlots,
+    /// PUT-based protocol: receiver allocates buffer, sender PUTs data and completion signal directly
     Put,
-    Put2,
-    /// PUT2-based protocol with N=4 in-flight slots per PE pair
-    Put2N,
-    Put3,
+    /// PUT-based protocol with N=4 in-flight slots per PE pair
+    PutSlots,
+    /// PUT-based protocol with eager send for small messages (≤4096 bytes)
+    PutEager,
 }
 
 fn default_cmd_queue() -> CmdQueue {

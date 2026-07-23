@@ -1,6 +1,6 @@
-// command_queues_put3.rs — PUT-based protocol with eager send path for small messages.
+// command_queues_put_eager.rs — PUT-based protocol with eager send path for small messages.
 //
-// Extends put2 with an eager (zero-handshake) path for messages ≤ EAGER_DATA_SIZE bytes:
+// Extends the base put protocol with an eager (zero-handshake) path for messages ≤ EAGER_DATA_SIZE bytes:
 //
 //   Sender                           Receiver
 //   ──────────────────────────────────────────
@@ -14,7 +14,7 @@
 //                                  submit_remote_am
 //
 // Flow control: sender checks that (send_head[dst] - acked[dst]) < RING_SIZE before claiming.
-// For larger messages, falls through to the rendezvous protocol from put2.
+// For larger messages, falls through to the base rendezvous protocol.
 
 use super::{
     comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
@@ -511,7 +511,7 @@ impl InnerCQ {
         ack_slot.put_unmanaged::<u64>(count as u64, src, 0);
     }
 
-    // Two-phase rendezvous send (same as put2).
+    // Two-phase rendezvous send (same as the base put protocol).
     async fn send(&self, data: CommSlice<u8>, dst: usize, hash: usize) {
         stats!(PE_SENDS[0][dst].fetch_add(1, Ordering::SeqCst));
         debug!("want to send data {:?} {:x}", dst, hash);
@@ -901,7 +901,7 @@ impl Drop for InnerCQ {
     }
 }
 
-pub(crate) struct CQPut3 {
+pub(crate) struct CQPutEager {
     cq: Arc<InnerCQ>,
     _send_buffer: CommAlloc,
     _recv_buffer: CommAlloc,
@@ -918,14 +918,14 @@ pub(crate) struct CQPut3 {
 }
 
 #[lamellar_prof::prof]
-impl CQPut3 {
+impl CQPutEager {
     pub(crate) fn new(
         comm: Arc<Comm>,
         scheduler: Arc<Scheduler>,
         my_pe: usize,
         num_pes: usize,
         active: Arc<AtomicU8>,
-    ) -> CQPut3 {
+    ) -> CQPutEager {
         let send_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
@@ -1016,7 +1016,7 @@ impl CQPut3 {
             active.clone(),
         );
         trace!("created InnerCQ");
-        CQPut3 {
+        CQPutEager {
             cq: Arc::new(cq),
             _send_buffer: send_buffer,
             _recv_buffer: recv_buffer,
@@ -1326,9 +1326,9 @@ impl CQPut3 {
 }
 
 #[lamellar_prof::prof]
-impl Drop for CQPut3 {
+impl Drop for CQPutEager {
     fn drop(&mut self) {
-        trace!(target: "drop", "begin drop CQPut3");
+        trace!(target: "drop", "begin drop CQPutEager");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1349,6 +1349,6 @@ impl Drop for CQPut3 {
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
-        trace!(target: "drop", "end drop CQPut3");
+        trace!(target: "drop", "end drop CQPutEager");
     }
 }

@@ -1371,7 +1371,7 @@ impl Drop for InnerCQ {
     }
 }
 
-pub(crate) struct CQOld {
+pub(crate) struct CQBatched {
     cq: Arc<InnerCQ>,
     _send_buffer: CommAlloc,
     _recv_buffer: CommAlloc,
@@ -1387,11 +1387,11 @@ pub(crate) struct CQOld {
 }
 
 #[lamellar_prof::prof]
-impl CQOld {
+impl CQBatched {
 
     fn print_arc_cnts(&self) {
         trace!(target: "drop",
-            "CQOld Arc counts: cq: {:?}  cmd_buffers: {:?} comm: {:?}",
+            "CQBatched Arc counts: cq: {:?}  cmd_buffers: {:?} comm: {:?}",
             Arc::strong_count(&self.cq),
             self._cmd_buffers.iter().map(|cb| Arc::strong_count(cb)).collect::<Vec<_>>(),
             Arc::strong_count(&self._comm),
@@ -1404,7 +1404,7 @@ impl CQOld {
         my_pe: usize,
         num_pes: usize,
         active: Arc<AtomicU8>,
-    ) -> CQOld {
+    ) -> CQBatched {
         let send_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
@@ -1494,7 +1494,7 @@ impl CQOld {
             active.clone(),
         );
         trace!("created InnerCQ");
-        CQOld {
+        CQBatched {
             cq: Arc::new(cq),
             _send_buffer: send_buffer,
             _recv_buffer: recv_buffer,
@@ -1831,10 +1831,10 @@ impl CQOld {
 }
 
 #[lamellar_prof::prof]
-impl Drop for CQOld {
+impl Drop for CQBatched {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        trace!(target: "drop", "begin drop CQOld");
+        trace!(target: "drop", "begin drop CQBatched");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1855,6 +1855,6 @@ impl Drop for CQOld {
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
-        trace!(target: "drop", "end drop CQOld");
+        trace!(target: "drop", "end drop CQBatched");
     }
 }

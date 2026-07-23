@@ -1,12 +1,11 @@
 pub(crate) mod comm;
 pub(crate) mod command_queues;
-pub(crate) mod command_queues_get2;
-pub(crate) mod command_queues_get_n;
-pub(crate) mod command_queues_put2_n;
+pub(crate) mod command_queues_batched;
+pub(crate) mod command_queues_get_eager;
+pub(crate) mod command_queues_get_slots;
 pub(crate) mod command_queues_put;
-pub(crate) mod command_queues_put2;
-pub(crate) mod command_queues_put3;
-pub(crate) mod command_queues_old;
+pub(crate) mod command_queues_put_eager;
+pub(crate) mod command_queues_put_slots;
 pub(crate) mod local_lamellae;
 pub(crate) mod shmem_lamellae;
 

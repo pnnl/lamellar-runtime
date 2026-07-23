@@ -718,7 +718,7 @@ impl Drop for InnerCQ {
     }
 }
 
-pub(crate) struct CQPut2N {
+pub(crate) struct CQPutSlots {
     cq: Arc<InnerCQ>,
     _send_buffer: CommAlloc,
     _recv_buffer: CommAlloc,
@@ -733,14 +733,14 @@ pub(crate) struct CQPut2N {
 }
 
 #[lamellar_prof::prof]
-impl CQPut2N {
+impl CQPutSlots {
     pub(crate) fn new(
         comm: Arc<Comm>,
         scheduler: Arc<Scheduler>,
         my_pe: usize,
         num_pes: usize,
         active: Arc<AtomicU8>,
-    ) -> CQPut2N {
+    ) -> CQPutSlots {
         let send_buffer = comm
             .rt_alloc(
                 num_pes * N * std::mem::size_of::<CmdMsg>(),
@@ -811,7 +811,7 @@ impl CQPut2N {
             active.clone(),
         );
         trace!("created InnerCQ");
-        CQPut2N {
+        CQPutSlots {
             cq: Arc::new(cq),
             _send_buffer: send_buffer,
             _recv_buffer: recv_buffer,
@@ -850,7 +850,7 @@ impl CQPut2N {
     }
 
     pub(crate) fn wait_all_print(&self) {
-        println!("command queue (Put2N, N={N})");
+        println!("command queue (PutSlots, N={N})");
         println!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1046,9 +1046,9 @@ impl CQPut2N {
 }
 
 #[lamellar_prof::prof]
-impl Drop for CQPut2N {
+impl Drop for CQPutSlots {
     fn drop(&mut self) {
-        trace!(target: "drop", "begin drop CQPut2N");
+        trace!(target: "drop", "begin drop CQPutSlots");
         debug!(
             "sends {:?}",
             print_stats!(PE_SENDS
@@ -1069,6 +1069,6 @@ impl Drop for CQPut2N {
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
         );
-        trace!(target: "drop", "end drop CQPut2N");
+        trace!(target: "drop", "end drop CQPutSlots");
     }
 }

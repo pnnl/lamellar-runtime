@@ -1035,14 +1035,13 @@ impl CQGet {
 
     fn mem_per_pe() -> usize {
         match config().cmd_queue {
-            CmdQueue::Old => super::command_queues_old::CQOld::mem_per_pe(),
+            CmdQueue::Batched => super::command_queues_batched::CQBatched::mem_per_pe(),
             CmdQueue::Get => 4 * std::mem::size_of::<CmdMsg>(),
-            CmdQueue::Get2 => super::command_queues_get2::CQGet2::mem_per_pe(),
-            CmdQueue::GetN => super::command_queues_get_n::CQGetN::mem_per_pe(),
+            CmdQueue::GetEager => super::command_queues_get_eager::CQGetEager::mem_per_pe(),
+            CmdQueue::GetSlots => super::command_queues_get_slots::CQGetSlots::mem_per_pe(),
             CmdQueue::Put => super::command_queues_put::CQPut::mem_per_pe(),
-            CmdQueue::Put2 => super::command_queues_put2::CQPut2::mem_per_pe(),
-            CmdQueue::Put2N => super::command_queues_put2_n::CQPut2N::mem_per_pe(),
-            CmdQueue::Put3 => super::command_queues_put3::CQPut3::mem_per_pe(),
+            CmdQueue::PutSlots => super::command_queues_put_slots::CQPutSlots::mem_per_pe(),
+            CmdQueue::PutEager => super::command_queues_put_eager::CQPutEager::mem_per_pe(),
         } 
     }
 
@@ -1080,14 +1079,13 @@ impl Drop for CQGet {
 }
 
 enum CQVariant {
-    Old(super::command_queues_old::CQOld),
+    Batched(super::command_queues_batched::CQBatched),
     Get(CQGet),
-    Get2(super::command_queues_get2::CQGet2),
-    GetN(super::command_queues_get_n::CQGetN),
+    GetEager(super::command_queues_get_eager::CQGetEager),
+    GetSlots(super::command_queues_get_slots::CQGetSlots),
     Put(super::command_queues_put::CQPut),
-    Put2(super::command_queues_put2::CQPut2),
-    Put2N(super::command_queues_put2_n::CQPut2N),
-    Put3(super::command_queues_put3::CQPut3),
+    PutSlots(super::command_queues_put_slots::CQPutSlots),
+    PutEager(super::command_queues_put_eager::CQPutEager),
 }
 
 pub(crate) struct CommandQueue {
@@ -1106,28 +1104,25 @@ impl CommandQueue {
         active: Arc<AtomicU8>,
     ) -> CommandQueue {
         let inner = match crate::config().cmd_queue {
-            CmdQueue::Old => CQVariant::Old(super::command_queues_old::CQOld::new(
+            CmdQueue::Batched => CQVariant::Batched(super::command_queues_batched::CQBatched::new(
                 comm, scheduler.clone(), my_pe, num_pes, active,
             )),
             CmdQueue::Get => CQVariant::Get(CQGet::new(
                 comm, scheduler.clone(), my_pe, num_pes, active,
             )),
-            CmdQueue::Get2 => CQVariant::Get2(super::command_queues_get2::CQGet2::new(
+            CmdQueue::GetEager => CQVariant::GetEager(super::command_queues_get_eager::CQGetEager::new(
                 comm, scheduler.clone(), my_pe, num_pes, active,
             )),
-            CmdQueue::GetN => CQVariant::GetN(super::command_queues_get_n::CQGetN::new(
+            CmdQueue::GetSlots => CQVariant::GetSlots(super::command_queues_get_slots::CQGetSlots::new(
                 comm, scheduler.clone(), my_pe, num_pes, active,
             )),
             CmdQueue::Put => CQVariant::Put(super::command_queues_put::CQPut::new(
                 comm, scheduler.clone(), my_pe, num_pes, active,
             )),
-            CmdQueue::Put2 => CQVariant::Put2(super::command_queues_put2::CQPut2::new(
+            CmdQueue::PutSlots => CQVariant::PutSlots(super::command_queues_put_slots::CQPutSlots::new(
                 comm, scheduler.clone(), my_pe, num_pes, active,
             )),
-            CmdQueue::Put2N => CQVariant::Put2N(super::command_queues_put2_n::CQPut2N::new(
-                comm, scheduler.clone(), my_pe, num_pes, active,
-            )),
-            CmdQueue::Put3 => CQVariant::Put3(super::command_queues_put3::CQPut3::new(
+            CmdQueue::PutEager => CQVariant::PutEager(super::command_queues_put_eager::CQPutEager::new(
                 comm, scheduler.clone(), my_pe, num_pes, active,
             )),
         };
@@ -1137,82 +1132,76 @@ impl CommandQueue {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn send_alloc(&self, min_size: usize) {
         match &self.inner {
-            CQVariant::Old(cq) => cq.send_alloc(min_size).await,
+            CQVariant::Batched(cq) => cq.send_alloc(min_size).await,
             CQVariant::Get(cq) => cq.send_alloc(min_size).await,
-            CQVariant::Get2(cq) => cq.send_alloc(min_size).await,
-            CQVariant::GetN(cq) => cq.send_alloc(min_size).await,
+            CQVariant::GetEager(cq) => cq.send_alloc(min_size).await,
+            CQVariant::GetSlots(cq) => cq.send_alloc(min_size).await,
             CQVariant::Put(cq) => cq.send_alloc(min_size).await,
-            CQVariant::Put2(cq) => cq.send_alloc(min_size).await,
-            CQVariant::Put2N(cq) => cq.send_alloc(min_size).await,
-            CQVariant::Put3(cq) => cq.send_alloc(min_size).await,
+            CQVariant::PutSlots(cq) => cq.send_alloc(min_size).await,
+            CQVariant::PutEager(cq) => cq.send_alloc(min_size).await,
         }
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn send_panic(&self) {
         match &self.inner {
-            CQVariant::Old(cq) => cq.send_panic(),
+            CQVariant::Batched(cq) => cq.send_panic(),
             CQVariant::Get(cq) => cq.send_panic(),
-            CQVariant::Get2(cq) => cq.send_panic(),
-            CQVariant::GetN(cq) => cq.send_panic(),
+            CQVariant::GetEager(cq) => cq.send_panic(),
+            CQVariant::GetSlots(cq) => cq.send_panic(),
             CQVariant::Put(cq) => cq.send_panic(),
-            CQVariant::Put2(cq) => cq.send_panic(),
-            CQVariant::Put2N(cq) => cq.send_panic(),
-            CQVariant::Put3(cq) => cq.send_panic(),
+            CQVariant::PutSlots(cq) => cq.send_panic(),
+            CQVariant::PutEager(cq) => cq.send_panic(),
         }
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn send_data(&self, data: SerializedData, dst: usize) {
         match &self.inner {
-            CQVariant::Old(cq) => cq.send_data(data, dst).await,
+            CQVariant::Batched(cq) => cq.send_data(data, dst).await,
             CQVariant::Get(cq) => cq.send_data(data, dst).await,
-            CQVariant::Get2(cq) => cq.send_data(data, dst).await,
-            CQVariant::GetN(cq) => cq.send_data(data, dst).await,
+            CQVariant::GetEager(cq) => cq.send_data(data, dst).await,
+            CQVariant::GetSlots(cq) => cq.send_data(data, dst).await,
             CQVariant::Put(cq) => cq.send_data(data, dst).await,
-            CQVariant::Put2(cq) => cq.send_data(data, dst).await,
-            CQVariant::Put2N(cq) => cq.send_data(data, dst).await,
-            CQVariant::Put3(cq) => cq.send_data(data, dst).await,
+            CQVariant::PutSlots(cq) => cq.send_data(data, dst).await,
+            CQVariant::PutEager(cq) => cq.send_data(data, dst).await,
         }
     }
 
     pub(crate) async fn send_vec(&self, vec_data: Vec<u8>, dst: usize) {
         match &self.inner {
-            CQVariant::Old(cq) => cq.send_vec(vec_data, dst).await,
+            CQVariant::Batched(cq) => cq.send_vec(vec_data, dst).await,
             CQVariant::Get(cq) => cq.send_vec(vec_data, dst).await,
-            CQVariant::Get2(cq) => cq.send_vec(vec_data, dst).await,
-            CQVariant::GetN(cq) => cq.send_vec(vec_data, dst).await,
+            CQVariant::GetEager(cq) => cq.send_vec(vec_data, dst).await,
+            CQVariant::GetSlots(cq) => cq.send_vec(vec_data, dst).await,
             CQVariant::Put(cq) => cq.send_vec(vec_data, dst).await,
-            CQVariant::Put2(cq) => cq.send_vec(vec_data, dst).await,
-            CQVariant::Put2N(cq) => cq.send_vec(vec_data, dst).await,
-            CQVariant::Put3(cq) => cq.send_vec(vec_data, dst).await,
+            CQVariant::PutSlots(cq) => cq.send_vec(vec_data, dst).await,
+            CQVariant::PutEager(cq) => cq.send_vec(vec_data, dst).await,
         }
     }
 
     pub(crate) fn wait_all_print(&self) {
         match &self.inner {
-            CQVariant::Old(cq) => cq.wait_all_print(),
+            CQVariant::Batched(cq) => cq.wait_all_print(),
             CQVariant::Get(cq) => cq.wait_all_print(),
-            CQVariant::Get2(cq) => cq.wait_all_print(),
-            CQVariant::GetN(cq) => cq.wait_all_print(),
+            CQVariant::GetEager(cq) => cq.wait_all_print(),
+            CQVariant::GetSlots(cq) => cq.wait_all_print(),
             CQVariant::Put(cq) => cq.wait_all_print(),
-            CQVariant::Put2(cq) => cq.wait_all_print(),
-            CQVariant::Put2N(cq) => cq.wait_all_print(),
-            CQVariant::Put3(cq) => cq.wait_all_print(),
+            CQVariant::PutSlots(cq) => cq.wait_all_print(),
+            CQVariant::PutEager(cq) => cq.wait_all_print(),
         }
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn alloc_task(&self) {
         match &self.inner {
-            CQVariant::Old(cq) => cq.alloc_task().await,
+            CQVariant::Batched(cq) => cq.alloc_task().await,
             CQVariant::Get(cq) => cq.alloc_task().await,
-            CQVariant::Get2(cq) => cq.alloc_task().await,
-            CQVariant::GetN(cq) => cq.alloc_task().await,
+            CQVariant::GetEager(cq) => cq.alloc_task().await,
+            CQVariant::GetSlots(cq) => cq.alloc_task().await,
             CQVariant::Put(cq) => cq.alloc_task().await,
-            CQVariant::Put2(cq) => cq.alloc_task().await,
-            CQVariant::Put2N(cq) => cq.alloc_task().await,
-            CQVariant::Put3(cq) => cq.alloc_task().await,
+            CQVariant::PutSlots(cq) => cq.alloc_task().await,
+            CQVariant::PutEager(cq) => cq.alloc_task().await,
         }
         self.background_done.fetch_sub(1, Ordering::Release);
         debug!(target: "drop","alloc_task exiting");
@@ -1221,14 +1210,13 @@ impl CommandQueue {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn panic_task(&self) {
         match &self.inner {
-            CQVariant::Old(cq) => cq.panic_task().await,
+            CQVariant::Batched(cq) => cq.panic_task().await,
             CQVariant::Get(cq) => cq.panic_task().await,
-            CQVariant::Get2(cq) => cq.panic_task().await,
-            CQVariant::GetN(cq) => cq.panic_task().await,
+            CQVariant::GetEager(cq) => cq.panic_task().await,
+            CQVariant::GetSlots(cq) => cq.panic_task().await,
             CQVariant::Put(cq) => cq.panic_task().await,
-            CQVariant::Put2(cq) => cq.panic_task().await,
-            CQVariant::Put2N(cq) => cq.panic_task().await,
-            CQVariant::Put3(cq) => cq.panic_task().await,
+            CQVariant::PutSlots(cq) => cq.panic_task().await,
+            CQVariant::PutEager(cq) => cq.panic_task().await,
         }
         self.background_done.fetch_sub(1, Ordering::Release);
         debug!(target: "drop","panic_task exiting");
@@ -1241,37 +1229,35 @@ impl CommandQueue {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn recv_data(&self, lamellae: Arc<Lamellae>) {
         match &self.inner {
-            CQVariant::Old(cq) => cq.recv_data(lamellae).await,
+            CQVariant::Batched(cq) => cq.recv_data(lamellae).await,
             CQVariant::Get(cq) => cq.recv_data(lamellae).await,
-            CQVariant::Get2(cq) => cq.recv_data(lamellae).await,
-            CQVariant::GetN(cq) => cq.recv_data(lamellae).await,
+            CQVariant::GetEager(cq) => cq.recv_data(lamellae).await,
+            CQVariant::GetSlots(cq) => cq.recv_data(lamellae).await,
             CQVariant::Put(cq) => cq.recv_data(lamellae).await,
-            CQVariant::Put2(cq) => cq.recv_data(lamellae).await,
-            CQVariant::Put2N(cq) => cq.recv_data(lamellae).await,
-            CQVariant::Put3(cq) => cq.recv_data(lamellae).await,
+            CQVariant::PutSlots(cq) => cq.recv_data(lamellae).await,
+            CQVariant::PutEager(cq) => cq.recv_data(lamellae).await,
         }
         debug!(target: "drop","recv_data exiting");
     }
 
     pub(crate) fn mem_per_pe() -> usize {
         match crate::config().cmd_queue {
-            CmdQueue::Get2 => super::command_queues_get2::CQGet2::mem_per_pe(),
-            CmdQueue::GetN => super::command_queues_get_n::CQGetN::mem_per_pe(),
-            CmdQueue::Put2N => super::command_queues_put2_n::CQPut2N::mem_per_pe(),
+            CmdQueue::GetEager => super::command_queues_get_eager::CQGetEager::mem_per_pe(),
+            CmdQueue::GetSlots => super::command_queues_get_slots::CQGetSlots::mem_per_pe(),
+            CmdQueue::PutSlots => super::command_queues_put_slots::CQPutSlots::mem_per_pe(),
             _ => CQGet::mem_per_pe(),
         }
     }
 
     pub(crate) fn available_to_send(&self, pe: usize) -> bool {
         match &self.inner {
-            CQVariant::Old(cq) => cq.available_to_send(pe),
+            CQVariant::Batched(cq) => cq.available_to_send(pe),
             CQVariant::Get(cq) => cq.available_to_send(pe),
-            CQVariant::Get2(cq) => cq.available_to_send(pe),
-            CQVariant::GetN(cq) => cq.available_to_send(pe),
+            CQVariant::GetEager(cq) => cq.available_to_send(pe),
+            CQVariant::GetSlots(cq) => cq.available_to_send(pe),
             CQVariant::Put(cq) => cq.available_to_send(pe),
-            CQVariant::Put2(cq) => cq.available_to_send(pe),
-            CQVariant::Put2N(cq) => cq.available_to_send(pe),
-            CQVariant::Put3(cq) => cq.available_to_send(pe),
+            CQVariant::PutSlots(cq) => cq.available_to_send(pe),
+            CQVariant::PutEager(cq) => cq.available_to_send(pe),
         }
     }
 }
