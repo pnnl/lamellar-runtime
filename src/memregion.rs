@@ -813,6 +813,13 @@ pub(crate) enum Mode {
 pub(crate) struct MemoryRegion<T: Remote> {
     pub(crate) alloc: CommAlloc,
     pub(crate) coll_sync_alloc: Option<Arc<CommAlloc>>,
+    // local (never remotely visible) ticket lock guarding the Manual collective path's
+    // shared sync region -- ensures PEs agree on which logical call "owns" the region even
+    // when multiple calls are pipelined via spawn() before any are blocked on. Assumes all
+    // PEs issue collectives against this array in the same program order (standard SPMD
+    // assumption already required by this array's other collective protocols).
+    pub(crate) coll_ticket: Arc<AtomicUsize>,
+    pub(crate) coll_now_serving: Arc<AtomicUsize>,
     pe: usize,
     backend: Backend,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -895,6 +902,8 @@ impl<T: Remote> MemoryRegion<T> {
         let temp = MemoryRegion {
             alloc,
             coll_sync_alloc,
+            coll_ticket: Arc::new(AtomicUsize::new(0)),
+            coll_now_serving: Arc::new(AtomicUsize::new(0)),
             pe: lamellae.comm().my_pe(),
             scheduler: scheduler.clone(),
             counters: counters,
@@ -933,6 +942,8 @@ impl<T: Remote> MemoryRegion<T> {
                 num_bytes,
             ),
             coll_sync_alloc: None,
+            coll_ticket: Arc::new(AtomicUsize::new(0)),
+            coll_now_serving: Arc::new(AtomicUsize::new(0)),
             pe: pe,
             // num_elems,
             scheduler: team.scheduler.clone(),
@@ -959,6 +970,8 @@ impl<T: Remote> MemoryRegion<T> {
         MemoryRegion {
             alloc: self.alloc.clone(),
             coll_sync_alloc: self.coll_sync_alloc.clone(),
+            coll_ticket: self.coll_ticket.clone(),
+            coll_now_serving: self.coll_now_serving.clone(),
             pe: self.pe,
             scheduler: self.scheduler.clone(),
             counters: self.counters.clone(),
@@ -977,6 +990,8 @@ impl<T: Remote> MemoryRegion<T> {
         MemoryRegion {
             alloc: self.alloc.clone(),
             coll_sync_alloc: self.coll_sync_alloc.clone(),
+            coll_ticket: self.coll_ticket.clone(),
+            coll_now_serving: self.coll_now_serving.clone(),
             pe: self.pe,
             // num_elems: self.alloc.num_bytes() / std::mem::size_of::<B>(),
             scheduler: self.scheduler.clone(),
@@ -991,6 +1006,10 @@ impl<T: Remote> MemoryRegion<T> {
 
     pub(crate) fn get_collective_sync_alloc(&self) -> Option<Arc<CommAlloc>> {
         self.coll_sync_alloc.clone()
+    }
+
+    pub(crate) fn get_collective_ticket_state(&self) -> (Arc<AtomicUsize>, Arc<AtomicUsize>) {
+        (self.coll_ticket.clone(), self.coll_now_serving.clone())
     }
 
     pub(crate) unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {

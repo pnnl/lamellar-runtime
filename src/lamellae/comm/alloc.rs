@@ -2427,12 +2427,12 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.reduce_all(scheduler, counters, index, len, op)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.reduce_all(scheduler, counters, index, len, op)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.reduce_all(scheduler, counters, index, len, op)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2491,12 +2491,12 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2553,12 +2553,12 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.reduce_all_in_place(scheduler, counters, src_and_dst, op)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.reduce_all_in_place(scheduler, counters, src_and_dst, op)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2620,12 +2620,12 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2683,12 +2683,12 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2807,12 +2807,12 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.gather_all(scheduler, counters, index, len)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.gather_all(scheduler, counters, index, len)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.gather_all(scheduler, counters, index, len)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2869,12 +2869,12 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2934,12 +2934,12 @@ impl CommAllocCollectiveGather for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.gather(scheduler, counters, index, len, root_pe)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.gather(scheduler, counters, index, len, root_pe)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.gather(scheduler, counters, index, len, root_pe)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2996,12 +2996,12 @@ impl CommAllocCollectiveGather for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3062,12 +3062,12 @@ impl CommAllocCollectiveAllToAll for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.alltoall(scheduler, counters, index, len)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.alltoall(scheduler, counters, index, len)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3126,12 +3126,12 @@ impl CommAllocCollectiveAllToAll for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.broadcast_all_into_buffer(scheduler, counters, src, buffer)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.alltoall_into_buffer(scheduler, counters, index, len, buffer)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.alltoall_into_buffer(scheduler, counters, index, len, buffer)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3176,12 +3176,12 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3237,12 +3237,12 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3302,12 +3302,12 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3365,12 +3365,12 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3431,12 +3431,12 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3494,12 +3494,12 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
             // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
-            // }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }

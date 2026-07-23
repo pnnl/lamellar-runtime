@@ -1,6 +1,6 @@
-use crate::{AsLamellarBuffer, Dist, ElementArithmeticOps, ElementBitWiseOps, LamellarBuffer, LamellarEnv, array::{NativeAtomicArray, 
+use crate::{AsLamellarBuffer, Dist, ElementArithmeticOps, ElementBitWiseOps, ElementComparePartialEqOps, LamellarBuffer, LamellarEnv, array::{NativeAtomicArray,
     collective::{
-        algorithm::{do_all_gather, do_all_gather_in_buffer, do_all_reduce, do_all_reduce_bitwise, do_all_reduce_bitwise_in_buffer, do_all_reduce_in_buffer, do_all_to_all, do_all_to_all_in_buffer, do_broadcast, do_broadcast_in_buffer, do_gather, do_gather_in_buffer, do_reduce, do_reduce_bitwise, do_reduce_bitwise_in_buffer, do_reduce_in_buffer, do_reduce_scatter, do_reduce_scatter_bitwise, do_reduce_scatter_bitwise_in_buffer, do_reduce_scatter_in_buffer, do_scatter, do_scatter_in_buffer}, 
+        algorithm::{do_all_gather, do_all_gather_in_buffer, do_all_reduce, do_all_reduce_bitwise, do_all_reduce_bitwise_in_buffer, do_all_reduce_comparison, do_all_reduce_comparison_in_buffer, do_all_reduce_in_buffer, do_all_to_all, do_all_to_all_in_buffer, do_broadcast, do_broadcast_in_buffer, do_gather, do_gather_in_buffer, do_reduce, do_reduce_bitwise, do_reduce_bitwise_in_buffer, do_reduce_comparison, do_reduce_comparison_in_buffer, do_reduce_in_buffer, do_reduce_scatter, do_reduce_scatter_bitwise, do_reduce_scatter_bitwise_in_buffer, do_reduce_scatter_comparison, do_reduce_scatter_comparison_in_buffer, do_reduce_scatter_in_buffer, do_scatter, do_scatter_in_buffer},
         broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveAllToAllIntoBufferState, ArrayCollectiveAllToAllState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle, ArrayCollectiveScatterIntoBufferState, ArrayCollectiveScatterState, CollectiveAllToAllIntoBufferManualOpHandle, CollectiveAllToAllManualOpHandle, CollectiveBroadcastIntoBufferManualOpHandle, CollectiveBroadcastManualOpHandle, CollectiveScatterIntoBufferManualOpHandle, CollectiveScatterManualOpHandle}, 
         gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState, CollectiveAllGatherIntoBufferManualOpHandle, CollectiveAllGatherManualOpHandle, CollectiveGatherIntoBufferManualOpHandle, CollectiveGatherManualOpHandle}, 
         reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState, CollectiveAllReduceIntoBufferManualOpHandle, CollectiveAllReduceManualOpHandle, CollectiveReduceIntoBufferManualOpHandle, CollectiveReduceManualOpHandle}, 
@@ -41,10 +41,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, index, len, ReduceOp::Sum)),
+                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Sum)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -58,6 +60,56 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         }
     }
 
+    /// All-reduce product of `len` elements starting at `index`, delivering the result to all PEs.
+    ///
+    /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
+    /// product is computed across all PEs and every PE receives the result.
+    /// Returns an [`ArrayCollectiveAllReduceHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
+    /// undefined behavior. `index + len` must not exceed the local segment length.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let _result = unsafe { array.prod_all(0, array.local_len()) }.block();
+    ///```
+    pub unsafe fn prod_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
+        if !self.array.collective_support.all_prod {
+            let alloc = self.array
+                .inner
+                .data
+                .mem_region
+                .get_collective_sync_alloc();
+
+            let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ArrayCollectiveAllReduceHandle{
+                array: self.array.as_lamellar_byte_array(),
+                state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
+                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Prod)),
+                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
+                    counters: self.array.inner.data.mem_region.counters.clone(),
+                }),
+                spawned: false,
+            }
+        }
+        else {
+            self.array
+                .prod_all(index, len)
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> NativeAtomicArray<T> {
     /// All-reduce max of `len` elements starting at `index`, delivering the result to all PEs.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -88,10 +140,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, index, len, ReduceOp::Max)),
+                    future: Box::pin(do_all_reduce_comparison(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Max)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -134,10 +188,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, index, len, ReduceOp::Min)),
+                    future: Box::pin(do_all_reduce_comparison(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Min)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -147,52 +203,6 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         else {
             self.array
                 .min_all(index, len)
-        }
-    }
-
-    /// All-reduce product of `len` elements starting at `index`, delivering the result to all PEs.
-    ///
-    /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
-    /// product is computed across all PEs and every PE receives the result.
-    /// Returns an [`ArrayCollectiveAllReduceHandle`] that must be `spawn()`ed or `block()`ed.
-    ///
-    /// # Safety
-    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
-    /// undefined behavior. `index + len` must not exceed the local segment length.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_all(0, array.local_len()) }.block();
-    ///```
-    pub unsafe fn prod_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
-        if !self.array.collective_support.all_prod {
-            let alloc = self.array
-                .inner
-                .data
-                .mem_region
-                .get_collective_sync_alloc();
-
-            let sync_alloc = alloc.unwrap();
-            ArrayCollectiveAllReduceHandle{
-                array: self.array.as_lamellar_byte_array(),
-                state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(),sync_alloc, index, len, ReduceOp::Prod)),
-                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
-                    counters: self.array.inner.data.mem_region.counters.clone(),
-                }),
-                spawned: false,
-            }
-        }
-        else {
-            self.array
-                .prod_all(index, len)
         }
     }
 }
@@ -230,10 +240,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd)),
+                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitAnd)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -277,10 +289,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor)),
+                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitXor)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -324,10 +338,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceState::CollectiveAllReduceManual(CollectiveAllReduceManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr)),
+                    future: Box::pin(do_all_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitOr)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -374,10 +390,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Sum, buffer)),
+                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Sum, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -390,6 +408,58 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         }
     }
 
+    /// All-reduce product of `len` elements starting at `index`, writing the result into `buffer` on all PEs.
+    ///
+    /// Like [`prod_all`](NativeAtomicArray::prod_all) but places the result into a caller-supplied
+    /// [`LamellarBuffer`] instead of allocating one internally.
+    /// Returns an [`ArrayCollectiveAllReduceIntoBufferHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
+    /// undefined behavior. `index + len` must not exceed the local segment length.
+    /// The buffer must be large enough to hold the result.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// let _result = unsafe { array.prod_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    ///```
+    pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+        if !self.array.collective_support.all_prod {
+            let alloc = self.array
+                .inner
+                .data
+                .mem_region
+                .get_collective_sync_alloc();
+
+            let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ArrayCollectiveAllReduceIntoBufferHandle{
+                array: self.array.as_lamellar_byte_array(),
+                state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
+                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Prod, buffer)),
+                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
+                    counters: self.array.inner.data.mem_region.counters.clone(),
+                }),
+                spawned: false,
+            }
+        }
+        else {
+            self.array
+                .prod_all_into_buffer(index, len, buffer)
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> NativeAtomicArray<T> {
     /// All-reduce max of `len` elements starting at `index`, writing the result into `buffer` on all PEs.
     ///
     /// Like [`max_all`](NativeAtomicArray::max_all) but places the result into a caller-supplied
@@ -422,10 +492,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Max, buffer)),
+                    future: Box::pin(do_all_reduce_comparison_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Max, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -470,10 +542,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Min, buffer)),
+                    future: Box::pin(do_all_reduce_comparison_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Min, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -483,54 +557,6 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         else {
             self.array
                 .min_all_into_buffer(index, len, buffer)
-        }
-    }
-
-    /// All-reduce product of `len` elements starting at `index`, writing the result into `buffer` on all PEs.
-    ///
-    /// Like [`prod_all`](NativeAtomicArray::prod_all) but places the result into a caller-supplied
-    /// [`LamellarBuffer`] instead of allocating one internally.
-    /// Returns an [`ArrayCollectiveAllReduceIntoBufferHandle`] that must be `spawn()`ed or `block()`ed.
-    ///
-    /// # Safety
-    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
-    /// undefined behavior. `index + len` must not exceed the local segment length.
-    /// The buffer must be large enough to hold the result.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.prod_all_into_buffer(0, array.local_len(), buf.into()) }.block();
-    ///```
-    pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
-        if !self.array.collective_support.all_prod {
-            let alloc = self.array
-                .inner
-                .data
-                .mem_region
-                .get_collective_sync_alloc();
-
-            let sync_alloc = alloc.unwrap();
-            ArrayCollectiveAllReduceIntoBufferHandle{
-                array: self.array.as_lamellar_byte_array(),
-                state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Prod, buffer)),
-                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
-                    counters: self.array.inner.data.mem_region.counters.clone(),
-                }),
-                spawned: false,
-            }
-        }
-        else {
-            self.array
-                .prod_all_into_buffer(index, len, buffer)
         }
     }
 }
@@ -568,10 +594,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd, buffer)),
+                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitAnd, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -616,10 +644,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor, buffer)),
+                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitXor, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -664,10 +694,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(CollectiveAllReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr, buffer)),
+                    future: Box::pin(do_all_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitOr, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -753,10 +785,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::Sum)),
+                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, pe, ReduceOp::Sum)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -769,6 +803,57 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         }
     }
 
+    /// Reduce product of `len` elements starting at `index`, delivering the result only to `pe`.
+    ///
+    /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
+    /// product is computed and the result is stored on the designated root PE `pe`.
+    /// Returns an [`ArrayCollectiveReduceHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
+    /// undefined behavior. `index + len` must not exceed the local segment length. `pe` must be
+    /// a valid PE index.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let _result = unsafe { array.prod_at_pe(0, array.local_len(), 0) }.block();
+    ///```
+    pub unsafe fn prod_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        if ! self.array.collective_support.prod {
+            let alloc = self.array
+                .inner
+                .data
+                .mem_region
+                .get_collective_sync_alloc();
+
+            let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ArrayCollectiveReduceHandle{
+                array: self.array.as_lamellar_byte_array(),
+                state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
+                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, pe, ReduceOp::Prod)),
+                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
+                    counters: self.array.inner.data.mem_region.counters.clone(),
+                }),
+                spawned: false,
+            }
+        }
+        else {
+            self.array
+                .prod_at_pe(index, len, pe)
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> NativeAtomicArray<T> {
     /// Reduce max of `len` elements starting at `index`, delivering the result only to `pe`.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -800,10 +885,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::Max)),
+                    future: Box::pin(do_reduce_comparison(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, pe, ReduceOp::Max)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -847,10 +934,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::Min)),
+                    future: Box::pin(do_reduce_comparison(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, pe, ReduceOp::Min)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -860,53 +949,6 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         else {
             self.array
                 .min_at_pe(index, len, pe)
-        }
-    }
-
-    /// Reduce product of `len` elements starting at `index`, delivering the result only to `pe`.
-    ///
-    /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
-    /// product is computed and the result is stored on the designated root PE `pe`.
-    /// Returns an [`ArrayCollectiveReduceHandle`] that must be `spawn()`ed or `block()`ed.
-    ///
-    /// # Safety
-    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
-    /// undefined behavior. `index + len` must not exceed the local segment length. `pe` must be
-    /// a valid PE index.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_at_pe(0, array.local_len(), 0) }.block();
-    ///```
-    pub unsafe fn prod_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
-        if ! self.array.collective_support.prod {
-            let alloc = self.array
-                .inner
-                .data
-                .mem_region
-                .get_collective_sync_alloc();
-
-            let sync_alloc = alloc.unwrap();
-            ArrayCollectiveReduceHandle{
-                array: self.array.as_lamellar_byte_array(),
-                state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::Prod)),
-                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
-                    counters: self.array.inner.data.mem_region.counters.clone(),
-                }),
-                spawned: false,
-            }
-        }
-        else {
-            self.array
-                .prod_at_pe(index, len, pe)
         }
     }
 }
@@ -944,10 +986,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::BitAnd)),
+                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, pe, ReduceOp::BitAnd)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -992,10 +1036,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, pe, ReduceOp::BitXor)),
+                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, pe, ReduceOp::BitXor)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1040,10 +1086,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceState::CollectiveReduceManual(CollectiveReduceManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc.clone(), index, len, pe, ReduceOp::BitOr)),
+                    future: Box::pin(do_reduce_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc.clone(), my_ticket, now_serving, index, len, pe, ReduceOp::BitOr)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1091,10 +1139,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Sum, target)),
+                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Sum, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1107,6 +1157,59 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         }
     }
 
+    /// Reduce product of `len` elements starting at `index`, writing the result into `dst` on the root PE.
+    ///
+    /// Like [`prod_at_pe`](NativeAtomicArray::prod_at_pe) but the caller supplies the destination buffer via
+    /// `dst: RootOrLamellarBuffer` instead of having the runtime allocate one. The root PE is encoded
+    /// in the `dst` value. Returns an [`ArrayCollectiveReduceIntoBufferHandle`] that must be
+    /// `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
+    /// undefined behavior. `index + len` must not exceed the local segment length. `dst` must be
+    /// large enough to hold one element.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// let _result = unsafe { array.prod_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    ///```
+    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        if !self.array.collective_support.prod {
+            let alloc = self.array
+                .inner
+                .data
+                .mem_region
+                .get_collective_sync_alloc();
+
+            let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ArrayCollectiveReduceIntoBufferHandle{
+                array: self.array.as_lamellar_byte_array(),
+                state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
+                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Prod, target)),
+                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
+                    counters: self.array.inner.data.mem_region.counters.clone(),
+                }),
+                spawned: false,
+            }
+        }
+        else {
+            self.array
+                .prod_at_pe_into_buffer(index, len, target)
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> NativeAtomicArray<T> {
     /// Reduce max of `len` elements starting at `index`, writing the result into `dst` on the root PE.
     ///
     /// Like [`max_at_pe`](NativeAtomicArray::max_at_pe) but the caller supplies the destination buffer via
@@ -1140,10 +1243,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Max, target)),
+                    future: Box::pin(do_reduce_comparison_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Max, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1189,10 +1294,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Min, target)),
+                    future: Box::pin(do_reduce_comparison_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Min, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1202,55 +1309,6 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         else {
             self.array
                 .min_at_pe_into_buffer(index, len, target)
-        }
-    }
-
-    /// Reduce product of `len` elements starting at `index`, writing the result into `dst` on the root PE.
-    ///
-    /// Like [`prod_at_pe`](NativeAtomicArray::prod_at_pe) but the caller supplies the destination buffer via
-    /// `dst: RootOrLamellarBuffer` instead of having the runtime allocate one. The root PE is encoded
-    /// in the `dst` value. Returns an [`ArrayCollectiveReduceIntoBufferHandle`] that must be
-    /// `spawn()`ed or `block()`ed.
-    ///
-    /// # Safety
-    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
-    /// undefined behavior. `index + len` must not exceed the local segment length. `dst` must be
-    /// large enough to hold one element.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.prod_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
-    ///```
-    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
-        if !self.array.collective_support.prod {
-            let alloc = self.array
-                .inner
-                .data
-                .mem_region
-                .get_collective_sync_alloc();
-
-            let sync_alloc = alloc.unwrap();
-            ArrayCollectiveReduceIntoBufferHandle{
-                array: self.array.as_lamellar_byte_array(),
-                state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Prod, target)),
-                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
-                    counters: self.array.inner.data.mem_region.counters.clone(),
-                }),
-                spawned: false,
-            }
-        }
-        else {
-            self.array
-                .prod_at_pe_into_buffer(index, len, target)
         }
     }
 }
@@ -1289,10 +1347,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd, target)),
+                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitAnd, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1338,10 +1398,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor, target)),
+                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitXor, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1387,10 +1449,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(CollectiveReduceIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr, target)),
+                    future: Box::pin(do_reduce_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitOr, target)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1515,10 +1579,12 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
             
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllGatherHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllGatherState::CollectiveAllGatherManual(CollectiveAllGatherManualOpHandle {
-                    future: Box::pin(do_all_gather(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len)),
+                    future: Box::pin(do_all_gather(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1564,10 +1630,12 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
             
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllGatherIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllGatherIntoBufferState::CollectiveAllGatherIntoBufferManual(CollectiveAllGatherIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_gather_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, buffer)),
+                    future: Box::pin(do_all_gather_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1613,10 +1681,12 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveGatherHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveGatherState::CollectiveGatherManual(CollectiveGatherManualOpHandle {
-                    future: Box::pin(do_gather(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, pe)),
+                    future: Box::pin(do_gather(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len, pe)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1661,10 +1731,12 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     ArrayCollectiveGatherIntoBufferHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveGatherIntoBufferState::CollectiveGatherIntoBufferManual(CollectiveGatherIntoBufferManualOpHandle {
-                            future: Box::pin(do_gather_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, target)),
+                            future: Box::pin(do_gather_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len, target)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1710,10 +1782,12 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllToAllHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllToAllState::CollectiveAllToAllManual(CollectiveAllToAllManualOpHandle {
-                    future: Box::pin(do_all_to_all(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len)),
+                    future: Box::pin(do_all_to_all(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1758,10 +1832,12 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveAllToAllIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveAllToAllIntoBufferState::CollectiveAllToAllIntoBufferManual(CollectiveAllToAllIntoBufferManualOpHandle {
-                    future: Box::pin(do_all_to_all_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, buffer)),
+                    future: Box::pin(do_all_to_all_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -1808,13 +1884,15 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
             match src_or_root_pe {
                 BroadcastInput::Root(index) => {
                     ArrayCollectiveBroadcastHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveBroadcastState::CollectiveBroadcastManual(CollectiveBroadcastManualOpHandle {
-                            future: Box::pin(do_broadcast(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, self.my_pe())),
+                            future: Box::pin(do_broadcast(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len, self.my_pe())),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1825,7 +1903,7 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                     ArrayCollectiveBroadcastHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveBroadcastState::CollectiveBroadcastManual(CollectiveBroadcastManualOpHandle {
-                            future: Box::pin(do_broadcast(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), 0, len, root)),
+                            future: Box::pin(do_broadcast(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, 0, len, root)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1874,10 +1952,12 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveBroadcastIntoBufferHandle{
                     array: self.array.as_lamellar_byte_array(),
                     state: ArrayCollectiveBroadcastIntoBufferState::CollectiveBroadcastIntoBufferManual(CollectiveBroadcastIntoBufferManualOpHandle {
-                        future: Box::pin(do_broadcast_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), len, target)),
+                        future: Box::pin(do_broadcast_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, len, target)),
                         scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                         counters: self.array.inner.data.mem_region.counters.clone(),
                     }),
@@ -1924,13 +2004,15 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
             match src_or_root_pe {
                 ScatterInput::Root(index) => {
                     ArrayCollectiveScatterHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveScatterState::CollectiveScatterManual(CollectiveScatterManualOpHandle {
-                            future: Box::pin(do_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, self.my_pe())),
+                            future: Box::pin(do_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len, self.my_pe())),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1941,7 +2023,7 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                     ArrayCollectiveScatterHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveScatterState::CollectiveScatterManual(CollectiveScatterManualOpHandle {
-                            future: Box::pin(do_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), 0, len, root)),
+                            future: Box::pin(do_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, 0, len, root)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -1990,13 +2072,15 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let alloc  = sync_alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
             match src_or_root_pe {
                 ScatterInput::Root(index) => {
                     ArrayCollectiveScatterIntoBufferHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBufferManual(CollectiveScatterIntoBufferManualOpHandle {
-                            future: Box::pin(do_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), index, len, self.my_pe(), buf)),
+                            future: Box::pin(do_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, index, len, self.my_pe(), buf)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -2007,7 +2091,7 @@ impl<T: Dist + Default> NativeAtomicArray<T> {
                     ArrayCollectiveScatterIntoBufferHandle{
                         array: self.array.as_lamellar_byte_array(),
                         state: ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBufferManual(CollectiveScatterIntoBufferManualOpHandle {
-                            future: Box::pin(do_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), 0, len, root, buf)),
+                            future: Box::pin(do_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), alloc.clone(), my_ticket, now_serving, 0, len, root, buf)),
                             scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                             counters: self.array.inner.data.mem_region.counters.clone(),
                         }),
@@ -2056,10 +2140,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Sum)),
+                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Sum)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2072,6 +2158,57 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         }
     }
 
+    /// Reduce-scatter product: reduces `len` elements starting at `index` and distributes disjoint result segments across PEs.
+    ///
+    /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
+    /// product is computed and the result is split into disjoint segments, one per PE, each PE receiving
+    /// its own segment.
+    /// Returns an [`ArrayCollectiveReduceScatterHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
+    /// undefined behavior. `index + len` must not exceed the local segment length.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let _result = unsafe { array.prod_scatter(0, array.local_len()) }.block();
+    ///```
+    pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+        if !self.array.collective_support.prod_scatter {
+            let alloc = self.array
+                .inner
+                .data
+                .mem_region
+                .get_collective_sync_alloc();
+
+            let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ArrayCollectiveReduceScatterHandle{
+                array: self.array.as_lamellar_byte_array(),
+                state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
+                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Prod)),
+                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
+                    counters: self.array.inner.data.mem_region.counters.clone(),
+                }),
+                spawned: false,
+            }
+        }
+        else {
+            self.array
+                .prod_scatter(index, len)
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> NativeAtomicArray<T> {
     /// Reduce-scatter max: reduces `len` elements starting at `index` and distributes disjoint result segments across PEs.
     ///
     /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
@@ -2103,10 +2240,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Max)),
+                    future: Box::pin(do_reduce_scatter_comparison(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Max)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2150,10 +2289,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Min)),
+                    future: Box::pin(do_reduce_scatter_comparison(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Min)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2163,53 +2304,6 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         else {
             self.array
                 .min_scatter(index, len)
-        }
-    }
-
-    /// Reduce-scatter product: reduces `len` elements starting at `index` and distributes disjoint result segments across PEs.
-    ///
-    /// Each PE contributes `len` elements from its local segment beginning at `index`. The global
-    /// product is computed and the result is split into disjoint segments, one per PE, each PE receiving
-    /// its own segment.
-    /// Returns an [`ArrayCollectiveReduceScatterHandle`] that must be `spawn()`ed or `block()`ed.
-    ///
-    /// # Safety
-    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
-    /// undefined behavior. `index + len` must not exceed the local segment length.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_scatter(0, array.local_len()) }.block();
-    ///```
-    pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
-        if !self.array.collective_support.prod_scatter {
-            let alloc = self.array
-                .inner
-                .data
-                .mem_region
-                .get_collective_sync_alloc();
-
-            let sync_alloc = alloc.unwrap();
-            ArrayCollectiveReduceScatterHandle{
-                array: self.array.as_lamellar_byte_array(),
-                state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Prod)),
-                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
-                    counters: self.array.inner.data.mem_region.counters.clone(),
-                }),
-                spawned: false,
-            }
-        }
-        else {
-            self.array
-                .prod_scatter(index, len)
         }
     }
 }
@@ -2248,10 +2342,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd)),
+                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitAnd)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2296,10 +2392,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor)),
+                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitXor)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2344,10 +2442,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterState::CollectiveReduceScatterManual(CollectiveReduceScatterManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr)),
+                    future: Box::pin(do_reduce_scatter_bitwise(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitOr)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2394,10 +2494,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Sum, buffer)),
+                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Sum, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2410,6 +2512,58 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         }
     }
 
+    /// Reduce-scatter product, placing each PE's result segment into caller-supplied `buffer`.
+    ///
+    /// Like [`prod_scatter`](NativeAtomicArray::prod_scatter) but places the received result segment into
+    /// the caller-supplied [`LamellarBuffer`] instead of writing into the local array.
+    /// Returns an [`ArrayCollectiveReduceScatterIntoBufferHandle`] that must be `spawn()`ed or `block()`ed.
+    ///
+    /// # Safety
+    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
+    /// undefined behavior. `index + len` must not exceed the local segment length. `buffer` must be
+    /// large enough to hold the PE's result segment.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
+    /// let _result = unsafe { array.prod_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
+    ///```
+    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+        if !self.array.collective_support.prod_scatter {
+            let alloc = self.array
+                .inner
+                .data
+                .mem_region
+                .get_collective_sync_alloc();
+
+            let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ArrayCollectiveReduceScatterIntoBufferHandle{
+                array: self.array.as_lamellar_byte_array(),
+                state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
+                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Prod, buffer)),
+                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
+                    counters: self.array.inner.data.mem_region.counters.clone(),
+                }),
+                spawned: false,
+            }
+        }
+        else {
+            self.array
+                .prod_scatter_into_buffer(index, len, buffer)
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> NativeAtomicArray<T> {
     /// Reduce-scatter max, placing each PE's result segment into caller-supplied `buffer`.
     ///
     /// Like [`max_scatter`](NativeAtomicArray::max_scatter) but places the received result segment into
@@ -2442,10 +2596,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Max, buffer)),
+                    future: Box::pin(do_reduce_scatter_comparison_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Max, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2490,10 +2646,12 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Min, buffer)),
+                    future: Box::pin(do_reduce_scatter_comparison_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::Min, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2503,54 +2661,6 @@ impl<T: ElementArithmeticOps + Default> NativeAtomicArray<T> {
         else {
             self.array
                 .min_scatter_into_buffer(index, len, buffer)
-        }
-    }
-
-    /// Reduce-scatter product, placing each PE's result segment into caller-supplied `buffer`.
-    ///
-    /// Like [`prod_scatter`](NativeAtomicArray::prod_scatter) but places the received result segment into
-    /// the caller-supplied [`LamellarBuffer`] instead of writing into the local array.
-    /// Returns an [`ArrayCollectiveReduceScatterIntoBufferHandle`] that must be `spawn()`ed or `block()`ed.
-    ///
-    /// # Safety
-    /// `NativeAtomicArray` does not enforce mutual exclusion; concurrent access to the same elements is
-    /// undefined behavior. `index + len` must not exceed the local segment length. `buffer` must be
-    /// large enough to hold the PE's result segment.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.prod_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
-    ///```
-    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
-        if !self.array.collective_support.prod_scatter {
-            let alloc = self.array
-                .inner
-                .data
-                .mem_region
-                .get_collective_sync_alloc();
-
-            let sync_alloc = alloc.unwrap();
-            ArrayCollectiveReduceScatterIntoBufferHandle{
-                array: self.array.as_lamellar_byte_array(),
-                state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::Prod, buffer)),
-                    scheduler: self.array.inner.data.mem_region.scheduler.clone(),
-                    counters: self.array.inner.data.mem_region.counters.clone(),
-                }),
-                spawned: false,
-            }
-        }
-        else {
-            self.array
-                .prod_scatter_into_buffer(index, len, buffer)
         }
     }
 }
@@ -2588,10 +2698,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitAnd, buffer)),
+                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitAnd, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2636,10 +2748,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitXor, buffer)),
+                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitXor, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
@@ -2684,10 +2798,12 @@ impl<T: ElementBitWiseOps + Default> NativeAtomicArray<T> {
                 .get_collective_sync_alloc();
 
             let sync_alloc = alloc.unwrap();
+            let (ticket_ctr, now_serving) = self.array.inner.data.mem_region.get_collective_ticket_state();
+            let my_ticket = ticket_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             ArrayCollectiveReduceScatterIntoBufferHandle{
                 array: self.array.as_lamellar_byte_array(),
                 state: ArrayCollectiveReduceScatterIntoBufferState::CollectiveReduceScatterIntoBufferManual(CollectiveReduceScatterIntoBufferManualOpHandle {
-                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, index, len, ReduceOp::BitOr, buffer)),
+                    future: Box::pin(do_reduce_scatter_bitwise_in_buffer(self.clone(), self.array.inner.data.mem_region.scheduler.clone(), sync_alloc, my_ticket, now_serving, index, len, ReduceOp::BitOr, buffer)),
                     scheduler: self.array.inner.data.mem_region.scheduler.clone(),
                     counters: self.array.inner.data.mem_region.counters.clone(),
                 }),
