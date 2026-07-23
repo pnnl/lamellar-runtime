@@ -478,8 +478,6 @@ impl<T: 'static> DarcInner<T> {
         self.item = item;
     }
 
-   
-
     fn set_dropping(&self) -> DarcMode {
         let mode = unsafe {
             (&self.mode_slice[self.my_pe] as *const _ as *const AtomicU64)
@@ -953,7 +951,7 @@ impl<T: 'static> DarcInner<T> {
 }
 
 impl<T: 'static> DarcInner<T> {
-     #[allow(dead_code)]
+    #[allow(dead_code)]
     fn item(&self) -> &T {
         unsafe { &(*self.item) }
     }
@@ -1371,7 +1369,12 @@ impl<T: Send + Sync> Darc<T> {
             let darc_temp_ptr = darc_alloc.as_mut_ptr::<DarcInner<T>>();
 
             let (mut team, item) = team_and_item.into_raw();
-            trace!("team ptr: {:p}, item ptr: {:p}, setting darc inner ptrs, start addr: {:?}", team, item, darc_temp_ptr);
+            trace!(
+                "team ptr: {:p}, item ptr: {:p}, setting darc inner ptrs, start addr: {:?}",
+                team,
+                item,
+                darc_temp_ptr
+            );
             if team.addr() == item.addr() {
                 // this means we are the world team, so we actually need to point to ourself
                 team = darc_temp_ptr as *const DarcInner<LamellarTeamRT>;
@@ -1420,7 +1423,10 @@ impl<T: Send + Sync> Darc<T> {
                 &(*darc_temp_ptr).am_counters as *const *const AMCounters
             );
             (*darc_temp_ptr).am_counters = std::ptr::null();
-            trace!("creating slices, ref_cnt_slice ptr: {:?}", &(*darc_temp_ptr).ref_cnt_slice as *const CommSlice<usize>);
+            trace!(
+                "creating slices, ref_cnt_slice ptr: {:?}",
+                &(*darc_temp_ptr).ref_cnt_slice as *const CommSlice<usize>
+            );
             std::ptr::write(
                 &mut (*darc_temp_ptr).ref_cnt_slice,
                 darc_alloc.comm_slice_at_byte_offset(ref_cnt_offset, num_pes),
@@ -1800,7 +1806,11 @@ struct DroppedWaitAM<T> {
 impl<T: 'static> std::fmt::Debug for DroppedWaitAM<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // write!(f, "DroppedWaitAM {{ inner_addr: {:?}, mode_addr: {:?}, my_pe: {:?}, num_pes: {:?}, team: {:?} }}", self.inner.addr(), self.inner.mode_slice, self.my_pe, self.num_pes, self.team)
-        write!(f, "DroppedWaitAM {{ inner: {:?}, my_pe: {:?}, num_pes: {:?}, team: {:?} }}", self.inner, self.my_pe, self.num_pes, self.team)
+        write!(
+            f,
+            "DroppedWaitAM {{ inner: {:?}, my_pe: {:?}, num_pes: {:?}, team: {:?} }}",
+            self.inner, self.my_pe, self.num_pes, self.team
+        )
     }
 }
 
@@ -1878,7 +1888,7 @@ impl<T> std::ops::DerefMut for DarcCommPtr<T> {
 #[lamellar_impl::rt_am_local]
 impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
-    
+
     async fn exec(self) {
         // trace!(target: "drop", " begin DroppedWaitAM exec");
         let mut timeout = std::time::Instant::now();
@@ -1896,7 +1906,6 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             unsafe { (&*self.inner.team).item.addr() },
             self.inner.item.addr(),
         );
-
 
         //if we are the world team we need to account for the extra refs for the world and team darcs available in the am
         //as well as the refs stored in the underlying am handles

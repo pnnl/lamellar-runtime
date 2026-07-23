@@ -47,7 +47,10 @@ fn main() {
     println!("result: {sum}");
     world.barrier();
     let expected_sum = ARRAY_LEN * (ARRAY_LEN - 1) / 2;
-    assert_eq!(sum, expected_sum, "block dist_iter map+sum: got {sum} expected {expected_sum}");
+    assert_eq!(
+        sum, expected_sum,
+        "block dist_iter map+sum: got {sum} expected {expected_sum}"
+    );
     println!("--------------------------------------------------------");
     println!("--------------------------------------------------------");
     println!("cyclic sum");
@@ -57,7 +60,10 @@ fn main() {
     world.barrier();
     // element i is on PE i%num_pes and stores that PE's id
     let expected_cyclic_sum: usize = (0..ARRAY_LEN).map(|i| i % num_pes).sum();
-    assert_eq!(sum, expected_cyclic_sum, "cyclic dist_iter map+sum: got {sum} expected {expected_cyclic_sum}");
+    assert_eq!(
+        sum, expected_cyclic_sum,
+        "cyclic dist_iter map+sum: got {sum} expected {expected_cyclic_sum}"
+    );
     println!("--------------------------------------------------------");
 
     // our plan is to support a number of iterator extenders/operators similar to tradition rust iters
@@ -286,7 +292,12 @@ fn main() {
         .count()
         .block();
     println!("result: {count}");
-    assert_eq!(count, ARRAY_LEN / 2, "dist_iter filter+count: got {count} expected {}", ARRAY_LEN / 2);
+    assert_eq!(
+        count,
+        ARRAY_LEN / 2,
+        "dist_iter filter+count: got {count} expected {}",
+        ARRAY_LEN / 2
+    );
 
     println!("--------------------------------------------------------");
     println!("block filter_map collect correctness");
@@ -295,12 +306,19 @@ fn main() {
         .dist_iter()
         .filter_map(|elem| {
             let e = *elem;
-            if e % 8 == 0 { Some(e as u8) } else { None }
+            if e % 8 == 0 {
+                Some(e as u8)
+            } else {
+                None
+            }
         })
         .collect::<ReadOnlyArray<u8>>(Distribution::Block)
         .block();
     let expected_count = (0..ARRAY_LEN).filter(|e| e % 8 == 0).count();
     let actual_count = filtered.onesided_iter().into_iter().count();
-    assert_eq!(actual_count, expected_count, "dist_iter filter_map+collect: got {actual_count} expected {expected_count}");
+    assert_eq!(
+        actual_count, expected_count,
+        "dist_iter filter_map+collect: got {actual_count} expected {expected_count}"
+    );
     println!("filter_map collect count: {actual_count} (expected {expected_count})");
 }

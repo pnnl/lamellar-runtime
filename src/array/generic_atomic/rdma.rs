@@ -979,12 +979,11 @@ impl<T: Dist> LamellarRdmaPut<T> for GenericAtomicArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self
-            .spawn_am_local_tg(InitPutBufferAm {
-                array: self.clone(),
-                index: index,
-                buf: buf.into(),
-            });
+        let _ = self.spawn_am_local_tg(InitPutBufferAm {
+            array: self.clone(),
+            index: index,
+            buf: buf.into(),
+        });
     }
 
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
@@ -1010,22 +1009,21 @@ impl<T: Dist> LamellarRdmaPut<T> for GenericAtomicArray<T> {
         }
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
-        let _ = self
-            .spawn_am_pe_tg(
-                pe,
-                GenericAtomicRemotePePutAm {
-                    array: self.clone().into(), //inner of the indices we need to place data into
-                    offset,
-                    elem_size: std::mem::size_of::<T>(),
-                    data: unsafe {
-                        std::slice::from_raw_parts(
-                            (&data as *const T) as *const u8,
-                            std::mem::size_of::<T>(),
-                        )
-                        .to_vec()
-                    },
+        let _ = self.spawn_am_pe_tg(
+            pe,
+            GenericAtomicRemotePePutAm {
+                array: self.clone().into(), //inner of the indices we need to place data into
+                offset,
+                elem_size: std::mem::size_of::<T>(),
+                data: unsafe {
+                    std::slice::from_raw_parts(
+                        (&data as *const T) as *const u8,
+                        std::mem::size_of::<T>(),
+                    )
+                    .to_vec()
                 },
-            );
+            },
+        );
     }
     unsafe fn put_pe_buffer<U: Into<MemregionRdmaInputInner<T>>>(
         &self,

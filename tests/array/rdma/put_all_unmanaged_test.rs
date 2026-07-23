@@ -64,7 +64,12 @@ macro_rules! put_all_unmanaged_test {
                 let elem = unsafe { array.blocking_get_pe(target_pe, offset) };
                 let expected = offset as $t;
                 if ((expected - elem) as f32).abs() > 0.0001 {
-                    eprintln!("{:?} {:?} {:?}", expected, elem, ((expected - elem) as f32).abs());
+                    eprintln!(
+                        "{:?} {:?} {:?}",
+                        expected,
+                        elem,
+                        ((expected - elem) as f32).abs()
+                    );
                     success = false;
                 }
             }

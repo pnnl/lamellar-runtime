@@ -88,7 +88,7 @@ fn create_binary_update_block() -> impl ToTokens {
                                         .arg("+x")
                                         .arg(&temp_exe_str)
                                         .status();
-                                    
+
                                     println!("chmod status: {:?}", chmod_status);
 
                                     let patch_status = std::process::Command::new("patchelf")
@@ -348,13 +348,15 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         .iter()
         .position(|stmt| quote!(#stmt).to_string().contains("LamellarWorldBuilder"));
 
-
-    let (_init_prof,fini_prof) = if cfg!(feature = "enable-prof") {
-        (quote! {
-            lamellar::init_prof_bt!();
-        }, quote! {
-            lamellar::fini_prof!();
-        })
+    let (_init_prof, fini_prof) = if cfg!(feature = "enable-prof") {
+        (
+            quote! {
+                lamellar::init_prof_bt!();
+            },
+            quote! {
+                lamellar::fini_prof!();
+            },
+        )
     } else {
         (quote! {}, quote! {})
     };
@@ -373,7 +375,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 __lamellar_app_start = std::time::Instant::now();
                 #(#post)*
-                
+
             } // this should enforce that world is dropped across all PEs before we print the application time, which is important for accurate timing of the application code.
             if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
                 println!("[LAMELLAR_MAIN] application time: {:?}", __lamellar_app_start.elapsed());

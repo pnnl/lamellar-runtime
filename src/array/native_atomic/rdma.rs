@@ -997,12 +997,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self
-            .spawn_am_local_tg(NativeAtomicInitPutBufferAm {
-                array: self.clone(),
-                index: index,
-                buf: buf.into(),
-            });
+        let _ = self.spawn_am_local_tg(NativeAtomicInitPutBufferAm {
+            array: self.clone(),
+            index: index,
+            buf: buf.into(),
+        });
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
         let req = self.exec_am_pe_tg(
@@ -1026,21 +1025,20 @@ impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
         }
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
-        let _ = self
-            .spawn_am_pe_tg(
-                pe,
-                NativeAtomicRemotePePutAm {
-                    array: self.clone().into(), //inner of the indices we need to place data into
-                    start_index: offset,
-                    data: unsafe {
-                        std::slice::from_raw_parts(
-                            &data as *const T as *const u8,
-                            std::mem::size_of::<T>(),
-                        )
-                        .to_vec()
-                    },
+        let _ = self.spawn_am_pe_tg(
+            pe,
+            NativeAtomicRemotePePutAm {
+                array: self.clone().into(), //inner of the indices we need to place data into
+                start_index: offset,
+                data: unsafe {
+                    std::slice::from_raw_parts(
+                        &data as *const T as *const u8,
+                        std::mem::size_of::<T>(),
+                    )
+                    .to_vec()
                 },
-            );
+            },
+        );
     }
     unsafe fn put_pe_buffer<U: Into<MemregionRdmaInputInner<T>>>(
         &self,

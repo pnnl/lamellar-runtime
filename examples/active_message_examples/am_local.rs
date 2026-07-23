@@ -89,24 +89,22 @@ fn main() {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
         for i in 0..map.len() {
-            let _ = world
-                .spawn_am_local(AmNoReturn {
-                    my_id: i,
-                    data: map.clone(),
-                    index: index.clone(),
-                });
+            let _ = world.spawn_am_local(AmNoReturn {
+                my_id: i,
+                data: map.clone(),
+                index: index.clone(),
+            });
         }
         world.wait_all();
         println!("-----------------------------------");
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
         for i in 0..map.len() {
-            let _ = world
-                .spawn_am_local(AmReturnUsize {
-                    my_id: i,
-                    data: map.clone(),
-                    index: index.clone(),
-                });
+            let _ = world.spawn_am_local(AmReturnUsize {
+                my_id: i,
+                data: map.clone(),
+                index: index.clone(),
+            });
         }
         world.wait_all();
         println!("-----------------------------------");

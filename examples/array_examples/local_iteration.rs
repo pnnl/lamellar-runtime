@@ -322,7 +322,10 @@ fn main() {
         "PE {my_pe} local_iter zip+map+reduce: got {:?} expected {expected_zip_sum}",
         zip_sum
     );
-    println!("{my_pe} zip sum of squares: {:?} (expected {expected_zip_sum})", zip_sum);
+    println!(
+        "{my_pe} zip sum of squares: {:?} (expected {expected_zip_sum})",
+        zip_sum
+    );
     block_array.barrier();
 
     println!("--------------------------------------------------------");

@@ -1,10 +1,10 @@
 //! This module provides an unsafe abstraction of a distributed array in Lamellar.
 
+mod collective;
 pub(crate) mod handle;
 mod iteration;
 pub(crate) mod local_chunks;
 pub(crate) mod operations;
-mod collective;
 mod rdma;
 
 pub use handle::UnsafeArrayHandle;
@@ -150,7 +150,7 @@ impl<T: Remote> From<UnsafeArray<T>> for __UnsafeArraySerde<T> {
     }
 }
 
-impl <T: Remote> Drop for UnsafeArray<T>{
+impl<T: Remote> Drop for UnsafeArray<T> {
     fn drop(&mut self) {
         trace!(target: "drop", "drop UnsafeArray");
     }
@@ -176,10 +176,8 @@ impl<'de, T: Dist + 'static> serde::Deserialize<'de> for UnsafeArray<T> {
         let sample = mem_region.as_slice()[0];
         let atomic_support =
             UnsafeArray::<T>::detect_atomic_support(inner.data.team.lamellae.comm(), sample);
-        let collective_support = UnsafeArray::<T>::detect_collective_support(
-            inner.data.team.lamellae.comm(),
-            sample,
-        );
+        let collective_support =
+            UnsafeArray::<T>::detect_collective_support(inner.data.team.lamellae.comm(), sample);
 
         Ok(UnsafeArray {
             inner,
@@ -404,7 +402,8 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         sample: T,
     ) -> UnsafeAtomicOpSupport {
         UnsafeAtomicOpSupport {
-            load: comm.atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
+            load: comm
+                .atomic_op_avail::<T>(AtomicOp::Read(unsafe { Box::pin(std::mem::zeroed()) })),
             store: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(sample))),
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(Box::pin(sample))),
             cas: comm.atomic_op_avail::<T>(AtomicOp::Cas),
@@ -438,12 +437,16 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             all_bit_and: comm.collective_avail::<T>(CollectiveOpKind::AllReduce(ReduceOp::BitAnd)),
             allgather: comm.collective_avail::<T>(CollectiveOpKind::AllGather),
             sum_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Sum)),
-            prod_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Prod)),
+            prod_scatter: comm
+                .collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Prod)),
             min_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Min)),
             max_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::Max)),
-            bit_or_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitOr)),
-            bit_xor_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitXor)),
-            bit_and_scatter: comm.collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitAnd)),
+            bit_or_scatter: comm
+                .collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitOr)),
+            bit_xor_scatter: comm
+                .collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitXor)),
+            bit_and_scatter: comm
+                .collective_avail::<T>(CollectiveOpKind::ReduceScatter(ReduceOp::BitAnd)),
             sum: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::Sum)),
             prod: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::Prod)),
             min: comm.collective_avail::<T>(CollectiveOpKind::Reduce(ReduceOp::Min)),
@@ -1113,10 +1116,7 @@ impl<T: Dist + 'static> From<__UnsafeByteArray> for UnsafeArray<T> {
             UnsafeArray::<T>::detect_atomic_support(inner.data.team.lamellae.comm(), sample);
 
         let collective_support =
-            UnsafeArray::<T>::detect_collective_support(
-                inner.data.team.lamellae.comm(), 
-                sample
-            );
+            UnsafeArray::<T>::detect_collective_support(inner.data.team.lamellae.comm(), sample);
         UnsafeArray {
             inner,
             mem_region,
@@ -1131,15 +1131,12 @@ impl<T: Dist + 'static> From<&__UnsafeByteArray> for UnsafeArray<T> {
     fn from(array: &__UnsafeByteArray) -> Self {
         let mem_region = unsafe { array.inner.data.mem_region.as_base::<T>() };
         let sample = mem_region.as_slice()[0];
-        let atomic_support = UnsafeArray::<T>::detect_atomic_support(
+        let atomic_support =
+            UnsafeArray::<T>::detect_atomic_support(array.inner.data.team.lamellae.comm(), sample);
+        let collective_support = UnsafeArray::<T>::detect_collective_support(
             array.inner.data.team.lamellae.comm(),
             sample,
         );
-        let collective_support =
-            UnsafeArray::<T>::detect_collective_support(
-                array.inner.data.team.lamellae.comm(), 
-                sample
-            );
         UnsafeArray {
             inner: array.inner.clone(),
             mem_region,
@@ -1152,7 +1149,9 @@ impl<T: Dist + 'static> From<&__UnsafeByteArray> for UnsafeArray<T> {
 
 impl<T: Dist> From<UnsafeArray<T>> for __UnsafeByteArray {
     fn from(array: UnsafeArray<T>) -> Self {
-        __UnsafeByteArray { inner: array.inner.clone() }
+        __UnsafeByteArray {
+            inner: array.inner.clone(),
+        }
     }
 }
 
@@ -1335,7 +1334,11 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
     {
         self.inner.data.team.scheduler.spawn_task(
             f,
-            Some(Arc::from([self.inner.data.team.world_counters.clone(), self.inner.data.team.team_counters.clone(), self.inner.data.array_counters.clone()])),
+            Some(Arc::from([
+                self.inner.data.team.world_counters.clone(),
+                self.inner.data.team.team_counters.clone(),
+                self.inner.data.array_counters.clone(),
+            ])),
         )
     }
     fn block_on<F: Future>(&self, f: F) -> F::Output {
@@ -1383,7 +1386,10 @@ impl<T: Dist> UnsafeArray<T> {
     /// Like `pe_and_offset_for_global_index` but always returns the absolute PE-local
     /// memory offset (not sub-array-relative). Required for raw RDMA operations that
     /// address PE memory directly (e.g. `mem_region.get_pe(pe, offset)`).
-    pub(crate) fn pe_and_rdma_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
+    pub(crate) fn pe_and_rdma_offset_for_global_index(
+        &self,
+        index: usize,
+    ) -> Option<(usize, usize)> {
         let pe = self.inner.pe_for_dist_index(index)?;
         let offset = self.inner.pe_full_offset_for_dist_index(pe, index)?;
         Some((pe, offset))
@@ -1515,10 +1521,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ) -> crate::array::ArrayReduceHandle<T> {
         self.reduce_data(self.get_reduction_op(op, byte_array))
     }
-    pub(crate) fn reduce_data(
-        &self,
-        am: LamellarArcAm,
-    ) -> crate::array::ArrayReduceHandle<T> {
+    pub(crate) fn reduce_data(&self, am: LamellarArcAm) -> crate::array::ArrayReduceHandle<T> {
         let raw = if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
             self.inner.data.team.exec_arc_am_pe::<Vec<u8>>(
                 my_pe,
@@ -1614,13 +1617,13 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> UnsafeArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
-        match ScalarType::get_type::<T>(){
-            Some((scalar_type,_)) => {
-                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Sum)))
-            }
-            None => {
-                self.reduce_data_user("sum", self.clone().into())
-            }
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type, _)) => self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                self.clone().into(),
+                scalar_type,
+                BuiltinOp::Sum,
+            ))),
+            None => self.reduce_data_user("sum", self.clone().into()),
         }
     }
 
@@ -1658,13 +1661,13 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> UnsafeArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
-        match ScalarType::get_type::<T>(){
-            Some((scalar_type,_)) => {
-                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Prod)))
-            }
-            None => {
-                self.reduce_data_user("prod", self.clone().into())
-            }
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type, _)) => self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                self.clone().into(),
+                scalar_type,
+                BuiltinOp::Prod,
+            ))),
+            None => self.reduce_data_user("prod", self.clone().into()),
         }
     }
 }
@@ -1700,13 +1703,13 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> UnsafeArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn max(&self) -> crate::array::ArrayReduceHandle<T> {
-        match ScalarType::get_type::<T>(){
-            Some((scalar_type,_)) => {
-                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Max)))
-            }
-            None => {
-                self.reduce_data_user("max", self.clone().into())
-            }
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type, _)) => self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                self.clone().into(),
+                scalar_type,
+                BuiltinOp::Max,
+            ))),
+            None => self.reduce_data_user("max", self.clone().into()),
         }
     }
 
@@ -1740,13 +1743,13 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> UnsafeArray<T> {
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn min(&self) -> crate::array::ArrayReduceHandle<T> {
-        match ScalarType::get_type::<T>(){
-            Some((scalar_type,_)) => {
-                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Min)))
-            }
-            None => {
-                self.reduce_data_user("min", self.clone().into())
-            }
+        match ScalarType::get_type::<T>() {
+            Some((scalar_type, _)) => self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                self.clone().into(),
+                scalar_type,
+                BuiltinOp::Min,
+            ))),
+            None => self.reduce_data_user("min", self.clone().into()),
         }
     }
 }
@@ -1783,12 +1786,12 @@ impl<T: Dist + AmDist + ElementBitWiseOps + 'static> UnsafeArray<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn and(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => {
-                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::And)))
-            }
-            None => {
-                self.reduce_data_user("and", self.clone().into())
-            }
+            Some((scalar_type, _)) => self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                self.clone().into(),
+                scalar_type,
+                BuiltinOp::And,
+            ))),
+            None => self.reduce_data_user("and", self.clone().into()),
         }
     }
 
@@ -1823,12 +1826,12 @@ impl<T: Dist + AmDist + ElementBitWiseOps + 'static> UnsafeArray<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn or(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => {
-                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Or)))
-            }
-            None => {
-                self.reduce_data_user("or", self.clone().into())
-            }
+            Some((scalar_type, _)) => self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                self.clone().into(),
+                scalar_type,
+                BuiltinOp::Or,
+            ))),
+            None => self.reduce_data_user("or", self.clone().into()),
         }
     }
 
@@ -1863,12 +1866,12 @@ impl<T: Dist + AmDist + ElementBitWiseOps + 'static> UnsafeArray<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub unsafe fn xor(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => {
-                self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Xor)))
-            }
-            None => {
-                self.reduce_data_user("xor", self.clone().into())
-            }
+            Some((scalar_type, _)) => self.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                self.clone().into(),
+                scalar_type,
+                BuiltinOp::Xor,
+            ))),
+            None => self.reduce_data_user("xor", self.clone().into()),
         }
     }
 }
@@ -1901,7 +1904,11 @@ impl UnsafeArrayInner {
     {
         self.data.team.scheduler.spawn_task(
             f,
-            Some(Arc::from([self.data.team.world_counters.clone(), self.data.team.team_counters.clone(), self.data.array_counters.clone()])),
+            Some(Arc::from([
+                self.data.team.world_counters.clone(),
+                self.data.team.team_counters.clone(),
+                self.data.array_counters.clone(),
+            ])),
         )
     }
     pub(crate) fn block_on<F: Future>(&self, f: F) -> F::Output {

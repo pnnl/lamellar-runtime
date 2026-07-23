@@ -1,7 +1,9 @@
 use crate::{
     config,
     lamellae::{
-        comm::{atomic::atomic_type_supported, AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
+        comm::{
+            atomic::atomic_type_supported, AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown,
+        },
         CollectiveOpKind,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
@@ -72,7 +74,8 @@ impl ShmemComm {
 
         #[cfg(feature = "pmi")]
         if let Some(ref pmi) = pmi_info {
-            pmi.barrier(false).expect("PMI barrier failed during shmem init");
+            pmi.barrier(false)
+                .expect("PMI barrier failed during shmem init");
         }
 
         let shmem = ShmemComm {

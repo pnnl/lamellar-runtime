@@ -38,7 +38,10 @@ pub(crate) use consumer::*;
 
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::{private::*, Schedule};
-use crate::array::{operations::{ElementArithmeticOps,ArrayOps}, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
+use crate::array::{
+    operations::{ArrayOps, ElementArithmeticOps},
+    AsyncTeamFrom, Distribution, InnerArray, LamellarArray,
+};
 use crate::memregion::Dist;
 use crate::LamellarTeam;
 

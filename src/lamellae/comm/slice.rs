@@ -89,7 +89,10 @@ impl<T> CommSlice<T> {
 
     pub(crate) unsafe fn from_raw_parts(data: *const T, len: usize) -> Self {
         CommSlice {
-            inner_alloc: Arc::new(CommAllocInner::Raw(data as usize, len * std::mem::size_of::<T>())),
+            inner_alloc: Arc::new(CommAllocInner::Raw(
+                data as usize,
+                len * std::mem::size_of::<T>(),
+            )),
             _phantom: std::marker::PhantomData,
         }
     }

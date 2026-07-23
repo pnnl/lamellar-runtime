@@ -56,56 +56,74 @@ macro_rules! alltoall_call {
     };
 }
 
-macro_rules! alltoall_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
-            let array_total_len = $len;
-            let mem_seg_len = array_total_len;
-            let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len * num_pes, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
+macro_rules! alltoall_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let my_pe = world.my_pe();
+        let array_total_len = $len;
+        let mem_seg_len = array_total_len;
+        let mut success = true;
+        let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len * num_pes, $dist)
+            .block()
+            .into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            //initialize array
-            let init_val = my_pe as $t;
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
-            let _lock = lock_if_needed!($array, array);
+        //initialize array
+        let init_val = my_pe as $t;
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
+        let _lock = lock_if_needed!($array, array);
 
-            // world.barrier();
+        // world.barrier();
 
-            for tx_size in 1..=mem_seg_len{
-                let num_txs = mem_seg_len/tx_size;
-                let mut reqs = vec![];
-                for tx in (0..num_txs){
-                    #[allow(unused_unsafe)]
-                    reqs.push((unsafe { alltoall_call!($array, array_or_lock!($array, array, _lock), tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()}, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
-                }
-                for req in reqs.drain(..){
-                    let buf =req.0.block();
-                    for (i, elem) in buf.iter().enumerate(){
-                        if ( ( (i/req.1) as $t  - elem) as f32).abs() > 0.0001 {
-                            eprintln!("[{:?}] {:?} {:?} {:?} {:?}",my_pe, i as $t, (i/req.1) as $t, elem,( ( (i/req.1) as $t  - elem) as f32).abs());
-                            success = false;
-                        }
+        for tx_size in 1..=mem_seg_len {
+            let num_txs = mem_seg_len / tx_size;
+            let mut reqs = vec![];
+            for tx in (0..num_txs) {
+                #[allow(unused_unsafe)]
+                reqs.push((
+                    unsafe {
+                        alltoall_call!(
+                            $array,
+                            array_or_lock!($array, array, _lock),
+                            tx * tx_size,
+                            std::cmp::min(mem_seg_len, (tx + 1) * tx_size) - tx * tx_size
+                        )
+                        .spawn()
+                    },
+                    std::cmp::min(mem_seg_len, (tx + 1) * tx_size - tx * tx_size),
+                ));
+            }
+            for req in reqs.drain(..) {
+                let buf = req.0.block();
+                for (i, elem) in buf.iter().enumerate() {
+                    if (((i / req.1) as $t - elem) as f32).abs() > 0.0001 {
+                        eprintln!(
+                            "[{:?}] {:?} {:?} {:?} {:?}",
+                            my_pe,
+                            i as $t,
+                            (i / req.1) as $t,
+                            elem,
+                            (((i / req.1) as $t - elem) as f32).abs()
+                        );
+                        success = false;
                     }
                 }
-                array.barrier();
-                // array.print();
-                array.wait_all();
-                array.barrier();
             }
             array.barrier();
-            world.wait_all();
-            world.barrier();
-
-            if !success{
-                eprintln!("failed");
-            }
+            // array.print();
+            array.wait_all();
+            array.barrier();
         }
-    }
+        array.barrier();
+        world.wait_all();
+        world.barrier();
+
+        if !success {
+            eprintln!("failed");
+        }
+    }};
 }
 
 #[lamellar::main]

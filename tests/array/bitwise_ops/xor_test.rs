@@ -3,7 +3,10 @@ use lamellar::array::prelude::*;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
-            $array.dist_iter_mut().for_each(move |x| *x = $init_val).block();
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
         }
         $array.wait_all();
         $array.barrier();

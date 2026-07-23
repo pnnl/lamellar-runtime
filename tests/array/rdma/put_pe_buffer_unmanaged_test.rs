@@ -75,8 +75,9 @@ macro_rules! put_pe_buffer_unmanaged_test {
                         array.put_pe_buffer_unmanaged(
                             target_pe,
                             tx * tx_size,
-                            &shared_mem_region
-                                .sub_region(tx * tx_size..std::cmp::min(pe_len, (tx + 1) * tx_size)),
+                            &shared_mem_region.sub_region(
+                                tx * tx_size..std::cmp::min(pe_len, (tx + 1) * tx_size),
+                            ),
                         );
                     }
                 }
@@ -86,7 +87,12 @@ macro_rules! put_pe_buffer_unmanaged_test {
                 for i in 0..(num_txs * tx_size) {
                     let elem = unsafe { array.blocking_get_pe(target_pe, i) };
                     if ((i as $t - elem) as f32).abs() > 0.0001 {
-                        eprintln!("{:?} {:?} {:?}", i as $t, elem, ((i as $t - elem) as f32).abs());
+                        eprintln!(
+                            "{:?} {:?} {:?}",
+                            i as $t,
+                            elem,
+                            ((i as $t - elem) as f32).abs()
+                        );
                         success = false;
                     }
                 }

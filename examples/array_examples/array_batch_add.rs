@@ -76,24 +76,24 @@ fn main() {
             if bufs[pe].len() == num_per_batch {
                 let mut buf = Vec::with_capacity(num_per_batch);
                 std::mem::swap(&mut bufs[pe], &mut buf);
-                let _ = world
-                    .spawn_am_pe(pe,
-                        AddAm {
-                            array: array.clone(),
-                            indices: buf,
-                        },
-                    );
+                let _ = world.spawn_am_pe(
+                    pe,
+                    AddAm {
+                        array: array.clone(),
+                        indices: buf,
+                    },
+                );
             }
         }
         for (pe, buf) in bufs.drain(..).enumerate() {
             if buf.len() > 0 {
-                let _ = world
-                    .spawn_am_pe(pe,
-                        AddAm {
-                            array: array.clone(),
-                            indices: buf,
-                        },
-                    );
+                let _ = world.spawn_am_pe(
+                    pe,
+                    AddAm {
+                        array: array.clone(),
+                        indices: buf,
+                    },
+                );
             }
         }
         if my_pe == 0 {

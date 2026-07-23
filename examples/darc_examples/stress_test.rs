@@ -27,15 +27,15 @@ impl LamellarAM for DataAM {
             for _i in 0..self.width {
                 let pe = pes.sample(&mut rng);
                 // println!("sending {:?} to {:?}",path,pe);
-                let _ = lamellar::team
-                    .spawn_am_pe(pe,
-                        DataAM {
-                            darc: self.darc.clone(),
-                            depth: self.depth - 1,
-                            width: self.width,
-                            path: path.clone(),
-                        },
-                    );
+                let _ = lamellar::team.spawn_am_pe(
+                    pe,
+                    DataAM {
+                        darc: self.darc.clone(),
+                        depth: self.depth - 1,
+                        width: self.width,
+                        path: path.clone(),
+                    },
+                );
             }
         }
     }
@@ -85,24 +85,24 @@ fn main() {
     let width = 5;
     for _i in 0..width {
         let pe = pes.sample(&mut rng) / 2; //since both teams consist of half the number of pes as the world
-        let _ = first_half_team
-            .spawn_am_pe(pe,
-                DataAM {
-                    darc: darc.clone(),
-                    depth: 5,
-                    width: width,
-                    path: vec![my_pe],
-                },
-            );
-        let _ = odd_team
-            .spawn_am_pe(pe,
-                DataAM {
-                    darc: darc.clone(),
-                    depth: 5,
-                    width: width,
-                    path: vec![my_pe],
-                },
-            );
+        let _ = first_half_team.spawn_am_pe(
+            pe,
+            DataAM {
+                darc: darc.clone(),
+                depth: 5,
+                width: width,
+                path: vec![my_pe],
+            },
+        );
+        let _ = odd_team.spawn_am_pe(
+            pe,
+            DataAM {
+                darc: darc.clone(),
+                depth: 5,
+                width: width,
+                path: vec![my_pe],
+            },
+        );
     }
     world.wait_all();
     world.barrier();

@@ -149,25 +149,24 @@ fn dft_lamellar(
     let timer = Instant::now();
     for pe in 0..num_pes {
         for k in 0..spectrum_slice.len() {
-            let _ = world
-                .spawn_am_local(LocalSumAM {
-                    spectrum: add_spec.clone(),
-                    signal: signal.clone(),
-                    global_sig_len: global_sig_len,
-                    k: k,
-                    pe: pe,
-                });
+            let _ = world.spawn_am_local(LocalSumAM {
+                spectrum: add_spec.clone(),
+                signal: signal.clone(),
+                global_sig_len: global_sig_len,
+                k: k,
+                pe: pe,
+            });
         }
         let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
         world.wait_all();
         add_spec_vec.copy_from_slice(unsafe { add_spec.as_slice() });
-        let _ = world
-            .spawn_am_pe(pe,
-                RemoteSumAM {
-                    spectrum: spectrum.clone(),
-                    add_spec: add_spec_vec,
-                },
-            );
+        let _ = world.spawn_am_pe(
+            pe,
+            RemoteSumAM {
+                spectrum: spectrum.clone(),
+                add_spec: add_spec_vec,
+            },
+        );
         world.wait_all();
     }
     world.wait_all();
@@ -218,7 +217,8 @@ fn dft_lamellar_am_group(
                 })
                 .collect::<Vec<_>>();
             world_clone
-                .spawn_am_pe(pe,
+                .spawn_am_pe(
+                    pe,
                     RemoteSumAM {
                         spectrum: spec,
                         add_spec: vec,

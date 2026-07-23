@@ -1,13 +1,23 @@
 use futures_util::Future;
 use pin_project::pin_project;
 use std::{
-    pin::Pin, sync::Arc, task::{Context, Poll}
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
 };
 
-use crate::{AsLamellarBuffer, Dist, LamellarTask, active_messaging::AMCounters, lamellae::collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle}, scheduler::Scheduler};
 use crate::array::LamellarByteArray;
 use crate::lamellae::comm::collective::CollectiveAllReduceOpHandle;
 use crate::warnings::RuntimeWarning;
+use crate::{
+    active_messaging::AMCounters,
+    lamellae::collective::{
+        CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle,
+        CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle,
+    },
+    scheduler::Scheduler,
+    AsLamellarBuffer, Dist, LamellarTask,
+};
 
 #[pin_project]
 pub struct ArrayCollectiveAllReduceHandle<T: Dist> {
@@ -20,12 +30,13 @@ pub struct ArrayCollectiveAllReduceHandle<T: Dist> {
 #[must_use = " CollectiveAllReduceManualOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub(crate) struct CollectiveAllReduceManualOpHandle<T: Dist> {
-    #[pin] pub(crate) future: Pin<Box<dyn Future<Output = Vec<T>> + Send>>,
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = Vec<T>> + Send>>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 }
 
-impl <T: Dist> Future for CollectiveAllReduceManualOpHandle<T> {
+impl<T: Dist> Future for CollectiveAllReduceManualOpHandle<T> {
     type Output = Vec<T>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -43,8 +54,6 @@ impl<T: Dist> CollectiveAllReduceManualOpHandle<T> {
         self.scheduler.clone().block_on(self)
     }
 }
-
-
 
 #[pin_project(project = ArrayCollectiveAllReduceStateProj)]
 pub(crate) enum ArrayCollectiveAllReduceState<T: Dist> {
@@ -109,18 +118,13 @@ impl<T: Dist> ArrayCollectiveAllReduceHandle<T> {
     }
 }
 
-
 impl<T: Dist> Future for ArrayCollectiveAllReduceHandle<T> {
     type Output = Vec<T>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.state.project() {
-            ArrayCollectiveAllReduceStateProj::CollectiveAllReduce(req) => {
-                req.poll(cx)
-            }
-            ArrayCollectiveAllReduceStateProj::CollectiveAllReduceManual(req) => {
-                req.poll(cx)
-            }
+            ArrayCollectiveAllReduceStateProj::CollectiveAllReduce(req) => req.poll(cx),
+            ArrayCollectiveAllReduceStateProj::CollectiveAllReduceManual(req) => req.poll(cx),
         }
     }
 }
@@ -133,11 +137,11 @@ pub struct ArrayCollectiveAllReduceIntoBufferHandle<T: Dist, B: AsLamellarBuffer
     pub(crate) spawned: bool,
 }
 
-
 #[must_use = " CollectiveAllReduceIntoBufferManualOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub(crate) struct CollectiveAllReduceIntoBufferManualOpHandle {
-    #[pin] pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,
+    #[pin]
+    pub(crate) future: Pin<Box<dyn Future<Output = ()> + Send>>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 }
@@ -160,7 +164,6 @@ impl CollectiveAllReduceIntoBufferManualOpHandle {
         self.scheduler.clone().block_on(self)
     }
 }
-
 
 #[pin_project(project = ArrayCollectiveAllReduceIntoBufferStateProj)]
 pub(crate) enum ArrayCollectiveAllReduceIntoBufferState<T: Dist, B: AsLamellarBuffer<T>> {
@@ -197,8 +200,12 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceIntoBufferHandle<T
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
-            ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBuffer(req) => req.spawn(),
-            ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(req) => req.spawn(),
+            ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBuffer(req) => {
+                req.spawn()
+            }
+            ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(req) => {
+                req.spawn()
+            }
         };
         self.spawned = true;
         task
@@ -215,7 +222,7 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceIntoBufferHandle<T
     /// let handle = array.allreduce_into_buffer_init(lamellar::array::operations::Sum, &buf);
     /// let result = handle.block();
     ///```
-    pub fn block(mut self)  {
+    pub fn block(mut self) {
         RuntimeWarning::BlockingCall(
             "ArrayCollectiveAllReduceIntoBufferHandle::block",
             "<handle>.spawn() or <handle>.await",
@@ -223,12 +230,15 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceIntoBufferHandle<T
         .print();
         self.spawned = true;
         match self.state {
-            ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBuffer(req) => req.block(),
-            ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(req) => req.block(),
+            ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBuffer(req) => {
+                req.block()
+            }
+            ArrayCollectiveAllReduceIntoBufferState::CollectiveAllReduceIntoBufferManual(req) => {
+                req.block()
+            }
         }
     }
 }
-
 
 impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
     type Output = ();
@@ -238,9 +248,9 @@ impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveAllReduceIntoBuf
             ArrayCollectiveAllReduceIntoBufferStateProj::CollectiveAllReduceIntoBuffer(req) => {
                 req.poll(cx)
             }
-            ArrayCollectiveAllReduceIntoBufferStateProj::CollectiveAllReduceIntoBufferManual(req) => {
-                req.poll(cx)
-            }
+            ArrayCollectiveAllReduceIntoBufferStateProj::CollectiveAllReduceIntoBufferManual(
+                req,
+            ) => req.poll(cx),
         }
     }
 }
@@ -315,7 +325,6 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceInPlaceHandle<T, B
     }
 }
 
-
 impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveAllReduceInPlaceHandle<T, B> {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -343,7 +352,6 @@ pub(crate) struct CollectiveReduceManualOpHandle<T: Dist> {
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 }
-
 
 impl<T: Dist> Future for CollectiveReduceManualOpHandle<T> {
     type Output = Option<Vec<T>>;
@@ -427,18 +435,13 @@ impl<T: Dist> ArrayCollectiveReduceHandle<T> {
     }
 }
 
-
 impl<T: Dist> Future for ArrayCollectiveReduceHandle<T> {
     type Output = Option<Vec<T>>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.state.project() {
-            ArrayCollectiveReduceStateProj::CollectiveReduce(req) => {
-                req.poll(cx)
-            },
-            ArrayCollectiveReduceStateProj::CollectiveReduceManual(req) => {
-                req.poll(cx)
-            }
+            ArrayCollectiveReduceStateProj::CollectiveReduce(req) => req.poll(cx),
+            ArrayCollectiveReduceStateProj::CollectiveReduceManual(req) => req.poll(cx),
         }
     }
 }
@@ -451,7 +454,6 @@ pub struct ArrayCollectiveReduceIntoBufferHandle<T: Dist, B: AsLamellarBuffer<T>
     pub(crate) spawned: bool,
 }
 
-
 #[pin_project]
 pub(crate) struct CollectiveReduceIntoBufferManualOpHandle {
     #[pin]
@@ -459,7 +461,6 @@ pub(crate) struct CollectiveReduceIntoBufferManualOpHandle {
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
 }
-
 
 impl Future for CollectiveReduceIntoBufferManualOpHandle {
     type Output = ();
@@ -516,7 +517,9 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceIntoBufferHandle<T, B
     pub fn spawn(mut self) -> LamellarTask<()> {
         let task = match self.state {
             ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req) => req.spawn(),
-            ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(req) => req.spawn(),
+            ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(req) => {
+                req.spawn()
+            }
         };
         self.spawned = true;
         task
@@ -542,12 +545,12 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceIntoBufferHandle<T, B
         self.spawned = true;
         match self.state {
             ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req) => req.block(),
-            ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(req) => req.block(),
-
+            ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBufferManual(req) => {
+                req.block()
+            }
         }
     }
 }
-
 
 impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveReduceIntoBufferHandle<T, B> {
     type Output = ();
@@ -620,4 +623,3 @@ impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveReduceIntoBuffer
 //         }
 //     }
 // }
-

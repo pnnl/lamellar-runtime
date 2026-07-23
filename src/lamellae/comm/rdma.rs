@@ -7,8 +7,11 @@ use crate::lamellae::libfabric_async_lamellae::rdma::{
 use crate::lamellae::libfabric_lamellae::rdma::{
     LibfabricGetBufferFuture, LibfabricGetFuture, LibfabricGetIntoBufferFuture, LibfabricPutFuture,
 };
-#[cfg(feature="enable-libfabric-sys")]
-use crate::lamellae::libfabric_sys_lamellae::rdma::{LibfabricSysGetBufferFuture, LibfabricSysGetFuture, LibfabricSysGetIntoBufferFuture, LibfabricSysPutFuture};
+#[cfg(feature = "enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::rdma::{
+    LibfabricSysGetBufferFuture, LibfabricSysGetFuture, LibfabricSysGetIntoBufferFuture,
+    LibfabricSysPutFuture,
+};
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::rdma::{
     RofiCGetBufferFuture, RofiCGetFuture, RofiCGetIntoBufferFuture, RofiCPutFuture,
@@ -46,8 +49,8 @@ use std::{
 /// A type is `Remote` if it is `Copy + Sync + Send + Default + 'static`.
 /// This is a blanket requirement because RDMA transfers raw bytes and the receiving
 /// PE must be able to construct a valid `T` from those bytes without any allocations.
-pub trait Remote: Copy + Sync + Send  + 'static {}
-impl<T: Copy + Sync + Send  + 'static> Remote for T {}
+pub trait Remote: Copy + Sync + Send + 'static {}
+impl<T: Copy + Sync + Send + 'static> Remote for T {}
 
 /// A task handle for raw RMDA (put/get) operation
 #[must_use = " RdmaHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]

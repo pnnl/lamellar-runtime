@@ -29,7 +29,6 @@ macro_rules! initialize_array {
     };
 }
 
-
 macro_rules! array_or_lock {
     (GlobalLockArray, $array: ident, $lock:ident) => {
         $lock
@@ -65,7 +64,7 @@ macro_rules! bit_or_at_pe_test{
             array.wait_all();
             array.barrier();
             let final_val = !(!0 << num_pes);
-            let root = 1usize; 
+            let root = 1usize;
             let _lock = lock_if_needed!($array, array);
             // world.barrier();
 
@@ -116,7 +115,7 @@ macro_rules! bit_or_at_pe_test{
 
             //     for req in reqs.drain(..){
             //         let buf =req.block();
-            //         if my_pe == 0 { 
+            //         if my_pe == 0 {
             //             for (i, elem) in buf.unwrap().as_slice().iter().enumerate(){
             //                 if ((final_val as $t  - elem) as f32).abs() > 0.0001 {
             //                     eprintln!("{:?} {:?} {:?}",i as $t,elem,((final_val as $t - elem) as f32).abs());

@@ -46,7 +46,6 @@ macro_rules! array_or_lock {
     };
 }
 
-
 macro_rules! min_all_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -179,8 +178,6 @@ macro_rules! min_all_test{
         }
     }
 }
-
-
 
 #[lamellar::main]
 fn main() {

@@ -1,134 +1,89 @@
-#[cfg(feature="enable-libfabric-sys")]
-use crate::lamellae::libfabric_sys_lamellae::collective::{
-    LibfabricSysCollectiveAllGatherFuture,
-    LibfabricSysCollectiveAllGatherIntoBufferFuture,
-    LibfabricSysCollectiveAllReduceFuture,
-    LibfabricSysCollectiveAllReduceInPlaceFuture,
-    LibfabricSysCollectiveAllReduceIntoBufferFuture,
-    LibfabricSysCollectiveAllToAllFuture,
-    LibfabricSysCollectiveAllToAllIntoBufferFuture,
-    LibfabricSysCollectiveBroadcastFuture,
-    LibfabricSysCollectiveBroadcastIntoBufferFuture,
-    LibfabricSysCollectiveGatherFuture,
-    LibfabricSysCollectiveGatherIntoBufferFuture,
-    LibfabricSysCollectiveReduceFuture,
-    LibfabricSysCollectiveReduceIntoBufferFuture,
-    LibfabricSysCollectiveReduceScatterFuture,
-    LibfabricSysCollectiveReduceScatterIntoBufferFuture,
-    LibfabricSysCollectiveScatterFuture,
-    LibfabricSysCollectiveScatterIntoBufferFuture,
-};
-use crate::{AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote, active_messaging::AMCounters, scheduler::Scheduler};
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::collective::{
-    LibfabricCollectiveAllReduceFuture,
-    LibfabricCollectiveAllReduceIntoBufferFuture,
-    LibfabricCollectiveAllReduceInPlaceFuture,
-    LibfabricCollectiveReduceFuture,
-    LibfabricCollectiveReduceIntoBufferFuture,
-    LibfabricCollectiveGatherFuture,
-    LibfabricCollectiveGatherIntoBufferFuture,
-    LibfabricCollectiveAllGatherFuture,
-    LibfabricCollectiveAllGatherIntoBufferFuture,
-    LibfabricCollectiveAllToAllFuture,
-    LibfabricCollectiveAllToAllIntoBufferFuture,
-    LibfabricCollectiveBroadcastFuture,
-    LibfabricCollectiveBroadcastIntoBufferFuture,
-    LibfabricCollectiveScatterFuture,
+    LibfabricCollectiveAllGatherFuture, LibfabricCollectiveAllGatherIntoBufferFuture,
+    LibfabricCollectiveAllReduceFuture, LibfabricCollectiveAllReduceInPlaceFuture,
+    LibfabricCollectiveAllReduceIntoBufferFuture, LibfabricCollectiveAllToAllFuture,
+    LibfabricCollectiveAllToAllIntoBufferFuture, LibfabricCollectiveBroadcastFuture,
+    LibfabricCollectiveBroadcastIntoBufferFuture, LibfabricCollectiveGatherFuture,
+    LibfabricCollectiveGatherIntoBufferFuture, LibfabricCollectiveReduceFuture,
+    LibfabricCollectiveReduceIntoBufferFuture, LibfabricCollectiveReduceScatterFuture,
+    LibfabricCollectiveReduceScatterIntoBufferFuture, LibfabricCollectiveScatterFuture,
     LibfabricCollectiveScatterIntoBufferFuture,
-    LibfabricCollectiveReduceScatterFuture,
-    LibfabricCollectiveReduceScatterIntoBufferFuture
+};
+#[cfg(feature = "enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::collective::{
+    LibfabricSysCollectiveAllGatherFuture, LibfabricSysCollectiveAllGatherIntoBufferFuture,
+    LibfabricSysCollectiveAllReduceFuture, LibfabricSysCollectiveAllReduceInPlaceFuture,
+    LibfabricSysCollectiveAllReduceIntoBufferFuture, LibfabricSysCollectiveAllToAllFuture,
+    LibfabricSysCollectiveAllToAllIntoBufferFuture, LibfabricSysCollectiveBroadcastFuture,
+    LibfabricSysCollectiveBroadcastIntoBufferFuture, LibfabricSysCollectiveGatherFuture,
+    LibfabricSysCollectiveGatherIntoBufferFuture, LibfabricSysCollectiveReduceFuture,
+    LibfabricSysCollectiveReduceIntoBufferFuture, LibfabricSysCollectiveReduceScatterFuture,
+    LibfabricSysCollectiveReduceScatterIntoBufferFuture, LibfabricSysCollectiveScatterFuture,
+    LibfabricSysCollectiveScatterIntoBufferFuture,
+};
+use crate::{
+    active_messaging::AMCounters, scheduler::Scheduler, AsLamellarBuffer, LamellarBuffer,
+    LamellarTask, Remote,
 };
 
 #[cfg(feature = "enable-libfabric-async")]
 use crate::lamellae::libfabric_async_lamellae::collective::{
-    LibfabricAsyncCollectiveAllReduceFuture,
-    LibfabricAsyncCollectiveAllReduceIntoBufferFuture,
-    LibfabricAsyncCollectiveAllReduceInPlaceFuture,
-    LibfabricAsyncCollectiveReduceFuture,
-    LibfabricAsyncCollectiveReduceIntoBufferFuture,
-    LibfabricAsyncCollectiveGatherFuture,
-    LibfabricAsyncCollectiveGatherIntoBufferFuture,
-    LibfabricAsyncCollectiveAllGatherFuture,
-    LibfabricAsyncCollectiveAllGatherIntoBufferFuture,
-    LibfabricAsyncCollectiveAllToAllFuture,
-    LibfabricAsyncCollectiveAllToAllIntoBufferFuture,
-    LibfabricAsyncCollectiveBroadcastFuture,
-    LibfabricAsyncCollectiveBroadcastIntoBufferFuture,
-    LibfabricAsyncCollectiveScatterFuture,
+    LibfabricAsyncCollectiveAllGatherFuture, LibfabricAsyncCollectiveAllGatherIntoBufferFuture,
+    LibfabricAsyncCollectiveAllReduceFuture, LibfabricAsyncCollectiveAllReduceInPlaceFuture,
+    LibfabricAsyncCollectiveAllReduceIntoBufferFuture, LibfabricAsyncCollectiveAllToAllFuture,
+    LibfabricAsyncCollectiveAllToAllIntoBufferFuture, LibfabricAsyncCollectiveBroadcastFuture,
+    LibfabricAsyncCollectiveBroadcastIntoBufferFuture, LibfabricAsyncCollectiveGatherFuture,
+    LibfabricAsyncCollectiveGatherIntoBufferFuture, LibfabricAsyncCollectiveReduceFuture,
+    LibfabricAsyncCollectiveReduceIntoBufferFuture, LibfabricAsyncCollectiveReduceScatterFuture,
+    LibfabricAsyncCollectiveReduceScatterIntoBufferFuture, LibfabricAsyncCollectiveScatterFuture,
     LibfabricAsyncCollectiveScatterIntoBufferFuture,
-    LibfabricAsyncCollectiveReduceScatterFuture,
-    LibfabricAsyncCollectiveReduceScatterIntoBufferFuture
 };
 
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::collective::{
-    UcxCollectiveAllToAllFuture,
-    UcxCollectiveAllToAllIntoBufferFuture,
-    UcxCollectiveAllGatherFuture,
-    UcxCollectiveAllGatherIntoBufferFuture,
-    UcxCollectiveAllReduceFuture,
-    UcxCollectiveAllReduceInPlaceFuture,
-    UcxCollectiveAllReduceIntoBufferFuture,
-    UcxCollectiveBroadcastFuture,
-    UcxCollectiveBroadcastIntoBufferFuture,
-    UcxCollectiveGatherFuture,
-    UcxCollectiveGatherIntoBufferFuture,
-    UcxCollectiveReduceFuture,
-    UcxCollectiveReduceIntoBufferFuture,
-    UcxCollectiveReduceScatterFuture,
-    UcxCollectiveReduceScatterIntoBufferFuture,
-    UcxCollectiveScatterFuture,
+    UcxCollectiveAllGatherFuture, UcxCollectiveAllGatherIntoBufferFuture,
+    UcxCollectiveAllReduceFuture, UcxCollectiveAllReduceInPlaceFuture,
+    UcxCollectiveAllReduceIntoBufferFuture, UcxCollectiveAllToAllFuture,
+    UcxCollectiveAllToAllIntoBufferFuture, UcxCollectiveBroadcastFuture,
+    UcxCollectiveBroadcastIntoBufferFuture, UcxCollectiveGatherFuture,
+    UcxCollectiveGatherIntoBufferFuture, UcxCollectiveReduceFuture,
+    UcxCollectiveReduceIntoBufferFuture, UcxCollectiveReduceScatterFuture,
+    UcxCollectiveReduceScatterIntoBufferFuture, UcxCollectiveScatterFuture,
     UcxCollectiveScatterIntoBufferFuture,
 };
 
-
 use crate::lamellae::shmem_lamellae::collective::{
-    ShmemCollectiveAllReduceFuture,
-    ShmemCollectiveAllReduceIntoBufferFuture,
-    ShmemCollectiveAllReduceInPlaceFuture,
-    ShmemCollectiveReduceFuture,
-    ShmemCollectiveReduceIntoBufferFuture,
-    ShmemCollectiveAllGatherFuture,
-    ShmemCollectiveAllGatherIntoBufferFuture,
-    ShmemCollectiveGatherFuture,
-    ShmemCollectiveGatherIntoBufferFuture,
-    ShmemCollectiveAllToAllFuture,
-    ShmemCollectiveAllToAllIntoBufferFuture,
-    ShmemCollectiveBroadcastFuture,
-    ShmemCollectiveBroadcastIntoBufferFuture,
-    ShmemCollectiveScatterFuture,
+    ShmemCollectiveAllGatherFuture, ShmemCollectiveAllGatherIntoBufferFuture,
+    ShmemCollectiveAllReduceFuture, ShmemCollectiveAllReduceInPlaceFuture,
+    ShmemCollectiveAllReduceIntoBufferFuture, ShmemCollectiveAllToAllFuture,
+    ShmemCollectiveAllToAllIntoBufferFuture, ShmemCollectiveBroadcastFuture,
+    ShmemCollectiveBroadcastIntoBufferFuture, ShmemCollectiveGatherFuture,
+    ShmemCollectiveGatherIntoBufferFuture, ShmemCollectiveReduceFuture,
+    ShmemCollectiveReduceIntoBufferFuture, ShmemCollectiveReduceScatterFuture,
+    ShmemCollectiveReduceScatterIntoBufferFuture, ShmemCollectiveScatterFuture,
     ShmemCollectiveScatterIntoBufferFuture,
-    ShmemCollectiveReduceScatterFuture,
-    ShmemCollectiveReduceScatterIntoBufferFuture,
 };
 
 use crate::lamellae::local_lamellae::collective::{
-    LocalCollectiveAllReduceFuture,
-    LocalCollectiveAllReduceIntoBufferFuture,
-    LocalCollectiveAllReduceInPlaceFuture,
-    LocalCollectiveReduceFuture,
-    LocalCollectiveReduceIntoBufferFuture,
-    LocalCollectiveAllGatherFuture,
-    LocalCollectiveAllGatherIntoBufferFuture,
-    LocalCollectiveGatherFuture,
-    LocalCollectiveGatherIntoBufferFuture,
-    LocalCollectiveAllToAllFuture,
-    LocalCollectiveAllToAllIntoBufferFuture,
-    LocalCollectiveBroadcastFuture,
-    LocalCollectiveBroadcastIntoBufferFuture,
-    LocalCollectiveScatterFuture,
+    LocalCollectiveAllGatherFuture, LocalCollectiveAllGatherIntoBufferFuture,
+    LocalCollectiveAllReduceFuture, LocalCollectiveAllReduceInPlaceFuture,
+    LocalCollectiveAllReduceIntoBufferFuture, LocalCollectiveAllToAllFuture,
+    LocalCollectiveAllToAllIntoBufferFuture, LocalCollectiveBroadcastFuture,
+    LocalCollectiveBroadcastIntoBufferFuture, LocalCollectiveGatherFuture,
+    LocalCollectiveGatherIntoBufferFuture, LocalCollectiveReduceFuture,
+    LocalCollectiveReduceIntoBufferFuture, LocalCollectiveReduceScatterFuture,
+    LocalCollectiveReduceScatterIntoBufferFuture, LocalCollectiveScatterFuture,
     LocalCollectiveScatterIntoBufferFuture,
-    LocalCollectiveReduceScatterFuture,
-    LocalCollectiveReduceScatterIntoBufferFuture,
 };
 
 use futures_util::Future;
 use pin_project::pin_project;
 use std::{
-    pin::Pin, sync::Arc, task::{Context, Poll}
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
 };
-
 
 #[must_use = " CollectiveAllReduceOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
@@ -300,21 +255,21 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceIntoBuffer
 
 #[must_use = " CollectiveAllReduceInPlaceOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
-pub struct CollectiveAllReduceInPlaceOpHandle<T: Remote, B: AsLamellarBuffer<T>>  {
+pub struct CollectiveAllReduceInPlaceOpHandle<T: Remote, B: AsLamellarBuffer<T>> {
     #[pin]
     pub(crate) future: CollectiveAllReduceInPlaceOpFuture<T, B>,
 }
 
 #[pin_project(project = CollectiveAllReduceInPlaceOpFutureProj)]
-pub(crate) enum CollectiveAllReduceInPlaceOpFuture<T: Remote, B: AsLamellarBuffer<T>>  {
+pub(crate) enum CollectiveAllReduceInPlaceOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveAllReduceInPlaceFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllReduceInPlaceFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
-    LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllReduceInPlaceFuture<T, B>), // we can reuse the IntoBuffer future for the InPlace operation since the buffer is provided by the caller in both cases    
+    LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllReduceInPlaceFuture<T, B>), // we can reuse the IntoBuffer future for the InPlace operation since the buffer is provided by the caller in both cases
     #[cfg(feature = "enable-ucx")]
-    Ucx(#[pin] UcxCollectiveAllReduceInPlaceFuture<T, B>),  
+    Ucx(#[pin] UcxCollectiveAllReduceInPlaceFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllReduceInPlaceFuture<T, B>),
     Local(#[pin] LocalCollectiveAllReduceInPlaceFuture<T, B>),
     #[allow(dead_code)]
@@ -382,14 +337,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceInPlaceOpH
     }
 }
 
-
 #[must_use = " CollectiveReduceOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub struct CollectiveReduceOpHandle<T: Remote> {
     #[pin]
     pub(crate) future: CollectiveReduceOpFuture<T>,
 }
-
 
 #[pin_project(project = CollectiveReduceOpFutureProj)]
 pub(crate) enum CollectiveReduceOpFuture<T: Remote> {
@@ -475,7 +428,6 @@ pub struct CollectiveReduceIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>>
     pub(crate) future: CollectiveReduceIntoBufferOpFuture<T, B>,
 }
 
-
 #[pin_project(project = CollectiveReduceIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
@@ -494,7 +446,7 @@ pub(crate) enum CollectiveReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
-    pub fn block(self)  {
+    pub fn block(self) {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceIntoBufferOpFuture::LibfabricSys(f) => f.block(),
@@ -643,7 +595,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceIntoBufferOpH
 //         }
 //     }
 // }
-
 
 #[must_use = " CollectiveAllGatherOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
@@ -820,7 +771,6 @@ pub struct CollectiveGatherOpHandle<T: Remote> {
     pub(crate) future: CollectiveGatherOpFuture<T>,
 }
 
-
 #[pin_project(project = CollectiveGatherOpFutureProj)]
 pub(crate) enum CollectiveGatherOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
@@ -905,7 +855,6 @@ pub struct CollectiveGatherIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>>
     pub(crate) future: CollectiveGatherIntoBufferOpFuture<T, B>,
 }
 
-
 #[pin_project(project = CollectiveGatherIntoBufferOpFutureProj)]
 pub(crate) enum CollectiveGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
@@ -924,7 +873,7 @@ pub(crate) enum CollectiveGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
-    pub fn block(self)  {
+    pub fn block(self) {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveGatherIntoBufferOpFuture::LibfabricSys(f) => f.block(),
@@ -982,7 +931,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveGatherIntoBufferOpH
         }
     }
 }
-
 
 #[must_use = " CollectiveAllBroadcastOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
@@ -1320,7 +1268,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveBroadcastIntoBuffer
     }
 }
 
-
 #[must_use = " CollectiveScatterOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub struct CollectiveScatterOpHandle<T: Remote> {
@@ -1488,7 +1435,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveScatterIntoBufferOp
         }
     }
 }
-
 
 #[must_use = " CollectiveReduceScatterOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
@@ -1658,8 +1604,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceScatterIntoBu
     }
 }
 
-
-
 #[derive(Clone)]
 pub(crate) enum ReduceOp {
     Min,
@@ -1675,25 +1619,23 @@ pub(crate) enum ReduceOp {
 pub(crate) type AllReduceOp = ReduceOp;
 
 pub(crate) enum RootOrBuffer<T> {
-    Root(Vec<T>), 
-    NotRoot(usize) 
+    Root(Vec<T>),
+    NotRoot(usize),
 }
-
 
 /// Input type for broadcast collective operations, indicating whether this PE is the root (source) or not.
 pub enum BroadcastInput {
     /// This PE is the root; `usize` is the local array index of the data to broadcast.
     Root(usize),
     /// This PE is not the root; `usize` is the PE index of the root.
-    NotRoot(usize)
+    NotRoot(usize),
 }
 
 #[allow(dead_code)] // WIP: broadcast inner representation not yet consumed
 pub(crate) enum BroadcastInputInner {
     Root(usize),
-    NotRoot(usize)
+    NotRoot(usize),
 }
-
 
 impl From<BroadcastInput> for BroadcastInputInner {
     fn from(value: BroadcastInput) -> Self {
@@ -1717,22 +1659,26 @@ impl BroadcastInput {
 }
 
 pub(crate) enum RootSrcOrBuffer<T: Remote> {
-    Root(usize), 
-    NotRoot(Vec<T>, usize) 
+    Root(usize),
+    NotRoot(Vec<T>, usize),
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<RootSrcOrLamellarBuffer<T, B>> for RootSrcOrLamellarBufferInner<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<RootSrcOrLamellarBuffer<T, B>>
+    for RootSrcOrLamellarBufferInner<T, B>
+{
     fn from(value: RootSrcOrLamellarBuffer<T, B>) -> Self {
         match value {
             RootSrcOrLamellarBuffer::Root(index) => RootSrcOrLamellarBufferInner::Root(index),
-            RootSrcOrLamellarBuffer::NotRoot(lamellar_buffer, root_pe) => RootSrcOrLamellarBufferInner::NotRoot(lamellar_buffer, root_pe),
+            RootSrcOrLamellarBuffer::NotRoot(lamellar_buffer, root_pe) => {
+                RootSrcOrLamellarBufferInner::NotRoot(lamellar_buffer, root_pe)
+            }
         }
     }
 }
 
 pub(crate) enum RootSrcOrLamellarBufferInner<T: Remote, B: AsLamellarBuffer<T>> {
-    Root(usize), 
-    NotRoot(LamellarBuffer<T, B>, usize) 
+    Root(usize),
+    NotRoot(LamellarBuffer<T, B>, usize),
 }
 
 /// Input type for scatter/broadcast operations where the root PE provides a source index and non-root PEs provide a destination buffer.
@@ -1740,7 +1686,7 @@ pub enum RootSrcOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
     /// Root PE: local array index of the source data.
     Root(usize),
     /// Non-root PE: destination buffer and root PE index.
-    NotRoot(LamellarBuffer<T, B>, usize)
+    NotRoot(LamellarBuffer<T, B>, usize),
 }
 
 /// Input type for scatter collective operations, indicating whether this PE is the root (source) or not.
@@ -1748,9 +1694,8 @@ pub enum ScatterInput {
     /// This PE is the root; `usize` is the local array index of the data to scatter.
     Root(usize),
     /// This PE is not the root; `usize` is the PE index of the root.
-    NotRoot(usize)
+    NotRoot(usize),
 }
-
 
 impl ScatterInput {
     /// Construct a [`ScatterInput`] for the root PE, providing the local array `index` of the data to scatter.
@@ -1766,9 +1711,8 @@ impl ScatterInput {
 
 pub(crate) enum ScatterInputInner {
     Root(usize),
-    NotRoot(usize)
+    NotRoot(usize),
 }
-
 
 impl From<ScatterInput> for ScatterInputInner {
     fn from(value: ScatterInput) -> Self {
@@ -1779,41 +1723,49 @@ impl From<ScatterInput> for ScatterInputInner {
     }
 }
 
-
 #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
 pub(crate) enum RootSrcSliceOrNone<'a, T> {
     Root(&'a [T]),
-    NotRoot(usize)
+    NotRoot(usize),
 }
-
 
 #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
 pub(crate) enum RootSrcOrSliceMut<'a, T> {
     Root(&'a mut [T]),
-    NotRoot(&'a mut [T], usize)
+    NotRoot(&'a mut [T], usize),
 }
 
-impl<T: Remote>  RootSrcOrBuffer<T> {
+impl<T: Remote> RootSrcOrBuffer<T> {
     #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
-    pub(crate) fn as_mut_slice<'a>(&'a mut self, alloc_slice: &'a mut [T], len: usize) -> RootSrcOrSliceMut<'a, T> {
+    pub(crate) fn as_mut_slice<'a>(
+        &'a mut self,
+        alloc_slice: &'a mut [T],
+        len: usize,
+    ) -> RootSrcOrSliceMut<'a, T> {
         match self {
-            RootSrcOrBuffer::Root(index) => RootSrcOrSliceMut::Root(&mut alloc_slice[*index..*index + len]),
-            RootSrcOrBuffer::NotRoot(vec, pe) => {RootSrcOrSliceMut::NotRoot(vec, *pe)}
+            RootSrcOrBuffer::Root(index) => {
+                RootSrcOrSliceMut::Root(&mut alloc_slice[*index..*index + len])
+            }
+            RootSrcOrBuffer::NotRoot(vec, pe) => RootSrcOrSliceMut::NotRoot(vec, *pe),
         }
     }
 }
 
 impl ScatterInputInner {
     #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
-    pub(crate) fn as_slice<'a, T>(&'a self, alloc_slice: &'a [T], len: usize) -> RootSrcSliceOrNone<'a, T> {
+    pub(crate) fn as_slice<'a, T>(
+        &'a self,
+        alloc_slice: &'a [T],
+        len: usize,
+    ) -> RootSrcSliceOrNone<'a, T> {
         match self {
-            ScatterInputInner::Root(index) => RootSrcSliceOrNone::Root(&alloc_slice[*index..*index + len]),
-            ScatterInputInner::NotRoot(pe) => RootSrcSliceOrNone::NotRoot(*pe)
+            ScatterInputInner::Root(index) => {
+                RootSrcSliceOrNone::Root(&alloc_slice[*index..*index + len])
+            }
+            ScatterInputInner::NotRoot(pe) => RootSrcSliceOrNone::NotRoot(*pe),
         }
     }
 }
-
-
 
 impl<T> RootOrBuffer<T> {
     #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
@@ -1825,7 +1777,6 @@ impl<T> RootOrBuffer<T> {
     }
 }
 
-
 /// Input type for gather-to-root collective operations, providing the root PE's destination buffer or a non-root PE's root index.
 pub enum RootOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
     /// This PE is the root; buffer to gather results into.
@@ -1834,14 +1785,13 @@ pub enum RootOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
     NotRoot(usize),
 }
 
-
-
-
 impl<T: Remote, B: AsLamellarBuffer<T>> RootOrLamellarBuffer<T, B> {
     #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
     pub(crate) fn as_mut_slice<'a>(&'a mut self) -> RootOrSliceMut<'a, T> {
         match self {
-            RootOrLamellarBuffer::Root(lamellar_buffer) => RootOrSliceMut::Root(lamellar_buffer.as_mut_slice()),
+            RootOrLamellarBuffer::Root(lamellar_buffer) => {
+                RootOrSliceMut::Root(lamellar_buffer.as_mut_slice())
+            }
             RootOrLamellarBuffer::NotRoot(pe) => RootOrSliceMut::NotRoot(*pe),
         }
     }
@@ -1849,16 +1799,22 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RootOrLamellarBuffer<T, B> {
 
 impl<T: Remote, B: AsLamellarBuffer<T>> RootSrcOrLamellarBufferInner<T, B> {
     #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
-    pub(crate) fn as_mut_slice<'a>(&'a mut self, alloc_slice: &'a mut [T], len: usize) -> RootSrcOrSliceMut<'a, T> {
+    pub(crate) fn as_mut_slice<'a>(
+        &'a mut self,
+        alloc_slice: &'a mut [T],
+        len: usize,
+    ) -> RootSrcOrSliceMut<'a, T> {
         match self {
-            RootSrcOrLamellarBufferInner::Root(index) => RootSrcOrSliceMut::Root(&mut alloc_slice[*index..*index + len]),
+            RootSrcOrLamellarBufferInner::Root(index) => {
+                RootSrcOrSliceMut::Root(&mut alloc_slice[*index..*index + len])
+            }
             RootSrcOrLamellarBufferInner::NotRoot(lamellar_buffer, pe) => {
                 let buf_slice = lamellar_buffer.as_mut_slice();
                 if buf_slice.len() < len {
                     panic!("RootSrcOrLamellarBufferInner::NotRoot buffer size {} is smaller than required len {}", buf_slice.len(), len);
                 }
                 RootSrcOrSliceMut::NotRoot(&mut buf_slice[..len], *pe)
-            },
+            }
         }
     }
 }
@@ -1866,7 +1822,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RootSrcOrLamellarBufferInner<T, B> {
 #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
 pub(crate) enum RootOrSliceMut<'a, T> {
     Root(&'a mut [T]),
-    NotRoot(usize)
+    NotRoot(usize),
 }
 
 impl std::fmt::Debug for ReduceOp {
@@ -1892,8 +1848,8 @@ pub(crate) trait CommAllocCollectiveAllReduce {
         len: usize,
         op: ReduceOp,
     ) -> CollectiveAllReduceOpHandle<T>;
-    
-    fn reduce_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+
+    fn reduce_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -1922,17 +1878,17 @@ pub(crate) trait CommAllocCollectiveReduce {
         len: usize,
         root_pe: usize,
     ) -> CollectiveReduceOpHandle<T>;
-    
-    fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+
+    fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
-        root_or_buffer: RootOrLamellarBuffer<T, B>
+        root_or_buffer: RootOrLamellarBuffer<T, B>,
     ) -> CollectiveReduceIntoBufferOpHandle<T, B>;
-    
+
     // fn reduce_in_place<T: Remote>(
     //     &self,
     //     scheduler: &Arc<Scheduler>,
@@ -1950,7 +1906,7 @@ pub(crate) trait CommAllocCollectiveAllGather {
         index: usize,
         len: usize,
     ) -> CollectiveAllGatherOpHandle<T>;
-    fn gather_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+    fn gather_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -1969,13 +1925,13 @@ pub(crate) trait CommAllocCollectiveGather {
         len: usize,
         root_pe: usize,
     ) -> CollectiveGatherOpHandle<T>;
-    fn gather_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+    fn gather_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
-        root_or_buffer: RootOrLamellarBuffer<T, B>
+        root_or_buffer: RootOrLamellarBuffer<T, B>,
     ) -> CollectiveGatherIntoBufferOpHandle<T, B>;
 }
 
@@ -1987,7 +1943,7 @@ pub(crate) trait CommAllocCollectiveAllToAll {
         index: usize,
         len: usize,
     ) -> CollectiveAllToAllOpHandle<T>;
-    fn alltoall_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+    fn alltoall_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -2005,7 +1961,7 @@ pub(crate) trait CommAllocCollectiveBroadcast {
         src_or_root_pe: BroadcastInput,
         len: usize,
     ) -> CollectiveBroadcastOpHandle<T>;
-    fn broadcast_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+    fn broadcast_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -2022,7 +1978,7 @@ pub(crate) trait CommAllocCollectiveScatter {
         src_or_root_pe: ScatterInput,
         len: usize,
     ) -> CollectiveScatterOpHandle<T>;
-    fn scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+    fn scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -2041,8 +1997,8 @@ pub(crate) trait CommAllocCollectiveReduceScatter {
         index: usize,
         len: usize,
     ) -> CollectiveReduceScatterOpHandle<T>;
-    
-    fn reduce_scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+
+    fn reduce_scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,

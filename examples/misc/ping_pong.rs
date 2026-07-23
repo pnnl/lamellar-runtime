@@ -171,7 +171,8 @@ impl LamellarAm for MyAm {
                         remote_pe: pe,
                         buffer_size: self.buffer_size,
                         comm_lock: self.comm_lock.clone(),
-                    }).spawn();
+                    })
+                    .spawn();
                 cnt += 1;
             }
         }
@@ -184,7 +185,8 @@ impl LamellarAm for MyAm {
                         remote_pe: pe,
                         buffer_size: self.buffer_size,
                         comm_lock: self.comm_lock.clone(),
-                    }).spawn();
+                    })
+                    .spawn();
                 cnt += 1;
             }
         }
@@ -282,28 +284,24 @@ fn main() {
     world.barrier();
     let timer = std::time::Instant::now();
     for (pe, buffer) in res_am_buffers.iter().enumerate() {
-        let _ = world
-            .spawn_am_local(RecvAm {
-                buffer: buffer.clone(),
-                remote_pe: pe,
-                finished: finished.clone(),
-                buffer_size,
-            });
+        let _ = world.spawn_am_local(RecvAm {
+            buffer: buffer.clone(),
+            remote_pe: pe,
+            finished: finished.clone(),
+            buffer_size,
+        });
     }
     let mut reqs = vec![];
     // if my_pe == 0 {
     for _thread in 0..1 {
         //world.num_threads_per_pe() {
-        reqs.push(
-            world
-                .spawn_am_local(MyAm {
-                    indices: indices.clone(),
-                    buffers: buffers.clone(),
-                    buffer_size,
-                    table_size_per_pe: table_size_per_pe,
-                    comm_lock: comm_lock.clone(),
-                }),
-        );
+        reqs.push(world.spawn_am_local(MyAm {
+            indices: indices.clone(),
+            buffers: buffers.clone(),
+            buffer_size,
+            table_size_per_pe: table_size_per_pe,
+            comm_lock: comm_lock.clone(),
+        }));
     }
     world.block_on_all(reqs);
     // }

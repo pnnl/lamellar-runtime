@@ -171,7 +171,7 @@ impl Endpoint {
                 rkey.handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                    | ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32,
                     // | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),

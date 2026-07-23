@@ -321,7 +321,9 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///```
     pub fn blocking_get_buffer_pe(&self, pe: usize, offset: usize, num_elems: usize) -> Vec<T> {
         unsafe {
-            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(self, pe, offset, num_elems, Sealed)
+            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(
+                self, pe, offset, num_elems, Sealed,
+            )
         }
     }
 
@@ -395,7 +397,9 @@ impl<T: Dist> ReadOnlyArray<T> {
         data: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(self, pe, offset, data, Sealed)
+            <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(
+                self, pe, offset, data, Sealed,
+            )
         }
     }
 

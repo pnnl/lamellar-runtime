@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use tracing::trace;
 
@@ -197,7 +197,9 @@ impl CommMem for RofiCComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: Arc::new(CommAllocInner::RofiCAlloc(inner_alloc.sub_alloc(addr.0, size)?)),
+                    inner_alloc: Arc::new(CommAllocInner::RofiCAlloc(
+                        inner_alloc.sub_alloc(addr.0, size)?,
+                    )),
                 });
             }
         }

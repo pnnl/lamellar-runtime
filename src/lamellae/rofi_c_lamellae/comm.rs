@@ -2,10 +2,7 @@ use crate::{
     config,
     lamellae::{
         comm::atomic::AtomicOp,
-        comm::{
-            CommInfo, CommMem,
-            CommProgress, CommShutdown, CollectiveOpKind,
-        },
+        comm::{CollectiveOpKind, CommInfo, CommMem, CommProgress, CommShutdown},
         AllocationType,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},

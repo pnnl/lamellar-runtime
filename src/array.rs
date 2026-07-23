@@ -164,10 +164,8 @@ pub use iterator::one_sided_iterator::OneSidedIterator;
 pub(crate) mod operations;
 pub use operations::*;
 
-pub(crate)  mod scalar_one_sided_reduce;
+pub(crate) mod scalar_one_sided_reduce;
 pub use scalar_one_sided_reduce::*;
-
-
 
 pub(crate) mod handle;
 pub use handle::*;
@@ -191,7 +189,6 @@ lazy_static! {
         }
         temp
     };
-    
 }
 
 type ReduceIdGen = fn() -> std::any::TypeId;
@@ -203,60 +200,66 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-
 /// Runtime tag for the 14 primitive scalar types that support array ops.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 #[allow(non_camel_case_types)]
 pub(crate) enum ScalarType {
-    u8, u16, u32, u64, usize,
+    u8,
+    u16,
+    u32,
+    u64,
+    usize,
     u128,
-    i8, i16, i32, i64, isize,
+    i8,
+    i16,
+    i32,
+    i64,
+    isize,
     i128,
-    f32, f64,
+    f32,
+    f64,
     bool,
 }
 
 impl ScalarType {
-    pub(crate) fn get_type<T: 'static>() -> Option<(Self,bool)> { // returns (ScalarType, is_option)
+    pub(crate) fn get_type<T: 'static>() -> Option<(Self, bool)> {
+        // returns (ScalarType, is_option)
         match std::any::TypeId::of::<T>() {
-            id if id == std::any::TypeId::of::<u8>() => Some((ScalarType::u8,false)),
-            id if id == std::any::TypeId::of::<u16>() => Some((ScalarType::u16,false)),
-            id if id == std::any::TypeId::of::<u32>() => Some((ScalarType::u32,false)),
-            id if id == std::any::TypeId::of::<u64>() => Some((ScalarType::u64,false)),
-            id if id == std::any::TypeId::of::<usize>() => Some((ScalarType::usize,false)),
-            id if id == std::any::TypeId::of::<u128>() => Some((ScalarType::u128,false)),
-            id if id == std::any::TypeId::of::<i8>() => Some((ScalarType::i8,false)),
-            id if id == std::any::TypeId::of::<i16>() => Some((ScalarType::i16,false)),
-            id if id == std::any::TypeId::of::<i32>() => Some((ScalarType::i32,false)),
-            id if id == std::any::TypeId::of::<i64>() => Some((ScalarType::i64,false)),
-            id if id == std::any::TypeId::of::<isize>() => Some((ScalarType::isize,false)),
-            id if id == std::any::TypeId::of::<i128>() => Some((ScalarType::i128,false)),
-            id if id == std::any::TypeId::of::<f32>() => Some((ScalarType::f32,false)),
-            id if id == std::any::TypeId::of::<f64>() => Some((ScalarType::f64,false)),
-            id if id == std::any::TypeId::of::<bool>() => Some((ScalarType::bool,false)),
-            id if id == std::any::TypeId::of::<Option<u8>>() => Some((ScalarType::u8,true)),
-            id if id == std::any::TypeId::of::<Option<u16>>() => Some((ScalarType::u16,true)),
-            id if id == std::any::TypeId::of::<Option<u32>>() => Some((ScalarType::u32,true)),
-            id if id == std::any::TypeId::of::<Option<u64>>() => Some((ScalarType::u64,true)),
-            id if id == std::any::TypeId::of::<Option<usize>>() => Some((ScalarType::usize,true)),
-            id if id == std::any::TypeId::of::<Option<u128>>() => Some((ScalarType::u128,true)),
-            id if id == std::any::TypeId::of::<Option<i8>>() => Some((ScalarType::i8,true)),
-            id if id == std::any::TypeId::of::<Option<i16>>() => Some((ScalarType::i16,true)),
-            id if id == std::any::TypeId::of::<Option<i32>>() => Some((ScalarType::i32,true)),
-            id if id == std::any::TypeId::of::<Option<i64>>() => Some((ScalarType::i64,true)),
-            id if id == std::any::TypeId::of::<Option<isize>>() => Some((ScalarType::isize,true)),
-            id if id == std::any::TypeId::of::<Option<i128>>() => Some((ScalarType::i128,true)),
-            id if id == std::any::TypeId::of::<Option<f32>>() => Some((ScalarType::f32,true)),
-            id if id == std::any::TypeId::of::<Option<f64>>() => Some((ScalarType::f64,true)),
-            id if id == std::any::TypeId::of::<Option<bool>>() => Some((ScalarType::bool,true)),
+            id if id == std::any::TypeId::of::<u8>() => Some((ScalarType::u8, false)),
+            id if id == std::any::TypeId::of::<u16>() => Some((ScalarType::u16, false)),
+            id if id == std::any::TypeId::of::<u32>() => Some((ScalarType::u32, false)),
+            id if id == std::any::TypeId::of::<u64>() => Some((ScalarType::u64, false)),
+            id if id == std::any::TypeId::of::<usize>() => Some((ScalarType::usize, false)),
+            id if id == std::any::TypeId::of::<u128>() => Some((ScalarType::u128, false)),
+            id if id == std::any::TypeId::of::<i8>() => Some((ScalarType::i8, false)),
+            id if id == std::any::TypeId::of::<i16>() => Some((ScalarType::i16, false)),
+            id if id == std::any::TypeId::of::<i32>() => Some((ScalarType::i32, false)),
+            id if id == std::any::TypeId::of::<i64>() => Some((ScalarType::i64, false)),
+            id if id == std::any::TypeId::of::<isize>() => Some((ScalarType::isize, false)),
+            id if id == std::any::TypeId::of::<i128>() => Some((ScalarType::i128, false)),
+            id if id == std::any::TypeId::of::<f32>() => Some((ScalarType::f32, false)),
+            id if id == std::any::TypeId::of::<f64>() => Some((ScalarType::f64, false)),
+            id if id == std::any::TypeId::of::<bool>() => Some((ScalarType::bool, false)),
+            id if id == std::any::TypeId::of::<Option<u8>>() => Some((ScalarType::u8, true)),
+            id if id == std::any::TypeId::of::<Option<u16>>() => Some((ScalarType::u16, true)),
+            id if id == std::any::TypeId::of::<Option<u32>>() => Some((ScalarType::u32, true)),
+            id if id == std::any::TypeId::of::<Option<u64>>() => Some((ScalarType::u64, true)),
+            id if id == std::any::TypeId::of::<Option<usize>>() => Some((ScalarType::usize, true)),
+            id if id == std::any::TypeId::of::<Option<u128>>() => Some((ScalarType::u128, true)),
+            id if id == std::any::TypeId::of::<Option<i8>>() => Some((ScalarType::i8, true)),
+            id if id == std::any::TypeId::of::<Option<i16>>() => Some((ScalarType::i16, true)),
+            id if id == std::any::TypeId::of::<Option<i32>>() => Some((ScalarType::i32, true)),
+            id if id == std::any::TypeId::of::<Option<i64>>() => Some((ScalarType::i64, true)),
+            id if id == std::any::TypeId::of::<Option<isize>>() => Some((ScalarType::isize, true)),
+            id if id == std::any::TypeId::of::<Option<i128>>() => Some((ScalarType::i128, true)),
+            id if id == std::any::TypeId::of::<Option<f32>>() => Some((ScalarType::f32, true)),
+            id if id == std::any::TypeId::of::<Option<f64>>() => Some((ScalarType::f64, true)),
+            id if id == std::any::TypeId::of::<Option<bool>>() => Some((ScalarType::bool, true)),
             _ => None,
         }
     }
 }
-
-
-
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
@@ -736,11 +739,19 @@ impl std::fmt::Debug for LamellarByteArray {
             LamellarByteArray::UnsafeArray(_) => write!(f, "LamellarByteArray::UnsafeArray"),
             LamellarByteArray::ReadOnlyArray(_) => write!(f, "LamellarByteArray::ReadOnlyArray"),
             LamellarByteArray::AtomicArray(_) => write!(f, "LamellarByteArray::AtomicArray"),
-            LamellarByteArray::NativeAtomicArray(_) => write!(f, "LamellarByteArray::NativeAtomicArray"),
-            LamellarByteArray::GenericAtomicArray(_) => write!(f, "LamellarByteArray::GenericAtomicArray"),
-            LamellarByteArray::NetworkAtomicArray(_) => write!(f, "LamellarByteArray::NetworkAtomicArray"),
+            LamellarByteArray::NativeAtomicArray(_) => {
+                write!(f, "LamellarByteArray::NativeAtomicArray")
+            }
+            LamellarByteArray::GenericAtomicArray(_) => {
+                write!(f, "LamellarByteArray::GenericAtomicArray")
+            }
+            LamellarByteArray::NetworkAtomicArray(_) => {
+                write!(f, "LamellarByteArray::NetworkAtomicArray")
+            }
             LamellarByteArray::LocalLockArray(_) => write!(f, "LamellarByteArray::LocalLockArray"),
-            LamellarByteArray::GlobalLockArray(_) => write!(f, "LamellarByteArray::GlobalLockArray"),
+            LamellarByteArray::GlobalLockArray(_) => {
+                write!(f, "LamellarByteArray::GlobalLockArray")
+            }
         }
     }
 }
@@ -960,8 +971,7 @@ pub enum __LamellarLocalData<'a, T: Dist> {
     NetworkAtomic(__NetworkAtomicLocalData<T>),
 }
 
-
-impl<T: Dist> __LamellarLocalData<'_ , T> {
+impl<T: Dist> __LamellarLocalData<'_, T> {
     pub fn reduce<Op>(self, reduce: Op) -> Option<T>
     where
         Op: Fn(T, T) -> T,
@@ -969,10 +979,18 @@ impl<T: Dist> __LamellarLocalData<'_ , T> {
         match self {
             __LamellarLocalData::Slice(slice) => slice.iter().copied().reduce(reduce),
             __LamellarLocalData::LocalLock(local_lock) => local_lock.iter().copied().reduce(reduce),
-            __LamellarLocalData::GlobalLock(global_lock) => global_lock.iter().copied().reduce(reduce),
-            __LamellarLocalData::NativeAtomic(native_atomic) => native_atomic.iter().map(|e| e.load()).reduce(reduce),
-            __LamellarLocalData::GenericAtomic(generic_atomic) => generic_atomic.iter().map(|e| e.load()).reduce(reduce),
-            __LamellarLocalData::NetworkAtomic(network_atomic) => network_atomic.iter().map(|e| e.load()).reduce(reduce),
+            __LamellarLocalData::GlobalLock(global_lock) => {
+                global_lock.iter().copied().reduce(reduce)
+            }
+            __LamellarLocalData::NativeAtomic(native_atomic) => {
+                native_atomic.iter().map(|e| e.load()).reduce(reduce)
+            }
+            __LamellarLocalData::GenericAtomic(generic_atomic) => {
+                generic_atomic.iter().map(|e| e.load()).reduce(reduce)
+            }
+            __LamellarLocalData::NetworkAtomic(network_atomic) => {
+                network_atomic.iter().map(|e| e.load()).reduce(reduce)
+            }
         }
     }
 }
@@ -1437,8 +1455,6 @@ pub(crate) mod private {
             self.team_rt()
                 .spawn_am_all_tg(am, Some(self.team_counters()))
         }
-
-
     }
 }
 

@@ -5,10 +5,10 @@ use handle::{
     GlobalLockArrayHandle, GlobalLockCollectiveMutLocalDataHandle, GlobalLockLocalDataHandle,
     GlobalLockMutLocalDataHandle, GlobalLockReadHandle, GlobalLockWriteHandle,
 };
+mod collective;
 mod iteration;
 pub(crate) mod operations;
 mod rdma;
-mod collective;
 use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::__UnsafeByteArray;
 use crate::barrier::BarrierHandle;
@@ -1193,7 +1193,10 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn registered_reduce(self, op: &str) -> GlobalLockArrayReduceHandle<T> {
         GlobalLockArrayReduceHandle {
-            req: self.array.array.reduce_data_user(op, self.array.clone().into()),
+            req: self
+                .array
+                .array
+                .reduce_data_user(op, self.array.clone().into()),
             lock_guard: self,
         }
     }
@@ -1226,10 +1229,24 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn sum(self) -> GlobalLockArrayReduceHandle<T> {
         let req = match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Sum))),
-            None => self.array.array.reduce_data_user("sum", self.array.clone().into()),
+            Some((scalar_type, _)) => {
+                self.array
+                    .array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.array.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Sum,
+                    )))
+            }
+            None => self
+                .array
+                .array
+                .reduce_data_user("sum", self.array.clone().into()),
         };
-        GlobalLockArrayReduceHandle { req, lock_guard: self }
+        GlobalLockArrayReduceHandle {
+            req,
+            lock_guard: self,
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1259,10 +1276,24 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn prod(self) -> GlobalLockArrayReduceHandle<T> {
         let req = match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Prod))),
-            None => self.array.array.reduce_data_user("prod", self.array.clone().into()),
+            Some((scalar_type, _)) => {
+                self.array
+                    .array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.array.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Prod,
+                    )))
+            }
+            None => self
+                .array
+                .array
+                .reduce_data_user("prod", self.array.clone().into()),
         };
-        GlobalLockArrayReduceHandle { req, lock_guard: self }
+        GlobalLockArrayReduceHandle {
+            req,
+            lock_guard: self,
+        }
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuard<T> {
@@ -1293,10 +1324,24 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn max(self) -> GlobalLockArrayReduceHandle<T> {
         let req = match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Max))),
-            None => self.array.array.reduce_data_user("max", self.array.clone().into()),
+            Some((scalar_type, _)) => {
+                self.array
+                    .array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.array.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Max,
+                    )))
+            }
+            None => self
+                .array
+                .array
+                .reduce_data_user("max", self.array.clone().into()),
         };
-        GlobalLockArrayReduceHandle { req, lock_guard: self }
+        GlobalLockArrayReduceHandle {
+            req,
+            lock_guard: self,
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1326,10 +1371,24 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn min(self) -> GlobalLockArrayReduceHandle<T> {
         let req = match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Min))),
-            None => self.array.array.reduce_data_user("min", self.array.clone().into()),
+            Some((scalar_type, _)) => {
+                self.array
+                    .array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.array.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Min,
+                    )))
+            }
+            None => self
+                .array
+                .array
+                .reduce_data_user("min", self.array.clone().into()),
         };
-        GlobalLockArrayReduceHandle { req, lock_guard: self }
+        GlobalLockArrayReduceHandle {
+            req,
+            lock_guard: self,
+        }
     }
 }
 impl<T: Dist + AmDist + ElementBitWiseOps + 'static> GlobalLockReadGuard<T> {
@@ -1359,10 +1418,24 @@ impl<T: Dist + AmDist + ElementBitWiseOps + 'static> GlobalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn and(self) -> GlobalLockArrayReduceHandle<T> {
         let req = match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::And))),
-            None => self.array.array.reduce_data_user("and", self.array.clone().into()),
+            Some((scalar_type, _)) => {
+                self.array
+                    .array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.array.clone().into(),
+                        scalar_type,
+                        BuiltinOp::And,
+                    )))
+            }
+            None => self
+                .array
+                .array
+                .reduce_data_user("and", self.array.clone().into()),
         };
-        GlobalLockArrayReduceHandle { req, lock_guard: self }
+        GlobalLockArrayReduceHandle {
+            req,
+            lock_guard: self,
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1391,10 +1464,24 @@ impl<T: Dist + AmDist + ElementBitWiseOps + 'static> GlobalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn or(self) -> GlobalLockArrayReduceHandle<T> {
         let req = match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Or))),
-            None => self.array.array.reduce_data_user("or", self.array.clone().into()),
+            Some((scalar_type, _)) => {
+                self.array
+                    .array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.array.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Or,
+                    )))
+            }
+            None => self
+                .array
+                .array
+                .reduce_data_user("or", self.array.clone().into()),
         };
-        GlobalLockArrayReduceHandle { req, lock_guard: self }
+        GlobalLockArrayReduceHandle {
+            req,
+            lock_guard: self,
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1423,9 +1510,23 @@ impl<T: Dist + AmDist + ElementBitWiseOps + 'static> GlobalLockReadGuard<T> {
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn xor(self) -> GlobalLockArrayReduceHandle<T> {
         let req = match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.array.clone().into(), scalar_type, BuiltinOp::Xor))),
-            None => self.array.array.reduce_data_user("xor", self.array.clone().into()),
+            Some((scalar_type, _)) => {
+                self.array
+                    .array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.array.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Xor,
+                    )))
+            }
+            None => self
+                .array
+                .array
+                .reduce_data_user("xor", self.array.clone().into()),
         };
-        GlobalLockArrayReduceHandle { req, lock_guard: self }
+        GlobalLockArrayReduceHandle {
+            req,
+            lock_guard: self,
+        }
     }
 }

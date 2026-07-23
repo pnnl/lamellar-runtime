@@ -177,14 +177,10 @@ impl LamellaeUtil for RofiC {
         self.cq.send_alloc(min_size).await;
     }
 
-    async fn send_vec_to_pe_async(
-        &self,
-        pe: usize,
-        vec_data: Vec<u8>,
-    ) {
+    async fn send_vec_to_pe_async(&self, pe: usize, vec_data: Vec<u8>) {
         self.cq.send_vec(vec_data, pe).await;
     }
-    
+
     fn available_to_send(&self, pe: usize) -> bool {
         self.cq.available_to_send(pe)
     }

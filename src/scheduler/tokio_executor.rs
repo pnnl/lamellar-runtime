@@ -2,7 +2,7 @@ use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInn
 use tokio::runtime::Runtime;
 
 use futures_util::Future;
-use std::sync::atomic::{AtomicU8};
+use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
 
 #[derive(Debug)]

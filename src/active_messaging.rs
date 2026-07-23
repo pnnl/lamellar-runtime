@@ -924,8 +924,8 @@ pub(crate) enum Cmd {
     Data = 2,     //a single data result
     Unit = 3,     //a single unit result
     BatchedMsg = 4, //a batched message, can contain a variety of am types
-              // BatchedReturnAm, //a batched message, only containing return ams -- not sure this can happen
-              // BatchedData, //a batched message, only containing data results
+                  // BatchedReturnAm, //a batched message, only containing return ams -- not sure this can happen
+                  // BatchedData, //a batched message, only containing data results
 }
 // // SAFETY: `Cmd` is `#[repr(C)]` with `Am = 0` as the default/zero value,
 // // making Zeroable sound. Pod is required for use in bytemuck-cast structs
@@ -935,11 +935,22 @@ pub(crate) enum Cmd {
 
 #[repr(C)]
 // #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default, bytemuck::CheckedBitPattern, bytemuck::NoUninit, bytemuck::Zeroable)]
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default, zerocopy_derive::IntoBytes,zerocopy_derive::TryFromBytes,zerocopy_derive::KnownLayout,zerocopy_derive::Immutable)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    zerocopy_derive::IntoBytes,
+    zerocopy_derive::TryFromBytes,
+    zerocopy_derive::KnownLayout,
+    zerocopy_derive::Immutable,
+)]
 pub(crate) struct Msg {
     pub(crate) src: u16,
     pub(crate) cmd: Cmd,
-    padding: [u8; 1], //padding to enable IntoBytes 
+    padding: [u8; 1], //padding to enable IntoBytes
 }
 
 #[allow(dead_code)]

@@ -4,7 +4,7 @@ use crate::{
         registered_active_message::*,
         *,
     },
-    lamellae::{Lamellae, SerializedData, SerializeHeader},
+    lamellae::{Lamellae, SerializeHeader, SerializedData},
 };
 use batching::*;
 
@@ -117,7 +117,10 @@ impl VecSimpleBatcher {
                     let guard = slot.lock();
                     let (_, data_bytes, current_batch_id) = &*guard;
                     if *current_batch_id != batch_id {
-                        debug!("vec_simple_batcher: batch {} for pe {} already sent", batch_id, pe);
+                        debug!(
+                            "vec_simple_batcher: batch {} for pe {} already sent",
+                            batch_id, pe
+                        );
                         return;
                     }
                     *data_bytes
@@ -136,7 +139,12 @@ impl VecSimpleBatcher {
                 async_std::task::yield_now().await;
             }
             if let Some(ready) = VecSimpleBatcher::take_batch(&slot, &header_bytes, batch_id) {
-                debug!("vec_simple_batcher: flushing batch {} to pe {}, {} bytes", batch_id, pe, ready.len());
+                debug!(
+                    "vec_simple_batcher: flushing batch {} to pe {}, {} bytes",
+                    batch_id,
+                    pe,
+                    ready.len()
+                );
                 lamellae.send_vec_to_pe_async(pe, ready).await;
             }
         });
@@ -153,7 +161,12 @@ impl VecSimpleBatcher {
         batch_id: usize,
     ) {
         if let Some(ready) = VecSimpleBatcher::take_batch(&slot, &header_bytes, batch_id) {
-            debug!("vec_simple_batcher: over-max flush batch {} to pe {}, {} bytes", batch_id, pe, ready.len());
+            debug!(
+                "vec_simple_batcher: over-max flush batch {} to pe {}, {} bytes",
+                batch_id,
+                pe,
+                ready.len()
+            );
             self.executor.submit_io_task(async move {
                 lamellae.send_vec_to_pe_async(pe, ready).await;
             });
@@ -211,9 +224,20 @@ impl Batcher for VecSimpleBatcher {
                 let mut darcs = vec![];
                 am.ser(1, &mut darcs);
                 let slot = Arc::clone(&self.inner.pe_batch[pe]);
-                let (prev, batch_id) =
-                    VecSimpleBatcher::append(&slot, &[cmd_bytes, am_header_bytes, &am_bytes], payload_len);
-                self.post_append(slot, &req_data.lamellae, pe, prev, prev + payload_len, batch_id, stall_mark);
+                let (prev, batch_id) = VecSimpleBatcher::append(
+                    &slot,
+                    &[cmd_bytes, am_header_bytes, &am_bytes],
+                    payload_len,
+                );
+                self.post_append(
+                    slot,
+                    &req_data.lamellae,
+                    pe,
+                    prev,
+                    prev + payload_len,
+                    batch_id,
+                    stall_mark,
+                );
             }
             None => {
                 let darc_ser_cnt = match req_data.team.team_pe_id() {
@@ -222,7 +246,10 @@ impl Batcher for VecSimpleBatcher {
                 };
                 let mut darcs = vec![];
                 am.ser(darc_ser_cnt, &mut darcs);
-                for pe in req_data.team.arch.team_iter()
+                for pe in req_data
+                    .team
+                    .arch
+                    .team_iter()
                     .filter(|pe| pe != &req_data.team.lamellae.comm().my_pe())
                 {
                     let slot = Arc::clone(&self.inner.pe_batch[pe]);
@@ -231,7 +258,15 @@ impl Batcher for VecSimpleBatcher {
                         &[cmd_bytes, am_header_bytes, &am_bytes],
                         payload_len,
                     );
-                    self.post_append(slot, &req_data.lamellae, pe, prev, prev + payload_len, batch_id, stall_mark);
+                    self.post_append(
+                        slot,
+                        &req_data.lamellae,
+                        pe,
+                        prev,
+                        prev + payload_len,
+                        batch_id,
+                        stall_mark,
+                    );
                 }
             }
         }
@@ -265,9 +300,20 @@ impl Batcher for VecSimpleBatcher {
                 let mut darcs = vec![];
                 am.ser(1, &mut darcs);
                 let slot = Arc::clone(&self.inner.pe_batch[pe]);
-                let (prev, batch_id) =
-                    VecSimpleBatcher::append(&slot, &[cmd_bytes, am_header_bytes, &am_bytes], payload_len);
-                self.post_append(slot, &req_data.lamellae, pe, prev, prev + payload_len, batch_id, stall_mark);
+                let (prev, batch_id) = VecSimpleBatcher::append(
+                    &slot,
+                    &[cmd_bytes, am_header_bytes, &am_bytes],
+                    payload_len,
+                );
+                self.post_append(
+                    slot,
+                    &req_data.lamellae,
+                    pe,
+                    prev,
+                    prev + payload_len,
+                    batch_id,
+                    stall_mark,
+                );
             }
             None => {
                 let darc_ser_cnt = match req_data.team.team_pe_id() {
@@ -276,7 +322,10 @@ impl Batcher for VecSimpleBatcher {
                 };
                 let mut darcs = vec![];
                 am.ser(darc_ser_cnt, &mut darcs);
-                for pe in req_data.team.arch.team_iter()
+                for pe in req_data
+                    .team
+                    .arch
+                    .team_iter()
                     .filter(|pe| pe != &req_data.team.lamellae.comm().my_pe())
                 {
                     let slot = Arc::clone(&self.inner.pe_batch[pe]);
@@ -285,7 +334,15 @@ impl Batcher for VecSimpleBatcher {
                         &[cmd_bytes, am_header_bytes, &am_bytes],
                         payload_len,
                     );
-                    self.post_append(slot, &req_data.lamellae, pe, prev, prev + payload_len, batch_id, stall_mark);
+                    self.post_append(
+                        slot,
+                        &req_data.lamellae,
+                        pe,
+                        prev,
+                        prev + payload_len,
+                        batch_id,
+                        stall_mark,
+                    );
                 }
             }
         }
@@ -323,7 +380,15 @@ impl Batcher for VecSimpleBatcher {
             &[cmd_bytes, data_header_bytes, &serialized_darcs, &data_bytes],
             payload_len,
         );
-        self.post_append(slot, &req_data.lamellae, pe, prev, prev + payload_len, batch_id, stall_mark);
+        self.post_append(
+            slot,
+            &req_data.lamellae,
+            pe,
+            prev,
+            prev + payload_len,
+            batch_id,
+            stall_mark,
+        );
     }
 
     async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, stall_mark: usize) {
@@ -343,10 +408,21 @@ impl Batcher for VecSimpleBatcher {
                 let slot = Arc::clone(&self.inner.pe_batch[pe]);
                 let (prev, batch_id) =
                     VecSimpleBatcher::append(&slot, &[cmd_bytes, unit_header_bytes], payload_len);
-                self.post_append(slot, &req_data.lamellae, pe, prev, prev + payload_len, batch_id, stall_mark);
+                self.post_append(
+                    slot,
+                    &req_data.lamellae,
+                    pe,
+                    prev,
+                    prev + payload_len,
+                    batch_id,
+                    stall_mark,
+                );
             }
             None => {
-                for pe in req_data.team.arch.team_iter()
+                for pe in req_data
+                    .team
+                    .arch
+                    .team_iter()
                     .filter(|pe| pe != &req_data.team.lamellae.comm().my_pe())
                 {
                     let slot = Arc::clone(&self.inner.pe_batch[pe]);
@@ -355,7 +431,15 @@ impl Batcher for VecSimpleBatcher {
                         &[cmd_bytes, unit_header_bytes],
                         payload_len,
                     );
-                    self.post_append(slot, &req_data.lamellae, pe, prev, prev + payload_len, batch_id, stall_mark);
+                    self.post_append(
+                        slot,
+                        &req_data.lamellae,
+                        pe,
+                        prev,
+                        prev + payload_len,
+                        batch_id,
+                        stall_mark,
+                    );
                 }
             }
         }
@@ -374,11 +458,14 @@ impl Batcher for VecSimpleBatcher {
         let mut offset = 0;
         while offset < data_bytes.len() {
             let cmd_bytes = &data_bytes[offset..offset + std::mem::size_of::<Cmd>()];
-            let cmd = Cmd::try_ref_from_bytes(cmd_bytes).expect("VecSimpleBatcher: failed to parse Cmd");
+            let cmd =
+                Cmd::try_ref_from_bytes(cmd_bytes).expect("VecSimpleBatcher: failed to parse Cmd");
             offset += std::mem::size_of::<Cmd>();
             offset += match cmd {
                 Cmd::Am => exec_am_inner(src, &data_bytes[offset..], lamellae, ame, &self.executor),
-                Cmd::ReturnAm => exec_return_am_inner(src, &data_bytes[offset..], lamellae, ame).await,
+                Cmd::ReturnAm => {
+                    exec_return_am_inner(src, &data_bytes[offset..], lamellae, ame).await
+                }
                 Cmd::Data => exec_data_am_inner(src, &data_bytes[offset..], ame),
                 Cmd::Unit => exec_unit_am_inner(src, &data_bytes[offset..], ame),
                 _ => unreachable!("VecSimpleBatcher: unexpected cmd in batched msg"),
@@ -476,7 +563,9 @@ async fn exec_return_am_inner(
         world: world.team.clone(),
         team: team.team.clone(),
     };
-    ame.clone().exec_local_am(req_data, am.as_local(), world, team).await;
+    ame.clone()
+        .exec_local_am(req_data, am.as_local(), world, team)
+        .await;
     offset
 }
 
@@ -497,7 +586,11 @@ fn exec_data_am_inner(src: usize, data_bytes: &[u8], ame: &RegisteredActiveMessa
         id: data_header.req_id.get() as usize,
         sub_id: data_header.req_sub_id.get() as usize,
     };
-    ame.send_data_to_user_handle(req_id, src, InternalResult::NewRemote(payload.to_vec(), darc_list));
+    ame.send_data_to_user_handle(
+        req_id,
+        src,
+        InternalResult::NewRemote(payload.to_vec(), darc_list),
+    );
     offset
 }
 

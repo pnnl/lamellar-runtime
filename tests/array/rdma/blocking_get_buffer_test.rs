@@ -93,8 +93,8 @@ macro_rules! initialize_array_range {
     }};
 }
 
-macro_rules! blocking_get_buffer_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{{
+macro_rules! blocking_get_buffer_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
         let world = lamellar::LamellarWorldBuilder::new().build();
         let num_pes = world.num_pes();
         let _my_pe = world.my_pe();
@@ -103,24 +103,36 @@ macro_rules! blocking_get_buffer_test{
         #[allow(unused_mut)]
         let mut success = true;
         #[allow(unused_mut)]
-        let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into();
+        let mut array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into();
         initialize_array!($array, array, $t);
 
         array.wait_all();
         array.barrier();
 
-        for tx_size in 1..=mem_seg_len{
-            let num_txs = mem_seg_len/tx_size;
+        for tx_size in 1..=mem_seg_len {
+            let num_txs = mem_seg_len / tx_size;
             let mut i = 0;
-            for tx in 0..num_txs{
+            for tx in 0..num_txs {
                 #[allow(unused_unsafe)]
-                let buf = unsafe { array.blocking_get_buffer(tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size)-tx*tx_size) };
-                for elem in buf.iter(){
+                let buf = unsafe {
+                    array.blocking_get_buffer(
+                        tx * tx_size,
+                        std::cmp::min(mem_seg_len, (tx + 1) * tx_size) - tx * tx_size,
+                    )
+                };
+                for elem in buf.iter() {
                     if ((i as $t - elem) as f32).abs() > 0.0001 {
-                        eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                        eprintln!(
+                            "{:?} {:?} {:?}",
+                            i as $t,
+                            elem,
+                            ((i as $t - elem) as f32).abs()
+                        );
                         success = false;
                     }
-                    i+=1;
+                    i += 1;
                 }
             }
             array.barrier();
@@ -128,30 +140,40 @@ macro_rules! blocking_get_buffer_test{
         array.barrier();
         world.wait_all();
         world.barrier();
-        if !success{
+        if !success {
             eprintln!("failed 1");
         }
 
-        let half_len = array_total_len/2;
-        let start_i = half_len/2;
+        let half_len = array_total_len / 2;
+        let start_i = half_len / 2;
         let end_i = start_i + half_len;
-        initialize_array_range!($array, array, $t,(start_i..end_i));
+        initialize_array_range!($array, array, $t, (start_i..end_i));
         let sub_array = array.sub_array(start_i..end_i);
         world.barrier();
 
         sub_array.barrier();
-        for tx_size in 1..=half_len{
-            let num_txs = half_len/tx_size;
+        for tx_size in 1..=half_len {
+            let num_txs = half_len / tx_size;
             let mut i = 0;
-            for tx in 0..num_txs{
+            for tx in 0..num_txs {
                 #[allow(unused_unsafe)]
-                let buf = unsafe { sub_array.blocking_get_buffer(tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size)-tx*tx_size) };
-                for elem in buf.iter(){
+                let buf = unsafe {
+                    sub_array.blocking_get_buffer(
+                        tx * tx_size,
+                        std::cmp::min(half_len, (tx + 1) * tx_size) - tx * tx_size,
+                    )
+                };
+                for elem in buf.iter() {
                     if ((i as $t - elem) as f32).abs() > 0.0001 {
-                        eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                        eprintln!(
+                            "{:?} {:?} {:?}",
+                            i as $t,
+                            elem,
+                            ((i as $t - elem) as f32).abs()
+                        );
                         success = false;
                     }
-                    i+=1;
+                    i += 1;
                 }
             }
             sub_array.barrier();
@@ -159,36 +181,46 @@ macro_rules! blocking_get_buffer_test{
         array.barrier();
         world.wait_all();
         world.barrier();
-        if !success{
+        if !success {
             eprintln!("failed 2");
         }
         drop(sub_array);
 
-        let pe_len = array_total_len/num_pes;
+        let pe_len = array_total_len / num_pes;
 
-        for pe in 0..num_pes{
-            let len = pe_len/2;
-            let start_i = (pe*pe_len)+ len/2;
+        for pe in 0..num_pes {
+            let len = pe_len / 2;
+            let start_i = (pe * pe_len) + len / 2;
 
-            let end_i = start_i+len;
-            initialize_array_range!($array, array, $t,(start_i..end_i));
+            let end_i = start_i + len;
+            initialize_array_range!($array, array, $t, (start_i..end_i));
             let sub_array = array.sub_array(start_i..end_i);
             world.barrier();
 
             sub_array.barrier();
 
-            for tx_size in 1..len{
-                let num_txs = len/tx_size;
+            for tx_size in 1..len {
+                let num_txs = len / tx_size;
                 let mut i = 0;
-                for tx in 0..num_txs{
+                for tx in 0..num_txs {
                     #[allow(unused_unsafe)]
-                    let buf = unsafe { sub_array.blocking_get_buffer(tx*tx_size,std::cmp::min(len,(tx+1)*tx_size)-tx*tx_size) };
-                    for elem in buf.iter(){
+                    let buf = unsafe {
+                        sub_array.blocking_get_buffer(
+                            tx * tx_size,
+                            std::cmp::min(len, (tx + 1) * tx_size) - tx * tx_size,
+                        )
+                    };
+                    for elem in buf.iter() {
                         if ((i as $t - elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                            eprintln!(
+                                "{:?} {:?} {:?}",
+                                i as $t,
+                                elem,
+                                ((i as $t - elem) as f32).abs()
+                            );
                             success = false;
                         }
-                        i+=1;
+                        i += 1;
                     }
                 }
                 sub_array.barrier();
@@ -198,7 +230,7 @@ macro_rules! blocking_get_buffer_test{
             world.barrier();
         }
 
-        if !success{
+        if !success {
             eprintln!("failed 3");
         }
     }};

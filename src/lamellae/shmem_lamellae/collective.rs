@@ -1,10 +1,55 @@
-use std::{future::Future, pin::Pin, sync::Arc, task::{Context, Poll}};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use pin_project::{pin_project, pinned_drop};
 
-use crate::{active_messaging::AMCounters, lamellae::{collective::{CollectiveAllReduceInPlaceOpFuture, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpFuture, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpFuture, CollectiveAllReduceOpHandle, CommAllocCollectiveAllReduce, ReduceOp, CollectiveAllGatherIntoBufferOpFuture, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpFuture, CollectiveAllGatherOpHandle, CollectiveAllToAllIntoBufferOpFuture, CollectiveAllToAllIntoBufferOpHandle, CollectiveAllToAllOpFuture, CollectiveAllToAllOpHandle, CollectiveBroadcastIntoBufferOpFuture, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpFuture, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpFuture, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpFuture, CollectiveGatherOpHandle, CollectiveReduceIntoBufferOpFuture, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpFuture, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpFuture, CollectiveReduceScatterIntoBufferOpHandle, CollectiveReduceScatterOpFuture, CollectiveReduceScatterOpHandle, CollectiveScatterIntoBufferOpFuture, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpFuture, CollectiveScatterOpHandle, CommAllocCollectiveAllGather, CommAllocCollectiveAllToAll, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, RootOrBuffer, RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer, RootSrcOrLamellarBufferInner, ScatterInputInner}, net_atomic_fetch_op, shmem_lamellae::fabric::ShmemAlloc, AtomicOp, CommAllocAddr}, scheduler::Scheduler, warnings::RuntimeWarning, AsLamellarBuffer, BroadcastInput, LamellarBuffer, LamellarTask, Remote, ScatterInput};
+use crate::{
+    active_messaging::AMCounters,
+    lamellae::{
+        collective::{
+            CollectiveAllGatherIntoBufferOpFuture, CollectiveAllGatherIntoBufferOpHandle,
+            CollectiveAllGatherOpFuture, CollectiveAllGatherOpHandle,
+            CollectiveAllReduceInPlaceOpFuture, CollectiveAllReduceInPlaceOpHandle,
+            CollectiveAllReduceIntoBufferOpFuture, CollectiveAllReduceIntoBufferOpHandle,
+            CollectiveAllReduceOpFuture, CollectiveAllReduceOpHandle,
+            CollectiveAllToAllIntoBufferOpFuture, CollectiveAllToAllIntoBufferOpHandle,
+            CollectiveAllToAllOpFuture, CollectiveAllToAllOpHandle,
+            CollectiveBroadcastIntoBufferOpFuture, CollectiveBroadcastIntoBufferOpHandle,
+            CollectiveBroadcastOpFuture, CollectiveBroadcastOpHandle,
+            CollectiveGatherIntoBufferOpFuture, CollectiveGatherIntoBufferOpHandle,
+            CollectiveGatherOpFuture, CollectiveGatherOpHandle, CollectiveReduceIntoBufferOpFuture,
+            CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpFuture, CollectiveReduceOpHandle,
+            CollectiveReduceScatterIntoBufferOpFuture, CollectiveReduceScatterIntoBufferOpHandle,
+            CollectiveReduceScatterOpFuture, CollectiveReduceScatterOpHandle,
+            CollectiveScatterIntoBufferOpFuture, CollectiveScatterIntoBufferOpHandle,
+            CollectiveScatterOpFuture, CollectiveScatterOpHandle, CommAllocCollectiveAllGather,
+            CommAllocCollectiveAllReduce, CommAllocCollectiveAllToAll,
+            CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce,
+            CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrBuffer,
+            RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer,
+            RootSrcOrLamellarBufferInner, ScatterInputInner,
+        },
+        net_atomic_fetch_op,
+        shmem_lamellae::fabric::ShmemAlloc,
+        AtomicOp, CommAllocAddr,
+    },
+    scheduler::Scheduler,
+    warnings::RuntimeWarning,
+    AsLamellarBuffer, BroadcastInput, LamellarBuffer, LamellarTask, Remote, ScatterInput,
+};
 
-fn reduce_to_root<T: Remote>(root: usize, alloc: &ShmemAlloc, result: Option<&mut [T]>, index: usize, len: usize, op: &ReduceOp) -> Option<usize>{
+fn reduce_to_root<T: Remote>(
+    root: usize,
+    alloc: &ShmemAlloc,
+    result: Option<&mut [T]>,
+    index: usize,
+    len: usize,
+    op: &ReduceOp,
+) -> Option<usize> {
     let alloc_slice = unsafe { alloc.as_mut_slice() };
     let my_slice = &mut alloc_slice[index..index + len];
 
@@ -20,13 +65,13 @@ fn reduce_to_root<T: Remote>(root: usize, alloc: &ShmemAlloc, result: Option<&mu
             result.copy_from_slice(my_slice);
         }
         None
-    }
-    else {
+    } else {
         while alloc.coll_get_barrier() == 0 {
             std::thread::yield_now();
         }
 
-        let remote_dst_address = alloc.pe_base_offset(root) + alloc.coll_index(root) * std::mem::size_of::<T>();
+        let remote_dst_address =
+            alloc.pe_base_offset(root) + alloc.coll_index(root) * std::mem::size_of::<T>();
         for (i, s) in my_slice.iter().enumerate() {
             let remote_dest = CommAllocAddr(remote_dst_address + i * std::mem::size_of::<T>());
             let atomic_op = reduce_to_atomic_op::<T>(*s, op);
@@ -67,9 +112,18 @@ impl<T: Remote> ShmemCollectiveAllReduceFuture<T> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let my_slice = &mut alloc_slice[self.index..self.index + self.len];
-        let mut to_replace: Vec<T> = (0..my_slice.len()).map(|_| unsafe { std::mem::zeroed() }).collect();
+        let mut to_replace: Vec<T> = (0..my_slice.len())
+            .map(|_| unsafe { std::mem::zeroed() })
+            .collect();
         to_replace.copy_from_slice(my_slice);
-        let remote_dst_address = reduce_to_root(0, &self.alloc, Some(&mut self.result[..]), self.index, self.len, &self.op);
+        let remote_dst_address = reduce_to_root(
+            0,
+            &self.alloc,
+            Some(&mut self.result[..]),
+            self.index,
+            self.len,
+            &self.op,
+        );
         if self.alloc.my_alloc_pe == 0 {
             self.alloc.coll_inc_barrier();
 
@@ -79,13 +133,14 @@ impl<T: Remote> ShmemCollectiveAllReduceFuture<T> {
 
             self.alloc.coll_reset_barrier();
             my_slice.copy_from_slice(&to_replace);
-        }
-        else {
+        } else {
             while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
                 std::thread::yield_now();
             }
 
-            let remote_dst_slice = unsafe {std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)};
+            let remote_dst_slice = unsafe {
+                std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)
+            };
 
             self.result.copy_from_slice(remote_dst_slice);
             self.alloc.coll_inc_barrier();
@@ -109,7 +164,6 @@ impl<T: Remote> ShmemCollectiveAllReduceFuture<T> {
         self.scheduler.clone().spawn_task(self, counters)
     }
 }
-
 
 #[pinned_drop]
 impl<T: Remote> PinnedDrop for ShmemCollectiveAllReduceFuture<T> {
@@ -157,9 +211,18 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceIntoBufferFuture
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let my_slice = &mut alloc_slice[self.index..self.index + self.len];
-        let mut to_replace: Vec<T> = (0..my_slice.len()).map(|_| unsafe { std::mem::zeroed() }).collect();
+        let mut to_replace: Vec<T> = (0..my_slice.len())
+            .map(|_| unsafe { std::mem::zeroed() })
+            .collect();
         to_replace.copy_from_slice(my_slice);
-        let remote_dst_address = reduce_to_root(0, &self.alloc, Some(self.result.as_mut_slice()), self.index, self.len, &self.op);
+        let remote_dst_address = reduce_to_root(
+            0,
+            &self.alloc,
+            Some(self.result.as_mut_slice()),
+            self.index,
+            self.len,
+            &self.op,
+        );
         if self.alloc.my_alloc_pe == 0 {
             self.alloc.coll_inc_barrier();
 
@@ -169,13 +232,14 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceIntoBufferFuture
 
             self.alloc.coll_reset_barrier();
             my_slice.copy_from_slice(&to_replace);
-        }
-        else {
+        } else {
             while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
                 std::thread::yield_now();
             }
 
-            let remote_dst_slice = unsafe {std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)};
+            let remote_dst_slice = unsafe {
+                std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)
+            };
 
             self.result.as_mut_slice().copy_from_slice(remote_dst_slice);
             self.alloc.coll_inc_barrier();
@@ -186,7 +250,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceIntoBufferFuture
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -198,7 +262,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceIntoBufferFuture
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveAllReduceIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for ShmemCollectiveAllReduceIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a ShmemCollectiveAllReduceIntoBufferFuture").print();
@@ -206,8 +272,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveAllReduceI
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveAllReduceIntoBufferFuture<T, B>> for CollectiveAllReduceIntoBufferOpHandle<T, B> {
-    fn from(f: ShmemCollectiveAllReduceIntoBufferFuture<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveAllReduceIntoBufferFuture<T, B>>
+    for CollectiveAllReduceIntoBufferOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveAllReduceIntoBufferFuture<T, B>,
+    ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         CollectiveAllReduceIntoBufferOpHandle {
             future: CollectiveAllReduceIntoBufferOpFuture::Shmem(f),
         }
@@ -224,7 +294,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemCollectiveAllReduceIntoB
         Poll::Ready(())
     }
 }
-
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLamellarBuffer<T>> {
@@ -255,7 +324,14 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceInPlaceFuture<T,
         to_replace.copy_from_slice(my_slice);
         my_slice.copy_from_slice(self.result.as_slice());
 
-        let remote_dst_address = reduce_to_root(0, &self.alloc, Some(self.result.as_mut_slice()), 0, len, &self.op);
+        let remote_dst_address = reduce_to_root(
+            0,
+            &self.alloc,
+            Some(self.result.as_mut_slice()),
+            0,
+            len,
+            &self.op,
+        );
         if self.alloc.my_alloc_pe == 0 {
             self.alloc.coll_inc_barrier();
 
@@ -265,13 +341,13 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceInPlaceFuture<T,
 
             self.alloc.coll_reset_barrier();
             my_slice.copy_from_slice(&to_replace);
-        }
-        else {
+        } else {
             while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
                 std::thread::yield_now();
             }
 
-            let remote_dst_slice = unsafe {std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, len)};
+            let remote_dst_slice =
+                unsafe { std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, len) };
 
             self.result.as_mut_slice().copy_from_slice(remote_dst_slice);
             my_slice.copy_from_slice(&to_replace);
@@ -283,7 +359,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceInPlaceFuture<T,
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -303,8 +379,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveAllReduceI
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveAllReduceInPlaceFuture<T, B>> for CollectiveAllReduceInPlaceOpHandle<T, B> {
-    fn from(f: ShmemCollectiveAllReduceInPlaceFuture<T, B>) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveAllReduceInPlaceFuture<T, B>>
+    for CollectiveAllReduceInPlaceOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveAllReduceInPlaceFuture<T, B>,
+    ) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         CollectiveAllReduceInPlaceOpHandle {
             future: CollectiveAllReduceInPlaceOpFuture::Shmem(f),
         }
@@ -322,7 +402,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemCollectiveAllReduceInPla
     }
 }
 
-
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemCollectiveReduceFuture<T: Remote> {
     pub(crate) alloc: ShmemAlloc,
@@ -339,20 +418,30 @@ impl<T: Remote> ShmemCollectiveReduceFuture<T> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let my_slice = &mut alloc_slice[self.index..self.index + self.len];
-        let mut to_replace: Vec<T> = (0..my_slice.len()).map(|_| unsafe { std::mem::zeroed() }).collect();
+        let mut to_replace: Vec<T> = (0..my_slice.len())
+            .map(|_| unsafe { std::mem::zeroed() })
+            .collect();
         to_replace.copy_from_slice(my_slice);
         match &mut self.target {
             RootOrBuffer::Root(result) => {
-                let _ = reduce_to_root(self.alloc.my_alloc_pe, &self.alloc, Some(&mut result[..]), self.index, self.len, &self.op);
+                let _ = reduce_to_root(
+                    self.alloc.my_alloc_pe,
+                    &self.alloc,
+                    Some(&mut result[..]),
+                    self.index,
+                    self.len,
+                    &self.op,
+                );
                 self.alloc.coll_inc_barrier();
                 while self.alloc.coll_get_barrier() < 2 * self.alloc.num_pes() {
                     std::thread::yield_now();
                 }
                 self.alloc.coll_reset_barrier();
                 my_slice.copy_from_slice(&to_replace);
-            },
+            }
             RootOrBuffer::NotRoot(root) => {
-                let _ = reduce_to_root::<T>(*root, &self.alloc, None, self.index, self.len, &self.op);
+                let _ =
+                    reduce_to_root::<T>(*root, &self.alloc, None, self.index, self.len, &self.op);
                 while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
                     std::thread::yield_now();
                 }
@@ -361,7 +450,7 @@ impl<T: Remote> ShmemCollectiveReduceFuture<T> {
                 while self.alloc.coll_get_barrier() >= self.alloc.num_pes() {
                     std::thread::yield_now();
                 }
-            },
+            }
         }
         self.spawned = true;
     }
@@ -373,7 +462,7 @@ impl<T: Remote> ShmemCollectiveReduceFuture<T> {
                 let mut res = Vec::new();
                 std::mem::swap(&mut res, r);
                 Some(res)
-            },
+            }
             RootOrBuffer::NotRoot(_) => None,
         }
     }
@@ -415,7 +504,7 @@ impl<T: Remote> Future for ShmemCollectiveReduceFuture<T> {
                 let mut res = Vec::new();
                 std::mem::swap(&mut res, r);
                 Poll::Ready(Some(res))
-            },
+            }
             RootOrBuffer::NotRoot(_) => Poll::Ready(None),
         }
     }
@@ -437,20 +526,30 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveReduceIntoBufferFuture<T,
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let my_slice = &mut alloc_slice[self.index..self.index + self.len];
-        let mut to_replace: Vec<T> = (0..my_slice.len()).map(|_| unsafe { std::mem::zeroed() }).collect();
+        let mut to_replace: Vec<T> = (0..my_slice.len())
+            .map(|_| unsafe { std::mem::zeroed() })
+            .collect();
         to_replace.copy_from_slice(my_slice);
         match &mut self.target {
             RootOrLamellarBuffer::Root(result) => {
-                let _ = reduce_to_root(self.alloc.my_alloc_pe, &self.alloc, Some(result.as_mut_slice()), self.index, self.len, &self.op);
+                let _ = reduce_to_root(
+                    self.alloc.my_alloc_pe,
+                    &self.alloc,
+                    Some(result.as_mut_slice()),
+                    self.index,
+                    self.len,
+                    &self.op,
+                );
                 self.alloc.coll_inc_barrier();
                 while self.alloc.coll_get_barrier() < 2 * self.alloc.num_pes() {
                     std::thread::yield_now();
                 }
                 self.alloc.coll_reset_barrier();
                 my_slice.copy_from_slice(&to_replace);
-            },
+            }
             RootOrLamellarBuffer::NotRoot(root) => {
-                let _ = reduce_to_root::<T>(*root, &self.alloc, None, self.index, self.len, &self.op);
+                let _ =
+                    reduce_to_root::<T>(*root, &self.alloc, None, self.index, self.len, &self.op);
                 while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
                     std::thread::yield_now();
                 }
@@ -459,12 +558,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveReduceIntoBufferFuture<T,
                 while self.alloc.coll_get_barrier() >= self.alloc.num_pes() {
                     std::thread::yield_now();
                 }
-            },
+            }
         }
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -485,8 +584,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveReduceInto
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveReduceIntoBufferFuture<T, B>> for CollectiveReduceIntoBufferOpHandle<T, B> {
-    fn from(f: ShmemCollectiveReduceIntoBufferFuture<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveReduceIntoBufferFuture<T, B>>
+    for CollectiveReduceIntoBufferOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveReduceIntoBufferFuture<T, B>,
+    ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         CollectiveReduceIntoBufferOpHandle {
             future: CollectiveReduceIntoBufferOpFuture::Shmem(f),
         }
@@ -503,7 +606,13 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemCollectiveReduceIntoBuff
         Poll::Ready(())
     }
 }
-fn gather<T: Remote>(root: usize, alloc: &ShmemAlloc, result: Option<&mut [T]>, index: usize, len: usize) {
+fn gather<T: Remote>(
+    root: usize,
+    alloc: &ShmemAlloc,
+    result: Option<&mut [T]>,
+    index: usize,
+    len: usize,
+) {
     alloc.coll_set_index(alloc.my_alloc_pe, index);
     alloc.coll_inc_barrier();
     while alloc.coll_get_barrier() < alloc.num_pes() {
@@ -512,8 +621,10 @@ fn gather<T: Remote>(root: usize, alloc: &ShmemAlloc, result: Option<&mut [T]>, 
 
     if let Some(result) = result {
         for pe in 0..alloc.num_pes() {
-            let remote_src_address = alloc.pe_base_offset(pe) + alloc.coll_index(pe) * std::mem::size_of::<T>();
-            let remote_src_slice = unsafe {std::slice::from_raw_parts(remote_src_address as *const T, len)};
+            let remote_src_address =
+                alloc.pe_base_offset(pe) + alloc.coll_index(pe) * std::mem::size_of::<T>();
+            let remote_src_slice =
+                unsafe { std::slice::from_raw_parts(remote_src_address as *const T, len) };
             result[(pe * len)..((pe + 1) * len)].copy_from_slice(remote_src_slice);
         }
     }
@@ -525,8 +636,7 @@ fn gather<T: Remote>(root: usize, alloc: &ShmemAlloc, result: Option<&mut [T]>, 
             std::thread::yield_now();
         }
         alloc.coll_reset_barrier();
-    }
-    else {
+    } else {
         while alloc.coll_get_barrier() >= alloc.num_pes() {
             std::thread::yield_now();
         }
@@ -609,12 +719,17 @@ pub(crate) struct ShmemCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsLamel
 
 impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllGatherIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        gather(0, &self.alloc, Some(self.result.as_mut_slice()), self.index, self.len);
+        gather(
+            0,
+            &self.alloc,
+            Some(self.result.as_mut_slice()),
+            self.index,
+            self.len,
+        );
         self.spawned = true;
-
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -627,7 +742,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllGatherIntoBufferFuture
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveAllGatherIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for ShmemCollectiveAllGatherIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a ShmemCollectiveAllGatherIntoBufferFuture").print();
@@ -635,8 +752,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveAllGatherI
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveAllGatherIntoBufferFuture<T, B>> for CollectiveAllGatherIntoBufferOpHandle<T, B> {
-    fn from(f: ShmemCollectiveAllGatherIntoBufferFuture<T, B>) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveAllGatherIntoBufferFuture<T, B>>
+    for CollectiveAllGatherIntoBufferOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveAllGatherIntoBufferFuture<T, B>,
+    ) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
         CollectiveAllGatherIntoBufferOpHandle {
             future: CollectiveAllGatherIntoBufferOpFuture::Shmem(f),
         }
@@ -669,11 +790,17 @@ impl<T: Remote> ShmemCollectiveGatherFuture<T> {
     fn exec_op(&mut self) {
         match &mut self.target {
             RootOrBuffer::Root(result) => {
-                gather(self.alloc.my_alloc_pe, &self.alloc, Some(result.as_mut_slice()), self.index, self.len);
-            },
+                gather(
+                    self.alloc.my_alloc_pe,
+                    &self.alloc,
+                    Some(result.as_mut_slice()),
+                    self.index,
+                    self.len,
+                );
+            }
             RootOrBuffer::NotRoot(root) => {
                 gather::<T>(*root, &self.alloc, None, self.index, self.len);
-            },
+            }
         }
         self.spawned = true;
     }
@@ -685,7 +812,7 @@ impl<T: Remote> ShmemCollectiveGatherFuture<T> {
                 let mut res = Vec::new();
                 std::mem::swap(&mut res, r);
                 Some(res)
-            },
+            }
             RootOrBuffer::NotRoot(_) => None,
         }
     }
@@ -727,7 +854,7 @@ impl<T: Remote> Future for ShmemCollectiveGatherFuture<T> {
                 let mut res = Vec::new();
                 std::mem::swap(&mut res, r);
                 Poll::Ready(Some(res))
-            },
+            }
             RootOrBuffer::NotRoot(_) => Poll::Ready(None),
         }
     }
@@ -744,21 +871,26 @@ pub(crate) struct ShmemCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellar
     pub(crate) spawned: bool,
 }
 
-
 impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveGatherIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         match &mut self.target {
             RootOrLamellarBuffer::Root(result) => {
-                gather(self.alloc.my_alloc_pe, &self.alloc, Some(result.as_mut_slice()), self.index, self.len);
-            },
+                gather(
+                    self.alloc.my_alloc_pe,
+                    &self.alloc,
+                    Some(result.as_mut_slice()),
+                    self.index,
+                    self.len,
+                );
+            }
             RootOrLamellarBuffer::NotRoot(root) => {
                 gather::<T>(*root, &self.alloc, None, self.index, self.len);
-            },
+            }
         }
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -779,8 +911,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveGatherInto
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveGatherIntoBufferFuture<T, B>> for CollectiveGatherIntoBufferOpHandle<T, B> {
-    fn from(f: ShmemCollectiveGatherIntoBufferFuture<T, B>) -> CollectiveGatherIntoBufferOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveGatherIntoBufferFuture<T, B>>
+    for CollectiveGatherIntoBufferOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveGatherIntoBufferFuture<T, B>,
+    ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
         CollectiveGatherIntoBufferOpHandle {
             future: CollectiveGatherIntoBufferOpFuture::Shmem(f),
         }
@@ -797,7 +933,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemCollectiveGatherIntoBuff
         Poll::Ready(())
     }
 }
-
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemCollectiveAllToAllFuture<T: Remote> {
@@ -861,7 +996,6 @@ impl<T: Remote> Future for ShmemCollectiveAllToAllFuture<T> {
     }
 }
 
-
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemCollectiveAllToAllIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     pub(crate) alloc: ShmemAlloc,
@@ -875,11 +1009,17 @@ pub(crate) struct ShmemCollectiveAllToAllIntoBufferFuture<T: Remote, B: AsLamell
 
 impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllToAllIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        gather(0, &self.alloc, Some(self.result.as_mut_slice()), self.index, self.len);
+        gather(
+            0,
+            &self.alloc,
+            Some(self.result.as_mut_slice()),
+            self.index,
+            self.len,
+        );
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -892,7 +1032,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllToAllIntoBufferFuture<
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveAllToAllIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for ShmemCollectiveAllToAllIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a ShmemCollectiveAllToAllIntoBufferFuture").print();
@@ -900,8 +1042,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveAllToAllIn
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveAllToAllIntoBufferFuture<T, B>> for CollectiveAllToAllIntoBufferOpHandle<T, B> {
-    fn from(f: ShmemCollectiveAllToAllIntoBufferFuture<T, B>) -> CollectiveAllToAllIntoBufferOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveAllToAllIntoBufferFuture<T, B>>
+    for CollectiveAllToAllIntoBufferOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveAllToAllIntoBufferFuture<T, B>,
+    ) -> CollectiveAllToAllIntoBufferOpHandle<T, B> {
         CollectiveAllToAllIntoBufferOpHandle {
             future: CollectiveAllToAllIntoBufferOpFuture::Shmem(f),
         }
@@ -922,7 +1068,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemCollectiveAllToAllIntoBu
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemCollectiveBroadcastFuture<T: Remote> {
     pub(crate) alloc: ShmemAlloc,
-    pub(crate) target: RootSrcOrBuffer<T> ,
+    pub(crate) target: RootSrcOrBuffer<T>,
     pub(crate) len: usize,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -943,14 +1089,21 @@ fn broadcast_root_side(alloc: &ShmemAlloc, root_index: usize, _len: usize) {
     alloc.coll_reset_barrier();
 }
 
-fn broadcast_non_root_side<T: Remote>(alloc: &ShmemAlloc, root_index: usize, len: usize, res: &mut[T]) {
+fn broadcast_non_root_side<T: Remote>(
+    alloc: &ShmemAlloc,
+    root_index: usize,
+    len: usize,
+    res: &mut [T],
+) {
     while alloc.coll_get_barrier() == 0 {
         std::thread::yield_now();
     }
 
-    let remote_src_address = alloc.pe_base_offset(root_index) + alloc.coll_index(root_index) * std::mem::size_of::<T>();
+    let remote_src_address =
+        alloc.pe_base_offset(root_index) + alloc.coll_index(root_index) * std::mem::size_of::<T>();
 
-    let remote_src_slice = unsafe {std::slice::from_raw_parts(remote_src_address as *const T, len)};
+    let remote_src_slice =
+        unsafe { std::slice::from_raw_parts(remote_src_address as *const T, len) };
     res.copy_from_slice(remote_src_slice);
     alloc.coll_inc_barrier();
     while alloc.coll_get_barrier() < alloc.num_pes() {
@@ -968,15 +1121,15 @@ impl<T: Remote> ShmemCollectiveBroadcastFuture<T> {
         match self.target {
             RootSrcOrBuffer::Root(index) => {
                 broadcast_root_side(&self.alloc, index, self.len);
-            },
+            }
             RootSrcOrBuffer::NotRoot(ref mut res, root) => {
                 broadcast_non_root_side(&self.alloc, root, self.len, res.as_mut_slice());
-            },
+            }
         }
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self) -> Option<Vec<T>>  {
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
         match &mut self.target {
             RootSrcOrBuffer::Root(_) => None,
@@ -984,7 +1137,7 @@ impl<T: Remote> ShmemCollectiveBroadcastFuture<T> {
                 let mut res = Vec::new();
                 std::mem::swap(items, &mut res);
                 Some(res)
-            },
+            }
         }
     }
 
@@ -1026,7 +1179,7 @@ impl<T: Remote> Future for ShmemCollectiveBroadcastFuture<T> {
                 let mut res = Vec::new();
                 std::mem::swap(items, &mut res);
                 Poll::Ready(Some(res))
-            },
+            }
         }
     }
 }
@@ -1046,15 +1199,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveBroadcastIntoBufferFuture
         match self.target {
             RootSrcOrLamellarBufferInner::Root(index) => {
                 broadcast_root_side(&self.alloc, index, self.len);
-            },
+            }
             RootSrcOrLamellarBufferInner::NotRoot(ref mut res, root) => {
                 broadcast_non_root_side(&self.alloc, root, self.len, res.as_mut_slice());
-            },
+            }
         }
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -1067,7 +1220,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveBroadcastIntoBufferFuture
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveBroadcastIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for ShmemCollectiveBroadcastIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a ShmemCollectiveBroadcastIntoBufferFuture").print();
@@ -1075,8 +1230,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveBroadcastI
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveBroadcastIntoBufferFuture<T, B>> for CollectiveBroadcastIntoBufferOpHandle<T, B> {
-    fn from(f: ShmemCollectiveBroadcastIntoBufferFuture<T, B>) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveBroadcastIntoBufferFuture<T, B>>
+    for CollectiveBroadcastIntoBufferOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveBroadcastIntoBufferFuture<T, B>,
+    ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
         CollectiveBroadcastIntoBufferOpHandle {
             future: CollectiveBroadcastIntoBufferOpFuture::Shmem(f),
         }
@@ -1094,7 +1253,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemCollectiveBroadcastIntoB
     }
 }
 
-fn scatter_root_side<T: Remote>(alloc: &ShmemAlloc, index: usize, len: usize, res: &mut[T]) {
+fn scatter_root_side<T: Remote>(alloc: &ShmemAlloc, index: usize, len: usize, res: &mut [T]) {
     let alloc_slice = unsafe { alloc.as_mut_slice() };
     let my_slice = &mut alloc_slice[index..index + len];
     res.copy_from_slice(my_slice);
@@ -1111,14 +1270,22 @@ fn scatter_root_side<T: Remote>(alloc: &ShmemAlloc, index: usize, len: usize, re
     alloc.coll_reset_barrier();
 }
 
-fn scatter_non_root_side<T: Remote>(alloc: &ShmemAlloc, root_index: usize, len: usize, res: &mut[T]) {
+fn scatter_non_root_side<T: Remote>(
+    alloc: &ShmemAlloc,
+    root_index: usize,
+    len: usize,
+    res: &mut [T],
+) {
     while alloc.coll_get_barrier() == 0 {
         std::thread::yield_now();
     }
 
-    let remote_src_address = alloc.pe_base_offset(root_index) + alloc.coll_index(root_index) * std::mem::size_of::<T>();
+    let remote_src_address =
+        alloc.pe_base_offset(root_index) + alloc.coll_index(root_index) * std::mem::size_of::<T>();
 
-    let remote_src_slice = unsafe {std::slice::from_raw_parts(remote_src_address as *const T, len * alloc.num_pes())};
+    let remote_src_slice = unsafe {
+        std::slice::from_raw_parts(remote_src_address as *const T, len * alloc.num_pes())
+    };
     res.copy_from_slice(&remote_src_slice[alloc.my_alloc_pe * len..(alloc.my_alloc_pe + 1) * len]);
     alloc.coll_inc_barrier();
     while alloc.coll_get_barrier() < alloc.num_pes() {
@@ -1131,12 +1298,11 @@ fn scatter_non_root_side<T: Remote>(alloc: &ShmemAlloc, root_index: usize, len: 
     }
 }
 
-
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemCollectiveScatterFuture<T: Remote> {
     pub(crate) alloc: ShmemAlloc,
     pub(crate) len: usize,
-    pub(crate) result: Vec<T> ,
+    pub(crate) result: Vec<T>,
     src_or_root_pe: ScatterInputInner,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
@@ -1148,10 +1314,10 @@ impl<T: Remote> ShmemCollectiveScatterFuture<T> {
         match self.src_or_root_pe {
             ScatterInputInner::Root(index) => {
                 scatter_root_side(&self.alloc, index, self.len, &mut self.result);
-            },
+            }
             ScatterInputInner::NotRoot(root) => {
                 scatter_non_root_side(&self.alloc, root, self.len, &mut self.result);
-            },
+            }
         }
         self.spawned = true;
     }
@@ -1217,15 +1383,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveScatterIntoBufferFuture<T
         match self.src_or_root_pe {
             ScatterInputInner::Root(index) => {
                 scatter_root_side(&self.alloc, index, self.len, self.result.as_mut_slice());
-            },
+            }
             ScatterInputInner::NotRoot(root) => {
                 scatter_non_root_side(&self.alloc, root, self.len, self.result.as_mut_slice());
-            },
+            }
         }
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -1238,7 +1404,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveScatterIntoBufferFuture<T
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for ShmemCollectiveScatterIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a ShmemCollectiveScatterIntoBufferFuture").print();
@@ -1246,8 +1414,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveScatterInt
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveScatterIntoBufferFuture<T, B>> for CollectiveScatterIntoBufferOpHandle<T, B> {
-    fn from(f: ShmemCollectiveScatterIntoBufferFuture<T, B>) -> CollectiveScatterIntoBufferOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveScatterIntoBufferFuture<T, B>>
+    for CollectiveScatterIntoBufferOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveScatterIntoBufferFuture<T, B>,
+    ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
         CollectiveScatterIntoBufferOpHandle {
             future: CollectiveScatterIntoBufferOpFuture::Shmem(f),
         }
@@ -1281,12 +1453,18 @@ impl<T: Remote> ShmemCollectiveReduceScatterFuture<T> {
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let my_slice = &mut alloc_slice[self.index..self.index + self.len];
-        let mut to_replace: Vec<T> = (0..my_slice.len()).map(|_| unsafe { std::mem::zeroed() }).collect();
+        let mut to_replace: Vec<T> = (0..my_slice.len())
+            .map(|_| unsafe { std::mem::zeroed() })
+            .collect();
         to_replace.copy_from_slice(my_slice);
         let chunk_size = self.len / self.alloc.num_pes();
-        let remote_dst_address = reduce_to_root::<T>(0, &self.alloc, None, self.index, self.len, &self.op);
+        let remote_dst_address =
+            reduce_to_root::<T>(0, &self.alloc, None, self.index, self.len, &self.op);
         if self.alloc.my_alloc_pe == 0 {
-            self.result.copy_from_slice(&my_slice[self.alloc.my_alloc_pe * chunk_size..(self.alloc.my_alloc_pe + 1) * chunk_size]);
+            self.result.copy_from_slice(
+                &my_slice[self.alloc.my_alloc_pe * chunk_size
+                    ..(self.alloc.my_alloc_pe + 1) * chunk_size],
+            );
             self.alloc.coll_inc_barrier();
 
             while self.alloc.coll_get_barrier() != 2 * self.alloc.num_pes() {
@@ -1295,15 +1473,19 @@ impl<T: Remote> ShmemCollectiveReduceScatterFuture<T> {
 
             self.alloc.coll_reset_barrier();
             my_slice.copy_from_slice(&to_replace);
-        }
-        else {
+        } else {
             while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
                 std::thread::yield_now();
             }
 
-            let remote_dst_slice = unsafe {std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)};
+            let remote_dst_slice = unsafe {
+                std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)
+            };
 
-            self.result.copy_from_slice(&remote_dst_slice[self.alloc.my_alloc_pe * chunk_size..(self.alloc.my_alloc_pe + 1) * chunk_size]);
+            self.result.copy_from_slice(
+                &remote_dst_slice[self.alloc.my_alloc_pe * chunk_size
+                    ..(self.alloc.my_alloc_pe + 1) * chunk_size],
+            );
             self.alloc.coll_inc_barrier();
             while self.alloc.coll_get_barrier() >= self.alloc.num_pes() {
                 std::thread::yield_now();
@@ -1373,12 +1555,18 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveReduceScatterIntoBufferFu
     fn exec_op(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let my_slice = &mut alloc_slice[self.index..self.index + self.len];
-        let mut to_replace: Vec<T> = (0..my_slice.len()).map(|_| unsafe { std::mem::zeroed() }).collect();
+        let mut to_replace: Vec<T> = (0..my_slice.len())
+            .map(|_| unsafe { std::mem::zeroed() })
+            .collect();
         let chunk_size = self.len / self.alloc.num_pes();
         to_replace.copy_from_slice(my_slice);
-        let remote_dst_address = reduce_to_root::<T>(0, &self.alloc, None, self.index, self.len, &self.op);
+        let remote_dst_address =
+            reduce_to_root::<T>(0, &self.alloc, None, self.index, self.len, &self.op);
         if self.alloc.my_alloc_pe == 0 {
-            self.result.as_mut_slice().copy_from_slice(&my_slice[self.alloc.my_alloc_pe * chunk_size..(self.alloc.my_alloc_pe + 1) * chunk_size]);
+            self.result.as_mut_slice().copy_from_slice(
+                &my_slice[self.alloc.my_alloc_pe * chunk_size
+                    ..(self.alloc.my_alloc_pe + 1) * chunk_size],
+            );
             self.alloc.coll_inc_barrier();
 
             while self.alloc.coll_get_barrier() != 2 * self.alloc.num_pes() {
@@ -1387,14 +1575,18 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveReduceScatterIntoBufferFu
 
             self.alloc.coll_reset_barrier();
             my_slice.copy_from_slice(&to_replace);
-        }
-        else {
+        } else {
             while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
                 std::thread::yield_now();
             }
 
-            let remote_dst_slice = unsafe {std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)};
-            self.result.as_mut_slice().copy_from_slice(&remote_dst_slice[self.alloc.my_alloc_pe * chunk_size..(self.alloc.my_alloc_pe + 1) * chunk_size]);
+            let remote_dst_slice = unsafe {
+                std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)
+            };
+            self.result.as_mut_slice().copy_from_slice(
+                &remote_dst_slice[self.alloc.my_alloc_pe * chunk_size
+                    ..(self.alloc.my_alloc_pe + 1) * chunk_size],
+            );
             self.alloc.coll_inc_barrier();
             while self.alloc.coll_get_barrier() >= self.alloc.num_pes() {
                 std::thread::yield_now();
@@ -1403,7 +1595,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveReduceScatterIntoBufferFu
         self.spawned = true;
     }
 
-    pub(crate) fn block(mut self)  {
+    pub(crate) fn block(mut self) {
         self.exec_op();
     }
 
@@ -1416,7 +1608,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveReduceScatterIntoBufferFu
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveReduceScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for ShmemCollectiveReduceScatterIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a ShmemCollectiveReduceScatterIntoBufferFuture").print();
@@ -1424,15 +1618,21 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemCollectiveReduceScat
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveReduceScatterIntoBufferFuture<T, B>> for CollectiveReduceScatterIntoBufferOpHandle<T, B> {
-    fn from(f: ShmemCollectiveReduceScatterIntoBufferFuture<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemCollectiveReduceScatterIntoBufferFuture<T, B>>
+    for CollectiveReduceScatterIntoBufferOpHandle<T, B>
+{
+    fn from(
+        f: ShmemCollectiveReduceScatterIntoBufferFuture<T, B>,
+    ) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         CollectiveReduceScatterIntoBufferOpHandle {
             future: CollectiveReduceScatterIntoBufferOpFuture::Shmem(f),
         }
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemCollectiveReduceScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> Future
+    for ShmemCollectiveReduceScatterIntoBufferFuture<T, B>
+{
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -1452,7 +1652,6 @@ impl CommAllocCollectiveAllReduce for ShmemAlloc {
         len: usize,
         op: crate::lamellae::collective::ReduceOp,
     ) -> crate::lamellae::collective::CollectiveAllReduceOpHandle<T> {
-
         ShmemCollectiveAllReduceFuture {
             alloc: self.clone(),
             op,
@@ -1466,7 +1665,7 @@ impl CommAllocCollectiveAllReduce for ShmemAlloc {
         .into()
     }
 
-    fn reduce_all_into_buffer<T: crate::Remote, B: crate::AsLamellarBuffer<T>> (
+    fn reduce_all_into_buffer<T: crate::Remote, B: crate::AsLamellarBuffer<T>>(
         &self,
         scheduler: &std::sync::Arc<crate::scheduler::Scheduler>,
         counters: Option<std::sync::Arc<[std::sync::Arc<crate::active_messaging::AMCounters>]>>,
@@ -1518,13 +1717,11 @@ impl CommAllocCollectiveReduce for ShmemAlloc {
         len: usize,
         root_pe: usize,
     ) -> crate::lamellae::collective::CollectiveReduceOpHandle<T> {
-        let target =
-            if root_pe != self.my_alloc_pe {
-                RootOrBuffer::NotRoot(root_pe)
-            }
-            else {
-                RootOrBuffer::Root((0..len).map(|_| unsafe { std::mem::zeroed() }).collect())
-            };
+        let target = if root_pe != self.my_alloc_pe {
+            RootOrBuffer::NotRoot(root_pe)
+        } else {
+            RootOrBuffer::Root((0..len).map(|_| unsafe { std::mem::zeroed() }).collect())
+        };
         ShmemCollectiveReduceFuture {
             alloc: self.clone(),
             index,
@@ -1538,14 +1735,14 @@ impl CommAllocCollectiveReduce for ShmemAlloc {
         .into()
     }
 
-    fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+    fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Option<Arc<[Arc<AMCounters>]>>,
         op: ReduceOp,
         index: usize,
         len: usize,
-        root_or_buffer: crate::lamellae::collective::RootOrLamellarBuffer<T, B>
+        root_or_buffer: crate::lamellae::collective::RootOrLamellarBuffer<T, B>,
     ) -> crate::lamellae::collective::CollectiveReduceIntoBufferOpHandle<T, B> {
         ShmemCollectiveReduceIntoBufferFuture {
             alloc: self.clone(),
@@ -1570,9 +1767,12 @@ impl CommAllocCollectiveBroadcast for ShmemAlloc {
         len: usize,
     ) -> CollectiveBroadcastOpHandle<T> {
         let target = match src_or_pe {
-                BroadcastInput::Root(index) => RootSrcOrBuffer::Root(index),
-                BroadcastInput::NotRoot(root) => RootSrcOrBuffer::NotRoot((0..len).map(|_| unsafe { std::mem::zeroed() }).collect(), root),
-            };
+            BroadcastInput::Root(index) => RootSrcOrBuffer::Root(index),
+            BroadcastInput::NotRoot(root) => RootSrcOrBuffer::NotRoot(
+                (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
+                root,
+            ),
+        };
         ShmemCollectiveBroadcastFuture {
             alloc: self.clone(),
             target,
@@ -1591,7 +1791,6 @@ impl CommAllocCollectiveBroadcast for ShmemAlloc {
         root_or_buffer: RootSrcOrLamellarBuffer<T, B>,
         len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
-
         ShmemCollectiveBroadcastIntoBufferFuture {
             alloc: self.clone(),
             target: root_or_buffer.into(),
@@ -1599,7 +1798,8 @@ impl CommAllocCollectiveBroadcast for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-        }.into()
+        }
+        .into()
     }
 }
 
@@ -1612,13 +1812,15 @@ impl CommAllocCollectiveGather for ShmemAlloc {
         len: usize,
         root_pe: usize,
     ) -> CollectiveGatherOpHandle<T> {
-        let target =
-            if root_pe != self.my_alloc_pe {
-                RootOrBuffer::NotRoot(root_pe)
-            }
-            else {
-                RootOrBuffer::Root((0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect())
-            };
+        let target = if root_pe != self.my_alloc_pe {
+            RootOrBuffer::NotRoot(root_pe)
+        } else {
+            RootOrBuffer::Root(
+                (0..len * self.num_pes())
+                    .map(|_| unsafe { std::mem::zeroed() })
+                    .collect(),
+            )
+        };
         ShmemCollectiveGatherFuture {
             alloc: self.clone(),
             index,
@@ -1636,9 +1838,8 @@ impl CommAllocCollectiveGather for ShmemAlloc {
         counters: Option<Arc<[Arc<AMCounters>]>>,
         index: usize,
         len: usize,
-        root_or_buffer: RootOrLamellarBuffer<T, B>
+        root_or_buffer: RootOrLamellarBuffer<T, B>,
     ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
-
         ShmemCollectiveGatherIntoBufferFuture {
             alloc: self.clone(),
             index,
@@ -1647,10 +1848,10 @@ impl CommAllocCollectiveGather for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-        }.into()
+        }
+        .into()
     }
 }
-
 
 impl CommAllocCollectiveAllGather for ShmemAlloc {
     fn gather_all<T: Remote>(
@@ -1664,7 +1865,9 @@ impl CommAllocCollectiveAllGather for ShmemAlloc {
             alloc: self.clone(),
             index,
             len,
-            result: (0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
+            result: (0..len * self.num_pes())
+                .map(|_| unsafe { std::mem::zeroed() })
+                .collect(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1679,7 +1882,6 @@ impl CommAllocCollectiveAllGather for ShmemAlloc {
         len: usize,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
-
         ShmemCollectiveAllGatherIntoBufferFuture {
             alloc: self.clone(),
             index,
@@ -1688,7 +1890,8 @@ impl CommAllocCollectiveAllGather for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-        }.into()
+        }
+        .into()
     }
 }
 
@@ -1704,7 +1907,9 @@ impl CommAllocCollectiveAllToAll for ShmemAlloc {
             alloc: self.clone(),
             index,
             len,
-            result: (0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
+            result: (0..len * self.num_pes())
+                .map(|_| unsafe { std::mem::zeroed() })
+                .collect(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1719,7 +1924,6 @@ impl CommAllocCollectiveAllToAll for ShmemAlloc {
         len: usize,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllToAllIntoBufferOpHandle<T, B> {
-
         ShmemCollectiveAllToAllIntoBufferFuture {
             alloc: self.clone(),
             index,
@@ -1728,7 +1932,8 @@ impl CommAllocCollectiveAllToAll for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-        }.into()
+        }
+        .into()
     }
 }
 
@@ -1759,7 +1964,6 @@ impl CommAllocCollectiveScatter for ShmemAlloc {
         src_or_root_pe: ScatterInput,
         len: usize,
     ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
-
         ShmemCollectiveScatterIntoBufferFuture {
             alloc: self.clone(),
             len,
@@ -1768,7 +1972,8 @@ impl CommAllocCollectiveScatter for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-        }.into()
+        }
+        .into()
     }
 }
 
@@ -1786,7 +1991,9 @@ impl CommAllocCollectiveReduceScatter for ShmemAlloc {
             op: op,
             index,
             len,
-            result: (0..len / self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
+            result: (0..len / self.num_pes())
+                .map(|_| unsafe { std::mem::zeroed() })
+                .collect(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1811,6 +2018,7 @@ impl CommAllocCollectiveReduceScatter for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-        }.into()
+        }
+        .into()
     }
 }

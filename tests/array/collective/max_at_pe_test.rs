@@ -63,7 +63,7 @@ macro_rules! max_at_pe_test{
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            let root = 1usize; 
+            let root = 1usize;
             let _lock = lock_if_needed!($array, array);
 
             // world.barrier();

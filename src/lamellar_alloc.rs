@@ -2,11 +2,11 @@ use crate::env_var::config;
 
 use core::marker::PhantomData;
 use indexmap::IndexSet;
-use tracing::trace;
 use parking_lot::{Condvar, Mutex};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use tracing::trace;
 
 pub(crate) trait LamellarAlloc {
     fn new(id: String) -> Self;
@@ -48,8 +48,6 @@ fn calc_padding(addr: usize, align: usize) -> usize {
 //     _id: String,
 //     free_space: Arc<AtomicUsize>,
 // }
-
-
 
 // impl LamellarAlloc for LinearAlloc {
 //     fn new(id: String) -> LinearAlloc {

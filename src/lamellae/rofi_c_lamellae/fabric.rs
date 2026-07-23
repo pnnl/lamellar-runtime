@@ -11,7 +11,7 @@ use crate::lamellar_alloc::BTreeAlloc;
 
 use crate::lamellar_alloc::LamellarAlloc;
 use std::any::TypeId;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tracing::{error, trace};
 
@@ -164,7 +164,10 @@ impl RofiC {
 
     pub(crate) fn wait_all(&self) -> Result<(), ()> {
         let my_cnt = self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst);
-        while let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+        while let Err(_) =
+            self.wait_flag
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        {
             std::thread::yield_now();
         }
         if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
@@ -178,7 +181,10 @@ impl RofiC {
     #[allow(dead_code)]
     pub(crate) fn thread_wait(&self) -> Result<(), ()> {
         let my_cnt = self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst);
-        while let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+        while let Err(_) =
+            self.wait_flag
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        {
             std::thread::yield_now();
         }
         if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
@@ -528,9 +534,12 @@ impl RofiCAlloc {
         decrement_ref_count(ref_count)
     }
 
-    pub(crate) fn wait(&self) -> RdmaResult{
+    pub(crate) fn wait(&self) -> RdmaResult {
         let my_cnt = self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst);
-        while let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+        while let Err(_) =
+            self.wait_flag
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        {
             std::thread::yield_now();
         }
         if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
@@ -544,15 +553,17 @@ impl RofiCAlloc {
         Ok(())
     }
 
-    pub(crate) fn try_wait(&self, my_cnt_val:&mut  Option<usize>) {
+    pub(crate) fn try_wait(&self, my_cnt_val: &mut Option<usize>) {
         let my_cnt = match my_cnt_val {
             Some(cnt) => *cnt,
             None => self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst),
         };
-        if let Err(_) = self.wait_flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+        if let Err(_) =
+            self.wait_flag
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        {
             *my_cnt_val = Some(my_cnt);
-        }
-        else {
+        } else {
             if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
                 // println!("RofiCAlloc::try_wait calling rofi_c_wait for alloc {:p}-{:p} bytes={}", self.sub_data, self.sub_data.wrapping_add(self.sub_data_num_bytes), self.sub_data_num_bytes);
                 let ret = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
@@ -599,9 +610,7 @@ impl Drop for RofiCAlloc {
                         error!("RofiCAlloc::drop failed to free alloc: {:?}", self);
                         panic!("failed to free alloc: {:?}", self);
                     }
-                    crate::lamellae::rofi_c_lamellae::rofi::rofi_c_release(
-                        self.base_data as usize,
-                    );
+                    crate::lamellae::rofi_c_lamellae::rofi::rofi_c_release(self.base_data as usize);
                 }
             }
             AllocTable::Runtime(rt_alloc_table, addr, allocs) => {

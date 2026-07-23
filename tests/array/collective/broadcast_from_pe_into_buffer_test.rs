@@ -56,70 +56,88 @@ macro_rules! lock_if_needed {
     };
 }
 
-macro_rules! broadcast_from_pe_into_buffer_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let root = 1usize;
-            let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
-            let array_total_len = $len;
-            let mem_seg_len = array_total_len;
-            let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len * num_pes, $dist).block().into();
+macro_rules! broadcast_from_pe_into_buffer_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let root = 1usize;
+        let num_pes = world.num_pes();
+        let my_pe = world.my_pe();
+        let array_total_len = $len;
+        let mem_seg_len = array_total_len;
+        let mut success = true;
+        let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len * num_pes, $dist)
+            .block()
+            .into();
 
-            let mut shared_mem_region = world.alloc_shared_mem_region(mem_seg_len).block();
+        let mut shared_mem_region = world.alloc_shared_mem_region(mem_seg_len).block();
 
-            let init_val = my_pe as $t;
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
-            initialize_mem_region(&shared_mem_region, num_pes as $t, 1 as $t);
-            let _lock = lock_if_needed!($array, array);
+        let init_val = my_pe as $t;
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
+        initialize_mem_region(&shared_mem_region, num_pes as $t, 1 as $t);
+        let _lock = lock_if_needed!($array, array);
 
-            for tx_size in 1..=mem_seg_len{
-                let mut buffer = unsafe { LamellarBuffer::from_shared_memory_region(shared_mem_region) };
-                let num_txs = mem_seg_len/tx_size;
-                for tx in 0..num_txs{
-                    let chunk_len = std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size;
-                    if my_pe == root {
-                        let target: RootSrcOrLamellarBuffer<$t, SharedMemoryRegion<$t>> = RootSrcOrLamellarBuffer::Root(tx*tx_size);
-                        #[allow(unused_unsafe)]
-                        unsafe { array_or_lock!($array, array, _lock).broadcast_from_pe_into_buffer(target, chunk_len).block(); }
-                    } else {
-                        let buf = buffer.split_off(chunk_len);
-                        let target = RootSrcOrLamellarBuffer::NotRoot(buffer, root);
-                        #[allow(unused_unsafe)]
-                        unsafe { array_or_lock!($array, array, _lock).broadcast_from_pe_into_buffer(target, chunk_len).block(); }
-                        buffer = buf;
-                    }
-                }
-                array.barrier();
-                shared_mem_region = buffer.try_unwrap().expect("could not unwrap buffer into mem_region");
-                if my_pe != root {
+        for tx_size in 1..=mem_seg_len {
+            let mut buffer =
+                unsafe { LamellarBuffer::from_shared_memory_region(shared_mem_region) };
+            let num_txs = mem_seg_len / tx_size;
+            for tx in 0..num_txs {
+                let chunk_len = std::cmp::min(mem_seg_len, (tx + 1) * tx_size) - tx * tx_size;
+                if my_pe == root {
+                    let target: RootSrcOrLamellarBuffer<$t, SharedMemoryRegion<$t>> =
+                        RootSrcOrLamellarBuffer::Root(tx * tx_size);
+                    #[allow(unused_unsafe)]
                     unsafe {
-                        for elem in shared_mem_region.as_slice().iter().take(num_txs*tx_size){
-                            if ((root as $t - elem) as f32).abs() > 0.0001 {
-                                eprintln!("[{:?}] {:?} {:?} {:?}",my_pe, root as $t, elem, ((root as $t - elem) as f32).abs());
-                                success = false;
-                            }
+                        array_or_lock!($array, array, _lock)
+                            .broadcast_from_pe_into_buffer(target, chunk_len)
+                            .block();
+                    }
+                } else {
+                    let buf = buffer.split_off(chunk_len);
+                    let target = RootSrcOrLamellarBuffer::NotRoot(buffer, root);
+                    #[allow(unused_unsafe)]
+                    unsafe {
+                        array_or_lock!($array, array, _lock)
+                            .broadcast_from_pe_into_buffer(target, chunk_len)
+                            .block();
+                    }
+                    buffer = buf;
+                }
+            }
+            array.barrier();
+            shared_mem_region = buffer
+                .try_unwrap()
+                .expect("could not unwrap buffer into mem_region");
+            if my_pe != root {
+                unsafe {
+                    for elem in shared_mem_region.as_slice().iter().take(num_txs * tx_size) {
+                        if ((root as $t - elem) as f32).abs() > 0.0001 {
+                            eprintln!(
+                                "[{:?}] {:?} {:?} {:?}",
+                                my_pe,
+                                root as $t,
+                                elem,
+                                ((root as $t - elem) as f32).abs()
+                            );
+                            success = false;
                         }
                     }
-                    initialize_mem_region(&shared_mem_region, num_pes as $t, 1 as $t);
                 }
-                array.barrier();
-                array.wait_all();
-                array.barrier();
+                initialize_mem_region(&shared_mem_region, num_pes as $t, 1 as $t);
             }
             array.barrier();
-            world.wait_all();
-            world.barrier();
-
-            if !success{
-                eprintln!("failed");
-            }
+            array.wait_all();
+            array.barrier();
         }
-    }
+        array.barrier();
+        world.wait_all();
+        world.barrier();
+
+        if !success {
+            eprintln!("failed");
+        }
+    }};
 }
 
 #[lamellar::main]

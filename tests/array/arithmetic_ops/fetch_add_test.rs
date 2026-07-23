@@ -496,7 +496,7 @@ macro_rules! input_test {
             };
         }
         array.barrier();
-        
+
         //individual T------------------------------
         println!("Individual usize------------------------------");
         let mut reqs = vec![];
@@ -614,7 +614,13 @@ macro_rules! input_test {
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(input_array.local_data(), 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "UnsafeArray<usize>.local_data()");
+        check_results!(
+            $array,
+            array,
+            num_pes,
+            reqs,
+            "UnsafeArray<usize>.local_data()"
+        );
 
         // ReadOnlyArray<T>------------------------------
         // let mut reqs = vec![];
@@ -627,7 +633,13 @@ macro_rules! input_test {
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(input_array.local_data(), 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "ReadOnlyArray<usize>.local_data()");
+        check_results!(
+            $array,
+            array,
+            num_pes,
+            reqs,
+            "ReadOnlyArray<usize>.local_data()"
+        );
 
         // AtomicArray<T>------------------------------
         // let mut reqs = vec![];
@@ -640,7 +652,13 @@ macro_rules! input_test {
         let mut reqs = vec![];
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(&input_array.local_data(), 1).spawn() });
-        check_results!($array, array, num_pes, reqs, "AtomicArray<usize>.local_data()");
+        check_results!(
+            $array,
+            array,
+            num_pes,
+            reqs,
+            "AtomicArray<usize>.local_data()"
+        );
 
         // LocalLockArray<T>------------------------------
         //  let mut reqs = vec![];
@@ -656,7 +674,13 @@ macro_rules! input_test {
         #[allow(unused_unsafe)]
         reqs.push(unsafe { array.batch_fetch_add(&local_data, 1).spawn() });
         drop(local_data);
-        check_results!($array, array, num_pes, reqs, "LocalLockArray<usize>.local_data()");
+        check_results!(
+            $array,
+            array,
+            num_pes,
+            reqs,
+            "LocalLockArray<usize>.local_data()"
+        );
 
         // GlobalLockArray<T>------------------------------
         //  let mut reqs = vec![];
@@ -672,7 +696,13 @@ macro_rules! input_test {
                 .batch_fetch_add(&input_array.read_local_data().block(), 1)
                 .spawn()
         });
-        check_results!($array, array, num_pes, reqs, "GlobalLockArray<usize>.local_data()");
+        check_results!(
+            $array,
+            array,
+            num_pes,
+            reqs,
+            "GlobalLockArray<usize>.local_data()"
+        );
     }};
 }
 

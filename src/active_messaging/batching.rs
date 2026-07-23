@@ -3,7 +3,10 @@ use std::sync::atomic::AtomicUsize;
 
 use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS};
 use crate::active_messaging::*;
-use crate::lamellae::{Lamellae, LamellaeUtil, Ser, SerializedData, SerializeHeader, comm::{error::AllocError,CommInfo}};
+use crate::lamellae::{
+    comm::{error::AllocError, CommInfo},
+    Lamellae, LamellaeUtil, Ser, SerializeHeader, SerializedData,
+};
 use direct_batcher::{MyAmHeader, MyDataHeader, MyUnitHeader};
 use zerocopy::*;
 
@@ -187,12 +190,7 @@ pub(crate) trait Batcher {
     ) {
         send_am_zerocopy(req_data, am, am_id, cmd).await;
     }
-    async fn send_data_am(
-        &self,
-        req_data: ReqMetaData,
-        data: LamellarResultArc,
-        data_size: usize,
-    ) {
+    async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         send_data_am_zerocopy(req_data, data, data_size).await;
     }
     async fn send_unit_am(&self, req_data: ReqMetaData) {
@@ -221,13 +219,7 @@ pub(crate) trait Batcher {
     ) {
         exec_return_am_zerocopy(src, data, i, lamellae, ame).await;
     }
-    fn exec_data_am(
-        &self,
-        src: usize,
-        data: &[u8],
-        i: &mut usize,
-        ame: &RegisteredActiveMessages,
-    ) {
+    fn exec_data_am(&self, src: usize, data: &[u8], i: &mut usize, ame: &RegisteredActiveMessages) {
         exec_data_am_zerocopy(src, data, i, ame);
     }
     fn exec_unit_am(&self, src: usize, data: &[u8], i: &mut usize, ame: &RegisteredActiveMessages) {
@@ -243,7 +235,6 @@ pub(crate) enum BatcherType {
     TeamAm(TeamAmBatcher),
     VecTeamAm(VecTeamAmBatcher),
 }
-
 
 #[async_trait]
 impl Batcher for BatcherType {
@@ -420,12 +411,7 @@ impl Batcher for BatcherType {
             BatcherType::VecTeamAm(b) => b.send_am(req_data, am, am_id, am_size, cmd).await,
         }
     }
-    async fn send_data_am(
-        &self,
-        req_data: ReqMetaData,
-        data: LamellarResultArc,
-        data_size: usize,
-    ) {
+    async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         match self {
             BatcherType::Simple(b) => b.send_data_am(req_data, data, data_size).await,
             BatcherType::Direct(b) => b.send_data_am(req_data, data, data_size).await,
@@ -510,7 +496,11 @@ pub(crate) async fn send_am_zerocopy(
 ) {
     let my_pe = req_data.team.world_pe;
     let header = Some(SerializeHeader {
-        msg: Msg { src: my_pe as u16, cmd, padding: [0; 1] },
+        msg: Msg {
+            src: my_pe as u16,
+            cmd,
+            padding: [0; 1],
+        },
     });
     let mut bytes = crate::serialize(&header, false).expect("failed to serialize am header");
     let am_bytes = am.serialize();
@@ -535,11 +525,17 @@ pub(crate) async fn send_am_zerocopy(
                 Err(_) => req_data.team.num_pes(),
             };
             am.ser(darc_ser_cnt, &mut darcs);
-            for pe in req_data.team.arch.team_iter()
+            for pe in req_data
+                .team
+                .arch
+                .team_iter()
                 .filter(|pe| pe != &req_data.team.world_pe)
                 .collect::<Vec<_>>()
             {
-                req_data.lamellae.send_vec_to_pe_async(pe, bytes.clone()).await;
+                req_data
+                    .lamellae
+                    .send_vec_to_pe_async(pe, bytes.clone())
+                    .await;
             }
         }
     }
@@ -552,7 +548,11 @@ pub(crate) async fn send_data_am_zerocopy(
 ) {
     let my_pe = req_data.team.world_pe;
     let header = Some(SerializeHeader {
-        msg: Msg { src: my_pe as u16, cmd: Cmd::Data, padding: [0; 1] },
+        msg: Msg {
+            src: my_pe as u16,
+            cmd: Cmd::Data,
+            padding: [0; 1],
+        },
     });
     let mut bytes = crate::serialize(&header, false).expect("failed to serialize data header");
     let mut darcs = vec![];
@@ -575,7 +575,11 @@ pub(crate) async fn send_data_am_zerocopy(
 pub(crate) async fn send_unit_am_zerocopy(req_data: ReqMetaData) {
     let my_pe = req_data.team.world_pe;
     let header = Some(SerializeHeader {
-        msg: Msg { src: my_pe as u16, cmd: Cmd::Unit, padding: [0; 1] },
+        msg: Msg {
+            src: my_pe as u16,
+            cmd: Cmd::Unit,
+            padding: [0; 1],
+        },
     });
     let mut bytes = crate::serialize(&header, false).expect("failed to serialize unit header");
     let unit_header = MyUnitHeader {
@@ -588,11 +592,17 @@ pub(crate) async fn send_unit_am_zerocopy(req_data: ReqMetaData) {
             req_data.lamellae.send_vec_to_pe_async(pe, bytes).await;
         }
         None => {
-            for pe in req_data.team.arch.team_iter()
+            for pe in req_data
+                .team
+                .arch
+                .team_iter()
                 .filter(|pe| pe != &req_data.team.world_pe)
                 .collect::<Vec<_>>()
             {
-                req_data.lamellae.send_vec_to_pe_async(pe, bytes.clone()).await;
+                req_data
+                    .lamellae
+                    .send_vec_to_pe_async(pe, bytes.clone())
+                    .await;
             }
         }
     }
@@ -630,7 +640,16 @@ pub(crate) async fn exec_am_zerocopy(
     team.team.team_counters.inc_outstanding(1);
     trace!(target: "lamellae_debug", "exec_am_zerocopy:  lamellae cnt: {:?}", Arc::strong_count(&lamellae));
     executor.submit_task(async move {
-        let am = match am.exec(team.team.world_pe, team.team.num_world_pes, false, world.clone(), team.clone()).await {
+        let am = match am
+            .exec(
+                team.team.world_pe,
+                team.team.num_world_pes,
+                false,
+                world.clone(),
+                team.clone(),
+            )
+            .await
+        {
             LamellarReturn::Unit => Am::Unit(req_data),
             LamellarReturn::RemoteData(data) => Am::Data(req_data, data),
             LamellarReturn::RemoteAm(am) => Am::Return(req_data, am),
@@ -670,7 +689,9 @@ pub(crate) async fn exec_return_am_zerocopy(
         world: world.team.clone(),
         team: team.team.clone(),
     };
-    ame.clone().exec_local_am(req_data, am.as_local(), world, team).await;
+    ame.clone()
+        .exec_local_am(req_data, am.as_local(), world, team)
+        .await;
     trace!(target: "lamellae_debug", "finished processing return am in exec_return_am_zerocopy, lamellae cnt: {:?}", Arc::strong_count(&lamellae));
 }
 
@@ -680,8 +701,9 @@ pub(crate) fn exec_data_am_zerocopy(
     i: &mut usize,
     ame: &RegisteredActiveMessages,
 ) {
-    let data_header = MyDataHeader::ref_from_bytes(&data[*i..*i + std::mem::size_of::<MyDataHeader>()])
-        .expect("failed to parse MyDataHeader");
+    let data_header =
+        MyDataHeader::ref_from_bytes(&data[*i..*i + std::mem::size_of::<MyDataHeader>()])
+            .expect("failed to parse MyDataHeader");
     *i += std::mem::size_of::<MyDataHeader>();
     let darc_list_size = data_header.darc_list_size.get() as usize;
     let darcs: Vec<RemotePtr> = crate::deserialize(&data[*i..*i + darc_list_size], false).unwrap();
@@ -693,7 +715,11 @@ pub(crate) fn exec_data_am_zerocopy(
         id: data_header.req_id.get() as usize,
         sub_id: data_header.req_sub_id.get() as usize,
     };
-    ame.send_data_to_user_handle(req_id, src, InternalResult::NewRemote(payload.to_vec(), darcs));
+    ame.send_data_to_user_handle(
+        req_id,
+        src,
+        InternalResult::NewRemote(payload.to_vec(), darcs),
+    );
 }
 
 pub(crate) fn exec_unit_am_zerocopy(
@@ -702,8 +728,9 @@ pub(crate) fn exec_unit_am_zerocopy(
     i: &mut usize,
     ame: &RegisteredActiveMessages,
 ) {
-    let unit_header = MyUnitHeader::ref_from_bytes(&data[*i..*i + std::mem::size_of::<MyUnitHeader>()])
-        .expect("failed to parse MyUnitHeader");
+    let unit_header =
+        MyUnitHeader::ref_from_bytes(&data[*i..*i + std::mem::size_of::<MyUnitHeader>()])
+            .expect("failed to parse MyUnitHeader");
     *i += std::mem::size_of::<MyUnitHeader>();
     let req_id = ReqId {
         id: unit_header.req_id.get() as usize,
@@ -728,7 +755,8 @@ pub(crate) fn exec_am_serde(
     let am_header: AmHeader = crate::deserialize(
         &data[*i..*i + *AM_HEADER_LEN.get().expect("am header size not calculated")],
         false,
-    ).unwrap();
+    )
+    .unwrap();
     let (team, world) = ame.get_team_and_world(src, am_header.team_addr, lamellae);
     *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
     let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
@@ -747,7 +775,13 @@ pub(crate) fn exec_am_serde(
     trace!(target: "lamellae_debug", "exec_am_serde:  lamellae cnt: {:?}", Arc::strong_count(lamellae));
     executor.submit_task(async move {
         let am = match am
-            .exec(team.team.world_pe, team.team.num_world_pes, false, world.clone(), team.clone())
+            .exec(
+                team.team.world_pe,
+                team.team.num_world_pes,
+                false,
+                world.clone(),
+                team.clone(),
+            )
             .await
         {
             LamellarReturn::Unit => Am::Unit(req_data),
@@ -774,7 +808,8 @@ pub(crate) async fn exec_return_am_serde(
     let am_header: AmHeader = crate::deserialize(
         &data[*i..*i + *AM_HEADER_LEN.get().expect("am header size not calculated")],
         false,
-    ).unwrap();
+    )
+    .unwrap();
     let (team, world) = ame.get_team_and_world(src, am_header.team_addr, lamellae);
     *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
     let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
@@ -787,7 +822,9 @@ pub(crate) async fn exec_return_am_serde(
         world: world.team.clone(),
         team: team.team.clone(),
     };
-    ame.clone().exec_local_am(req_data, am.as_local(), world, team).await;
+    ame.clone()
+        .exec_local_am(req_data, am.as_local(), world, team)
+        .await;
     trace!(target: "lamellae_debug", "finished processing return am in exec_return_am_serde, lamellae cnt: {:?}", Arc::strong_count(&lamellae));
 }
 
@@ -816,22 +853,19 @@ async fn create_serde_buf(
     data.unwrap()
 }
 
-pub(crate) async fn send_am_serde(
-    req_data: ReqMetaData,
-    am: LamellarArcAm,
-    am_id: AmId,
-    cmd: Cmd,
-) {
+pub(crate) async fn send_am_serde(req_data: ReqMetaData, am: LamellarArcAm, am_id: AmId, cmd: Cmd) {
     use crate::active_messaging::registered_active_message::{AmHeader, AM_HEADER_LEN};
     let my_pe = req_data.team.world_pe;
     let am_size = am.serialized_size();
-    let header = SerializeHeader { msg: Msg { src: my_pe as u16, cmd, padding: [0; 1] } };
+    let header = SerializeHeader {
+        msg: Msg {
+            src: my_pe as u16,
+            cmd,
+            padding: [0; 1],
+        },
+    };
     let header_len = *AM_HEADER_LEN.get().expect("am header size not calculated");
-    let mut data_buf = create_serde_buf(
-        header,
-        am_size + header_len,
-        &req_data.lamellae,
-    ).await;
+    let mut data_buf = create_serde_buf(header, am_size + header_len, &req_data.lamellae).await;
     let mut data_slice = data_buf.data_as_bytes_mut();
     let am_header = AmHeader {
         am_id,
@@ -849,7 +883,10 @@ pub(crate) async fn send_am_serde(
     let mut darcs = vec![];
     am.ser(darc_ser_cnt, &mut darcs);
     am.serialize_into(&mut data_slice[header_len..]);
-    req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf).await;
+    req_data
+        .lamellae
+        .send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf)
+        .await;
     trace!(target: "lamellae_debug", "send_am_serde:  lamellae cnt: {:?}, am size: {}", Arc::strong_count(&req_data.lamellae), am_size);
 }
 
@@ -860,35 +897,60 @@ pub(crate) async fn send_data_am_serde(
 ) {
     use crate::active_messaging::registered_active_message::{DataHeader, DATA_HEADER_LEN};
     let my_pe = req_data.team.world_pe;
-    let header = SerializeHeader { msg: Msg { src: my_pe as u16, cmd: Cmd::Data, padding: [0; 1] } };
+    let header = SerializeHeader {
+        msg: Msg {
+            src: my_pe as u16,
+            cmd: Cmd::Data,
+            padding: [0; 1],
+        },
+    };
     let mut darcs = vec![];
     data.ser(1, &mut darcs);
     let darc_list_size = crate::serialized_size(&darcs, false);
-    let data_header = DataHeader { size: data_size, req_id: req_data.id, darc_list_size };
+    let data_header = DataHeader {
+        size: data_size,
+        req_id: req_data.id,
+        darc_list_size,
+    };
     let mut data_buf = create_serde_buf(
         header,
         data_size + darc_list_size + *DATA_HEADER_LEN,
         &req_data.lamellae,
-    ).await;
+    )
+    .await;
     let mut data_slice = data_buf.data_as_bytes_mut();
     crate::serialize_into(&mut data_slice[0..*DATA_HEADER_LEN], &data_header, false).unwrap();
     let mut i = *DATA_HEADER_LEN;
     crate::serialize_into(&mut data_slice[i..i + darc_list_size], &darcs, false).unwrap();
     i += darc_list_size;
     data.serialize_into(&mut data_slice[i..]);
-    req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf).await;
+    req_data
+        .lamellae
+        .send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf)
+        .await;
     trace!(target: "lamellae_debug", "send_data_am_serde:  lamellae cnt: {:?}, data size: {}", Arc::strong_count(&req_data.lamellae), data_size);
 }
 
 pub(crate) async fn send_unit_am_serde(req_data: ReqMetaData) {
     use crate::active_messaging::registered_active_message::{UnitHeader, UNIT_HEADER_LEN};
     let my_pe = req_data.team.world_pe;
-    let header = SerializeHeader { msg: Msg { src: my_pe as u16, cmd: Cmd::Unit, padding: [0; 1] } };
+    let header = SerializeHeader {
+        msg: Msg {
+            src: my_pe as u16,
+            cmd: Cmd::Unit,
+            padding: [0; 1],
+        },
+    };
     let mut data_buf = create_serde_buf(header, *UNIT_HEADER_LEN, &req_data.lamellae).await;
     let mut data_slice = data_buf.data_as_bytes_mut();
-    let unit_header = UnitHeader { req_id: req_data.id };
+    let unit_header = UnitHeader {
+        req_id: req_data.id,
+    };
     crate::serialize_into(&mut data_slice[0..*UNIT_HEADER_LEN], &unit_header, false).unwrap();
-    req_data.lamellae.send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf).await;
+    req_data
+        .lamellae
+        .send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf)
+        .await;
     trace!(target: "lamellae_debug", "send_unit_am_serde:  lamellae cnt: {:?}, sent unit am", Arc::strong_count(&req_data.lamellae));
 }
 
@@ -899,13 +961,19 @@ pub(crate) fn exec_data_am_serde(
     ame: &RegisteredActiveMessages,
 ) {
     use crate::active_messaging::registered_active_message::{DataHeader, DATA_HEADER_LEN};
-    let data_header: DataHeader = crate::deserialize(&data[*i..*i + *DATA_HEADER_LEN], false).unwrap();
+    let data_header: DataHeader =
+        crate::deserialize(&data[*i..*i + *DATA_HEADER_LEN], false).unwrap();
     *i += *DATA_HEADER_LEN;
-    let darcs: Vec<RemotePtr> = crate::deserialize(&data[*i..*i + data_header.darc_list_size], false).unwrap();
+    let darcs: Vec<RemotePtr> =
+        crate::deserialize(&data[*i..*i + data_header.darc_list_size], false).unwrap();
     *i += data_header.darc_list_size;
     let payload = data[*i..*i + data_header.size].to_vec();
     *i += data_header.size;
-    ame.send_data_to_user_handle(data_header.req_id, src, InternalResult::NewRemote(payload, darcs));
+    ame.send_data_to_user_handle(
+        data_header.req_id,
+        src,
+        InternalResult::NewRemote(payload, darcs),
+    );
 }
 
 pub(crate) fn exec_unit_am_serde(
@@ -915,7 +983,8 @@ pub(crate) fn exec_unit_am_serde(
     ame: &RegisteredActiveMessages,
 ) {
     use crate::active_messaging::registered_active_message::{UnitHeader, UNIT_HEADER_LEN};
-    let unit_header: UnitHeader = crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN], false).unwrap();
+    let unit_header: UnitHeader =
+        crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN], false).unwrap();
     *i += *UNIT_HEADER_LEN;
     ame.send_data_to_user_handle(unit_header.req_id, src, InternalResult::Unit);
 }

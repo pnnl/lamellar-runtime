@@ -122,14 +122,14 @@ fn main() {
     let index = 0;
     // while index < ARRAY_LEN / num_pes {
     if my_pe == 0 {
-        let _ = world
-            .spawn_am_pe(num_pes - 1,
-                RdmaAM {
-                    array: array.clone(),
-                    orig_pe: my_pe,
-                    index: index,
-                },
-            );
+        let _ = world.spawn_am_pe(
+            num_pes - 1,
+            RdmaAM {
+                array: array.clone(),
+                orig_pe: my_pe,
+                index: index,
+            },
+        );
     }
 
     world.wait_all();

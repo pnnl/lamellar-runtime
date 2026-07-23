@@ -1,15 +1,15 @@
-use crate::active_messaging::batching::simple_batcher::SimpleBatcher;
 use crate::active_messaging::batching::direct_batcher::DirectBatcher;
-use crate::active_messaging::batching::vec_simple_batcher::VecSimpleBatcher;
+use crate::active_messaging::batching::simple_batcher::SimpleBatcher;
 use crate::active_messaging::batching::team_am_batcher::TeamAmBatcher;
+use crate::active_messaging::batching::vec_simple_batcher::VecSimpleBatcher;
 use crate::active_messaging::batching::vec_team_am_batcher::VecTeamAmBatcher;
 use crate::active_messaging::batching::BatcherType;
 use crate::active_messaging::registered_active_message::RegisteredActiveMessages;
 use crate::active_messaging::*;
 use crate::env_var::config;
 use crate::lamellae::{Des, Lamellae, SerializedData};
+use crate::scheduler::work_stealing::{TaskType, TASKS_FINISHED, TASKS_LAUNCHED};
 use crate::warnings::RuntimeWarning;
- use crate::scheduler::work_stealing::{TASKS_LAUNCHED, TASKS_FINISHED, TaskType};
 
 use enum_dispatch::enum_dispatch;
 use futures_util::Future;
@@ -19,8 +19,8 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use tracing::{debug, trace};
 use zerocopy_derive::*;
-use tracing::{trace, debug};
 
 static LAMELLAR_THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 thread_local! {
@@ -107,7 +107,6 @@ pub(crate) enum SchedulerStatus {
     IntoBytes,
     KnownLayout,
     Immutable,
-
 )]
 pub(crate) struct ReqId {
     pub(crate) id: usize,
@@ -241,13 +240,14 @@ pub(crate) trait LamellarExecutor {
     where
         F: Future + Send + 'static,
         F::Output: Send;
-    
+
     fn submit_long_task<F>(&self, future: F)
     where
         F: Future + Send + 'static,
-        F::Output: Send{
-            self.submit_task(future)
-        }
+        F::Output: Send,
+    {
+        self.submit_task(future)
+    }
 
     fn submit_io_task<F>(&self, future: F)
     where
@@ -338,7 +338,7 @@ impl Scheduler {
             .fetch_add(1, Ordering::Relaxed);
         // println!("am ptr {:p} ", &am);
         let am_future = async move {
-           trace!(target: "tasks", "[AM_ID {am_id}] execing");
+            trace!(target: "tasks", "[AM_ID {am_id}] execing");
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
@@ -346,7 +346,6 @@ impl Scheduler {
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
             trace!(target: "tasks", "[AM_ID {am_id}] finished");
-            
         };
         self.executor.submit_task(am_future);
     }
@@ -433,7 +432,7 @@ impl Scheduler {
             .fetch_add(1, Ordering::Relaxed);
         let lamellae_clone = lamellae.clone();
         trace!(target: "lamellae_debug", "submit_remote_am:  lamellae cnt: {:?}", Arc::strong_count(lamellae));
-        
+
         let am_future = async move {
             trace!(target: "tasks", "[AM_ID {am_id}] execing remote");
             if let Some(header) = data.deserialize_header() {
@@ -494,8 +493,6 @@ impl Scheduler {
         self.executor.spawn_task(future, self.executor.clone())
     }
 
-
-
     pub(crate) fn submit_task<F>(&self, task: F)
     where
         F: Future<Output = ()> + Send + 'static,
@@ -521,7 +518,7 @@ impl Scheduler {
         self.executor.submit_task(future);
     }
 
-     pub(crate) fn submit_long_task<F>(&self, task: F)
+    pub(crate) fn submit_long_task<F>(&self, task: F)
     where
         F: Future<Output = ()> + Send + 'static,
     {
@@ -641,8 +638,7 @@ impl Scheduler {
         );
     }
 
-    pub(crate) fn active(&self,additional: usize) -> bool {
-
+    pub(crate) fn active(&self, additional: usize) -> bool {
         self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
             || self.num_tasks.load(Ordering::SeqCst) > 3 + additional // the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task, additional represents a long running task that we dont want to consider when determining if the scheduler is active
     }
@@ -660,7 +656,7 @@ impl Scheduler {
         let mut timer = std::time::Instant::now();
         while self.panic.load(Ordering::SeqCst) == 0
             && (self.num_tasks.load(Ordering::Relaxed) > 3
-            || self.num_ams.load(Ordering::Relaxed) > 0)
+                || self.num_ams.load(Ordering::Relaxed) > 0)
         {
             //the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
             if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
@@ -762,9 +758,9 @@ impl Scheduler {
         )
     }
 
-    pub(crate) fn init_batcher_task(&self,scheduler: Arc<Scheduler>, lamellae: &Arc<Lamellae>) {
+    pub(crate) fn init_batcher_task(&self, scheduler: Arc<Scheduler>, lamellae: &Arc<Lamellae>) {
         if let BatcherType::Direct(batcher) = &self.active_message_engine.batcher {
-            batcher.init_batcher_task(scheduler,lamellae);
+            batcher.init_batcher_task(scheduler, lamellae);
         }
     }
 }

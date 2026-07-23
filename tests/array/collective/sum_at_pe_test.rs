@@ -64,7 +64,7 @@ macro_rules! sum_at_pe_test{
             array.wait_all();
             array.barrier();
             let final_val = (0..num_pes).map(|pe| (pe as $t)).sum::<$t>();
-            let root = 1usize; 
+            let root = 1usize;
             let _lock = lock_if_needed!($array, array);
 
             // world.barrier();

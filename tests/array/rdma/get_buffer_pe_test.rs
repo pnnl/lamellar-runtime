@@ -38,8 +38,8 @@ macro_rules! initialize_array_local {
     };
 }
 
-macro_rules! get_buffer_pe_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{{
+macro_rules! get_buffer_pe_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
         let world = lamellar::LamellarWorldBuilder::new().build();
         let num_pes = world.num_pes();
         let my_pe = world.my_pe();
@@ -47,30 +47,47 @@ macro_rules! get_buffer_pe_test{
         #[allow(unused_mut)]
         let mut success = true;
         #[allow(unused_mut)]
-        let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into();
+        let mut array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into();
 
         let init_val = my_pe as $t;
         initialize_array_local!($array, array, init_val);
         array.wait_all();
         array.barrier();
 
-        let pe_len = array_total_len/num_pes;
+        let pe_len = array_total_len / num_pes;
 
         for pe in 0..num_pes {
             for tx_size in 1..=pe_len {
-                let num_txs = pe_len/tx_size;
+                let num_txs = pe_len / tx_size;
                 let mut reqs = vec![];
-                for tx in 0..num_txs{
+                for tx in 0..num_txs {
                     #[allow(unused_unsafe)]
-                    unsafe { reqs.push(array.get_buffer_pe(pe,tx*tx_size,std::cmp::min(pe_len,(tx+1)*tx_size)-tx*tx_size).spawn()); }
+                    unsafe {
+                        reqs.push(
+                            array
+                                .get_buffer_pe(
+                                    pe,
+                                    tx * tx_size,
+                                    std::cmp::min(pe_len, (tx + 1) * tx_size) - tx * tx_size,
+                                )
+                                .spawn(),
+                        );
+                    }
                 }
                 array.wait_all();
                 array.barrier();
-                for req in reqs.drain(..){
+                for req in reqs.drain(..) {
                     let buf = req.block();
-                    for elem in buf.as_slice().iter(){
+                    for elem in buf.as_slice().iter() {
                         if ((pe as $t - elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",pe as $t,elem,((pe as $t - elem) as f32).abs());
+                            eprintln!(
+                                "{:?} {:?} {:?}",
+                                pe as $t,
+                                elem,
+                                ((pe as $t - elem) as f32).abs()
+                            );
                             success = false;
                         }
                     }
@@ -82,7 +99,7 @@ macro_rules! get_buffer_pe_test{
         array.barrier();
         world.wait_all();
         world.barrier();
-        if !success{
+        if !success {
             eprintln!("failed");
         }
     }};

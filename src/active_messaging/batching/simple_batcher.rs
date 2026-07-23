@@ -573,7 +573,8 @@ impl Batcher for SimpleBatcher {
                 Cmd::ReturnAm => {
                     *cnts.entry(Cmd::ReturnAm).or_insert(0) += 1;
                     let data = ser_data.data_as_bytes();
-                    self.exec_return_am_serde(msg.src as usize, &data, &mut i, lamellae, ame).await;
+                    self.exec_return_am_serde(msg.src as usize, &data, &mut i, lamellae, ame)
+                        .await;
                     stats!(
                         BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
                             [&StatCmd::Return]
@@ -646,12 +647,7 @@ impl Batcher for SimpleBatcher {
         send_am_serde(req_data, am, am_id, cmd).await;
     }
 
-    async fn send_data_am(
-        &self,
-        req_data: ReqMetaData,
-        data: LamellarResultArc,
-        data_size: usize,
-    ) {
+    async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         send_data_am_serde(req_data, data, data_size).await;
     }
 

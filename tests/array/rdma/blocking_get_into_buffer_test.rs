@@ -30,21 +30,24 @@ macro_rules! initialize_array {
         $array
             .dist_iter()
             .enumerate()
-            .for_each(move |(i, x)| x.store(i as $t)).block();
+            .for_each(move |(i, x)| x.store(i as $t))
+            .block();
         $array.wait_all();
     };
     (LocalLockArray,$array:ident,$t:ty) => {
         $array
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t).block();
+            .for_each(move |(i, x)| *x = i as $t)
+            .block();
         $array.wait_all();
     };
     (GlobalLockArray,$array:ident,$t:ty) => {
         $array
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t).block();
+            .for_each(move |(i, x)| *x = i as $t)
+            .block();
         $array.wait_all();
     };
     (ReadOnlyArray,$array:ident,$t:ty) => {
@@ -109,137 +112,182 @@ macro_rules! initialize_array_range {
     }};
 }
 
-macro_rules! blocking_get_into_buffer_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let _my_pe = world.my_pe();
-            let array_total_len = $len;
-            let mem_seg_len = array_total_len;
-            let mut success = true;
-            #[allow(unused_mut)]
-            let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into();
+macro_rules! blocking_get_into_buffer_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let _my_pe = world.my_pe();
+        let array_total_len = $len;
+        let mem_seg_len = array_total_len;
+        let mut success = true;
+        #[allow(unused_mut)]
+        let mut array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into();
 
-            let mut shared_mem_region = world.alloc_shared_mem_region(mem_seg_len).block();
-            initialize_array!($array, array, $t);
-            array.wait_all();
-            array.barrier();
-            initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
+        let mut shared_mem_region = world.alloc_shared_mem_region(mem_seg_len).block();
+        initialize_array!($array, array, $t);
+        array.wait_all();
+        array.barrier();
+        initialize_mem_region(&shared_mem_region, num_pes as $t, 0 as $t);
 
-            for tx_size in 1..=mem_seg_len{
-                let mut buffer = unsafe{LamellarBuffer::from_shared_memory_region(shared_mem_region)};
-                let num_txs = mem_seg_len/tx_size;
-                for tx in (0..num_txs){
-                    let buf = buffer.split_off( std::cmp::min(mem_seg_len,(tx+1)*tx_size)- tx*tx_size);
-                    #[allow(unused_unsafe)]
-                    unsafe {array.blocking_get_into_buffer(tx*tx_size,buffer);}
-                    buffer = buf;
+        for tx_size in 1..=mem_seg_len {
+            let mut buffer =
+                unsafe { LamellarBuffer::from_shared_memory_region(shared_mem_region) };
+            let num_txs = mem_seg_len / tx_size;
+            for tx in (0..num_txs) {
+                let buf =
+                    buffer.split_off(std::cmp::min(mem_seg_len, (tx + 1) * tx_size) - tx * tx_size);
+                #[allow(unused_unsafe)]
+                unsafe {
+                    array.blocking_get_into_buffer(tx * tx_size, buffer);
                 }
-                array.barrier();
-                shared_mem_region = buffer.try_unwrap().expect("could not unwrap buffer into mem_region");
-                unsafe{
-                    for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
-                        if ((i as $t - elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
-                            success = false;
-                        }
-                    }
-                }
-                array.barrier();
-                initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
-                array.wait_all();
-                array.barrier();
+                buffer = buf;
             }
             array.barrier();
-            world.wait_all();
-            world.barrier();
+            shared_mem_region = buffer
+                .try_unwrap()
+                .expect("could not unwrap buffer into mem_region");
+            unsafe {
+                for (i, elem) in shared_mem_region
+                    .as_slice()
+                    .iter()
+                    .enumerate()
+                    .take(num_txs * tx_size)
+                {
+                    if ((i as $t - elem) as f32).abs() > 0.0001 {
+                        eprintln!(
+                            "{:?} {:?} {:?}",
+                            i as $t,
+                            elem,
+                            ((i as $t - elem) as f32).abs()
+                        );
+                        success = false;
+                    }
+                }
+            }
+            array.barrier();
+            initialize_mem_region(&shared_mem_region, num_pes as $t, 0 as $t);
+            array.wait_all();
+            array.barrier();
+        }
+        array.barrier();
+        world.wait_all();
+        world.barrier();
 
+        let half_len = array_total_len / 2;
+        let start_i = half_len / 2;
+        let end_i = start_i + half_len;
+        initialize_array_range!($array, array, $t, (start_i..end_i));
+        let sub_array = array.sub_array(start_i..end_i);
+        world.barrier();
+        sub_array.barrier();
+        for tx_size in 1..=half_len {
+            let mut buffer =
+                unsafe { LamellarBuffer::from_shared_memory_region(shared_mem_region) };
+            let num_txs = half_len / tx_size;
+            for tx in (0..num_txs) {
+                let buf =
+                    buffer.split_off(std::cmp::min(half_len, (tx + 1) * tx_size) - tx * tx_size);
+                #[allow(unused_unsafe)]
+                unsafe {
+                    sub_array.blocking_get_into_buffer(tx * tx_size, buffer);
+                }
+                buffer = buf;
+            }
+            sub_array.barrier();
+            shared_mem_region = buffer
+                .try_unwrap()
+                .expect("could not unwrap buffer into mem_region");
+            unsafe {
+                for (i, elem) in shared_mem_region
+                    .as_slice()
+                    .iter()
+                    .enumerate()
+                    .take(num_txs * tx_size)
+                {
+                    if ((i as $t - elem) as f32).abs() > 0.0001 {
+                        eprintln!(
+                            "{:?} {:?} {:?}",
+                            i as $t,
+                            elem,
+                            ((i as $t - elem) as f32).abs()
+                        );
+                        success = false;
+                    }
+                }
+            }
+            sub_array.barrier();
+            initialize_mem_region(&shared_mem_region, num_pes as $t, 0 as $t);
+            sub_array.wait_all();
+            sub_array.barrier();
+        }
+        array.barrier();
+        world.wait_all();
+        world.barrier();
+        drop(sub_array);
 
+        let pe_len = array_total_len / num_pes;
 
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
-            initialize_array_range!($array, array, $t,(start_i..end_i));
+        for pe in 0..num_pes {
+            let len = pe_len / 2;
+            let start_i = (pe * pe_len) + len / 2;
+
+            let end_i = start_i + len;
+            initialize_array_range!($array, array, $t, (start_i..end_i));
             let sub_array = array.sub_array(start_i..end_i);
             world.barrier();
             sub_array.barrier();
-            for tx_size in 1..=half_len{
-                let mut buffer = unsafe{LamellarBuffer::from_shared_memory_region(shared_mem_region)};
-                let num_txs = half_len/tx_size;
-                for tx in (0..num_txs){
-                    let buf = buffer.split_off( std::cmp::min(half_len,(tx+1)*tx_size)- tx*tx_size);
+
+            for tx_size in 1..len {
+                let mut buffer =
+                    unsafe { LamellarBuffer::from_shared_memory_region(shared_mem_region) };
+                let num_txs = len / tx_size;
+                for tx in (0..num_txs) {
+                    let buf = buffer
+                        .split_off(std::cmp::min(half_len, (tx + 1) * tx_size) - tx * tx_size);
                     #[allow(unused_unsafe)]
-                    unsafe {sub_array.blocking_get_into_buffer(tx*tx_size,buffer);}
+                    unsafe {
+                        sub_array.blocking_get_into_buffer(tx * tx_size, buffer);
+                    }
                     buffer = buf;
                 }
                 sub_array.barrier();
-                shared_mem_region = buffer.try_unwrap().expect("could not unwrap buffer into mem_region");
-                unsafe{
-                    for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
+                shared_mem_region = buffer
+                    .try_unwrap()
+                    .expect("could not unwrap buffer into mem_region");
+                unsafe {
+                    for (i, elem) in shared_mem_region
+                        .as_slice()
+                        .iter()
+                        .enumerate()
+                        .take(num_txs * tx_size)
+                    {
                         if ((i as $t - elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                            eprintln!(
+                                "{:?} {:?} {:?}",
+                                i as $t,
+                                elem,
+                                ((i as $t - elem) as f32).abs()
+                            );
                             success = false;
                         }
                     }
                 }
                 sub_array.barrier();
-                initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
+                initialize_mem_region(&shared_mem_region, num_pes as $t, 0 as $t);
                 sub_array.wait_all();
                 sub_array.barrier();
             }
             array.barrier();
             world.wait_all();
             world.barrier();
-            drop(sub_array);
-
-            let pe_len = array_total_len/num_pes;
-
-            for pe in 0..num_pes{
-
-                let len = pe_len/2;
-                let start_i = (pe*pe_len)+ len/2;
-
-                let end_i = start_i+len;
-                initialize_array_range!($array, array, $t,(start_i..end_i));
-                let sub_array = array.sub_array(start_i..end_i);
-                world.barrier();
-                sub_array.barrier();
-
-                for tx_size in 1..len{
-                    let mut buffer = unsafe{LamellarBuffer::from_shared_memory_region(shared_mem_region)};
-                    let num_txs = len/tx_size;
-                    for tx in (0..num_txs){
-                        let buf = buffer.split_off(std::cmp::min(half_len,(tx+1)*tx_size)- tx*tx_size);
-                        #[allow(unused_unsafe)]
-                        unsafe {sub_array.blocking_get_into_buffer(tx*tx_size,buffer);}
-                        buffer = buf;
-                    }
-                    sub_array.barrier();
-                    shared_mem_region = buffer.try_unwrap().expect("could not unwrap buffer into mem_region");
-                    unsafe{
-                        for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
-                            if ((i as $t - elem) as f32).abs() > 0.0001 {
-                                eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
-                                success = false;
-                            }
-                        }
-                    }
-                    sub_array.barrier();
-                    initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
-                    sub_array.wait_all();
-                    sub_array.barrier();
-                }
-                array.barrier();
-                world.wait_all();
-                world.barrier();
-            }
-
-            if !success{
-                eprintln!("failed");
-            }
         }
-    };
+
+        if !success {
+            eprintln!("failed");
+        }
+    }};
 }
 
 #[lamellar::main]
@@ -311,7 +359,7 @@ fn main() {
         "LocalLockArray" => match elem.as_str() {
             "u8" => blocking_get_into_buffer_test!(LocalLockArray, u8, len, dist_type),
             "u16" => blocking_get_into_buffer_test!(LocalLockArray, u16, len, dist_type),
-            "u32" => blocking_get_into_buffer_test  !(LocalLockArray, u32, len, dist_type),
+            "u32" => blocking_get_into_buffer_test!(LocalLockArray, u32, len, dist_type),
             "u64" => blocking_get_into_buffer_test!(LocalLockArray, u64, len, dist_type),
             "u128" => blocking_get_into_buffer_test!(LocalLockArray, u128, len, dist_type),
             "usize" => blocking_get_into_buffer_test!(LocalLockArray, usize, len, dist_type),

@@ -54,7 +54,10 @@ fn main() {
             count += 1;
         }
         println!("");
-        assert_eq!(count, ARRAY_LEN, "onesided_iter into_iter count: got {count} expected {ARRAY_LEN}");
+        assert_eq!(
+            count, ARRAY_LEN,
+            "onesided_iter into_iter count: got {count} expected {ARRAY_LEN}"
+        );
 
         println!("Here2");
         let mut cyclic_count = 0;
@@ -63,7 +66,10 @@ fn main() {
             cyclic_count += 1;
         }
         println!("");
-        assert_eq!(cyclic_count, ARRAY_LEN, "cyclic onesided_iter count: got {cyclic_count} expected {ARRAY_LEN}");
+        assert_eq!(
+            cyclic_count, ARRAY_LEN,
+            "cyclic onesided_iter count: got {cyclic_count} expected {ARRAY_LEN}"
+        );
     }
     println!("Here3");
     println!("--------------------------------------------------------");
@@ -110,7 +116,11 @@ fn main() {
         let rem = ARRAY_LEN % num_pes;
         let block_pe_for = |i: usize| -> usize {
             let boundary = rem * (chunk + 1);
-            if i < boundary { i / (chunk + 1) } else { rem + (i - boundary) / chunk }
+            if i < boundary {
+                i / (chunk + 1)
+            } else {
+                rem + (i - boundary) / chunk
+            }
         };
         let zipped: Vec<_> = cyclic_array
             .onesided_iter()
@@ -118,11 +128,26 @@ fn main() {
             .into_iter()
             .enumerate()
             .collect();
-        assert_eq!(zipped.len(), ARRAY_LEN, "zip count: got {} expected {ARRAY_LEN}", zipped.len());
+        assert_eq!(
+            zipped.len(),
+            ARRAY_LEN,
+            "zip count: got {} expected {ARRAY_LEN}",
+            zipped.len()
+        );
         for (i, (a, b)) in &zipped {
             println!("{:?}: {:?} {:?}", i, a, b);
-            assert_eq!(*a, i % num_pes, "zip cyclic value mismatch at {i}: got {a} expected {}", i % num_pes);
-            assert_eq!(*b, block_pe_for(*i), "zip block value mismatch at {i}: got {b} expected {}", block_pe_for(*i));
+            assert_eq!(
+                *a,
+                i % num_pes,
+                "zip cyclic value mismatch at {i}: got {a} expected {}",
+                i % num_pes
+            );
+            assert_eq!(
+                *b,
+                block_pe_for(*i),
+                "zip block value mismatch at {i}: got {b} expected {}",
+                block_pe_for(*i)
+            );
         }
         println!("-----");
         let chunk_pairs: Vec<_> = cyclic_array
@@ -131,13 +156,27 @@ fn main() {
             .zip(block_array.onesided_iter().chunks(10))
             .into_iter()
             .collect();
-        assert_eq!(chunk_pairs.len(), ARRAY_LEN / 10, "chunks zip count: got {} expected {}", chunk_pairs.len(), ARRAY_LEN / 10);
+        assert_eq!(
+            chunk_pairs.len(),
+            ARRAY_LEN / 10,
+            "chunks zip count: got {} expected {}",
+            chunk_pairs.len(),
+            ARRAY_LEN / 10
+        );
         for (chunk_idx, (a, b)) in chunk_pairs.iter().enumerate() {
             println!("{:?} {:?}", a.as_slice(), b.as_slice());
             for j in 0..a.as_slice().len() {
                 let i = chunk_idx * 10 + j;
-                assert_eq!(a.as_slice()[j], i % num_pes, "chunk cyclic mismatch at global {i}");
-                assert_eq!(b.as_slice()[j], block_pe_for(i), "chunk block mismatch at global {i}");
+                assert_eq!(
+                    a.as_slice()[j],
+                    i % num_pes,
+                    "chunk cyclic mismatch at global {i}"
+                );
+                assert_eq!(
+                    b.as_slice()[j],
+                    block_pe_for(i),
+                    "chunk block mismatch at global {i}"
+                );
             }
         }
     }
@@ -179,7 +218,10 @@ fn main() {
                 .take(4)
                 .map(|elem| elem as f64)
                 .all(|elem| async move { elem < num_pes as f64 });
-            assert!(result.await, "onesided_iter all: expected all elems < num_pes");
+            assert!(
+                result.await,
+                "onesided_iter all: expected all elems < num_pes"
+            );
         }
     });
 }

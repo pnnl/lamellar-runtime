@@ -43,9 +43,9 @@ fn main() {
     // }
     world.wait_all();
     world.barrier();
-   
+
     if world.my_pe() == 0 {
-         println!(
+        println!(
             "PE{} time: {:?} done",
             world.my_pe(),
             start.elapsed().as_secs_f64()

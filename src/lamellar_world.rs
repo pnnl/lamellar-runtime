@@ -21,7 +21,7 @@ use crate::{
 };
 // use log::trace;
 
-use tracing::{debug, trace,error};
+use tracing::{debug, error, trace};
 
 use futures_util::future::join_all;
 use futures_util::Future;
@@ -111,7 +111,10 @@ impl ActiveMessaging for LamellarWorld {
     {
         self.team_rt.scheduler.spawn_task(
             f,
-            Some(Arc::from([self.team_rt.world_counters.clone(), self.team_rt.team_counters.clone()])),
+            Some(Arc::from([
+                self.team_rt.world_counters.clone(),
+                self.team_rt.team_counters.clone(),
+            ])),
         )
     }
 
@@ -138,7 +141,10 @@ impl ActiveMessaging for LamellarWorld {
             .block_on(join_all(iter.into_iter().map(|task| {
                 self.team_rt.scheduler.spawn_task(
                     task,
-                    Some(Arc::from([self.team_rt.world_counters.clone(), self.team_rt.team_counters.clone()])),
+                    Some(Arc::from([
+                        self.team_rt.world_counters.clone(),
+                        self.team_rt.team_counters.clone(),
+                    ])),
                 )
             })))
         // )

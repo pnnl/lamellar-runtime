@@ -114,7 +114,7 @@ impl CommInfo for UcxComm {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
             / 1_000_000.0
     }
-    fn collective_avail<T: 'static>(&self,op: CollectiveOpKind) -> bool {
+    fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
         let avail = self.ucx.collective_avail::<T>(op);
         avail
     }

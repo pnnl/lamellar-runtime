@@ -31,10 +31,9 @@ fn main() {
     world.barrier();
 
     //Send a Hello World Active Message to all pes
-    let request = world
-        .spawn_am_all(HelloWorld {
-            originial_pe: my_pe,
-        });
+    let request = world.spawn_am_all(HelloWorld {
+        originial_pe: my_pe,
+    });
 
     //wait for the request to complete
     request.block();

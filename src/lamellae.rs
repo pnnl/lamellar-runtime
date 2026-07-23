@@ -12,7 +12,7 @@ pub(crate) mod shmem_lamellae;
 #[cfg(feature = "enable-on-node-shmem")]
 pub(crate) mod shmem_utils;
 
-#[cfg(feature="enable-libfabric-sys")]
+#[cfg(feature = "enable-libfabric-sys")]
 use crate::lamellae::libfabric_sys_lamellae::LibfabricSys;
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
@@ -30,10 +30,10 @@ use rofi_c_lamellae::{RofiC, RofiCBuilder};
 #[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfabric_lamellae;
 
-#[cfg(feature = "enable-libfabric-sys")]
-pub(crate) mod libfabric_sys_lamellae;
 #[cfg(feature = "enable-libfabric-async")]
 pub(crate) mod libfabric_async_lamellae;
+#[cfg(feature = "enable-libfabric-sys")]
+pub(crate) mod libfabric_sys_lamellae;
 #[cfg(feature = "enable-ucx")]
 pub(crate) mod ucx_lamellae;
 
@@ -248,7 +248,6 @@ impl SerializedData {
     }
 }
 
-
 impl std::fmt::Debug for SerializedData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SeralizedData addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
@@ -294,9 +293,10 @@ impl SerializedData {
             alloc: self.alloc.clone(),
             ser_data_bytes: self.ser_data_bytes.clone(),
             header_bytes: self.header_bytes.clone(),
-            payload_bytes: self.payload_bytes.sub_slice(0..self.payload_bytes.len() - num_bytes),
+            payload_bytes: self
+                .payload_bytes
+                .sub_slice(0..self.payload_bytes.len() - num_bytes),
         }
-       
     }
 }
 
@@ -409,7 +409,7 @@ impl Lamellae {
             Lamellae::RofiC(rofi_c) => rofi_c.comm(),
             #[cfg(feature = "enable-libfabric-sys")]
             Lamellae::LibfabricSys(libfabric_sys) => libfabric_sys.comm(),
-                        #[cfg(feature = "enable-libfabric")]
+            #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.comm(),
             #[cfg(feature = "enable-libfabric-async")]
             Lamellae::LibfabricAsync(libfabric_async) => libfabric_async.comm(),
@@ -450,11 +450,7 @@ pub(crate) trait LamellaeUtil: Send {
         data: SerializedData,
     );
 
-    async fn send_vec_to_pe_async(
-        &self,
-        pe: usize,
-        data: Vec<u8>,
-    );
+    async fn send_vec_to_pe_async(&self, pe: usize, data: Vec<u8>);
 
     // #[allow(dead_code)]
     // async fn send_vec_to_team_pes_async(
@@ -467,7 +463,7 @@ pub(crate) trait LamellaeUtil: Send {
 
     async fn request_new_alloc(&self, min_size: usize);
 
-    fn available_to_send(&self,pe: usize) -> bool;
+    fn available_to_send(&self, pe: usize) -> bool;
 }
 
 //#[tracing::instrument(skip_all, level = "debug")]
@@ -481,7 +477,6 @@ pub(crate) fn create_lamellae(backend: Backend, _num_threads: usize) -> Lamellae
         }
         #[cfg(feature = "enable-libfabric-sys")]
         Backend::LibfabricSys => {
-
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::LibfabricSysBuilder(LibfabricSysBuilder::new(&provider, &domain))

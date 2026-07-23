@@ -96,8 +96,8 @@ fn instrument_block_async(name: String, input: &mut syn::Block, generics: &[Stri
         let tokens = quote! {
             #prof_future_tokens(#name_lit, async { #(#original_stmts)* }).await
         };
-        let expr: syn::Expr = syn::parse2(tokens)
-            .unwrap_or_else(|e| panic!("instrument_block_async: {}", e));
+        let expr: syn::Expr =
+            syn::parse2(tokens).unwrap_or_else(|e| panic!("instrument_block_async: {}", e));
         input.stmts = vec![syn::Stmt::Expr(expr)];
     } else {
         let mut new_stmts: Vec<syn::Stmt> = vec![];
@@ -117,8 +117,8 @@ fn instrument_block_async(name: String, input: &mut syn::Block, generics: &[Stri
         let tokens = quote! {
             #prof_future_tokens(&_lamellar_prof_name, async { #(#original_stmts)* }).await
         };
-        let expr: syn::Expr = syn::parse2(tokens)
-            .unwrap_or_else(|e| panic!("instrument_block_async: {}", e));
+        let expr: syn::Expr =
+            syn::parse2(tokens).unwrap_or_else(|e| panic!("instrument_block_async: {}", e));
         new_stmts.push(syn::Stmt::Expr(expr));
         input.stmts = new_stmts;
     }

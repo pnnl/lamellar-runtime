@@ -94,12 +94,9 @@ fn main() {
         if my_pe == 0 {
             for _j in 0..num_tasks {
                 let sub_timer = Instant::now();
-                reqs.push(
-                    world
-                        .spawn_am_all(FlopAM {
-                            iterations: num_iterations,
-                        }),
-                );
+                reqs.push(world.spawn_am_all(FlopAM {
+                    iterations: num_iterations,
+                }));
 
                 sub_time += sub_timer.elapsed().as_secs_f64();
             }
@@ -113,7 +110,8 @@ fn main() {
             .drain(0..)
             .map(|r| r.block().drain(0..).sum::<usize>())
             .sum();
-        let task_granularity = ((cur_t * num_threads as f64) / (num_tasks * num_pes) as f64) * 1000.0f64;
+        let task_granularity =
+            ((cur_t * num_threads as f64) / (num_tasks * num_pes) as f64) * 1000.0f64;
         if my_pe == 0 {
             println!(
                 "iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})

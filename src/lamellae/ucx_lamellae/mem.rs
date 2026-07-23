@@ -209,7 +209,9 @@ impl CommMem for UcxComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: Arc::new(CommAllocInner::UcxAlloc(inner_alloc.sub_alloc(addr.0, size)?)),
+                    inner_alloc: Arc::new(CommAllocInner::UcxAlloc(
+                        inner_alloc.sub_alloc(addr.0, size)?,
+                    )),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }

@@ -257,16 +257,13 @@ fn main() {
                     j,
                     block_size,
                 );
-                reqs.push(
-                    world
-                        .spawn_am_local(MatMulAM {
-                            a: a_block,
-                            b: b_block,
-                            c: c_block.clone(),
-                            a_pe_rows: a_pe_rows,
-                            block_size: block_size,
-                        }),
-                );
+                reqs.push(world.spawn_am_local(MatMulAM {
+                    a: a_block,
+                    b: b_block,
+                    c: c_block.clone(),
+                    a_pe_rows: a_pe_rows,
+                    block_size: block_size,
+                }));
                 tasks += 1;
             }
             // for req in reqs {

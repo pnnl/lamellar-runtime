@@ -1,7 +1,5 @@
 use crate::{
-    array::{
-        AmDist, LamellarByteArray,
-    },
+    array::{AmDist, LamellarByteArray},
     lamellae::{
         AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, RdmaGetHandle, Remote,
     },
@@ -275,8 +273,6 @@ impl Future for ArrayBatchOpHandle {
     }
 }
 
-
-
 //  fn bytes_to_vec_t<T: Copy>(bytes: Vec<u8>) -> Vec<T> {
 //         let elem_size = std::mem::size_of::<T>();
 //         if elem_size == 0 || bytes.is_empty() {
@@ -288,7 +284,6 @@ impl Future for ArrayBatchOpHandle {
 //         std::mem::forget(bytes);
 //         unsafe { Vec::from_raw_parts(ptr, len, cap) }
 //     }
-
 
 /// a task handle for a single array operation that returns a value
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
@@ -382,7 +377,7 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
             // }
             FetchOpState::OneSidedMemoryRegionReq(req) => {
                 let mem_region = req.block();
-                let data = unsafe{ mem_region.clone().to_base::<R>().get(0).block() };
+                let data = unsafe { mem_region.clone().to_base::<R>().get(0).block() };
                 data
             }
             FetchOpState::Rdma(op_handle, mem_region) => {
@@ -399,7 +394,7 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
             // }
             FetchOpState::OneSidedMemoryRegionLaunched(req) => {
                 let mem_region = req.block();
-                let data = unsafe{ mem_region.clone().to_base::<R>().get(0).block() };
+                let data = unsafe { mem_region.clone().to_base::<R>().get(0).block() };
                 data
             }
         }
@@ -409,7 +404,7 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
 impl<R: Dist> Future for ArrayFetchOpHandle<R> {
     type Output = R;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut  this = self.project();
+        let mut this = self.project();
         match this.state.as_mut().project() {
             // FetchOpStateProj::Req(req) => {
             //     let mut result = ready!(req.poll(cx));
@@ -421,7 +416,7 @@ impl<R: Dist> Future for ArrayFetchOpHandle<R> {
             // }
             FetchOpStateProj::OneSidedMemoryRegionReq(req) => {
                 let mem_region = ready!(req.poll(cx));
-                let rdma = unsafe{ mem_region.clone().to_base::<R>().get(0) };
+                let rdma = unsafe { mem_region.clone().to_base::<R>().get(0) };
                 this.state.set(FetchOpState::Rdma(rdma, Some(mem_region)));
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -438,7 +433,7 @@ impl<R: Dist> Future for ArrayFetchOpHandle<R> {
             // }
             FetchOpStateProj::OneSidedMemoryRegionLaunched(req) => {
                 let mem_region = ready!(req.poll(cx));
-                let rdma = unsafe{ mem_region.clone().to_base::<R>().get(0) };
+                let rdma = unsafe { mem_region.clone().to_base::<R>().get(0) };
                 this.state.set(FetchOpState::Rdma(rdma, Some(mem_region)));
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -463,7 +458,14 @@ pub(crate) enum FetchBatchOpState<R: AmDist + Dist> {
     OneSidedMemoryRegionReqs(VecDeque<(AmHandle<OneSidedMemoryRegion<u8>>, Vec<usize>)>),
     Launched(VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>),
     // ByteLaunched(VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>),
-    OneSidedMemoryRegionLaunched(VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<R>>>, Vec<usize>, Option<OneSidedMemoryRegion<u8>>)>),
+    OneSidedMemoryRegionLaunched(
+        VecDeque<(
+            Option<LamellarTask<OneSidedMemoryRegion<u8>>>,
+            Option<LamellarTask<Vec<R>>>,
+            Vec<usize>,
+            Option<OneSidedMemoryRegion<u8>>,
+        )>,
+    ),
 }
 
 #[pinned_drop]
@@ -534,7 +536,12 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
                 let launched = reqs
                     .drain(..)
                     .map(|(am, res)| (Some(am.spawn()), None, res, None))
-                    .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<R>>>, Vec<usize>, Option<OneSidedMemoryRegion<u8>>)>>();
+                    .collect::<VecDeque<(
+                        Option<LamellarTask<OneSidedMemoryRegion<u8>>>,
+                        Option<LamellarTask<Vec<R>>>,
+                        Vec<usize>,
+                        Option<OneSidedMemoryRegion<u8>>,
+                    )>>();
                 self.state = FetchBatchOpState::OneSidedMemoryRegionLaunched(launched);
                 self.array.team().spawn(self)
             }
@@ -582,11 +589,16 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
                 let launched = reqs
                     .drain(..)
                     .map(|(am, res)| (Some(am.spawn()), None, res, None))
-                    .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<R>>>, Vec<usize>, Option<OneSidedMemoryRegion<u8>>)>>();
+                    .collect::<VecDeque<(
+                        Option<LamellarTask<OneSidedMemoryRegion<u8>>>,
+                        Option<LamellarTask<Vec<R>>>,
+                        Vec<usize>,
+                        Option<OneSidedMemoryRegion<u8>>,
+                    )>>();
                 self.state = FetchBatchOpState::OneSidedMemoryRegionLaunched(launched);
                 self.array.team().block_on(self)
             }
-            FetchBatchOpState::Launched(_)  | FetchBatchOpState::OneSidedMemoryRegionLaunched(_)    => {
+            FetchBatchOpState::Launched(_) | FetchBatchOpState::OneSidedMemoryRegionLaunched(_) => {
                 self.array.team().block_on(self)
             }
         }
@@ -618,7 +630,12 @@ impl<R: Dist> From<ArrayFetchBatchOpHandle<R>> for ArrayFetchOpHandle<R> {
             // },
             FetchBatchOpState::OneSidedMemoryRegionLaunched(reqs) => Self {
                 array: req.array.clone(),
-                state: FetchOpState::OneSidedMemoryRegionLaunched(reqs.pop_front().unwrap().0.expect("Expected a launched task")),
+                state: FetchOpState::OneSidedMemoryRegionLaunched(
+                    reqs.pop_front()
+                        .unwrap()
+                        .0
+                        .expect("Expected a launched task"),
+                ),
             },
         };
         req.state = FetchBatchOpState::Launched(VecDeque::new());
@@ -703,7 +720,12 @@ impl<R: AmDist + Dist> Future for ArrayFetchBatchOpHandle<R> {
                 let launched = reqs
                     .drain(..)
                     .map(|(am, res)| (Some(am.spawn()), None, res, None))
-                    .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<R>>>, Vec<usize>, Option<OneSidedMemoryRegion<u8>>)>>();
+                    .collect::<VecDeque<(
+                        Option<LamellarTask<OneSidedMemoryRegion<u8>>>,
+                        Option<LamellarTask<Vec<R>>>,
+                        Vec<usize>,
+                        Option<OneSidedMemoryRegion<u8>>,
+                    )>>();
                 *this.state = FetchBatchOpState::OneSidedMemoryRegionLaunched(launched);
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -744,7 +766,13 @@ impl<R: AmDist + Dist> Future for ArrayFetchBatchOpHandle<R> {
                     if let Some(mem_region) = req.0.as_mut() {
                         if let Poll::Ready(mem_region) = Future::poll(Pin::new(mem_region), cx) {
                             let num_bytes = mem_region.len();
-                            let data_task = unsafe{mem_region.clone().to_base::<R>().get_buffer(0,num_bytes/std::mem::size_of::<R>()).spawn()};
+                            let data_task = unsafe {
+                                mem_region
+                                    .clone()
+                                    .to_base::<R>()
+                                    .get_buffer(0, num_bytes / std::mem::size_of::<R>())
+                                    .spawn()
+                            };
                             req.0 = None;
                             req.1 = Some(data_task);
                             req.3 = Some(mem_region);
@@ -775,9 +803,6 @@ impl<R: AmDist + Dist> Future for ArrayFetchBatchOpHandle<R> {
     }
 }
 
-
-
-
 // fn bytes_to_result_vec<T: Dist>( bytes: Vec<u8>) -> Vec<Result<T, T>> {
 //     crate::deserialize(&bytes, true).expect("failed to deserialize result vec")
 // }
@@ -797,12 +822,14 @@ pub(crate) enum ResultOpState<R: Remote + PartialEq> {
     // Req(AmHandle<Vec<Result<R, R>>>),
     // ByteReq(AmHandle<Vec<u8>>),
     OneSidedMemoryRegionReq(#[pin] AmHandle<OneSidedMemoryRegion<u8>>),
-    Rdma(#[pin] RdmaGetHandle<Result<R, R>>, Option<OneSidedMemoryRegion<u8>>),
+    Rdma(
+        #[pin] RdmaGetHandle<Result<R, R>>,
+        Option<OneSidedMemoryRegion<u8>>,
+    ),
     Network(#[pin] AtomicCompareExchangeOpHandle<R>),
     Launched(#[pin] LamellarTask<Vec<Result<R, R>>>),
     // ByteLaunched(LamellarTask<Vec<u8>>),
     OneSidedMemoryRegionLaunched(#[pin] LamellarTask<OneSidedMemoryRegion<u8>>),
-
 }
 
 impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
@@ -885,9 +912,7 @@ impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
                 data
             }
             ResultOpState::Network(handle) => handle.block(),
-            ResultOpState::Launched(ref _req) => {
-                self.array.team().block_on(self)
-            }
+            ResultOpState::Launched(ref _req) => self.array.team().block_on(self),
             // ResultOpState::ByteLaunched(ref _req) => {
             //     self.array.team().block_on(self)
             // }
@@ -918,7 +943,7 @@ impl<R: Dist + PartialEq> Future for ArrayResultOpHandle<R> {
             // }
             ResultOpStateProj::OneSidedMemoryRegionReq(req) => {
                 let mem_region = ready!(req.poll(cx));
-                let rdma = unsafe{ mem_region.clone().to_base::<Result<R, R>>().get(0) };
+                let rdma = unsafe { mem_region.clone().to_base::<Result<R, R>>().get(0) };
                 this.state.set(ResultOpState::Rdma(rdma, Some(mem_region)));
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -962,8 +987,14 @@ pub(crate) enum BatchResultOpState<R> {
     OneSidedMemoryRegionReqs(VecDeque<(AmHandle<OneSidedMemoryRegion<u8>>, Vec<usize>)>),
     Launched(VecDeque<(LamellarTask<Vec<Result<R, R>>>, Vec<usize>)>),
     // ByteLaunched(VecDeque<(LamellarTask<Vec<u8>>, Vec<usize>)>),
-    OneSidedMemoryRegionLaunched(VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<Result<R, R>>>>, Vec<usize>, Option<OneSidedMemoryRegion<u8>>)>),
-
+    OneSidedMemoryRegionLaunched(
+        VecDeque<(
+            Option<LamellarTask<OneSidedMemoryRegion<u8>>>,
+            Option<LamellarTask<Vec<Result<R, R>>>>,
+            Vec<usize>,
+            Option<OneSidedMemoryRegion<u8>>,
+        )>,
+    ),
 }
 
 #[pinned_drop]
@@ -1034,7 +1065,12 @@ impl<R: AmDist + Dist> ArrayResultBatchOpHandle<R> {
                 let launched = reqs
                     .drain(..)
                     .map(|(am, res)| (Some(am.spawn()), None, res, None))
-                    .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<Result<R, R>>>>, Vec<usize>, Option<OneSidedMemoryRegion<u8>>)>>();
+                    .collect::<VecDeque<(
+                        Option<LamellarTask<OneSidedMemoryRegion<u8>>>,
+                        Option<LamellarTask<Vec<Result<R, R>>>>,
+                        Vec<usize>,
+                        Option<OneSidedMemoryRegion<u8>>,
+                    )>>();
                 self.state = BatchResultOpState::OneSidedMemoryRegionLaunched(launched);
                 self.array.team().spawn(self)
             }
@@ -1082,11 +1118,17 @@ impl<R: AmDist + Dist> ArrayResultBatchOpHandle<R> {
                 let launched = reqs
                     .drain(..)
                     .map(|(am, res)| (Some(am.spawn()), None, res, None))
-                    .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<Result<R, R>>>>, Vec<usize>, Option<OneSidedMemoryRegion<u8>>)>>();
+                    .collect::<VecDeque<(
+                        Option<LamellarTask<OneSidedMemoryRegion<u8>>>,
+                        Option<LamellarTask<Vec<Result<R, R>>>>,
+                        Vec<usize>,
+                        Option<OneSidedMemoryRegion<u8>>,
+                    )>>();
                 self.state = BatchResultOpState::OneSidedMemoryRegionLaunched(launched);
                 self.array.team().block_on(self)
             }
-            BatchResultOpState::Launched(_) |  BatchResultOpState::OneSidedMemoryRegionLaunched(_) => {
+            BatchResultOpState::Launched(_)
+            | BatchResultOpState::OneSidedMemoryRegionLaunched(_) => {
                 self.array.team().block_on(self)
             }
         }
@@ -1118,7 +1160,12 @@ impl<R: Dist + PartialEq> From<ArrayResultBatchOpHandle<R>> for ArrayResultOpHan
             // },
             BatchResultOpState::OneSidedMemoryRegionLaunched(reqs) => Self {
                 array: req.array.clone(),
-                state: ResultOpState::OneSidedMemoryRegionLaunched(reqs.pop_front().unwrap().0.expect("Expected a launched task")),
+                state: ResultOpState::OneSidedMemoryRegionLaunched(
+                    reqs.pop_front()
+                        .unwrap()
+                        .0
+                        .expect("Expected a launched task"),
+                ),
             },
         };
         req.state = BatchResultOpState::Launched(VecDeque::new());
@@ -1203,7 +1250,12 @@ impl<R: AmDist + Dist> Future for ArrayResultBatchOpHandle<R> {
                 let launched = reqs
                     .drain(..)
                     .map(|(am, res)| (Some(am.spawn()), None, res, None))
-                    .collect::<VecDeque<(Option<LamellarTask<OneSidedMemoryRegion<u8>>>, Option<LamellarTask<Vec<Result<R, R>>>>, Vec<usize>, Option<OneSidedMemoryRegion<u8>>)>>();
+                    .collect::<VecDeque<(
+                        Option<LamellarTask<OneSidedMemoryRegion<u8>>>,
+                        Option<LamellarTask<Vec<Result<R, R>>>>,
+                        Vec<usize>,
+                        Option<OneSidedMemoryRegion<u8>>,
+                    )>>();
                 *this.state = BatchResultOpState::OneSidedMemoryRegionLaunched(launched);
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -1244,7 +1296,13 @@ impl<R: AmDist + Dist> Future for ArrayResultBatchOpHandle<R> {
                     if let Some(mem_region) = req.0.as_mut() {
                         if let Poll::Ready(mem_region) = Future::poll(Pin::new(mem_region), cx) {
                             let num_bytes = mem_region.len();
-                            let data_task = unsafe{mem_region.clone().to_base::<Result<R, R>>().get_buffer(0,num_bytes/std::mem::size_of::<Result<R,R>>()).spawn()};
+                            let data_task = unsafe {
+                                mem_region
+                                    .clone()
+                                    .to_base::<Result<R, R>>()
+                                    .get_buffer(0, num_bytes / std::mem::size_of::<Result<R, R>>())
+                                    .spawn()
+                            };
                             req.0 = None;
                             req.1 = Some(data_task);
                             req.3 = Some(mem_region);

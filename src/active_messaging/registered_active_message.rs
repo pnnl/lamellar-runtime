@@ -7,9 +7,7 @@ use crate::{
         *,
     },
     config,
-    lamellae::{
-        Backend, Lamellae, SerializedData,comm::CommInfo,LamellaeUtil
-    },
+    lamellae::{comm::CommInfo, Backend, Lamellae, LamellaeUtil, SerializedData},
     utils::stats,
 };
 
@@ -17,7 +15,6 @@ use async_recursion::async_recursion;
 // use log::trace;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
-
 
 pub(crate) const AM_ID_START: AmId = 1;
 
@@ -93,7 +90,6 @@ pub(crate) struct AmHeader {
     pub(crate) am_id: AmId,
 }
 
-
 #[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
 pub(crate) struct DataHeader {
     pub(crate) size: usize,
@@ -106,7 +102,7 @@ pub(crate) struct UnitHeader {
     pub(crate) req_id: ReqId,
 }
 
- #[lamellar_prof::prof]
+#[lamellar_prof::prof]
 #[async_trait]
 impl ActiveMessageEngine for RegisteredActiveMessages {
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -128,7 +124,12 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     self.executor.submit_io_task(async move {
                         //spawn a task so that we can the execute the local am immediately
                         // println!(" {} {} {}, {}, {}",req_data.team.lamellae.comm().backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.comm().backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
-                        if am_size < config().am_size_threshold && !immediate || req_data_clone.team.arch.team_iter().any(|pe| pe != req_data_clone.src && !req_data_clone.lamellae.available_to_send(pe)) {
+                        if am_size < config().am_size_threshold && !immediate
+                            || req_data_clone.team.arch.team_iter().any(|pe| {
+                                pe != req_data_clone.src
+                                    && !req_data_clone.lamellae.available_to_send(pe)
+                            })
+                        {
                             ame.batcher
                                 .add_remote_am_to_batch(
                                     req_data_clone.clone(),
@@ -176,7 +177,9 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 } else {
                     let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                     let am_size = am.serialized_size();
-                    if am_size < config().am_size_threshold && !immediate || !req_data.lamellae.available_to_send(req_data.dst.unwrap()) {
+                    if am_size < config().am_size_threshold && !immediate
+                        || !req_data.lamellae.available_to_send(req_data.dst.unwrap())
+                    {
                         self.batcher
                             .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                             .await;
@@ -210,7 +213,9 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 // println!("Am::Return");
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                 let am_size = am.serialized_size();
-                if am_size < config().am_size_threshold && !immediate  || !req_data.lamellae.available_to_send(req_data.dst.unwrap()) {
+                if am_size < config().am_size_threshold && !immediate
+                    || !req_data.lamellae.available_to_send(req_data.dst.unwrap())
+                {
                     self.batcher
                         .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                         .await;
@@ -238,7 +243,9 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             Am::Data(req_data, data) => {
                 // println!("Am::Data");
                 let data_size = data.serialized_size();
-                if data_size < config().am_size_threshold && !immediate || !req_data.lamellae.available_to_send(req_data.dst.unwrap()) {
+                if data_size < config().am_size_threshold && !immediate
+                    || !req_data.lamellae.available_to_send(req_data.dst.unwrap())
+                {
                     self.batcher
                         .add_data_am_to_batch(req_data, data, data_size, stall_mark)
                         .await;
@@ -258,7 +265,9 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 }
             }
             Am::Unit(req_data) => {
-                if *UNIT_HEADER_LEN < config().am_size_threshold && !immediate || !req_data.lamellae.available_to_send(req_data.dst.unwrap()) {
+                if *UNIT_HEADER_LEN < config().am_size_threshold && !immediate
+                    || !req_data.lamellae.available_to_send(req_data.dst.unwrap())
+                {
                     self.batcher
                         .add_unit_am_to_batch(req_data, stall_mark)
                         .await;
@@ -292,7 +301,16 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         match msg.cmd {
             Cmd::Am => {
                 let data_bytes = ser_data.data_as_bytes();
-                self.batcher.exec_am(msg.src as usize, &data_bytes, &mut i, lamellae, &self, &self.executor).await;
+                self.batcher
+                    .exec_am(
+                        msg.src as usize,
+                        &data_bytes,
+                        &mut i,
+                        lamellae,
+                        &self,
+                        &self.executor,
+                    )
+                    .await;
                 stats!(
                     BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)][&StatCmd::Am]
                         .fetch_add(1, Ordering::Relaxed)
@@ -305,7 +323,9 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             }
             Cmd::ReturnAm => {
                 let data_bytes = ser_data.data_as_bytes();
-                self.batcher.exec_return_am(msg.src as usize, &data_bytes, &mut i, lamellae, &self).await;
+                self.batcher
+                    .exec_return_am(msg.src as usize, &data_bytes, &mut i, lamellae, &self)
+                    .await;
                 stats!(
                     BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
                         [&StatCmd::Return]
@@ -319,7 +339,8 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             }
             Cmd::Data => {
                 let data_bytes = ser_data.data_as_bytes();
-                self.batcher.exec_data_am(msg.src as usize, &data_bytes, &mut i, &self);
+                self.batcher
+                    .exec_data_am(msg.src as usize, &data_bytes, &mut i, &self);
                 stats!(
                     BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)][&StatCmd::Data]
                         .fetch_add(1, Ordering::Relaxed)
@@ -332,7 +353,8 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             }
             Cmd::Unit => {
                 let data_bytes = ser_data.data_as_bytes();
-                self.batcher.exec_unit_am(msg.src as usize, &data_bytes, &mut i, &self);
+                self.batcher
+                    .exec_unit_am(msg.src as usize, &data_bytes, &mut i, &self);
                 stats!(
                     BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)][&StatCmd::Unit]
                         .fetch_add(1, Ordering::Relaxed)
@@ -363,7 +385,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
     }
 }
 
- #[lamellar_prof::prof]
+#[lamellar_prof::prof]
 impl RegisteredActiveMessages {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(batcher: BatcherType, executor: Arc<Executor>) -> RegisteredActiveMessages {
@@ -378,15 +400,12 @@ impl RegisteredActiveMessages {
         am_size: usize,
         cmd: Cmd,
     ) {
-        self.batcher.send_am(req_data, am, am_id, am_size, cmd).await;
+        self.batcher
+            .send_am(req_data, am, am_id, am_size, cmd)
+            .await;
     }
 
-    async fn send_data_am(
-        &self,
-        req_data: ReqMetaData,
-        data: LamellarResultArc,
-        data_size: usize,
-    ) {
+    async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         self.batcher.send_data_am(req_data, data, data_size).await;
     }
 
@@ -441,5 +460,4 @@ impl RegisteredActiveMessages {
         world.team.world_counters.dec_outstanding(1);
         team.team.team_counters.dec_outstanding(1);
     }
-
 }

@@ -750,7 +750,9 @@ impl<T: Dist> GlobalLockArray<T> {
     ///```
     pub fn blocking_get_buffer_pe(&self, pe: usize, offset: usize, num_elems: usize) -> Vec<T> {
         unsafe {
-            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(self, pe, offset, num_elems, Sealed)
+            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(
+                self, pe, offset, num_elems, Sealed,
+            )
         }
     }
 
@@ -830,7 +832,9 @@ impl<T: Dist> GlobalLockArray<T> {
         data: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(self, pe, offset, data, Sealed)
+            <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(
+                self, pe, offset, data, Sealed,
+            )
         }
     }
 
@@ -913,12 +917,11 @@ impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self
-            .spawn_am_local_tg(InitPutBufferAm {
-                array: self.clone(),
-                index: index,
-                buf: buf.into(),
-            });
+        let _ = self.spawn_am_local_tg(InitPutBufferAm {
+            array: self.clone(),
+            index: index,
+            buf: buf.into(),
+        });
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
         let req = self.exec_am_local_tg(InitPePutAm {

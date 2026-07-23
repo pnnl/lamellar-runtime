@@ -7,9 +7,17 @@ pub(crate) enum AllocError {
     IdError(usize),
     LocalNotFound(CommAllocAddr),
     // RemoteNotFound(CommAllocAddr),
-    #[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async",feature="enable-rofi-c"))]
-    UnexpectedAllocationType( crate::lamellae::AllocationType),
-    #[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async",feature="enable-rofi-c"))]
+    #[cfg(any(
+        feature = "enable-libfabric",
+        feature = "enable-libfabric-async",
+        feature = "enable-rofi-c"
+    ))]
+    UnexpectedAllocationType(crate::lamellae::AllocationType),
+    #[cfg(any(
+        feature = "enable-libfabric",
+        feature = "enable-libfabric-async",
+        feature = "enable-rofi-c"
+    ))]
     FabricAllocationError(i32),
     InvalidSubAlloc(usize, usize),
     // NotRTAlloc(usize),
@@ -38,11 +46,19 @@ impl std::fmt::Display for AllocError {
             //         addr
             //     )
             // }
-             #[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async",feature="enable-rofi-c"))]
+            #[cfg(any(
+                feature = "enable-libfabric",
+                feature = "enable-libfabric-async",
+                feature = "enable-rofi-c"
+            ))]
             AllocError::UnexpectedAllocationType(alloc_type) => {
                 write!(f, "Unexpected allocation type {:?}", alloc_type)
             }
-             #[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async",feature="enable-rofi-c"))]
+            #[cfg(any(
+                feature = "enable-libfabric",
+                feature = "enable-libfabric-async",
+                feature = "enable-rofi-c"
+            ))]
             AllocError::FabricAllocationError(err_no) => {
                 write!(f, "Fabric allocation error: {:?}", err_no)
             }
@@ -63,8 +79,12 @@ impl std::error::Error for AllocError {}
 
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
-
-#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async",feature="enable-rofi-c", feature = "enable-ucx"))]
+#[cfg(any(
+    feature = "enable-libfabric",
+    feature = "enable-libfabric-async",
+    feature = "enable-rofi-c",
+    feature = "enable-ucx"
+))]
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum FabricError {
     InitError(u32),
@@ -73,7 +93,12 @@ pub(crate) enum FabricError {
     // FabricError(u32),
 }
 
-#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async",feature="enable-rofi-c", feature = "enable-ucx"))]
+#[cfg(any(
+    feature = "enable-libfabric",
+    feature = "enable-libfabric-async",
+    feature = "enable-rofi-c",
+    feature = "enable-ucx"
+))]
 impl std::fmt::Display for FabricError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -90,13 +115,22 @@ impl std::fmt::Display for FabricError {
     }
 }
 
-#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async",feature="enable-rofi-c", feature = "enable-ucx"))]
+#[cfg(any(
+    feature = "enable-libfabric",
+    feature = "enable-libfabric-async",
+    feature = "enable-rofi-c",
+    feature = "enable-ucx"
+))]
 impl std::error::Error for FabricError {}
 
-#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async",feature="enable-rofi-c"))]
+#[cfg(any(
+    feature = "enable-libfabric",
+    feature = "enable-libfabric-async",
+    feature = "enable-rofi-c"
+))]
 pub(crate) type FabricResult<T> = Result<T, FabricError>;
 
-#[cfg(feature="enable-rofi-c")]
+#[cfg(feature = "enable-rofi-c")]
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RdmaError {
     FabricPutError(i32),
@@ -105,10 +139,10 @@ pub(crate) enum RdmaError {
     FabricWaitError(i32),
 }
 
-#[cfg(feature="enable-rofi-c")]
+#[cfg(feature = "enable-rofi-c")]
 pub(crate) type RdmaResult = Result<(), RdmaError>;
 
-#[cfg(feature="enable-rofi-c")]
+#[cfg(feature = "enable-rofi-c")]
 impl std::fmt::Display for RdmaError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -119,7 +153,7 @@ impl std::fmt::Display for RdmaError {
     }
 }
 
-#[cfg(feature="enable-rofi-c")]
+#[cfg(feature = "enable-rofi-c")]
 impl std::error::Error for RdmaError {}
 
 // #[cfg(feature = "rofi-c")]

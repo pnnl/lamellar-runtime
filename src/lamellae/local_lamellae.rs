@@ -103,13 +103,9 @@ impl LamellaeUtil for Local {
     async fn request_new_alloc(&self, _min_size: usize) {
         panic!("should never request new alloc in local")
     }
-    
-    async fn send_vec_to_pe_async(
-        &self,
-        _pe: usize,
-        _vec_data: Vec<u8>,
-    ) {
-       panic!("should never request new alloc in local")
+
+    async fn send_vec_to_pe_async(&self, _pe: usize, _vec_data: Vec<u8>) {
+        panic!("should never request new alloc in local")
     }
 
     fn available_to_send(&self, _pe: usize) -> bool {

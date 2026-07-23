@@ -1,11 +1,37 @@
 use crate::{
-    active_messaging::AMCounters, lamellae::{collective::{BroadcastInput, CollectiveAllToAllIntoBufferOpFuture, CollectiveAllToAllIntoBufferOpHandle, CollectiveAllToAllOpFuture, CollectiveAllToAllOpHandle, CollectiveAllGatherIntoBufferOpFuture, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpFuture, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpFuture, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpFuture, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpFuture, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpFuture, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpFuture, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpFuture, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpFuture, CollectiveGatherOpHandle, CollectiveReduceIntoBufferOpFuture, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpFuture, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpFuture, CollectiveReduceScatterIntoBufferOpHandle, CollectiveReduceScatterOpFuture, CollectiveReduceScatterOpHandle, CollectiveScatterIntoBufferOpFuture, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpFuture, CollectiveScatterOpHandle, CommAllocCollectiveAllToAll, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, RootOrBuffer, RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer, RootSrcOrLamellarBufferInner, ScatterInput, ScatterInputInner}, comm::collective::ReduceOp}, warnings::RuntimeWarning, AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote
+    active_messaging::AMCounters,
+    lamellae::{
+        collective::{
+            BroadcastInput, CollectiveAllGatherIntoBufferOpFuture,
+            CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpFuture,
+            CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpFuture,
+            CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpFuture,
+            CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpFuture,
+            CollectiveAllReduceOpHandle, CollectiveAllToAllIntoBufferOpFuture,
+            CollectiveAllToAllIntoBufferOpHandle, CollectiveAllToAllOpFuture,
+            CollectiveAllToAllOpHandle, CollectiveBroadcastIntoBufferOpFuture,
+            CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpFuture,
+            CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpFuture,
+            CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpFuture, CollectiveGatherOpHandle,
+            CollectiveReduceIntoBufferOpFuture, CollectiveReduceIntoBufferOpHandle,
+            CollectiveReduceOpFuture, CollectiveReduceOpHandle,
+            CollectiveReduceScatterIntoBufferOpFuture, CollectiveReduceScatterIntoBufferOpHandle,
+            CollectiveReduceScatterOpFuture, CollectiveReduceScatterOpHandle,
+            CollectiveScatterIntoBufferOpFuture, CollectiveScatterIntoBufferOpHandle,
+            CollectiveScatterOpFuture, CollectiveScatterOpHandle, CommAllocCollectiveAllGather,
+            CommAllocCollectiveAllReduce, CommAllocCollectiveAllToAll,
+            CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce,
+            CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, RootOrBuffer,
+            RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer,
+            RootSrcOrLamellarBufferInner, ScatterInput, ScatterInputInner,
+        },
+        comm::collective::ReduceOp,
+    },
+    warnings::RuntimeWarning,
+    AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote,
 };
 
-use super::{
-    fabric::{LibfabricAsyncAlloc},
-    Scheduler,
-};
+use super::{fabric::LibfabricAsyncAlloc, Scheduler};
 
 use pin_project::{pin_project, pinned_drop};
 use std::{
@@ -18,7 +44,7 @@ use std::{
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricAsyncCollectiveAllReduceFuture<T: Remote> {
     fut_data: Option<CollectiveReduceData<T>>,
-    fut: Option<Pin<Box<dyn Future<Output=Vec<T>> + Send>>>,
+    fut: Option<Pin<Box<dyn Future<Output = Vec<T>> + Send>>>,
 }
 
 struct CollectiveReduceData<T> {
@@ -35,25 +61,24 @@ struct CollectiveReduceData<T> {
 
 impl<T: Remote> CollectiveReduceData<T> {
     async fn exec_op(mut self) -> Vec<T> {
-        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
-        LibfabricAsyncAlloc::allreduce_inner(
-            &self.alloc,
-            &self.op,
-            src,
-            &mut self.result,
-        )
-        .await
-        .unwrap();
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index + self.len] };
+        LibfabricAsyncAlloc::allreduce_inner(&self.alloc, &self.op, src, &mut self.result)
+            .await
+            .unwrap();
         self.result
     }
 
     pub(crate) fn block(self) -> Vec<T> {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(async move { self.exec_op().await }, counters)
+        self.scheduler
+            .clone()
+            .spawn_task(async move { self.exec_op().await }, counters)
     }
 }
 
@@ -78,7 +103,9 @@ impl<T: Remote> PinnedDrop for LibfabricAsyncCollectiveAllReduceFuture<T> {
     }
 }
 
-impl<T: Remote> From<LibfabricAsyncCollectiveAllReduceFuture<T>> for CollectiveAllReduceOpHandle<T> {
+impl<T: Remote> From<LibfabricAsyncCollectiveAllReduceFuture<T>>
+    for CollectiveAllReduceOpHandle<T>
+{
     fn from(f: LibfabricAsyncCollectiveAllReduceFuture<T>) -> CollectiveAllReduceOpHandle<T> {
         CollectiveAllReduceOpHandle {
             future: CollectiveAllReduceOpFuture::LibfabricAsync(f),
@@ -91,9 +118,7 @@ impl<T: Remote> Future for LibfabricAsyncCollectiveAllReduceFuture<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut_self = self.get_mut();
         match mut_self.fut.as_mut() {
-            Some(fut) => {
-                fut.as_mut().poll(cx)
-            },
+            Some(fut) => fut.as_mut().poll(cx),
             None => {
                 let fut_data = mut_self.fut_data.take().unwrap();
                 let fut = Box::pin(fut_data.exec_op());
@@ -117,9 +142,12 @@ struct CollectiveReduceIntoBufferData<T: Remote, B: AsLamellarBuffer<T>> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<
+    T: Remote,
+    B: AsLamellarBuffer<T>,
+> {
     fut_data: Option<CollectiveReduceIntoBufferData<T, B>>,
-    fut: Option<Pin<Box<dyn Future<Output=()> + Send>>>,
+    fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
 
 // impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T, B> {
@@ -138,7 +166,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective reduce op: {:?} initiated",
 //         //     self.op,
@@ -187,7 +215,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     }
 // }
 
-
 // #[pin_project(PinnedDrop)]
 // pub(crate) struct LibfabricAsyncCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLamellarBuffer<T>> {
 //     pub(crate) alloc: LibfabricAsyncAlloc,
@@ -213,7 +240,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective reduce op: {:?} initiated",
 //         //     self.op,
@@ -274,12 +301,10 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     pub(crate) spawned: bool,
 // }
 
-
-
 // impl<T: Remote> LibfabricAsyncCollectiveReduceFuture<T> {
 //     fn exec_op(&mut self) {
 //         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
-        
+
 //         LibfabricAsyncAlloc::reduce_inner(
 //             &self.alloc,
 //             &self.op,
@@ -288,7 +313,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective reduce op: {:?} initiated",
 //         //     self.op,
@@ -364,12 +389,10 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     pub(crate) spawned: bool,
 // }
 
-
-
 // impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveReduceIntoBufferFuture<T, B> {
 //     fn exec_op(&mut self) {
 //         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
-        
+
 //         LibfabricAsyncAlloc::reduce_inner(
 //             &self.alloc,
 //             &self.op,
@@ -378,7 +401,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective reduce op: {:?} initiated",
 //         //     self.op,
@@ -452,7 +475,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //             false,
 // //         )
 // //         .unwrap();
-// //         
+// //
 // //         println!(
 // //             "collective reduce op: {:?} initiated",
 // //             self.op,
@@ -510,7 +533,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //         len: usize,
 //         op: ReduceOp,
 //     ) -> CollectiveAllReduceOpHandle<T> {
-        
+
 //         CollectiveAllReduceOpHandle
 //         LibfabricAsyncCollectiveAllReduceFuture {
 //             // alloc: self.clone(),
@@ -533,7 +556,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //         op: ReduceOp,
 //         dst: LamellarBuffer<T, B>,
 //     ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
-        
+
 //         LibfabricAsyncCollectiveAllReduceIntoBufferFuture {
 //             alloc: self.clone(),
 //             op: op,
@@ -564,7 +587,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //         }.into()
 //     }
 // }
-
 
 // impl CommAllocCollectiveReduce for LibfabricAsyncAlloc {
 //     fn reduce<T: Remote>(
@@ -604,7 +626,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //         len: usize,
 //         root_or_buffer: RootOrLamellarBuffer<T, B>
 //     ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
-        
+
 //         LibfabricAsyncCollectiveReduceIntoBufferFuture {
 //             alloc: self.clone(),
 //             op: op,
@@ -641,7 +663,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     // }
 // }
 
-
 // #[pin_project(PinnedDrop)]
 // pub(crate) struct LibfabricAsyncCollectiveAllGatherFuture<T: Remote> {
 //     pub(crate) alloc: LibfabricAsyncAlloc,
@@ -668,7 +689,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective all gather initiated",
 //         // );
@@ -721,7 +742,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     }
 // }
 
-
 // #[pin_project(PinnedDrop)]
 // pub(crate) struct LibfabricAsyncCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
 //     pub(crate) alloc: LibfabricAsyncAlloc,
@@ -748,7 +768,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective gather initiated",
 //         // );
@@ -796,7 +816,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     }
 // }
 
-
 // #[pin_project(PinnedDrop)]
 // pub(crate) struct LibfabricAsyncCollectiveGatherFuture<T: Remote> {
 //     pub(crate) alloc: LibfabricAsyncAlloc,
@@ -808,12 +827,10 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     pub(crate) spawned: bool,
 // }
 
-
-
 // impl<T: Remote> LibfabricAsyncCollectiveGatherFuture<T> {
 //     fn exec_op(&mut self) {
 //         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
-        
+
 //         LibfabricAsyncAlloc::gather_inner(
 //             &self.alloc,
 //             src,
@@ -821,7 +838,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective reduce op: {:?} initiated",
 //         //     self.op,
@@ -896,12 +913,10 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     pub(crate) spawned: bool,
 // }
 
-
-
 // impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveGatherIntoBufferFuture<T, B> {
 //     fn exec_op(&mut self) {
 //         let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
-        
+
 //         LibfabricAsyncAlloc::gather_inner(
 //             &self.alloc,
 //             src,
@@ -909,7 +924,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective reduce op: {:?} initiated",
 //         //     self.op,
@@ -958,7 +973,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     }
 // }
 
-
 // #[pin_project(PinnedDrop)]
 // pub(crate) struct LibfabricAsyncCollectiveAllBroadcastFuture<T: Remote> {
 //     pub(crate) alloc: LibfabricAsyncAlloc,
@@ -983,7 +997,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective all gather initiated",
 //         // );
@@ -1035,7 +1049,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //         Poll::Ready(res)
 //     }
 // }
-
 
 // #[pin_project(PinnedDrop)]
 // pub(crate) struct LibfabricAsyncCollectiveAllBroadcastIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
@@ -1132,7 +1145,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
+
 //         // println!(
 //         //     "collective broadcast initiated",
 //         // );
@@ -1194,7 +1207,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //         }
 //     }
 // }
-
 
 // #[pin_project(PinnedDrop)]
 // pub(crate) struct LibfabricAsyncCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
@@ -1293,8 +1305,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //             false,
 //         )
 //         .unwrap();
-        
-        
+
 //         // println!(
 //         //     "collective scatter initiated",
 //         // );
@@ -1347,7 +1358,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 //     }
 // }
 
-
 // // #[pin_project(PinnedDrop)]
 // // pub(crate) struct LibfabricAsyncCollectiveScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
 // //     pub(crate) alloc: LibfabricAsyncAlloc,
@@ -1374,7 +1384,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //             false,
 // //         )
 // //         .unwrap();
-        
+
 // //         // println!(
 // //         //     "collective gather initiated",
 // //         // );
@@ -1422,7 +1432,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //     }
 // // }
 
-
 // // #[pin_project(PinnedDrop)]
 // // pub(crate) struct LibfabricAsyncCollectiveReduceScatterFuture<T: Remote> {
 // //     pub(crate) alloc: LibfabricAsyncAlloc,
@@ -1453,7 +1462,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //             false,
 // //         )
 // //         .unwrap();
-        
+
 // //         // println!(
 // //         //     "collective reduce op: {:?} initiated",
 // //         //     self.op,
@@ -1507,7 +1516,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //     }
 // // }
 
-
 // // #[pin_project(PinnedDrop)]
 // // pub(crate) struct LibfabricAsyncCollectiveReduceScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
 // //     pub(crate) alloc: LibfabricAsyncAlloc,
@@ -1537,7 +1545,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //             false,
 // //         )
 // //         .unwrap();
-        
+
 // //         // println!(
 // //         //     "collective reduce op: {:?} initiated",
 // //         //     self.op,
@@ -1586,7 +1594,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //     }
 // // }
 
-
 // // impl CommAllocCollectiveAllGather for LibfabricAsyncAlloc {
 // //     fn gather_all<T: Remote>(
 // //         &self,
@@ -1614,7 +1621,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //         len: usize,
 // //         dst: LamellarBuffer<T, B>,
 // //     ) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
-        
+
 // //         LibfabricAsyncCollectiveAllGatherIntoBufferFuture {
 // //             alloc: self.clone(),
 // //             index,
@@ -1662,7 +1669,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //         len: usize,
 // //         root_or_buffer: RootOrLamellarBuffer<T, B>
 // //     ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
-        
+
 // //         LibfabricAsyncCollectiveGatherIntoBufferFuture {
 // //             alloc: self.clone(),
 // //             index,
@@ -1701,7 +1708,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //         src: impl Into<MemregionRdmaInputInner<T>>,
 // //         dst: LamellarBuffer<T, B>,
 // //     ) -> CollectiveAllBroadcastIntoBufferOpHandle<T, B> {
-        
+
 // //         LibfabricAsyncCollectiveAllBroadcastIntoBufferFuture {
 // //             alloc: self.clone(),
 // //             src: src.into(),
@@ -1712,7 +1719,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //         }.into()
 // //     }
 // // }
-
 
 // // impl CommAllocCollectiveBroadcast for LibfabricAsyncAlloc {
 // //     fn broadcast<T: Remote>(
@@ -1750,7 +1756,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //         root_or_buffer: RootSrcOrLamellarBuffer<T, B>,
 // //         len: usize,
 // //     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
-        
+
 // //         LibfabricAsyncCollectiveBroadcastIntoBufferFuture {
 // //             alloc: self.clone(),
 // //             target: root_or_buffer.into(),
@@ -1761,7 +1767,6 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //         }.into()
 // //     }
 // // }
-
 
 // // impl CommAllocCollectiveScatter for LibfabricAsyncAlloc {
 // //     fn scatter<T: Remote>(
@@ -1790,7 +1795,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //         src_or_root_pe: ScatterInput,
 // //         len: usize,
 // //     ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
-        
+
 // //         LibfabricAsyncCollectiveScatterIntoBufferFuture {
 // //             alloc: self.clone(),
 // //             len,
@@ -1809,7 +1814,7 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 // //         scheduler: &Arc<Scheduler>,
 // //         counters: Option<Arc<[Arc<AMCounters>]>>,
 // //         op: ReduceOp,
-// //         index: usize, 
+// //         index: usize,
 // //         len: usize,
 // //     ) -> CollectiveReduceScatterOpHandle<T> {
 // //         LibfabricAsyncCollectiveReduceScatterFuture {
@@ -1867,13 +1872,20 @@ pub(crate) struct LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T: Remote, B
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferData<T, B> {
     async fn exec_op(mut self) {
         let src = unsafe { &self.alloc.as_slice()[self.index..self.index + self.len] };
-        LibfabricAsyncAlloc::allreduce_inner(&self.alloc, &self.op, src, self.result.as_mut_slice())
-            .await
-            .unwrap();
+        LibfabricAsyncAlloc::allreduce_inner(
+            &self.alloc,
+            &self.op,
+            src,
+            self.result.as_mut_slice(),
+        )
+        .await
+        .unwrap();
     }
 
     pub(crate) fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -1908,7 +1920,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T, B>>
+impl<T: Remote, B: AsLamellarBuffer<T>>
+    From<LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T, B>>
     for CollectiveAllReduceIntoBufferOpHandle<T, B>
 {
     fn from(
@@ -1947,20 +1960,27 @@ struct CollectiveAllReduceInPlaceData<T: Remote, B: AsLamellarBuffer<T>> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLamellarBuffer<T>>
+{
     fut_data: Option<CollectiveAllReduceInPlaceData<T, B>>,
     fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceData<T, B> {
     async fn exec_op(mut self) {
-        LibfabricAsyncAlloc::allreduce_inplace_inner::<T>(&self.alloc, &self.op, self.result.as_mut_slice())
-            .await
-            .unwrap();
+        LibfabricAsyncAlloc::allreduce_inplace_inner::<T>(
+            &self.alloc,
+            &self.op,
+            self.result.as_mut_slice(),
+        )
+        .await
+        .unwrap();
     }
 
     fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     fn spawn(self) -> LamellarTask<()> {
@@ -1987,7 +2007,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
 {
     fn drop(self: Pin<&mut Self>) {
         if self.fut_data.is_some() {
-            RuntimeWarning::DroppedHandle("a LibfabricAsyncCollectiveAllReduceInPlaceFuture").print();
+            RuntimeWarning::DroppedHandle("a LibfabricAsyncCollectiveAllReduceInPlaceFuture")
+                .print();
         }
     }
 }
@@ -2122,7 +2143,8 @@ struct CollectiveReduceIntoBufferDataToRoot<T: Remote, B: AsLamellarBuffer<T>> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>>
+{
     fut_data: Option<CollectiveReduceIntoBufferDataToRoot<T, B>>,
     fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
@@ -2136,7 +2158,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferDataToRoot<T, 
     }
 
     fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     fn spawn(self) -> LamellarTask<()> {
@@ -2198,7 +2222,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future
         }
     }
 }
-
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricAsyncCollectiveReduceInPlaceFuture<T> {
@@ -2297,7 +2320,9 @@ impl<T: Remote> PinnedDrop for LibfabricAsyncCollectiveAllGatherFuture<T> {
     }
 }
 
-impl<T: Remote> From<LibfabricAsyncCollectiveAllGatherFuture<T>> for CollectiveAllGatherOpHandle<T> {
+impl<T: Remote> From<LibfabricAsyncCollectiveAllGatherFuture<T>>
+    for CollectiveAllGatherOpHandle<T>
+{
     fn from(f: LibfabricAsyncCollectiveAllGatherFuture<T>) -> CollectiveAllGatherOpHandle<T> {
         CollectiveAllGatherOpHandle {
             future: CollectiveAllGatherOpFuture::LibfabricAsync(f),
@@ -2331,7 +2356,10 @@ struct CollectiveAllGatherIntoBufferData<T: Remote, B: AsLamellarBuffer<T>> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveAllGatherIntoBufferFuture<
+    T: Remote,
+    B: AsLamellarBuffer<T>,
+> {
     fut_data: Option<CollectiveAllGatherIntoBufferData<T, B>>,
     fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
@@ -2345,7 +2373,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferData<T, B> 
     }
 
     fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     fn spawn(self) -> LamellarTask<()> {
@@ -2378,7 +2408,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<LibfabricAsyncCollectiveAllGatherIntoBufferFuture<T, B>>
+impl<T: Remote, B: AsLamellarBuffer<T>>
+    From<LibfabricAsyncCollectiveAllGatherIntoBufferFuture<T, B>>
     for CollectiveAllGatherIntoBufferOpHandle<T, B>
 {
     fn from(
@@ -2506,7 +2537,8 @@ struct CollectiveGatherIntoBufferData<T: Remote, B: AsLamellarBuffer<T>> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>>
+{
     fut_data: Option<CollectiveGatherIntoBufferData<T, B>>,
     fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
@@ -2520,7 +2552,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferData<T, B> {
     }
 
     fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     fn spawn(self) -> LamellarTask<()> {
@@ -2674,7 +2708,10 @@ struct CollectiveAllToAllIntoBufferData<T: Remote, B: AsLamellarBuffer<T>> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveAllToAllIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveAllToAllIntoBufferFuture<
+    T: Remote,
+    B: AsLamellarBuffer<T>,
+> {
     fut_data: Option<CollectiveAllToAllIntoBufferData<T, B>>,
     fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
@@ -2688,7 +2725,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferData<T, B> {
     }
 
     fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     fn spawn(self) -> LamellarTask<()> {
@@ -2817,7 +2856,9 @@ impl<T: Remote> PinnedDrop for LibfabricAsyncCollectiveBroadcastFuture<T> {
     }
 }
 
-impl<T: Remote> From<LibfabricAsyncCollectiveBroadcastFuture<T>> for CollectiveBroadcastOpHandle<T> {
+impl<T: Remote> From<LibfabricAsyncCollectiveBroadcastFuture<T>>
+    for CollectiveBroadcastOpHandle<T>
+{
     fn from(f: LibfabricAsyncCollectiveBroadcastFuture<T>) -> CollectiveBroadcastOpHandle<T> {
         CollectiveBroadcastOpHandle {
             future: CollectiveBroadcastOpFuture::LibfabricAsync(f),
@@ -2850,7 +2891,10 @@ struct CollectiveBroadcastIntoBufferData<T: Remote, B: AsLamellarBuffer<T>> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveBroadcastIntoBufferFuture<
+    T: Remote,
+    B: AsLamellarBuffer<T>,
+> {
     fut_data: Option<CollectiveBroadcastIntoBufferData<T, B>>,
     fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
@@ -2867,7 +2911,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferData<T, B> 
     }
 
     fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     fn spawn(self) -> LamellarTask<()> {
@@ -2900,7 +2946,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<LibfabricAsyncCollectiveBroadcastIntoBufferFuture<T, B>>
+impl<T: Remote, B: AsLamellarBuffer<T>>
+    From<LibfabricAsyncCollectiveBroadcastIntoBufferFuture<T, B>>
     for CollectiveBroadcastIntoBufferOpHandle<T, B>
 {
     fn from(
@@ -3025,7 +3072,8 @@ struct CollectiveScatterIntoBufferData<T: Remote, B: AsLamellarBuffer<T>> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>>
+{
     fut_data: Option<CollectiveScatterIntoBufferData<T, B>>,
     fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
@@ -3043,7 +3091,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferData<T, B> {
     }
 
     fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     fn spawn(self) -> LamellarTask<()> {
@@ -3168,7 +3218,9 @@ impl<T: Remote> PinnedDrop for LibfabricAsyncCollectiveReduceScatterFuture<T> {
 impl<T: Remote> From<LibfabricAsyncCollectiveReduceScatterFuture<T>>
     for CollectiveReduceScatterOpHandle<T>
 {
-    fn from(f: LibfabricAsyncCollectiveReduceScatterFuture<T>) -> CollectiveReduceScatterOpHandle<T> {
+    fn from(
+        f: LibfabricAsyncCollectiveReduceScatterFuture<T>,
+    ) -> CollectiveReduceScatterOpHandle<T> {
         CollectiveReduceScatterOpHandle {
             future: CollectiveReduceScatterOpFuture::LibfabricAsync(f),
         }
@@ -3202,7 +3254,10 @@ struct CollectiveReduceScatterIntoBufferData<T: Remote, B: AsLamellarBuffer<T>> 
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAsyncCollectiveReduceScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+pub(crate) struct LibfabricAsyncCollectiveReduceScatterIntoBufferFuture<
+    T: Remote,
+    B: AsLamellarBuffer<T>,
+> {
     fut_data: Option<CollectiveReduceScatterIntoBufferData<T, B>>,
     fut: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
 }
@@ -3222,7 +3277,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferData<T,
     }
 
     fn block(self) {
-        self.scheduler.clone().block_on(async move { self.exec_op().await })
+        self.scheduler
+            .clone()
+            .block_on(async move { self.exec_op().await })
     }
 
     fn spawn(self) -> LamellarTask<()> {
@@ -3233,7 +3290,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferData<T,
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncCollectiveReduceScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>>
+    LibfabricAsyncCollectiveReduceScatterIntoBufferFuture<T, B>
+{
     pub(crate) fn block(mut self) {
         self.fut_data.take().unwrap().block()
     }
@@ -3249,8 +3308,10 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
 {
     fn drop(self: Pin<&mut Self>) {
         if self.fut_data.is_some() {
-            RuntimeWarning::DroppedHandle("a LibfabricAsyncCollectiveReduceScatterIntoBufferFuture")
-                .print();
+            RuntimeWarning::DroppedHandle(
+                "a LibfabricAsyncCollectiveReduceScatterIntoBufferFuture",
+            )
+            .print();
         }
     }
 }
@@ -3425,7 +3486,9 @@ impl CommAllocCollectiveAllGather for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 index,
                 len,
-                result: (0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
+                result: (0..len * self.num_pes())
+                    .map(|_| unsafe { std::mem::zeroed() })
+                    .collect(),
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -3469,7 +3532,11 @@ impl CommAllocCollectiveGather for LibfabricAsyncAlloc {
         let target = if root_pe != self.ofi.my_pe {
             RootOrBuffer::NotRoot(root_pe)
         } else {
-            RootOrBuffer::Root((0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect())
+            RootOrBuffer::Root(
+                (0..len * self.num_pes())
+                    .map(|_| unsafe { std::mem::zeroed() })
+                    .collect(),
+            )
         };
         LibfabricAsyncCollectiveGatherFuture {
             fut_data: Some(CollectiveGatherData {
@@ -3521,7 +3588,9 @@ impl CommAllocCollectiveAllToAll for LibfabricAsyncAlloc {
                 alloc: self.clone(),
                 index,
                 len,
-                result: (0..len * self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
+                result: (0..len * self.num_pes())
+                    .map(|_| unsafe { std::mem::zeroed() })
+                    .collect(),
                 scheduler: scheduler.clone(),
                 counters,
             }),
@@ -3563,9 +3632,10 @@ impl CommAllocCollectiveBroadcast for LibfabricAsyncAlloc {
     ) -> CollectiveBroadcastOpHandle<T> {
         let target = match src_or_pe {
             BroadcastInput::Root(index) => RootSrcOrBuffer::Root(index),
-            BroadcastInput::NotRoot(root_pe) => {
-                RootSrcOrBuffer::NotRoot((0..len).map(|_| unsafe { std::mem::zeroed() }).collect(), root_pe)
-            }
+            BroadcastInput::NotRoot(root_pe) => RootSrcOrBuffer::NotRoot(
+                (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
+                root_pe,
+            ),
         };
         LibfabricAsyncCollectiveBroadcastFuture {
             fut_data: Some(CollectiveBroadcastData {
@@ -3661,7 +3731,9 @@ impl CommAllocCollectiveReduceScatter for LibfabricAsyncAlloc {
                 op,
                 index,
                 len,
-                result: (0..len / self.num_pes()).map(|_| unsafe { std::mem::zeroed() }).collect(),
+                result: (0..len / self.num_pes())
+                    .map(|_| unsafe { std::mem::zeroed() })
+                    .collect(),
                 scheduler: scheduler.clone(),
                 counters,
             }),

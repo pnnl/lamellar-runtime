@@ -80,7 +80,7 @@ create_and_tests!(
 create_and_tests!(
     (GlobalLockArray),
     ("Block", "Cyclic"),
-    (u8,isize),
+    (u8, isize),
     (4),
     (4, 9)
 );

@@ -30,7 +30,6 @@ macro_rules! initialize_array {
     };
 }
 
-
 macro_rules! array_or_lock {
     (GlobalLockArray, $array: ident, $lock:ident) => {
         $lock
@@ -76,7 +75,7 @@ macro_rules! broadcast_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     let chunk_len = std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size;
-                    let broadcast_input = if my_pe == root { 
+                    let broadcast_input = if my_pe == root {
                         BroadcastInput::root(tx * tx_size)
                     } else {
                         BroadcastInput::not_root(root)
@@ -119,7 +118,7 @@ macro_rules! broadcast_test{
             //     for tx in (0..num_txs){
             //         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
             //         let chunk_len = std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size;
-            //         let broadcast_input = if my_pe == root { 
+            //         let broadcast_input = if my_pe == root {
             //             BroadcastInput::root(tx * tx_size)
             //         } else {
             //             BroadcastInput::not_root(root)
@@ -167,7 +166,7 @@ macro_rules! broadcast_test{
             //         for tx in (0..num_txs){
             //             // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
             //             let chunk_len = std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size;
-            //             let broadcast_input = if my_pe == root { 
+            //             let broadcast_input = if my_pe == root {
             //                 BroadcastInput::root(tx * tx_size)
             //             } else {
             //                 BroadcastInput::not_root(root)

@@ -164,7 +164,6 @@ pub(crate) struct WorkStealingThread {
     work_flag: Arc<AtomicU8>,
     status: Arc<AtomicU8>,
     panic: Arc<AtomicU8>,
-    
 }
 
 impl WorkStealingThread {
@@ -175,12 +174,10 @@ impl WorkStealingThread {
         // num_tasks: Arc<AtomicUsize>,
         ids: Arc<Vec<CoreId>>,
         _my_pe: usize,
-
     ) -> thread::JoinHandle<()> {
         let builder = thread::Builder::new().name("worker_thread".into());
         builder
             .spawn(move || {
-                
                 let tid = LAMELLAR_THREAD_ID.with(|tid| *tid);
                 // let log_name= format!("lamellar_log-pe-{}-thread-{}-", my_pe, tid);
                 // file_per_thread_logger::initialize(&log_name);
@@ -191,7 +188,6 @@ impl WorkStealingThread {
                     id,
                     tid
                 );
-                
                 let _span = trace_span!("WorkStealingThread::run");
                 core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
@@ -323,7 +319,7 @@ impl LamellarExecutor for WorkStealing {
                         .get(&TaskType::Spawn)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        trace!(target: "collective", "finished spawn task id: {:?} ", task_id);
+                    trace!(target: "collective", "finished spawn task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Spawned Task", task_id = task_id))
@@ -363,7 +359,7 @@ impl LamellarExecutor for WorkStealing {
                         .get(&TaskType::LongSubmit)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        // trace!("finished long submit task id: {:?} ", task_id);
+                    // trace!("finished long submit task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Submitted Task", task_id = task_id))
@@ -398,7 +394,7 @@ impl LamellarExecutor for WorkStealing {
                         .get(&TaskType::Submit)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        trace!(target: "collective", "finished submit task id: {:?} ", task_id);
+                    trace!(target: "collective", "finished submit task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Submitted Task", task_id = task_id))
@@ -434,7 +430,7 @@ impl LamellarExecutor for WorkStealing {
                         .get(&TaskType::Submit)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        trace!(target: "collective", "finished thread submit task id: {:?} ", task_id);
+                    trace!(target: "collective", "finished thread submit task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Submitted Task", task_id = task_id))
@@ -471,7 +467,7 @@ impl LamellarExecutor for WorkStealing {
                         .get(&TaskType::IO)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        // trace!("finished IO task id: {:?} ", task_id);
+                    // trace!("finished IO task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("IO Task", task_id = task_id))
@@ -507,7 +503,7 @@ impl LamellarExecutor for WorkStealing {
                         .get(&TaskType::Immediate)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        // trace!("finished immediate task id: {:?} ", task_id);
+                    // trace!("finished immediate task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Immediate Task", task_id = task_id))
@@ -682,11 +678,11 @@ impl WorkStealing {
             active_cnt: Arc::new(AtomicUsize::new(0)),
             panic,
         };
-        ws.init(Arc::new(core_ids),my_pe);
+        ws.init(Arc::new(core_ids), my_pe);
         ws
     }
     // //#[tracing::instrument(skip_all)]
-    fn init(&mut self, core_ids: Arc<Vec<CoreId>>,my_pe: usize,) {
+    fn init(&mut self, core_ids: Arc<Vec<CoreId>>, my_pe: usize) {
         let mut work_workers: std::vec::Vec<crossbeam::deque::Worker<Runnable<usize>>> = vec![];
         for _i in 0..self.max_num_threads {
             let work_worker: crossbeam::deque::Worker<Runnable<usize>> =

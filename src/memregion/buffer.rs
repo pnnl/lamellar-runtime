@@ -1,11 +1,16 @@
-use std::{marker::PhantomData, ops::Range, ptr::NonNull, sync::{Arc,atomic::AtomicUsize}};
+use std::{
+    marker::PhantomData,
+    ops::Range,
+    ptr::NonNull,
+    sync::{atomic::AtomicUsize, Arc},
+};
 
 use tracing::trace;
 
 use crate::{
-    lamellae::{CommSlice, Remote,Lamellae,CommProgress},
+    lamellae::{CommProgress, CommSlice, Lamellae, Remote},
+    lamellar_team::IntoLamellarTeam,
     memregion::{LamellarMemoryRegion, OneSidedMemoryRegion, SharedMemoryRegion},
-    lamellar_team::{IntoLamellarTeam},
 };
 
 /// Trait implemented by types that can serve as the backing store for a [`LamellarBuffer`].
@@ -263,7 +268,10 @@ impl<T: Remote> LamellarBuffer<T, CommSlice<T>> {
     /// unsafe because multiple handles to the same memory region can be created,
     /// thus user must ensure that nothing else is mutating the memory region
     /// while this buffer exists
-    pub(crate) unsafe fn from_comm_slice(comm_slice: CommSlice<T>,lamellae: Arc<Lamellae>) -> Self {
+    pub(crate) unsafe fn from_comm_slice(
+        comm_slice: CommSlice<T>,
+        lamellae: Arc<Lamellae>,
+    ) -> Self {
         let len = comm_slice.len();
         trace!(target: "lamellae_debug", "creating LamellarBuffer from CommSlice with len {:?} lamellae cnt: {:?}", len, Arc::strong_count(&lamellae));
         LamellarBuffer {
@@ -307,7 +315,7 @@ impl<T: Remote> LamellarBuffer<T, Vec<T>> {
     ///     mem_region.get_into_buffer(my_pe * 10, buf).block();
     /// }
     ///```
-    pub fn from_vec<U: Into<IntoLamellarTeam>>(team: U,vec: Vec<T>) -> Self {
+    pub fn from_vec<U: Into<IntoLamellarTeam>>(team: U, vec: Vec<T>) -> Self {
         let len = vec.len();
         let lamellae = team.into().team.lamellae.clone();
         LamellarBuffer {
@@ -317,7 +325,7 @@ impl<T: Remote> LamellarBuffer<T, Vec<T>> {
             _phantom: PhantomData,
         }
     }
-    pub(crate) fn from_vec_with_lamellae(vec: Vec<T>,lamellae: Arc<Lamellae>) -> Self {
+    pub(crate) fn from_vec_with_lamellae(vec: Vec<T>, lamellae: Arc<Lamellae>) -> Self {
         let len = vec.len();
         trace!(target: "lamellae_debug", "creating LamellarBuffer from Vec with len {:?} lamellae cnt: {:?}", len, Arc::strong_count(&lamellae));
         LamellarBuffer {

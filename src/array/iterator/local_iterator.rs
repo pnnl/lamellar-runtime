@@ -35,7 +35,10 @@ use zip::*;
 pub(crate) use consumer::*;
 
 use crate::array::iterator::{private::*, Schedule};
-use crate::array::{operations::{ElementArithmeticOps,ArrayOps}, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
+use crate::array::{
+    operations::{ArrayOps, ElementArithmeticOps},
+    AsyncTeamFrom, Distribution, InnerArray, LamellarArray,
+};
 use crate::memregion::Dist;
 use crate::LamellarTeam;
 
@@ -696,7 +699,10 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> LocalIterSumHandle<Self::Item>
     where
-        Self::Item: SyncSend + for<'a> std::iter::Sum<&'a Self::Item> + ElementArithmeticOps + std::iter::Sum<Self::Item>,
+        Self::Item: SyncSend
+            + for<'a> std::iter::Sum<&'a Self::Item>
+            + ElementArithmeticOps
+            + std::iter::Sum<Self::Item>,
     {
         self.array().sum(self)
     }
@@ -723,7 +729,10 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum_with_schedule(&self, sched: Schedule) -> LocalIterSumHandle<Self::Item>
     where
-        Self::Item: SyncSend + for<'a> std::iter::Sum<&'a Self::Item> + ElementArithmeticOps + std::iter::Sum<Self::Item>,
+        Self::Item: SyncSend
+            + for<'a> std::iter::Sum<&'a Self::Item>
+            + ElementArithmeticOps
+            + std::iter::Sum<Self::Item>,
     {
         self.array().sum_with_schedule(sched, self)
     }

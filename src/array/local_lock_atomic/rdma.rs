@@ -749,7 +749,9 @@ impl<T: Dist> LocalLockArray<T> {
     ///```
     pub fn blocking_get_buffer_pe(&self, pe: usize, offset: usize, num_elems: usize) -> Vec<T> {
         unsafe {
-            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(self, pe, offset, num_elems, Sealed)
+            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(
+                self, pe, offset, num_elems, Sealed,
+            )
         }
     }
 
@@ -829,7 +831,9 @@ impl<T: Dist> LocalLockArray<T> {
         data: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(self, pe, offset, data, Sealed)
+            <Self as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(
+                self, pe, offset, data, Sealed,
+            )
         }
     }
 
@@ -909,12 +913,11 @@ impl<T: Dist> LamellarRdmaPut<T> for LocalLockArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self
-            .spawn_am_local_tg(InitPutBufferAm {
-                array: self.clone(),
-                index: index,
-                buf: buf.into(),
-            });
+        let _ = self.spawn_am_local_tg(InitPutBufferAm {
+            array: self.clone(),
+            index: index,
+            buf: buf.into(),
+        });
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
         let req = self.exec_am_pe_tg(
@@ -938,21 +941,20 @@ impl<T: Dist> LamellarRdmaPut<T> for LocalLockArray<T> {
         }
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
-        let _ = self
-            .spawn_am_pe_tg(
-                pe,
-                LocalLockRemotePePutAm {
-                    array: self.clone().into(), //inner of the indices we need to place data into
-                    byte_start_index: offset * std::mem::size_of::<T>(),
-                    data: unsafe {
-                        std::slice::from_raw_parts(
-                            &data as *const T as *const u8,
-                            std::mem::size_of::<T>(),
-                        )
-                        .to_vec()
-                    },
+        let _ = self.spawn_am_pe_tg(
+            pe,
+            LocalLockRemotePePutAm {
+                array: self.clone().into(), //inner of the indices we need to place data into
+                byte_start_index: offset * std::mem::size_of::<T>(),
+                data: unsafe {
+                    std::slice::from_raw_parts(
+                        &data as *const T as *const u8,
+                        std::mem::size_of::<T>(),
+                    )
+                    .to_vec()
                 },
-            );
+            },
+        );
     }
     unsafe fn put_pe_buffer<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
@@ -1221,7 +1223,7 @@ impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockGetPeAm {
     array: __LocalLockByteArray, //inner of the indices we need to place data into
-    local_index: usize,         //local index
+    local_index: usize,          //local index
 }
 
 #[lamellar_impl::rt_am]

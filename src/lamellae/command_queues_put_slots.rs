@@ -2,12 +2,10 @@ use super::{
     comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
     Comm, Lamellae, SerializedData,
 };
-use crate::{
-    env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
-};
+use crate::{env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats};
+use async_lock::Mutex;
 use core::panic;
 use parking_lot::RwLock;
-use async_lock::Mutex;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -346,7 +344,8 @@ impl InnerCQ {
                 if panic_buf[pe].cmd != Cmd::Clear {
                     trace!(
                         "pe {} panic_buf not clear {:?}",
-                        pe, &panic_buf[pe] as *const CmdMsg
+                        pe,
+                        &panic_buf[pe] as *const CmdMsg
                     );
                     trace!("panic_buf {:?}", panic_buf[pe]);
                 }
@@ -431,10 +430,15 @@ impl InnerCQ {
                     debug!("got ready from dst({dst}) slot({s}) {:?}", ready);
 
                     let dst_data_full = comm.one_sided_alloc_from_remote_pe_and_addr(
-                        dst, ready.daddr, data.len() + std::mem::size_of::<u64>());
+                        dst,
+                        ready.daddr,
+                        data.len() + std::mem::size_of::<u64>(),
+                    );
                     let dst_data = dst_data_full.comm_slice_at_byte_offset::<u8>(0, data.len());
                     let magic_data = dst_data_full.comm_slice_at_byte_offset::<u64>(data.len(), 1);
-                    dst_data.put_buffer::<u8>(&scheduler, None, data.clone(), dst, 0).await;
+                    dst_data
+                        .put_buffer::<u8>(&scheduler, None, data.clone(), dst, 0)
+                        .await;
                     magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
 
                     sent_cnt.fetch_add(1, Ordering::SeqCst);
@@ -510,16 +514,20 @@ impl InnerCQ {
                     debug!("got ready from dst({dst}) slot({s}) {:?}", ready);
                     data.extend_from_slice(&ready.msg_hash.to_ne_bytes());
 
-                    let dst_data_full = comm.one_sided_alloc_from_remote_pe_and_addr(
-                        dst, ready.daddr, data.len());
+                    let dst_data_full =
+                        comm.one_sided_alloc_from_remote_pe_and_addr(dst, ready.daddr, data.len());
 
                     if let Ok(rt_data) = comm.rt_alloc(data.len(), std::mem::align_of::<u8>()) {
                         let mut data_slice = rt_data.as_comm_slice::<u8>();
                         data_slice.copy_from_slice(&data);
                         put_amt.fetch_add(data.len(), Ordering::Relaxed);
-                        dst_data_full.put_buffer::<u8>(&scheduler, None, data_slice, dst, 0).await;
+                        dst_data_full
+                            .put_buffer::<u8>(&scheduler, None, data_slice, dst, 0)
+                            .await;
                     } else {
-                        dst_data_full.put_buffer::<u8>(&scheduler, None, data, dst, 0).await;
+                        dst_data_full
+                            .put_buffer::<u8>(&scheduler, None, data, dst, 0)
+                            .await;
                     }
 
                     sent_cnt.fetch_add(1, Ordering::SeqCst);
@@ -661,7 +669,8 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    let _ = panic_buf.put_unmanaged::<CmdMsg>(panic_buf[self.my_pe], pe, self.my_pe);
+                    let _ =
+                        panic_buf.put_unmanaged::<CmdMsg>(panic_buf[self.my_pe], pe, self.my_pe);
                 }
             }
             self.comm.thread_wait();
@@ -677,7 +686,8 @@ impl InnerCQ {
             cmd.slot
         );
         let byte_offset = (self.my_pe * N + cmd.slot) * std::mem::size_of::<CmdMsg>();
-        let slot = self.send_buffer_comm_alloc
+        let slot = self
+            .send_buffer_comm_alloc
             .comm_slice_at_byte_offset::<CmdMsg>(byte_offset, 1);
         let mut ready = CmdMsg {
             daddr: alloc_addr,
@@ -836,16 +846,24 @@ impl CQPutSlots {
 
     pub(crate) async fn send_data(&self, data: SerializedData, dst: usize) {
         let mut hash = calc_hash(data.ser_data_bytes.usize_addr(), data.len());
-        if hash == 0 { hash = 1; }
+        if hash == 0 {
+            hash = 1;
+        }
         let data_slice = data.ser_data_bytes.clone();
         self.cq.send(data_slice, dst, hash).await;
     }
 
     pub(crate) async fn send_vec(&self, vec_data: Vec<u8>, dst: usize) {
-        debug!("sending vec_data of len {:?} to dst {:?}", vec_data.len(), dst);
+        debug!(
+            "sending vec_data of len {:?} to dst {:?}",
+            vec_data.len(),
+            dst
+        );
         let vec_data_addr = vec_data.as_ptr() as usize;
         let mut hash = calc_hash(vec_data_addr, vec_data.len());
-        if hash == 0 { hash = 1; }
+        if hash == 0 {
+            hash = 1;
+        }
         self.cq.send_vec(vec_data, dst, hash).await;
     }
 
@@ -890,7 +908,10 @@ impl CQPutSlots {
             for s in 0..N {
                 let send_buffer = self.cq.send_buffer[pe * N + s].read();
                 let recv_buffer = self.cq.recv_buffer[pe * N + s].read();
-                println!("  slot {s}: send={:?} recv={:?}", send_buffer[0], recv_buffer[0]);
+                println!(
+                    "  slot {s}: send={:?} recv={:?}",
+                    send_buffer[0], recv_buffer[0]
+                );
             }
         }
         // println!("finished command queue wait_all_print");
@@ -960,15 +981,21 @@ impl CQPutSlots {
                     };
                     if let Some(cmd) = cmd_opt {
                         // Clear the recv slot before allocating so the sender can reuse it.
-                        self.cq.recv_buffer[src * N + slot_idx].write()[0] =
-                            **self.cq.clear_cmd;
+                        self.cq.recv_buffer[src * N + slot_idx].write()[0] = **self.cq.clear_cmd;
 
-                        debug!("recv_data: Tx from {src} slot {slot_idx} size={}", cmd.dsize);
+                        debug!(
+                            "recv_data: Tx from {src} slot {slot_idx} size={}",
+                            cmd.dsize
+                        );
                         let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
                         let size = cmd.dsize;
 
                         let mut ser_data = loop {
-                            match self.cq.comm.new_serialized_data(size + std::mem::size_of::<u64>()) {
+                            match self
+                                .cq
+                                .comm
+                                .new_serialized_data(size + std::mem::size_of::<u64>())
+                            {
                                 Ok(sd) => break sd,
                                 Err(_) => {
                                     debug!("recv_data: waiting for alloc size={size} src={src} msg_id={msg_id}");
@@ -989,7 +1016,9 @@ impl CQPutSlots {
                         unsafe { (done_flag_addr as *mut u64).write_unaligned(0u64) };
 
                         self.cq.send_ready(src, cmd, data_addr);
-                        debug!("recv_data: sent ready to src[{src}] slot {slot_idx} msg_id={msg_id}");
+                        debug!(
+                            "recv_data: sent ready to src[{src}] slot {slot_idx} msg_id={msg_id}"
+                        );
 
                         let cq = self.cq.clone();
                         let lamellae = lamellae.clone();

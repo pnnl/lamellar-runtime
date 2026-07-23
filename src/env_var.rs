@@ -204,7 +204,7 @@ where
 }
 
 fn default_ucc_oob_init_buffer_size() -> usize {
-    16*1024
+    16 * 1024
 }
 
 #[doc(hidden)]

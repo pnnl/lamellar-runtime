@@ -858,8 +858,10 @@ impl ShmemAllocator {
         barrier2[self.my_pe] = my_base_ptr as usize; //save the start of my segment in my address space
 
         if sub_alloc_pe_id == 0 {
-            let coll_meta =
-                std::slice::from_raw_parts_mut(shmem.base_ptr().add(coll_meta_offset), coll_meta_size);
+            let coll_meta = std::slice::from_raw_parts_mut(
+                shmem.base_ptr().add(coll_meta_offset),
+                coll_meta_size,
+            );
             coll_meta.fill(0);
         }
 

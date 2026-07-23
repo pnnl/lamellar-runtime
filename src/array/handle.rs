@@ -1049,14 +1049,20 @@ pub struct ArrayReduceHandle<T: AmDist> {
 
 impl<T: AmDist> ArrayReduceHandle<T> {
     pub(crate) fn new(req: AmHandle<Vec<u8>>) -> Self {
-        Self { req, _phantom: std::marker::PhantomData }
+        Self {
+            req,
+            _phantom: std::marker::PhantomData,
+        }
     }
 
     fn deserialize(bytes: Vec<u8>) -> Option<T> {
         if bytes.is_empty() {
             None
         } else {
-            Some(crate::deserialize::<T>(&bytes, true).expect("failed to deserialize reduction result"))
+            Some(
+                crate::deserialize::<T>(&bytes, true)
+                    .expect("failed to deserialize reduction result"),
+            )
         }
     }
 

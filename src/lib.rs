@@ -289,7 +289,9 @@ pub(crate) mod warnings;
 pub mod env_var;
 pub use env_var::config;
 
-pub use crate::lamellae::comm::collective::{BroadcastInput, ScatterInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer};
+pub use crate::lamellae::comm::collective::{
+    BroadcastInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput,
+};
 pub use crate::lamellae::Backend;
 pub use crate::lamellae::{
     AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, RdmaHandle,
@@ -313,7 +315,6 @@ pub use crate::scheduler::LamellarTask;
 // //#[doc(hidden)]
 pub use lamellar_impl::Dist;
 
-
 #[cfg(feature = "enable-prof")]
 pub mod prof;
 
@@ -323,7 +324,6 @@ pub use lamellar_prof::init_prof;
 pub use lamellar_prof::init_prof_bt;
 pub use lamellar_prof::prof;
 pub use lamellar_prof::prof_all;
-
 
 #[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::main;

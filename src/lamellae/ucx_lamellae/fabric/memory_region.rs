@@ -10,7 +10,7 @@ use std::{
 
 use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc, UcxBarrier};
 use lamellar_ucx_sys::*;
-use pmi::{pmi::Pmi};
+use pmi::pmi::Pmi;
 
 use tracing::{debug, trace};
 
@@ -40,10 +40,7 @@ impl MemoryHandle {
     }
     pub(crate) fn as_slice<T>(&self) -> &[T] {
         unsafe {
-            std::slice::from_raw_parts(
-                self.addr as *const T,
-                self.size / std::mem::size_of::<T>(),
-            )
+            std::slice::from_raw_parts(self.addr as *const T, self.size / std::mem::size_of::<T>())
         }
     }
 

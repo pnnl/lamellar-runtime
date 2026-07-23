@@ -1,4 +1,29 @@
-use crate::{AsLamellarBuffer, AtomicArray, Dist, ElementArithmeticOps, ElementBitWiseOps, ElementComparePartialEqOps, LamellarBuffer, array::{collective::{broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceIntoBufferHandle}, reduce_scatter_handle::{ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle}}}, lamellae::collective::{BroadcastInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}};
+use crate::{
+    array::collective::{
+        broadcast_handle::{
+            ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle,
+            ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle,
+            ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle,
+        },
+        gather_handle::{
+            ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle,
+            ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle,
+        },
+        reduce_handle::{
+            ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle,
+            ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle,
+            ArrayCollectiveReduceIntoBufferHandle,
+        },
+        reduce_scatter_handle::{
+            ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle,
+        },
+    },
+    lamellae::collective::{
+        BroadcastInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput,
+    },
+    AsLamellarBuffer, AtomicArray, Dist, ElementArithmeticOps, ElementBitWiseOps,
+    ElementComparePartialEqOps, LamellarBuffer,
+};
 
 impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
@@ -22,18 +47,9 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     ///```
     pub unsafe fn sum_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .sum_all(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .sum_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .sum_all(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.sum_all(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.sum_all(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.sum_all(index, len),
         }
     }
 
@@ -58,18 +74,9 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     ///```
     pub unsafe fn prod_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_all(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_all(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.prod_all(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.prod_all(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.prod_all(index, len),
         }
     }
 }
@@ -96,18 +103,9 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     ///```
     pub unsafe fn max_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .max_all(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .max_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .max_all(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.max_all(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.max_all(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.max_all(index, len),
         }
     }
 
@@ -132,18 +130,9 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     ///```
     pub unsafe fn min_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .min_all(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .min_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .min_all(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.min_all(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.min_all(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.min_all(index, len),
         }
     }
 }
@@ -168,20 +157,15 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.bit_and_all(0, 1) }.block();
     ///```
-    pub unsafe fn bit_and_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
+    pub unsafe fn bit_and_all(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveAllReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_and_all(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_and_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_and_all(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.bit_and_all(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.bit_and_all(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.bit_and_all(index, len),
         }
     }
 
@@ -204,20 +188,15 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.bit_xor_all(0, 1) }.block();
     ///```
-    pub unsafe fn bit_xor_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
+    pub unsafe fn bit_xor_all(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveAllReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_xor_all(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_xor_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_xor_all(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.bit_xor_all(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.bit_xor_all(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.bit_xor_all(index, len),
         }
     }
 
@@ -242,19 +221,10 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     ///```
     pub unsafe fn bit_or_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_or_all(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_or_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_or_all(index, len)
-            },
-         }
+            AtomicArray::NetworkAtomicArray(array) => array.bit_or_all(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.bit_or_all(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.bit_or_all(index, len),
+        }
     }
 }
 
@@ -280,20 +250,16 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.sum_all_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn sum_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub unsafe fn sum_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .sum_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .sum_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .sum_all_into_buffer(index, len, buffer)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.sum_all_into_buffer(index, len, buffer),
+            AtomicArray::NativeAtomicArray(array) => array.sum_all_into_buffer(index, len, buffer),
+            AtomicArray::GenericAtomicArray(array) => array.sum_all_into_buffer(index, len, buffer),
         }
     }
 
@@ -318,20 +284,20 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.prod_all_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_all_into_buffer(index, len, buffer)
-            },
+                array.prod_all_into_buffer(index, len, buffer)
+            }
+            AtomicArray::NativeAtomicArray(array) => array.prod_all_into_buffer(index, len, buffer),
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_all_into_buffer(index, len, buffer)
-            },
+                array.prod_all_into_buffer(index, len, buffer)
+            }
         }
     }
 }
@@ -358,20 +324,16 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.max_all_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn max_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub unsafe fn max_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .max_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .max_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .max_all_into_buffer(index, len, buffer)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.max_all_into_buffer(index, len, buffer),
+            AtomicArray::NativeAtomicArray(array) => array.max_all_into_buffer(index, len, buffer),
+            AtomicArray::GenericAtomicArray(array) => array.max_all_into_buffer(index, len, buffer),
         }
     }
 
@@ -396,26 +358,21 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.min_all_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn min_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub unsafe fn min_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .min_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .min_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .min_all_into_buffer(index, len, buffer)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.min_all_into_buffer(index, len, buffer),
+            AtomicArray::NativeAtomicArray(array) => array.min_all_into_buffer(index, len, buffer),
+            AtomicArray::GenericAtomicArray(array) => array.min_all_into_buffer(index, len, buffer),
         }
     }
 }
 
 impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
-
     #[doc(alias("Collective", "collective"))]
     /// Like `bit_and_all` but places the result into caller-supplied `buffer`. Returns an `ArrayCollectiveAllReduceIntoBufferHandle`.
     ///
@@ -437,20 +394,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_and_all_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn bit_and_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_and_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_and_all_into_buffer(index, len, buffer)
-            },
+                array.bit_and_all_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_and_all_into_buffer(index, len, buffer)
-            },
+                array.bit_and_all_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_and_all_into_buffer(index, len, buffer)
-            },
+                array.bit_and_all_into_buffer(index, len, buffer)
+            }
         }
     }
 
@@ -475,20 +434,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_xor_all_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn bit_xor_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_xor_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_xor_all_into_buffer(index, len, buffer)
-            },
+                array.bit_xor_all_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_xor_all_into_buffer(index, len, buffer)
-            },
+                array.bit_xor_all_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_xor_all_into_buffer(index, len, buffer)
-            },
+                array.bit_xor_all_into_buffer(index, len, buffer)
+            }
         }
     }
 
@@ -513,20 +474,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_or_all_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn bit_or_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_or_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_or_all_into_buffer(index, len, buffer)
-            },
+                array.bit_or_all_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_or_all_into_buffer(index, len, buffer)
-            },
+                array.bit_or_all_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_or_all_into_buffer(index, len, buffer)
-            },
+                array.bit_or_all_into_buffer(index, len, buffer)
+            }
         }
     }
 }
@@ -553,22 +516,22 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.sum_all_in_place(buf) }.block();
     ///```
-    pub unsafe fn sum_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
+    pub unsafe fn sum_all_in_place<B: AsLamellarBuffer<T>>(
+        &self,
+        src_and_dst: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .sum_all_in_place(src_and_dst)
-            },
-            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
-
-            // AtomicArray::NativeAtomicArray(array) => {
-            //     array
-            //         .sum_all_in_place(src_and_dst)
-            // },
-            // AtomicArray::GenericAtomicArray(array) => {
-            //     array
-            //         .sum_all_in_place(src_and_dst)
-            // },
+            AtomicArray::NetworkAtomicArray(array) => array.sum_all_in_place(src_and_dst),
+            _ => {
+                todo!("collective reduce operations currently only supported on network atomic arrays")
+            } // AtomicArray::NativeAtomicArray(array) => {
+              //     array
+              //         .sum_all_in_place(src_and_dst)
+              // },
+              // AtomicArray::GenericAtomicArray(array) => {
+              //     array
+              //         .sum_all_in_place(src_and_dst)
+              // },
         }
     }
 
@@ -593,22 +556,22 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.max_all_in_place(buf) }.block();
     ///```
-    pub unsafe fn max_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
+    pub unsafe fn max_all_in_place<B: AsLamellarBuffer<T>>(
+        &self,
+        src_and_dst: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .max_all_in_place(src_and_dst)
-
-            },
-            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
-            // AtomicArray::NativeAtomicArray(array) => {
-            //     array
-            //         .max_all_in_place(src_and_dst)
-            // },
-            // AtomicArray::GenericAtomicArray(array) => {
-            //     array
-            //         .max_all_in_place(src_and_dst)
-            // },
+            AtomicArray::NetworkAtomicArray(array) => array.max_all_in_place(src_and_dst),
+            _ => {
+                todo!("collective reduce operations currently only supported on network atomic arrays")
+            } // AtomicArray::NativeAtomicArray(array) => {
+              //     array
+              //         .max_all_in_place(src_and_dst)
+              // },
+              // AtomicArray::GenericAtomicArray(array) => {
+              //     array
+              //         .max_all_in_place(src_and_dst)
+              // },
         }
     }
 
@@ -633,21 +596,22 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.min_all_in_place(buf) }.block();
     ///```
-    pub unsafe fn min_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
+    pub unsafe fn min_all_in_place<B: AsLamellarBuffer<T>>(
+        &self,
+        src_and_dst: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .min_all_in_place(src_and_dst)
-            },
-            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
-            // AtomicArray::NativeAtomicArray(array) => {
-            //     array
-            //         .min_all_in_place(src_and_dst)
-            // },
-            // AtomicArray::GenericAtomicArray(array) => {
-            //     array
-            //         .min_all_in_place(src_and_dst)
-            // },
+            AtomicArray::NetworkAtomicArray(array) => array.min_all_in_place(src_and_dst),
+            _ => {
+                todo!("collective reduce operations currently only supported on network atomic arrays")
+            } // AtomicArray::NativeAtomicArray(array) => {
+              //     array
+              //         .min_all_in_place(src_and_dst)
+              // },
+              // AtomicArray::GenericAtomicArray(array) => {
+              //     array
+              //         .min_all_in_place(src_and_dst)
+              // },
         }
     }
 
@@ -672,28 +636,27 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.prod_all_in_place(buf) }.block();
     ///```
-    pub unsafe fn prod_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
+    pub unsafe fn prod_all_in_place<B: AsLamellarBuffer<T>>(
+        &self,
+        src_and_dst: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_all_in_place(src_and_dst)
-            },
-            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
-
-            // AtomicArray::NativeAtomicArray(array) => {
-            //     array
-            //         .prod_all_in_place(src_and_dst)
-            // },
-            // AtomicArray::GenericAtomicArray(array) => {
-            //     array
-            //         .prod_all_in_place(src_and_dst)
-            // },
+            AtomicArray::NetworkAtomicArray(array) => array.prod_all_in_place(src_and_dst),
+            _ => {
+                todo!("collective reduce operations currently only supported on network atomic arrays")
+            } // AtomicArray::NativeAtomicArray(array) => {
+              //     array
+              //         .prod_all_in_place(src_and_dst)
+              // },
+              // AtomicArray::GenericAtomicArray(array) => {
+              //     array
+              //         .prod_all_in_place(src_and_dst)
+              // },
         }
     }
 }
 
 impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
-
     #[doc(alias("Collective", "collective"))]
     /// All-reduce bitwise AND in place, using `src_and_dst` as both input and output. Currently only supported on `NetworkAtomicArray`; panics on other array variants.
     ///
@@ -715,13 +678,15 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_and_all_in_place(buf) }.block();
     ///```
-    pub unsafe fn bit_and_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
+    pub unsafe fn bit_and_all_in_place<B: AsLamellarBuffer<T>>(
+        &self,
+        src_and_dst: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_and_all_in_place(src_and_dst)
-            },
-            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+            AtomicArray::NetworkAtomicArray(array) => array.bit_and_all_in_place(src_and_dst),
+            _ => {
+                todo!("collective reduce operations currently only supported on network atomic arrays")
+            }
         }
     }
 
@@ -746,13 +711,15 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_xor_all_in_place(buf) }.block();
     ///```
-    pub unsafe fn bit_xor_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
+    pub unsafe fn bit_xor_all_in_place<B: AsLamellarBuffer<T>>(
+        &self,
+        src_and_dst: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_xor_all_in_place(src_and_dst)
-            },
-            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+            AtomicArray::NetworkAtomicArray(array) => array.bit_xor_all_in_place(src_and_dst),
+            _ => {
+                todo!("collective reduce operations currently only supported on network atomic arrays")
+            }
         }
     }
 
@@ -777,17 +744,18 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_or_all_in_place(buf) }.block();
     ///```
-    pub unsafe fn bit_or_all_in_place<B: AsLamellarBuffer<T>>(&self, src_and_dst: LamellarBuffer<T,B>) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
+    pub unsafe fn bit_or_all_in_place<B: AsLamellarBuffer<T>>(
+        &self,
+        src_and_dst: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllReduceInPlaceHandle<T, B> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_or_all_in_place(src_and_dst)
+            AtomicArray::NetworkAtomicArray(array) => array.bit_or_all_in_place(src_and_dst),
+            _ => {
+                todo!("collective reduce operations currently only supported on network atomic arrays")
             }
-            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
-         }
+        }
     }
 }
-
 
 impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
@@ -809,20 +777,16 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.sum_at_pe(0, 1, 0) }.block();
     ///```
-    pub unsafe fn sum_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn sum_at_pe(
+        &self,
+        index: usize,
+        len: usize,
+        pe: usize,
+    ) -> ArrayCollectiveReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .sum_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .sum_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .sum_at_pe(index, len, pe)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.sum_at_pe(index, len, pe),
+            AtomicArray::NativeAtomicArray(array) => array.sum_at_pe(index, len, pe),
+            AtomicArray::GenericAtomicArray(array) => array.sum_at_pe(index, len, pe),
         }
     }
 
@@ -845,20 +809,16 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.prod_at_pe(0, 1, 0) }.block();
     ///```
-    pub unsafe fn prod_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn prod_at_pe(
+        &self,
+        index: usize,
+        len: usize,
+        pe: usize,
+    ) -> ArrayCollectiveReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_at_pe(index, len, pe)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.prod_at_pe(index, len, pe),
+            AtomicArray::NativeAtomicArray(array) => array.prod_at_pe(index, len, pe),
+            AtomicArray::GenericAtomicArray(array) => array.prod_at_pe(index, len, pe),
         }
     }
 }
@@ -883,20 +843,16 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.max_at_pe(0, 1, 0) }.block();
     ///```
-    pub unsafe fn max_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn max_at_pe(
+        &self,
+        index: usize,
+        len: usize,
+        pe: usize,
+    ) -> ArrayCollectiveReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .max_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .max_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .max_at_pe(index, len, pe)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.max_at_pe(index, len, pe),
+            AtomicArray::NativeAtomicArray(array) => array.max_at_pe(index, len, pe),
+            AtomicArray::GenericAtomicArray(array) => array.max_at_pe(index, len, pe),
         }
     }
 
@@ -919,20 +875,16 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.min_at_pe(0, 1, 0) }.block();
     ///```
-    pub unsafe fn min_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn min_at_pe(
+        &self,
+        index: usize,
+        len: usize,
+        pe: usize,
+    ) -> ArrayCollectiveReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .min_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .min_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .min_at_pe(index, len, pe)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.min_at_pe(index, len, pe),
+            AtomicArray::NativeAtomicArray(array) => array.min_at_pe(index, len, pe),
+            AtomicArray::GenericAtomicArray(array) => array.min_at_pe(index, len, pe),
         }
     }
 }
@@ -957,20 +909,16 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.bit_and_at_pe(0, 1, 0) }.block();
     ///```
-    pub unsafe fn bit_and_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn bit_and_at_pe(
+        &self,
+        index: usize,
+        len: usize,
+        pe: usize,
+    ) -> ArrayCollectiveReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_and_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_and_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_and_at_pe(index, len, pe)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.bit_and_at_pe(index, len, pe),
+            AtomicArray::NativeAtomicArray(array) => array.bit_and_at_pe(index, len, pe),
+            AtomicArray::GenericAtomicArray(array) => array.bit_and_at_pe(index, len, pe),
         }
     }
 
@@ -993,20 +941,16 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.bit_xor_at_pe(0, 1, 0) }.block();
     ///```
-    pub unsafe fn bit_xor_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn bit_xor_at_pe(
+        &self,
+        index: usize,
+        len: usize,
+        pe: usize,
+    ) -> ArrayCollectiveReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_xor_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_xor_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_xor_at_pe(index, len, pe)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.bit_xor_at_pe(index, len, pe),
+            AtomicArray::NativeAtomicArray(array) => array.bit_xor_at_pe(index, len, pe),
+            AtomicArray::GenericAtomicArray(array) => array.bit_xor_at_pe(index, len, pe),
         }
     }
 
@@ -1029,21 +973,16 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.bit_or_at_pe(0, 1, 0) }.block();
     ///```
-    pub unsafe fn bit_or_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
-
+    pub unsafe fn bit_or_at_pe(
+        &self,
+        index: usize,
+        len: usize,
+        pe: usize,
+    ) -> ArrayCollectiveReduceHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_or_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_or_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_or_at_pe(index, len, pe)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.bit_or_at_pe(index, len, pe),
+            AtomicArray::NativeAtomicArray(array) => array.bit_or_at_pe(index, len, pe),
+            AtomicArray::GenericAtomicArray(array) => array.bit_or_at_pe(index, len, pe),
         }
     }
 }
@@ -1070,20 +1009,22 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.sum_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
     ///```
-    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        target: RootOrLamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .sum_at_pe_into_buffer(index, len, target)
-            },
+                array.sum_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .sum_at_pe_into_buffer(index, len, target)
-            },
+                array.sum_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .sum_at_pe_into_buffer(index, len, target)
-            },
+                array.sum_at_pe_into_buffer(index, len, target)
+            }
         }
     }
 
@@ -1108,20 +1049,22 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.prod_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
     ///```
-    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        target: RootOrLamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_at_pe_into_buffer(index, len, target)
-            },
+                array.prod_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_at_pe_into_buffer(index, len, target)
-            },
+                array.prod_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_at_pe_into_buffer(index, len, target)
-            },
+                array.prod_at_pe_into_buffer(index, len, target)
+            }
         }
     }
 }
@@ -1148,20 +1091,22 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.max_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
     ///```
-    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        target: RootOrLamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .max_at_pe_into_buffer(index, len, target)
-            },
+                array.max_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .max_at_pe_into_buffer(index, len, target)
-            },
+                array.max_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .max_at_pe_into_buffer(index, len, target)
-            },
+                array.max_at_pe_into_buffer(index, len, target)
+            }
         }
     }
 
@@ -1186,26 +1131,27 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.min_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
     ///```
-    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        target: RootOrLamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .min_at_pe_into_buffer(index, len, target)
-            },
+                array.min_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .min_at_pe_into_buffer(index, len, target)
-            },
+                array.min_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .min_at_pe_into_buffer(index, len, target)
-            },
+                array.min_at_pe_into_buffer(index, len, target)
+            }
         }
     }
 }
 
 impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
-
     #[doc(alias("Collective", "collective"))]
     /// Like `bit_and_at_pe` but places the result into caller-supplied `target: RootOrLamellarBuffer`.
     ///
@@ -1227,20 +1173,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_and_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
     ///```
-    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        target: RootOrLamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_and_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_and_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_and_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_and_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_and_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_and_at_pe_into_buffer(index, len, target)
+            }
         }
     }
 
@@ -1265,20 +1213,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_xor_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
     ///```
-    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        target: RootOrLamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_xor_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_xor_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_xor_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_xor_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_xor_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_xor_at_pe_into_buffer(index, len, target)
+            }
         }
     }
 
@@ -1303,20 +1253,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_or_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
     ///```
-    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        target: RootOrLamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_or_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_or_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_or_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_or_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_or_at_pe_into_buffer(index, len, target)
-            },
+                array.bit_or_at_pe_into_buffer(index, len, target)
+            }
         }
     }
 }
@@ -1393,7 +1345,6 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
 //     }
 // }
 
-
 impl<T: Dist + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// Gathers `len` elements starting at `index` from every PE, delivering the concatenated result to all PEs.
@@ -1416,18 +1367,9 @@ impl<T: Dist + Default> AtomicArray<T> {
     ///```
     pub unsafe fn gather_all(&self, index: usize, len: usize) -> ArrayCollectiveAllGatherHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .gather_all(index, len)
-            }
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .gather_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .gather_all(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.gather_all(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.gather_all(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.gather_all(index, len),
         }
     }
 
@@ -1452,20 +1394,22 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.gather_all_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
+    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .gather_all_into_buffer(index, len, buffer)
-            },
+                array.gather_all_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .gather_all_into_buffer(index, len, buffer)
-            },
+                array.gather_all_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .gather_all_into_buffer(index, len, buffer)
-            },
+                array.gather_all_into_buffer(index, len, buffer)
+            }
         }
     }
 }
@@ -1490,20 +1434,16 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.gather_at_pe(0, 1, 0) }.block();
     ///```
-    pub unsafe fn gather_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveGatherHandle<T> {
+    pub unsafe fn gather_at_pe(
+        &self,
+        index: usize,
+        len: usize,
+        pe: usize,
+    ) -> ArrayCollectiveGatherHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .gather_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .gather_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .gather_at_pe(index, len, pe)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.gather_at_pe(index, len, pe),
+            AtomicArray::NativeAtomicArray(array) => array.gather_at_pe(index, len, pe),
+            AtomicArray::GenericAtomicArray(array) => array.gather_at_pe(index, len, pe),
         }
     }
 
@@ -1529,20 +1469,22 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.gather_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
     ///```
-    pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
+    pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        target: RootOrLamellarBuffer<T, B>,
+    ) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .gather_at_pe_into_buffer(index, len, target)
-            },
+                array.gather_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .gather_at_pe_into_buffer(index, len, target)
-            },
+                array.gather_at_pe_into_buffer(index, len, target)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .gather_at_pe_into_buffer(index, len, target)
-            },
+                array.gather_at_pe_into_buffer(index, len, target)
+            }
         }
     }
 }
@@ -1567,21 +1509,12 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.alltoall(0, 1) }.block();
     ///```
-    pub unsafe fn alltoall(&self,  index: usize, len: usize) -> ArrayCollectiveAllToAllHandle<T> {
+    pub unsafe fn alltoall(&self, index: usize, len: usize) -> ArrayCollectiveAllToAllHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .alltoall(index, len)
-            }
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .alltoall(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .alltoall(index, len)
-            },
-         }
+            AtomicArray::NetworkAtomicArray(array) => array.alltoall(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.alltoall(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.alltoall(index, len),
+        }
     }
 
     #[doc(alias("Collective", "collective"))]
@@ -1604,20 +1537,20 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.alltoall_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn alltoall_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize,  buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllToAllIntoBufferHandle<T, B> {
+    pub unsafe fn alltoall_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveAllToAllIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .alltoall_into_buffer(index, len, buffer)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .alltoall_into_buffer(index, len, buffer)
-            },
+                array.alltoall_into_buffer(index, len, buffer)
+            }
+            AtomicArray::NativeAtomicArray(array) => array.alltoall_into_buffer(index, len, buffer),
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .alltoall_into_buffer(index, len, buffer)
-            },
+                array.alltoall_into_buffer(index, len, buffer)
+            }
         }
     }
 }
@@ -1642,20 +1575,15 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// world.barrier();
     /// unsafe { array.broadcast_from_pe(BroadcastInput::Root(0), 1) }.block();
     ///```
-    pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput, len: usize) -> ArrayCollectiveBroadcastHandle<T> {
+    pub unsafe fn broadcast_from_pe(
+        &self,
+        src_or_root_pe: BroadcastInput,
+        len: usize,
+    ) -> ArrayCollectiveBroadcastHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .broadcast_from_pe(src_or_root_pe, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .broadcast_from_pe(src_or_root_pe, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .broadcast_from_pe(src_or_root_pe, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.broadcast_from_pe(src_or_root_pe, len),
+            AtomicArray::NativeAtomicArray(array) => array.broadcast_from_pe(src_or_root_pe, len),
+            AtomicArray::GenericAtomicArray(array) => array.broadcast_from_pe(src_or_root_pe, len),
         }
     }
 
@@ -1679,20 +1607,21 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.broadcast_from_pe_into_buffer(RootSrcOrLamellarBuffer::Root(0, buf), 1) }.block();
     ///```
-    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootSrcOrLamellarBuffer<T, B>, len: usize) -> ArrayCollectiveBroadcastIntoBufferHandle<T, B> {
+    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        target: RootSrcOrLamellarBuffer<T, B>,
+        len: usize,
+    ) -> ArrayCollectiveBroadcastIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .broadcast_from_pe_into_buffer(target, len)
-            },
+                array.broadcast_from_pe_into_buffer(target, len)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .broadcast_from_pe_into_buffer(target, len)
-            },
+                array.broadcast_from_pe_into_buffer(target, len)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .broadcast_from_pe_into_buffer(target, len)
-            },
+                array.broadcast_from_pe_into_buffer(target, len)
+            }
         }
     }
 }
@@ -1717,20 +1646,15 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// world.barrier();
     /// unsafe { array.scatter_from_pe(ScatterInput::Root(0), 1) }.block();
     ///```
-    pub unsafe fn scatter_from_pe(&self, src_or_root_pe: ScatterInput, len: usize) -> ArrayCollectiveScatterHandle<T> {
+    pub unsafe fn scatter_from_pe(
+        &self,
+        src_or_root_pe: ScatterInput,
+        len: usize,
+    ) -> ArrayCollectiveScatterHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .scatter_from_pe(src_or_root_pe, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .scatter_from_pe(src_or_root_pe, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .scatter_from_pe(src_or_root_pe, len)
-            }
+            AtomicArray::NetworkAtomicArray(array) => array.scatter_from_pe(src_or_root_pe, len),
+            AtomicArray::NativeAtomicArray(array) => array.scatter_from_pe(src_or_root_pe, len),
+            AtomicArray::GenericAtomicArray(array) => array.scatter_from_pe(src_or_root_pe, len),
         }
     }
 
@@ -1755,24 +1679,25 @@ impl<T: Dist + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.scatter_from_pe_into_buffer(buf, ScatterInput::Root(0), 1) }.block();
     ///```
-    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, buf: LamellarBuffer<T, B>, src_or_root_pe: ScatterInput, len: usize) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
+    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        buf: LamellarBuffer<T, B>,
+        src_or_root_pe: ScatterInput,
+        len: usize,
+    ) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .scatter_from_pe_into_buffer(buf, src_or_root_pe, len)
-            },
+                array.scatter_from_pe_into_buffer(buf, src_or_root_pe, len)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .scatter_from_pe_into_buffer(buf, src_or_root_pe, len)
-            },
+                array.scatter_from_pe_into_buffer(buf, src_or_root_pe, len)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .scatter_from_pe_into_buffer(buf, src_or_root_pe, len)
-            },
+                array.scatter_from_pe_into_buffer(buf, src_or_root_pe, len)
+            }
         }
     }
 }
-
 
 impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
@@ -1794,20 +1719,15 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.sum_scatter(0, 1) }.block();
     ///```
-    pub unsafe fn sum_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn sum_scatter(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .sum_scatter(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .sum_scatter(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .sum_scatter(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.sum_scatter(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.sum_scatter(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.sum_scatter(index, len),
         }
     }
 
@@ -1830,20 +1750,15 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.prod_scatter(0, 1) }.block();
     ///```
-    pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn prod_scatter(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_scatter(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_scatter(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_scatter(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.prod_scatter(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.prod_scatter(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.prod_scatter(index, len),
         }
     }
 }
@@ -1868,20 +1783,15 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.max_scatter(0, 1) }.block();
     ///```
-    pub unsafe fn max_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn max_scatter(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .max_scatter(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .max_scatter(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .max_scatter(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.max_scatter(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.max_scatter(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.max_scatter(index, len),
         }
     }
 
@@ -1904,20 +1814,15 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.min_scatter(0, 1) }.block();
     ///```
-    pub unsafe fn min_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn min_scatter(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .min_scatter(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .min_scatter(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .min_scatter(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.min_scatter(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.min_scatter(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.min_scatter(index, len),
         }
     }
 }
@@ -1942,21 +1847,15 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.bit_and_scatter(0, 1) }.block();
     ///```
-    pub unsafe fn bit_and_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T>
-    {
+    pub unsafe fn bit_and_scatter(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_and_scatter(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_and_scatter(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_and_scatter(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.bit_and_scatter(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.bit_and_scatter(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.bit_and_scatter(index, len),
         }
     }
 
@@ -1979,21 +1878,15 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.bit_xor_scatter(0, 1) }.block();
     ///```
-    pub unsafe fn bit_xor_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T>
-    {
+    pub unsafe fn bit_xor_scatter(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_xor_scatter(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_xor_scatter(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_xor_scatter(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.bit_xor_scatter(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.bit_xor_scatter(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.bit_xor_scatter(index, len),
         }
     }
 
@@ -2016,21 +1909,15 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// world.barrier();
     /// let _result = unsafe { array.bit_or_scatter(0, 1) }.block();
     ///```
-    pub unsafe fn bit_or_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T>
-    {
+    pub unsafe fn bit_or_scatter(
+        &self,
+        index: usize,
+        len: usize,
+    ) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_or_scatter(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_or_scatter(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_or_scatter(index, len)
-            },
+            AtomicArray::NetworkAtomicArray(array) => array.bit_or_scatter(index, len),
+            AtomicArray::NativeAtomicArray(array) => array.bit_or_scatter(index, len),
+            AtomicArray::GenericAtomicArray(array) => array.bit_or_scatter(index, len),
         }
     }
 }
@@ -2056,20 +1943,22 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.sum_scatter_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .sum_scatter_into_buffer(index, len, buffer)
-            },
+                array.sum_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .sum_scatter_into_buffer(index, len, buffer)
-            },
+                array.sum_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .sum_scatter_into_buffer(index, len, buffer)
-            },
+                array.sum_scatter_into_buffer(index, len, buffer)
+            }
         }
     }
 
@@ -2094,20 +1983,22 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.prod_scatter_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_scatter_into_buffer(index, len, buffer)
-            },
+                array.prod_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_scatter_into_buffer(index, len, buffer)
-            },
+                array.prod_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_scatter_into_buffer(index, len, buffer)
-            },
+                array.prod_scatter_into_buffer(index, len, buffer)
+            }
         }
     }
 }
@@ -2134,20 +2025,22 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.max_scatter_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .max_scatter_into_buffer(index, len, buffer)
-            },
+                array.max_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .max_scatter_into_buffer(index, len, buffer)
-            },
+                array.max_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .max_scatter_into_buffer(index, len, buffer)
-            },
+                array.max_scatter_into_buffer(index, len, buffer)
+            }
         }
     }
 
@@ -2172,20 +2065,22 @@ impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.min_scatter_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .min_scatter_into_buffer(index, len, buffer)
-            },
+                array.min_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .min_scatter_into_buffer(index, len, buffer)
-            },
+                array.min_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .min_scatter_into_buffer(index, len, buffer)
-            },
+                array.min_scatter_into_buffer(index, len, buffer)
+            }
         }
     }
 }
@@ -2212,20 +2107,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_and_scatter_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_and_scatter_into_buffer(index, len, buffer)
-            },
+                array.bit_and_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_and_scatter_into_buffer(index, len, buffer)
-            },
+                array.bit_and_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_and_scatter_into_buffer(index, len, buffer)
-            },
+                array.bit_and_scatter_into_buffer(index, len, buffer)
+            }
         }
     }
 
@@ -2250,20 +2147,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_xor_scatter_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_xor_scatter_into_buffer(index, len, buffer)
-            },
+                array.bit_xor_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_xor_scatter_into_buffer(index, len, buffer)
-            },
+                array.bit_xor_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_xor_scatter_into_buffer(index, len, buffer)
-            },
+                array.bit_xor_scatter_into_buffer(index, len, buffer)
+            }
         }
     }
 
@@ -2288,20 +2187,22 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
     /// unsafe { array.bit_or_scatter_into_buffer(0, 1, buf) }.block();
     ///```
-    pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        len: usize,
+        buffer: LamellarBuffer<T, B>,
+    ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .bit_or_scatter_into_buffer(index, len, buffer)
+                array.bit_or_scatter_into_buffer(index, len, buffer)
             }
             AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .bit_or_scatter_into_buffer(index, len, buffer)
-            },
+                array.bit_or_scatter_into_buffer(index, len, buffer)
+            }
             AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .bit_or_scatter_into_buffer(index, len, buffer)
-            },
-         }
+                array.bit_or_scatter_into_buffer(index, len, buffer)
+            }
+        }
     }
 }

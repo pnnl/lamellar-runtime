@@ -54,7 +54,7 @@ impl LamellaeInit for UcxBuilder {
         let cq = ucx.cq();
         trace!("created command queue for ucx");
         let ucx = Arc::new(Lamellae::Ucx(ucx));
-        trace!(target: "lamellae_debug", "created Arc<Lamellae::Ucx> instance lamellae cnt: {:?}", Arc::strong_count(&ucx));    
+        trace!(target: "lamellae_debug", "created Arc<Lamellae::Ucx> instance lamellae cnt: {:?}", Arc::strong_count(&ucx));
         let ucx_clone = ucx.clone();
         let cq_clone = cq.clone();
         scheduler.submit_long_task(async move {
@@ -176,14 +176,10 @@ impl LamellaeUtil for Ucx {
         self.cq.send_alloc(min_size).await;
     }
 
-    async fn send_vec_to_pe_async(
-        &self,
-        pe: usize,
-        vec_data: Vec<u8>,
-    ) {
+    async fn send_vec_to_pe_async(&self, pe: usize, vec_data: Vec<u8>) {
         self.cq.send_vec(vec_data, pe).await;
     }
-    
+
     fn available_to_send(&self, pe: usize) -> bool {
         self.cq.available_to_send(pe)
     }

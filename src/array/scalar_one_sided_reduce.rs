@@ -1,6 +1,4 @@
-use crate::array::{LamellarByteArray,ScalarType};
-
-
+use crate::array::{LamellarByteArray, ScalarType};
 
 /// Runtime tag for the 7 builtin reduction operations.
 #[doc(hidden)]
@@ -15,9 +13,8 @@ pub enum BuiltinOp {
     Xor,
 }
 
-
 #[crabtime::function]
-fn impl_reduce_scalar_type_match(){
+fn impl_reduce_scalar_type_match() {
     let mut reduce_match_arms = Vec::new();
     let mut merge_match_arms = Vec::new();
     let arithmetic_ops = crabtime::quote! {
@@ -31,23 +28,28 @@ fn impl_reduce_scalar_type_match(){
         BuiltinOp::Or   => |a, b| a | b,
         BuiltinOp::Xor  => |a, b| a ^ b,
     };
-    for ty in ["u8", "u16", "u32", "u64", "usize", "u128", "i8", "i16", "i32", "i64", "isize", "i128","bool","f32","f64"].iter() {
-        let mut op_arms = crabtime::quote!{  };
+    for ty in [
+        "u8", "u16", "u32", "u64", "usize", "u128", "i8", "i16", "i32", "i64", "isize", "i128",
+        "bool", "f32", "f64",
+    ]
+    .iter()
+    {
+        let mut op_arms = crabtime::quote! {};
         if *ty == "bool" {
-            op_arms = crabtime::quote!{
+            op_arms = crabtime::quote! {
                 {{bitwise_ops}}
             };
         } else if *ty == "f32" || *ty == "f64" {
-            op_arms = crabtime::quote!{
+            op_arms = crabtime::quote! {
                 {{arithmetic_ops}}
             };
         } else {
-            op_arms = crabtime::quote!{
+            op_arms = crabtime::quote! {
                 {{arithmetic_ops}}
                 {{bitwise_ops}}
             };
         }
-        reduce_match_arms.push(crabtime::quote!{
+        reduce_match_arms.push(crabtime::quote! {
             ScalarType::{{ty}} => {
                 let local = self.data.local_data::<{{ty}}>().await;
                 let closure: fn({{ty}}, {{ty}}) -> {{ty}} = match self.op {
@@ -76,7 +78,7 @@ fn impl_reduce_scalar_type_match(){
     let reduce_match_arms = reduce_match_arms.join("\n");
     let merge_match_arms = merge_match_arms.join("\n");
 
-    crabtime::output!{
+    crabtime::output! {
         async fn reduce_scalar_local(&self) -> Vec<u8> {
             match self.scalar_type {
                 {{reduce_match_arms}}
@@ -122,28 +124,31 @@ impl ScalarBuiltinReductionAm {
 
 #[lamellar_impl::rt_am]
 impl LamellarAM for ScalarBuiltinReductionAm {
-
-    
-
     async fn exec(&self) -> Vec<u8> {
         if self.start_pe == self.end_pe {
             self.reduce_scalar_local().await
         } else {
             let mid_pe = (self.start_pe + self.end_pe) / 2;
-            let left = __lamellar_team.spawn_am_pe(self.start_pe, ScalarBuiltinReductionAm {
-                data: self.data.clone(),
-                start_pe: self.start_pe,
-                end_pe: mid_pe,
-                scalar_type: self.scalar_type,
-                op: self.op,
-            });
-            let right = __lamellar_team.spawn_am_pe(mid_pe + 1, ScalarBuiltinReductionAm {
-                data: self.data.clone(),
-                start_pe: mid_pe + 1,
-                end_pe: self.end_pe,
-                scalar_type: self.scalar_type,
-                op: self.op,
-            });
+            let left = __lamellar_team.spawn_am_pe(
+                self.start_pe,
+                ScalarBuiltinReductionAm {
+                    data: self.data.clone(),
+                    start_pe: self.start_pe,
+                    end_pe: mid_pe,
+                    scalar_type: self.scalar_type,
+                    op: self.op,
+                },
+            );
+            let right = __lamellar_team.spawn_am_pe(
+                mid_pe + 1,
+                ScalarBuiltinReductionAm {
+                    data: self.data.clone(),
+                    start_pe: mid_pe + 1,
+                    end_pe: self.end_pe,
+                    scalar_type: self.scalar_type,
+                    op: self.op,
+                },
+            );
             let left_bytes = left.await;
             let right_bytes = right.await;
             self.merge_scalar(left_bytes, right_bytes).await
@@ -152,12 +157,8 @@ impl LamellarAM for ScalarBuiltinReductionAm {
 }
 
 impl ScalarBuiltinReductionAm {
-    pub(crate) fn new(
-        data: LamellarByteArray,
-        scalar_type: ScalarType,
-        op: BuiltinOp,
-    ) -> Self {
-        let num_pes = data.team().num_pes()-1;
+    pub(crate) fn new(data: LamellarByteArray, scalar_type: ScalarType, op: BuiltinOp) -> Self {
+        let num_pes = data.team().num_pes() - 1;
         Self {
             data,
             start_pe: 0,

@@ -117,7 +117,7 @@ macro_rules! fetch_rem_test {
             }
             #[allow(unused_mut)]
             for req in reqs {
-                let _val =req.block() as u128;
+                let _val = req.block() as u128;
             }
         }
         array.wait_all();

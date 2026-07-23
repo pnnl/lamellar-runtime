@@ -1,6 +1,6 @@
 pub(crate) mod atomic;
-pub(crate) mod comm;
 pub(crate) mod collective;
+pub(crate) mod comm;
 pub(crate) mod fabric;
 pub(crate) mod mem;
 pub(crate) mod rdma;
@@ -190,14 +190,10 @@ impl LamellaeUtil for Libfabric {
         self.cq.send_alloc(min_size).await;
     }
 
-    async fn send_vec_to_pe_async(
-        &self,
-        pe: usize,
-        vec_data: Vec<u8>,
-    ) {
+    async fn send_vec_to_pe_async(&self, pe: usize, vec_data: Vec<u8>) {
         self.cq.send_vec(vec_data, pe).await;
     }
-    
+
     fn available_to_send(&self, pe: usize) -> bool {
         self.cq.available_to_send(pe)
     }

@@ -39,7 +39,6 @@ fn type_to_string(ty: &syn::Type) -> String {
     }
 }
 
-
 fn gen_multi_val_multi_idx(
     op_type: proc_macro2::TokenStream,
     lock: &proc_macro2::TokenStream,
@@ -260,7 +259,7 @@ fn create_buf_ops(
             quote! {let mut slice = unsafe{self.data.__local_as_mut_slice()};},
         )
     } else if array_type == "NativeAtomicArray" {
-            panic!("native atomics should be handled differently, this should never happen")
+        panic!("native atomics should be handled differently, this should never happen")
     } else if array_type == "LocalLockArray" || array_type == "GlobalLockArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard

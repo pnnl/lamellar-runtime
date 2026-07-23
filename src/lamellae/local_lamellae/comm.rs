@@ -124,7 +124,7 @@ impl CommInfo for LocalComm {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
             / 1_000_000.0
     }
-    
+
     fn collective_avail<T: 'static>(&self, _op: CollectiveOpKind) -> bool {
         true // all collectives are available since they are all noop
     }

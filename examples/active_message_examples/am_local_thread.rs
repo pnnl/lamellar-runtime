@@ -29,7 +29,7 @@ fn main() {
         // Launch one AM per thread, each pinned to a specific thread index.
         // Collect the LamellarTask handles for use with join_all.
         let handles: Vec<_> = (0..num_threads)
-            .map(|thread| team.exec_am_local_thread(ThreadIdAm{}, thread).spawn())
+            .map(|thread| team.exec_am_local_thread(ThreadIdAm {}, thread).spawn())
             .collect();
 
         // join_all awaits all futures concurrently without blocking the caller thread.

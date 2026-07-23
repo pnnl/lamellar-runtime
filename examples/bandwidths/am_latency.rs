@@ -47,15 +47,7 @@ fn main() {
 
     // sizes: 0B through 32MB in powers of 4, plus a few intermediate points
     let sizes: &[usize] = &[
-        0,
-        8,
-        64,
-        512,
-        4_096,
-        16_384,
-        65_536,
-        131_072,
-        524_288,
+        0, 8, 64, 512, 4_096, 16_384, 65_536, 131_072, 524_288,
         1_048_576,
         // 4_194_304,
         // 16_777_216,
@@ -69,8 +61,8 @@ fn main() {
 
     if my_pe == 0 {
         let cq_variant = std::env::var("LAMELLAR_CMD_QUEUE").unwrap_or_else(|_| "get".to_owned());
-        let threshold = std::env::var("LAMELLAR_AM_SIZE_THRESHOLD")
-            .unwrap_or_else(|_| "100000".to_owned());
+        let threshold =
+            std::env::var("LAMELLAR_AM_SIZE_THRESHOLD").unwrap_or_else(|_| "100000".to_owned());
         println!(
             "# AM latency  cmd_queue={cq_variant}  am_size_threshold={threshold}  \
              pe0->pe{dst}  iters={ITERS}"
@@ -94,7 +86,9 @@ fn main() {
 
         if my_pe == 0 {
             for _ in 0..WARMUP {
-                world.exec_am_pe(dst, LatencyAM { data: data.clone() }).block();
+                world
+                    .exec_am_pe(dst, LatencyAM { data: data.clone() })
+                    .block();
             }
         }
         world.barrier();
@@ -103,7 +97,9 @@ fn main() {
         if my_pe == 0 {
             for _ in 0..ITERS {
                 let t = Instant::now();
-                world.exec_am_pe(dst, LatencyAM { data: data.clone() }).block();
+                world
+                    .exec_am_pe(dst, LatencyAM { data: data.clone() })
+                    .block();
                 latencies.push(t.elapsed().as_nanos() as u64);
             }
         }
@@ -141,7 +137,9 @@ fn main() {
 
         if my_pe == 0 {
             for _ in 0..WARMUP {
-                world.spawn_am_pe(dst, LatencyAM { data: data.clone() }).block();
+                world
+                    .spawn_am_pe(dst, LatencyAM { data: data.clone() })
+                    .block();
             }
         }
         world.barrier();
@@ -150,7 +148,9 @@ fn main() {
         if my_pe == 0 {
             for _ in 0..ITERS {
                 let t = Instant::now();
-                world.spawn_am_pe(dst, LatencyAM { data: data.clone() }).block();
+                world
+                    .spawn_am_pe(dst, LatencyAM { data: data.clone() })
+                    .block();
                 latencies.push(t.elapsed().as_nanos() as u64);
             }
         }
@@ -232,7 +232,7 @@ fn main() {
         let data = vec![42u8; size];
 
         for _ in 0..WARMUP {
-            world.spawn_am_all( LatencyAM { data: data.clone() }).block();
+            world.spawn_am_all(LatencyAM { data: data.clone() }).block();
         }
         world.barrier();
 
@@ -277,12 +277,14 @@ fn main() {
 
         world.barrier();
 
-        let mut latencies: Vec<u64> = Vec::with_capacity(ITERS+1);
+        let mut latencies: Vec<u64> = Vec::with_capacity(ITERS + 1);
         if my_pe == 0 {
             let timer = Instant::now();
             for _ in 0..ITERS {
                 let t = Instant::now();
-                let _ = world.exec_am_pe(dst, LatencyAM { data: data.clone() }).spawn();
+                let _ = world
+                    .exec_am_pe(dst, LatencyAM { data: data.clone() })
+                    .spawn();
                 latencies.push(t.elapsed().as_nanos() as u64);
             }
             world.wait_all();
@@ -324,7 +326,7 @@ fn main() {
 
         world.barrier();
 
-        let mut latencies: Vec<u64> = Vec::with_capacity(ITERS+1);
+        let mut latencies: Vec<u64> = Vec::with_capacity(ITERS + 1);
         if my_pe == 0 {
             let timer = Instant::now();
             for _ in 0..ITERS {
@@ -443,6 +445,4 @@ fn main() {
         }
         world.barrier();
     }
-
-
 }

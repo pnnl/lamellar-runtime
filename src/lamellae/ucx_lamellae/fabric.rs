@@ -4,22 +4,25 @@ mod error;
 mod memory_region;
 mod worker;
 
+use super::ucc::UccLib;
+use crate::config;
+use crate::lamellae::CollectiveOpKind;
 use context::Context;
 use endpoint::Endpoint;
 pub(crate) use endpoint::UcxRequest;
 use endpoint::ATOMIC_PUT_TMP;
 use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
 use worker::Worker;
-use crate::config;
-use crate::lamellae::CollectiveOpKind;
-use super::ucc::UccLib;
 
 #[cfg(feature = "enable-on-node-shmem")]
 use crate::config;
 use crate::{
     lamellae::{
-        comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
-        collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone},  ucx_lamellae::ucc::{self, Error, UccContext, UccRequest, UccTeam}, CommAllocAddr, CommAllocInner, FabricError
+        collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone},
+        comm::alloc::*,
+        ucx_lamellae::ucc::{self, Error, UccContext, UccRequest, UccTeam},
+        AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc, CommAllocAddr,
+        CommAllocInner, FabricError,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -240,7 +243,7 @@ impl UcxWorld {
             .iter()
             .map(|a| Endpoint::new(worker.clone(), a).unwrap())
             .collect::<Vec<_>>();
-        
+
         let my_pe = my_pmi.rank();
         let num_pes = my_pmi.ranks().len();
         #[cfg(feature = "enable-on-node-shmem")]
@@ -281,8 +284,7 @@ impl UcxWorld {
         )
         .unwrap();
 
-        Self::warmup_peer_puts( &worker, &exchange_buffer, my_pe, num_pes);
-
+        Self::warmup_peer_puts(&worker, &exchange_buffer, my_pe, num_pes);
 
         let barrier_buffer = Self::initial_alloc(
             false,
@@ -304,7 +306,7 @@ impl UcxWorld {
         .unwrap();
 
         // Self::warmup_peer_puts( &worker, &barrier_buffer, my_pe, num_pes);
-    
+
         let mut world = UcxWorld {
             pmi: my_pmi.clone(),
             my_pe,
@@ -330,9 +332,15 @@ impl UcxWorld {
             )))),
             ucc_world_buffer: None,
         };
-        my_pmi.barrier(false).expect("Failed to perform barrier after initial allocations");
-    
-        let alloc = Arc::new(world.alloc(config().ucc_oob_init_buffer_size * world.num_pes, 8, AllocationType::Global));
+        my_pmi
+            .barrier(false)
+            .expect("Failed to perform barrier after initial allocations");
+
+        let alloc = Arc::new(world.alloc(
+            config().ucc_oob_init_buffer_size * world.num_pes,
+            8,
+            AllocationType::Global,
+        ));
         world.ucc_world_buffer = Some(alloc.clone());
 
         unsafe { alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX) };
@@ -345,7 +353,13 @@ impl UcxWorld {
         unsafe { alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX) };
         world.barrier();
         // my_pmi.barrier(false);
-        let ucc_world_team = UccTeam::new(my_pe, &(0..num_pes).collect::<Vec<_>>(), ucc_context.clone(), alloc.clone()).unwrap();
+        let ucc_world_team = UccTeam::new(
+            my_pe,
+            &(0..num_pes).collect::<Vec<_>>(),
+            ucc_context.clone(),
+            alloc.clone(),
+        )
+        .unwrap();
 
         world.ucc_context = Some(ucc_context);
         world.ucc_world_team = Some(Arc::new(ucc_world_team));
@@ -355,12 +369,7 @@ impl UcxWorld {
     // Found this was necessary in the offchance that the first call to a intranode PE
     // happened simultaneously (in a MT environment) with other operations like progress or flush
     // if this becomes a bottleneck it may be sufficient to just do a put to each node instead of each PE, but for now we will do it to each PE to be safe
-    fn warmup_peer_puts(
-        worker: &Arc<Worker>,
-        buffer: &UcxAlloc,
-        my_pe: usize,
-        num_pes: usize,
-    ) {
+    fn warmup_peer_puts(worker: &Arc<Worker>, buffer: &UcxAlloc, my_pe: usize, num_pes: usize) {
         for pe in 0..num_pes {
             if pe == my_pe {
                 continue;
@@ -683,7 +692,12 @@ impl UcxWorld {
         };
         let ucc_team = self.ucc_context.as_ref().and_then(|ctx| {
             UccTeam::new_sub_team(self.my_pe, pes, ctx.clone())
-                .map_err(|e| eprintln!("Failed to create UCC sub-team, falling back to manual collectives: {:?}", e))
+                .map_err(|e| {
+                    eprintln!(
+                        "Failed to create UCC sub-team, falling back to manual collectives: {:?}",
+                        e
+                    )
+                })
                 .ok()
         });
         let alloc = UcxAlloc::new(
@@ -704,7 +718,7 @@ impl UcxWorld {
             buffer_keys_map.clone(),
             self.mem_handles.clone(),
             self.remote_keys.clone(),
-            ucc_team.map(Arc::new)
+            ucc_team.map(Arc::new),
         )
         .expect("UcxAlloc::new failed");
         self.mem_handles.lock().unwrap().push(alloc.clone());
@@ -725,7 +739,10 @@ impl UcxWorld {
         self.worker.progress();
 
         if let Some(ucc_team) = &self.ucc_world_team {
-            ucc_team.context.progress().expect("Failed to progress UCC context");
+            ucc_team
+                .context
+                .progress()
+                .expect("Failed to progress UCC context");
         }
     }
 
@@ -1145,7 +1162,6 @@ impl UcxAlloc {
             ucc_team,
         };
 
-
         unsafe {
             (&*(alloc.mem.inner.as_ptr().add(alloc.fabric_ref_cnt_offset) as *mut AtomicUsize))
                 .store(encoded, Ordering::SeqCst);
@@ -1215,7 +1231,6 @@ impl UcxAlloc {
             alloc_table: self.alloc_table.clone(),
             ucc_team: self.ucc_team.clone(),
         };
-
 
         debug!(target: "ucx", "Created UCX sub-allocation: {:?}", alloc);
         Ok(alloc)
@@ -1345,7 +1360,6 @@ impl UcxAlloc {
             ),
             ucc_team: self.ucc_team.clone(),
         };
-
 
         debug!(target: "ucx", "Converted UCX alloc to rt-alloc: {:?}", alloc);
         Ok(alloc)
@@ -1684,8 +1698,7 @@ impl UcxAlloc {
         blocking: bool,
     ) -> Result<Option<UccRequest>, ucc::Error> {
         if let Some(ucc_team) = &self.ucc_team {
-            let req = ucc_team
-                .allgather(src, result)?;
+            let req = ucc_team.allgather(src, result)?;
 
             if blocking {
                 self.wait_ucc_request(&req)?;
@@ -1706,8 +1719,7 @@ impl UcxAlloc {
         blocking: bool,
     ) -> Result<Option<UccRequest>, ucc::Error> {
         if let Some(ucc_team) = &self.ucc_team {
-            let req = ucc_team
-                .allreduce(src, result, op.clone())?;
+            let req = ucc_team.allreduce(src, result, op.clone())?;
             if blocking {
                 self.wait_ucc_request(&req)?;
                 Ok(None)
@@ -1725,7 +1737,8 @@ impl UcxAlloc {
         src_and_result: &mut [T],
         blocking: bool,
     ) -> Result<Option<UccRequest>, ucc::Error> {
-        let src = unsafe { std::slice::from_raw_parts(src_and_result.as_ptr(), src_and_result.len()) };
+        let src =
+            unsafe { std::slice::from_raw_parts(src_and_result.as_ptr(), src_and_result.len()) };
         self.allreduce_inner(op, src, src_and_result, blocking)
     }
 
@@ -1816,9 +1829,10 @@ impl UcxAlloc {
     ) -> Result<Option<UccRequest>, ucc::Error> {
         if let Some(ucc_team) = &self.ucc_team {
             let (res, root_pe) = match root_src {
-                RootSrcOrSliceMut::Root(src) => {
-                    (unsafe { std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len()) }, self.my_pe)
-                }
+                RootSrcOrSliceMut::Root(src) => (
+                    unsafe { std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len()) },
+                    self.my_pe,
+                ),
                 RootSrcOrSliceMut::NotRoot(result, root_pe) => (result, root_pe),
             };
 
@@ -1844,9 +1858,10 @@ impl UcxAlloc {
         if let Some(ucc_team) = &self.ucc_team {
             let (src, root_pe) = match src_or_root_pe {
                 RootSrcSliceOrNone::Root(src) => (src, self.my_pe),
-                RootSrcSliceOrNone::NotRoot(root_pe) => {
-                    (unsafe { std::slice::from_raw_parts(res.as_ptr(), res.len()) }, root_pe)
-                }
+                RootSrcSliceOrNone::NotRoot(root_pe) => (
+                    unsafe { std::slice::from_raw_parts(res.as_ptr(), res.len()) },
+                    root_pe,
+                ),
             };
 
             let req = ucc_team.scatter(src, res, root_pe)?;
@@ -1886,12 +1901,11 @@ impl UcxAlloc {
             while let Err(err) = req.test() {
                 if !matches!(err, Error::Inprogress) {
                     return Err(err);
-                } 
+                }
                 ucc_team.context.progress()?;
             }
             Ok(())
-        }
-        else {
+        } else {
             panic!("UCC team not initialized for waiting on UCC request");
         }
     }
@@ -1908,8 +1922,12 @@ impl UcxAlloc {
         if let Some(ucc_team) = &self.ucc_team {
             loop {
                 ucc_team.context.progress().unwrap();
-                let completed = ucc_team.req_completed.load(std::sync::atomic::Ordering::SeqCst);
-                let pending = ucc_team.req_pending.load(std::sync::atomic::Ordering::SeqCst);
+                let completed = ucc_team
+                    .req_completed
+                    .load(std::sync::atomic::Ordering::SeqCst);
+                let pending = ucc_team
+                    .req_pending
+                    .load(std::sync::atomic::Ordering::SeqCst);
                 if completed == pending {
                     break;
                 }
@@ -1928,8 +1946,6 @@ impl UcxAlloc {
 
         self.wait_ucc_all();
     }
-
-
 
     pub(crate) fn wait(&self) {
         self.worker

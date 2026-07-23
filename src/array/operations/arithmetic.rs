@@ -20,10 +20,6 @@ pub trait ElementArithmeticOps:
 {
 }
 
-
-
-
-
 // We dont want to auto derive this because we want to require that users
 // use the #[AmData(ArrayOps(Arithmetic))] macro to derive it for them
 // impl<T> ElementArithmeticOps for T where
@@ -1908,7 +1904,6 @@ pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
         idx_vals: impl Iterator<Item = (usize, T)>,
         fetch: bool,
     ) -> Option<Vec<T>>;
-
 }
 
 // macro_rules! impl_local_arithmetic_op {

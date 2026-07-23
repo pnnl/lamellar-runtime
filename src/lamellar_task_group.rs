@@ -3,7 +3,7 @@ use crate::{
     active_messaging::*,
     barrier::BarrierHandle,
     env_var::config,
-    lamellae::{CommProgress},
+    lamellae::CommProgress,
     lamellar_arch::LamellarArchRT,
     lamellar_request::LamellarRequest,
     lamellar_request::*,
@@ -335,7 +335,13 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
 
         let reqs = map.entry(sub_id).or_insert_with(|| HashMap::new());
         reqs.insert(pe, data);
-        trace!("added result for pe {} to sub_id {}, total results for sub_id {} is now {}", pe, sub_id, sub_id, reqs.len());
+        trace!(
+            "added result for pe {} to sub_id {}, total results for sub_id {} is now {}",
+            pe,
+            sub_id,
+            sub_id,
+            reqs.len()
+        );
 
         if reqs.len() == self.arch.num_pes() {
             if let Some(waker) = self.wakers.lock().remove(&sub_id) {
@@ -547,7 +553,11 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
                 })
                 .or_insert(waker.clone());
         }
-        trace!("ready_or_set_waker for sub_id {} returning {}", self.sub_id, ready);
+        trace!(
+            "ready_or_set_waker for sub_id {} returning {}",
+            self.sub_id,
+            ready
+        );
         ready
     }
 
@@ -898,7 +908,11 @@ impl ActiveMessaging for LamellarTaskGroup {
     {
         self.team.scheduler.spawn_task(
             task,
-            Some(Arc::from([self.team.world_counters.clone(), self.team.team_counters.clone(), self.counters.clone()])),
+            Some(Arc::from([
+                self.team.world_counters.clone(),
+                self.team.team_counters.clone(),
+                self.counters.clone(),
+            ])),
         )
     }
     fn block_on<F>(&self, f: F) -> F::Output
@@ -920,7 +934,11 @@ impl ActiveMessaging for LamellarTaskGroup {
             .block_on(join_all(iter.into_iter().map(|task| {
                 self.team.scheduler.spawn_task(
                     task,
-                    Some(Arc::from([self.team.world_counters.clone(), self.team.team_counters.clone(), self.counters.clone()])),
+                    Some(Arc::from([
+                        self.team.world_counters.clone(),
+                        self.team.team_counters.clone(),
+                        self.counters.clone(),
+                    ])),
                 )
             })))
     }

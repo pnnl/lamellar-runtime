@@ -12,8 +12,7 @@ fn create_reduction(
     op: proc_macro2::TokenStream,
     array_types: &Vec<syn::Ident>,
 ) -> proc_macro2::TokenStream {
-    let lamellar = 
-        quote::format_ident!("__lamellar");
+    let lamellar = quote::format_ident!("__lamellar");
 
     let am_data: syn::Path = syn::parse("lamellar::AmData".parse().unwrap()).unwrap();
     let am: syn::Path = syn::parse("lamellar::am".parse().unwrap()).unwrap();
@@ -21,8 +20,7 @@ fn create_reduction(
     let reduction_gen = quote::format_ident!("{:}_{:}_reduction_gen", typeident, reduction);
     let reduction_id_gen = quote::format_ident!("{:}_{:}_reduction_id", typeident, reduction);
 
-    let reduction_name =
-        quote::format_ident!("{:}_{:}_reduction", typeident, reduction);
+    let reduction_name = quote::format_ident!("{:}_{:}_reduction", typeident, reduction);
 
     // Recursive branch: left/right return Option<Vec<u8>>; deserialize, apply op, re-serialize.
     let array_impls = quote! {
@@ -72,9 +70,8 @@ fn create_reduction(
         }
     };
 
-     let mut gen_match_stmts = quote! {};
+    let mut gen_match_stmts = quote! {};
 
-    
     gen_match_stmts.extend(quote! {
         #lamellar::array::LamellarByteArray::NativeAtomicArray(_) => panic!("this type is not a native atomic"),
         #lamellar::array::LamellarByteArray::NetworkAtomicArray(_) => panic!("this type is not a network atomic"),

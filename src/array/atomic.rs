@@ -1,9 +1,9 @@
 //! This module provides the implementation of the `AtomicArray` type, which is a distributed array that uses atomic operations for thread-safe access. The array can be backed either by native atomics or mutex based atomics
 
+pub(crate) mod collective;
 mod iteration;
 pub(crate) mod operations;
 pub(crate) mod rdma;
-pub(crate) mod collective;
 
 pub(crate) mod handle;
 pub use handle::AtomicArrayHandle;
@@ -1142,9 +1142,9 @@ impl<T: Dist + 'static> AtomicArray<T> {
 
     pub(crate) fn get_element_ref(&self, index: usize) -> Option<AtomicElementRef<'_, T>> {
         match self {
-            AtomicArray::NativeAtomicArray(array) => Some(AtomicElementRef::NativeAtomicElementRef(
-                array.get_element_ref(index)?,
-            )),
+            AtomicArray::NativeAtomicArray(array) => Some(
+                AtomicElementRef::NativeAtomicElementRef(array.get_element_ref(index)?),
+            ),
             AtomicArray::GenericAtomicArray(array) => Some(
                 AtomicElementRef::GenericAtomicElementRef(array.get_element_ref(index)?),
             ),

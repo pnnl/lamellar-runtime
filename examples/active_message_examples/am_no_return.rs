@@ -11,8 +11,6 @@ use lamellar::active_messaging::prelude::*;
 
 // use tracing_flame::FlameLayer;
 
-
-
 //----------------- Active message returning nothing-----------------//
 #[lamellar::AmData(Debug, Clone)]
 struct AmNoReturn {
@@ -50,7 +48,6 @@ async fn test_am_no_return_async() {
     std::thread::sleep(std::time::Duration::from_millis(2));
 }
 
-
 #[lamellar::main]
 fn main() {
     let start = std::time::Instant::now();
@@ -72,36 +69,50 @@ fn main() {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
         // we can use exec_am_pe which returns a lazy future that we can block on to get the result
-        let res = world.exec_am_pe(my_pe, AmNoReturn {
-            my_pe: my_pe,
-            test_var: 0,
-        }).block();
+        let res = world
+            .exec_am_pe(
+                my_pe,
+                AmNoReturn {
+                    my_pe: my_pe,
+                    test_var: 0,
+                },
+            )
+            .block();
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
         // we can also use spawn_am_pe which eagerly executes the am and returns a future that we can block on to get the result
-        let res = world.spawn_am_pe(num_pes - 1, AmNoReturn {
-            my_pe: my_pe,
-            test_var: 1,
-        }).block();
+        let res = world
+            .spawn_am_pe(
+                num_pes - 1,
+                AmNoReturn {
+                    my_pe: my_pe,
+                    test_var: 1,
+                },
+            )
+            .block();
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
         println!("Testing all am no return");
         println!("[{:?}] exec on all", my_pe);
-        let res = world.exec_am_all(AmNoReturn {
-            my_pe: my_pe,
-            test_var: 2,
-        }).block();
+        let res = world
+            .exec_am_all(AmNoReturn {
+                my_pe: my_pe,
+                test_var: 2,
+            })
+            .block();
         assert!(res.iter().all(|x| *x == ()));
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
         println!("Testing spawn all am no return");
         println!("[{:?}] spawn on all", my_pe);
-        let res = world.spawn_am_all(AmNoReturn {
-            my_pe: my_pe,
-            test_var: 2,
-        }).block();
+        let res = world
+            .spawn_am_all(AmNoReturn {
+                my_pe: my_pe,
+                test_var: 2,
+            })
+            .block();
         assert!(res.iter().all(|x| *x == ()));
         println!("no return result: {:?}", res);
         println!("---------------------------------------------------------------");

@@ -64,7 +64,7 @@ macro_rules! bit_and_at_pe_test{
             array.wait_all();
             array.barrier();
             let final_val = (!0 << num_pes) as $t;
-            let root = 1usize; 
+            let root = 1usize;
             let _lock = lock_if_needed!($array, array);
             // initialize_mem_region(&shared_mem_region, !(1 as $t << my_pe),0 as $t);
             // world.barrier();

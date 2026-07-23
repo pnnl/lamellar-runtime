@@ -985,12 +985,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self
-            .spawn_am_local_tg(NetworkAtomicInitPutBufferAm {
-                array: self.clone(),
-                index: index,
-                buf: buf.into(),
-            });
+        let _ = self.spawn_am_local_tg(NetworkAtomicInitPutBufferAm {
+            array: self.clone(),
+            index: index,
+            buf: buf.into(),
+        });
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
         let req = self
@@ -1085,12 +1084,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         buf: U,
         _: Sealed,
     ) {
-        let _ = self
-            .spawn_am_all_tg(NativeAtomicRemotePePutAm {
-                array: Into::<__NetworkAtomicByteArray>::into(self.clone()).into(),
-                start_index: offset,
-                data: buf.into().to_bytes(),
-            });
+        let _ = self.spawn_am_all_tg(NativeAtomicRemotePePutAm {
+            array: Into::<__NetworkAtomicByteArray>::into(self.clone()).into(),
+            start_index: offset,
+            data: buf.into().to_bytes(),
+        });
     }
 }
 
@@ -1175,7 +1173,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ =  <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).spawn();
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).spawn();
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
@@ -1264,7 +1262,8 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed).spawn();
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed)
+            .spawn();
     }
 }
 

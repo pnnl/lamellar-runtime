@@ -158,7 +158,7 @@ impl<T: Dist> UnsafeArray<T> {
         &self,
         index: usize, //relative to inner
         mut dst: LamellarBuffer<T, B>,
-    )  {
+    ) {
         let global_index = index + self.inner.offset;
         let start_pe = match self.inner.pe_for_dist_index(index) {
             Some(pe) => pe,
@@ -187,7 +187,8 @@ impl<T: Dist> UnsafeArray<T> {
                 let dsts = dst.split(len);
                 dst = dsts.1;
                 unsafe {
-                    self.mem_region.get_into_buffer_unmanaged(pe, offset, dsts.0)
+                    self.mem_region
+                        .get_into_buffer_unmanaged(pe, offset, dsts.0)
                 };
                 buf_index += len;
                 dist_index += len;
@@ -1805,7 +1806,6 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
         }
     }
 
-    
     unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
@@ -1815,7 +1815,6 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).block()
     }
 
-    
     unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
@@ -1824,8 +1823,7 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
     ) {
         let num_elems = data.len();
         match self.inner.distribution {
-            Distribution::Block => 
-                    self.rdma_block_get_into_buffer_unmanaged(index, data),
+            Distribution::Block => self.rdma_block_get_into_buffer_unmanaged(index, data),
             Distribution::Cyclic => {
                 let _ = ArrayRdmaGetIntoBufferHandle {
                     array: self.as_lamellar_byte_array(),
@@ -1834,8 +1832,9 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
                         self.rdma_cyclic_get_buffer(index, num_elems).collect(),
                     ),
                     spawned: false,
-                }.spawn();
-            },
+                }
+                .spawn();
+            }
         }
     }
 

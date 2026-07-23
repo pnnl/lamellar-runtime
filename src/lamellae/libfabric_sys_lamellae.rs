@@ -1,8 +1,8 @@
 pub(crate) mod atomic;
 pub(crate) mod collective;
 pub(crate) mod comm;
-pub(crate) mod mem;
 pub(crate) mod fabric;
+pub(crate) mod mem;
 pub(crate) mod rdma;
 
 use super::{
@@ -11,7 +11,10 @@ use super::{
     Comm, Lamellae, LamellaeInit, LamellaeShutdown, LamellaeUtil, Ser, SerializeHeader,
     SerializedData, SERIALIZE_HEADER_LEN,
 };
-use crate::{config, env_var::HeapMode, lamellae::libfabric_sys_lamellae::comm::LibfabricSysComm, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use crate::{
+    config, env_var::HeapMode, lamellae::libfabric_sys_lamellae::comm::LibfabricSysComm,
+    lamellar_arch::LamellarArchRT, scheduler::Scheduler,
+};
 
 use async_trait::async_trait;
 use futures_util::stream::FuturesUnordered;
@@ -38,7 +41,8 @@ impl LibfabricSysBuilder {
         } else {
             None
         };
-        let libfabric_sys_comm: Arc<Comm> = Arc::new(LibfabricSysComm::new(provider, domain).into());
+        let libfabric_sys_comm: Arc<Comm> =
+            Arc::new(LibfabricSysComm::new(provider, domain).into());
         LibfabricSysBuilder {
             my_pe: libfabric_sys_comm.my_pe(),
             num_pes: libfabric_sys_comm.num_pes(),
@@ -188,11 +192,7 @@ impl LamellaeUtil for LibfabricSys {
         self.cq.send_alloc(min_size).await;
     }
 
-    async fn send_vec_to_pe_async(
-        &self,
-        pe: usize,
-        vec_data: Vec<u8>,
-    ) {
+    async fn send_vec_to_pe_async(&self, pe: usize, vec_data: Vec<u8>) {
         self.cq.send_vec(vec_data, pe).await;
     }
 
@@ -208,8 +208,10 @@ impl Ser for LibfabricSys {
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = *SERIALIZE_HEADER_LEN;
-        let mut ser_data =
-            SerializedData::new(self.libfabric_sys_comm.clone(), header_size + serialized_size)?;
+        let mut ser_data = SerializedData::new(
+            self.libfabric_sys_comm.clone(),
+            header_size + serialized_size,
+        )?;
         crate::serialize_into(&mut ser_data.header_as_bytes_mut(), &header, false)?; //we want header to be a fixed size
         Ok(ser_data)
     }

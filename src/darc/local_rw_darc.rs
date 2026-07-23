@@ -198,7 +198,7 @@ impl<T> LocalRwDarc<T> {
     }
 }
 
-impl <T> Drop for LocalRwDarc<T> {
+impl<T> Drop for LocalRwDarc<T> {
     fn drop(&mut self) {
         tracing::trace!(target: "drop", "drop LocalRwDarc");
     }

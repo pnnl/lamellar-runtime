@@ -1,9 +1,9 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::ElementArithmeticOps;
 use crate::array::iterator::local_iterator::LocalIterator;
 use crate::array::iterator::private::*;
 use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
+use crate::array::ElementArithmeticOps;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
@@ -37,7 +37,10 @@ impl<I: InnerIter> InnerIter for Sum<I> {
 impl<I> IterConsumer for Sum<I>
 where
     I: LocalIterator + 'static,
-    I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + ElementArithmeticOps + std::iter::Sum<I::Item>,
+    I::Item: SyncSend
+        + for<'a> std::iter::Sum<&'a I::Item>
+        + ElementArithmeticOps
+        + std::iter::Sum<I::Item>,
 {
     type AmOutput = I::Item;
     type Output = I::Item;
@@ -87,7 +90,11 @@ enum InnerState<T> {
 
 impl<T> Future for InnerLocalIterSumHandle<T>
 where
-    T: SyncSend + for<'a> std::iter::Sum<&'a T> + ElementArithmeticOps + std::iter::Sum<T> + 'static,
+    T: SyncSend
+        + for<'a> std::iter::Sum<&'a T>
+        + ElementArithmeticOps
+        + std::iter::Sum<T>
+        + 'static,
 {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -144,7 +151,11 @@ impl<T> PinnedDrop for LocalIterSumHandle<T> {
 
 impl<T> LocalIterSumHandle<T>
 where
-    T: SyncSend + for<'a> std::iter::Sum<&'a T> + ElementArithmeticOps + std::iter::Sum<T> + 'static,
+    T: SyncSend
+        + for<'a> std::iter::Sum<&'a T>
+        + ElementArithmeticOps
+        + std::iter::Sum<T>
+        + 'static,
 {
     pub(crate) fn new(
         lock: Option<IterLockFuture>,
@@ -209,7 +220,11 @@ enum State<T> {
 }
 impl<T> Future for LocalIterSumHandle<T>
 where
-    T: SyncSend + for<'a> std::iter::Sum<&'a T> + ElementArithmeticOps + std::iter::Sum<T> + 'static,
+    T: SyncSend
+        + for<'a> std::iter::Sum<&'a T>
+        + ElementArithmeticOps
+        + std::iter::Sum<T>
+        + 'static,
 {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -260,7 +275,10 @@ impl<I: InnerIter> InnerIter for SumAm<I> {
 impl<I> LamellarAm for SumAm<I>
 where
     I: LocalIterator + 'static,
-    I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + ElementArithmeticOps + std::iter::Sum<I::Item>,
+    I::Item: SyncSend
+        + for<'a> std::iter::Sum<&'a I::Item>
+        + ElementArithmeticOps
+        + std::iter::Sum<I::Item>,
 {
     async fn exec(&self) -> I::Item {
         let iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));

@@ -708,7 +708,10 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
         self.team.scheduler.spawn_task(
             task,
-            Some(Arc::from([self.team.world_counters.clone(), self.team.team_counters.clone()])),
+            Some(Arc::from([
+                self.team.world_counters.clone(),
+                self.team.team_counters.clone(),
+            ])),
         )
     }
 
@@ -734,7 +737,10 @@ impl ActiveMessaging for Arc<LamellarTeam> {
             .block_on(join_all(iter.into_iter().map(|task| {
                 self.team.scheduler.spawn_task(
                     task,
-                    Some(Arc::from([self.team.world_counters.clone(), self.team.team_counters.clone()])),
+                    Some(Arc::from([
+                        self.team.world_counters.clone(),
+                        self.team.team_counters.clone(),
+                    ])),
                 )
             })))
     }
@@ -1301,7 +1307,10 @@ impl LamellarTeamRT {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn counters(&self) -> Option<Arc<[Arc<AMCounters>]>> {
-        Some(Arc::from([self.world_counters.clone(), self.team_counters.clone()]))
+        Some(Arc::from([
+            self.world_counters.clone(),
+            self.team_counters.clone(),
+        ]))
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -1332,7 +1341,10 @@ impl LamellarTeamRT {
             let dropped = MemoryRegion::<usize>::new(
                 parent.num_pes,
                 &parent.scheduler,
-                Some(Arc::from([team_counters.clone(), parent.world_counters.clone()])),
+                Some(Arc::from([
+                    team_counters.clone(),
+                    parent.world_counters.clone(),
+                ])),
                 &parent.lamellae,
                 parent_alloc.clone(),
             );
@@ -1619,7 +1631,10 @@ impl LamellarTeamRT {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
         self.scheduler.spawn_task(
             task,
-            Some(Arc::from([self.world_counters.clone(), self.team_counters.clone()])),
+            Some(Arc::from([
+                self.world_counters.clone(),
+                self.team_counters.clone(),
+            ])),
         )
     }
 
@@ -1842,7 +1857,10 @@ impl LamellarTeamRT {
             .block_on(join_all(iter.into_iter().map(|task| {
                 self.scheduler.spawn_task(
                     task,
-                    Some(Arc::from([self.world_counters.clone(), self.team_counters.clone()])),
+                    Some(Arc::from([
+                        self.world_counters.clone(),
+                        self.team_counters.clone(),
+                    ])),
                 )
             })))
     }
@@ -2014,8 +2032,7 @@ impl Darc<LamellarTeamRT> {
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team exec all", std::thread::current().id());
         trace!(target: "lamellae_debug", "spawn_am_all_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
-        self.scheduler
-            .submit_am(Am::All(req_data, func.clone()));
+        self.scheduler.submit_am(Am::All(req_data, func.clone()));
         MultiAmHandle {
             inner: req,
             am: None,
@@ -2233,7 +2250,7 @@ impl Darc<LamellarTeamRT> {
         };
         trace!(target: "lamellae_debug", "spawn_am_pe_tg submitting am to scheduler lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         self.scheduler.submit_am(Am::Remote(req_data, func));
-        
+
         AmHandle {
             inner: req,
             am: None,

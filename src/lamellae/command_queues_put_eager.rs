@@ -20,12 +20,10 @@ use super::{
     comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
     Comm, Lamellae, SerializedData,
 };
-use crate::{
-    env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
-};
+use crate::{env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats};
+use async_lock::Mutex;
 use core::panic;
 use parking_lot::RwLock;
-use async_lock::Mutex;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -181,12 +179,12 @@ struct InnerCQ {
     alloc_id: Arc<AtomicUsize>,
     active: Arc<AtomicU8>,
     // Eager path state
-    eager_recv_alloc_addr: usize,       // local VA of our eager recv ring (for local polling)
-    eager_send_acks_alloc_addr: usize,  // local VA of our send-ack counters (for local reads)
-    eager_recv_comm_alloc: CommAlloc,   // CommAlloc for remote PUTs into any PE's recv ring
+    eager_recv_alloc_addr: usize, // local VA of our eager recv ring (for local polling)
+    eager_send_acks_alloc_addr: usize, // local VA of our send-ack counters (for local reads)
+    eager_recv_comm_alloc: CommAlloc, // CommAlloc for remote PUTs into any PE's recv ring
     eager_send_acks_comm_alloc: CommAlloc, // CommAlloc for remote PUTs into any PE's ack counters
-    eager_recv_head: Arc<Vec<AtomicUsize>>,      // per-src: next ring slot index to poll
-    eager_send_head: Arc<Vec<AtomicUsize>>,      // per-dst: next ring slot index to claim
+    eager_recv_head: Arc<Vec<AtomicUsize>>, // per-src: next ring slot index to poll
+    eager_send_head: Arc<Vec<AtomicUsize>>, // per-dst: next ring slot index to claim
     eager_recv_processed: Arc<Vec<AtomicUsize>>, // per-src: monotonic count of processed slots
 }
 
@@ -415,7 +413,8 @@ impl InnerCQ {
                 if panic_buf[pe].cmd != Cmd::Clear {
                     trace!(
                         "pe {} panic_buf not clear {:?}",
-                        pe, &panic_buf[pe] as *const CmdMsg
+                        pe,
+                        &panic_buf[pe] as *const CmdMsg
                     );
                     trace!("panic_buf {:?}", panic_buf[pe]);
                 }
@@ -440,15 +439,13 @@ impl InnerCQ {
             let head = self.eager_send_head[dst].load(Ordering::Acquire);
             // Read acks that dst has sent back to our send_acks array.
             let acked = unsafe {
-                ((self.eager_send_acks_alloc_addr + dst * std::mem::size_of::<u64>())
-                    as *const u64)
+                ((self.eager_send_acks_alloc_addr + dst * std::mem::size_of::<u64>()) as *const u64)
                     .read_volatile() as usize
             };
             if head.wrapping_sub(acked) >= EAGER_RING_SIZE {
                 return None;
             }
-            if self
-                .eager_send_head[dst]
+            if self.eager_send_head[dst]
                 .compare_exchange(head, head + 1, Ordering::SeqCst, Ordering::Relaxed)
                 .is_ok()
             {
@@ -464,8 +461,12 @@ impl InnerCQ {
         let size = data.len();
         let byte_offset = (self.my_pe * EAGER_RING_SIZE + slot_idx) * EAGER_SLOT_SIZE;
 
-        let dst_data = self.eager_recv_comm_alloc.comm_slice_at_byte_offset::<u8>(byte_offset, size);
-        let dst_magic = self.eager_recv_comm_alloc.comm_slice_at_byte_offset::<u64>(byte_offset + EAGER_DATA_SIZE, 1);
+        let dst_data = self
+            .eager_recv_comm_alloc
+            .comm_slice_at_byte_offset::<u8>(byte_offset, size);
+        let dst_magic = self
+            .eager_recv_comm_alloc
+            .comm_slice_at_byte_offset::<u64>(byte_offset + EAGER_DATA_SIZE, 1);
 
         dst_data
             .put_buffer::<u8>(&self.scheduler, None, data, dst, 0)
@@ -482,8 +483,12 @@ impl InnerCQ {
         let size = data.len();
         let byte_offset = (self.my_pe * EAGER_RING_SIZE + slot_idx) * EAGER_SLOT_SIZE;
 
-        let dst_data = self.eager_recv_comm_alloc.comm_slice_at_byte_offset::<u8>(byte_offset, size);
-        let dst_magic = self.eager_recv_comm_alloc.comm_slice_at_byte_offset::<u64>(byte_offset + EAGER_DATA_SIZE, 1);
+        let dst_data = self
+            .eager_recv_comm_alloc
+            .comm_slice_at_byte_offset::<u8>(byte_offset, size);
+        let dst_magic = self
+            .eager_recv_comm_alloc
+            .comm_slice_at_byte_offset::<u64>(byte_offset + EAGER_DATA_SIZE, 1);
 
         if let Ok(rt_data) = self.comm.rt_alloc(size, std::mem::align_of::<u8>()) {
             let mut data_slice = rt_data.as_comm_slice::<u8>();
@@ -506,7 +511,8 @@ impl InnerCQ {
     // Send an ack counter back to src. Uses eager_send_acks_comm_alloc which has
     // remote_keys[src].addr = src's actual ack counter VA. Slot my_pe is src's index for us.
     fn send_eager_ack(&self, src: usize, count: usize) {
-        let ack_slot = self.eager_send_acks_comm_alloc
+        let ack_slot = self
+            .eager_send_acks_comm_alloc
             .comm_slice_at_byte_offset::<u64>(self.my_pe * std::mem::size_of::<u64>(), 1);
         ack_slot.put_unmanaged::<u64>(count as u64, src, 0);
     }
@@ -519,7 +525,10 @@ impl InnerCQ {
         // Eager path: small messages that fit in a ring slot.
         if data.len() > 0 && data.len() <= EAGER_DATA_SIZE {
             if let Some(slot_idx) = self.try_claim_eager_slot(dst) {
-                debug!("eager send to dst({dst}) size={} slot={slot_idx}", data.len());
+                debug!(
+                    "eager send to dst({dst}) size={} slot={slot_idx}",
+                    data.len()
+                );
                 self.send_eager(data, dst, slot_idx).await;
                 return;
             }
@@ -593,10 +602,8 @@ impl InnerCQ {
                         ready.daddr,
                         data.len() + std::mem::size_of::<u64>(),
                     );
-                    let dst_data =
-                        dst_data_full.comm_slice_at_byte_offset::<u8>(0, data.len());
-                    let magic_data = dst_data_full
-                        .comm_slice_at_byte_offset::<u64>(data.len(), 1);
+                    let dst_data = dst_data_full.comm_slice_at_byte_offset::<u8>(0, data.len());
+                    let magic_data = dst_data_full.comm_slice_at_byte_offset::<u64>(data.len(), 1);
                     dst_data
                         .put_buffer::<u8>(&scheduler, None, data.clone(), dst, 0)
                         .await;
@@ -696,11 +703,8 @@ impl InnerCQ {
                     debug!("got ready from dst({dst}) {:?}", ready);
                     data.extend_from_slice(&ready.msg_hash.to_ne_bytes());
 
-                    let dst_data_full = comm.one_sided_alloc_from_remote_pe_and_addr(
-                        dst,
-                        ready.daddr,
-                        data.len(),
-                    );
+                    let dst_data_full =
+                        comm.one_sided_alloc_from_remote_pe_and_addr(dst, ready.daddr, data.len());
 
                     if let Ok(rt_data) = comm.rt_alloc(data.len(), std::mem::align_of::<u8>()) {
                         let mut data_slice = rt_data.as_comm_slice::<u8>();
@@ -853,7 +857,8 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    let _ = panic_buf.put_unmanaged::<CmdMsg>(panic_buf[self.my_pe], pe, self.my_pe);
+                    let _ =
+                        panic_buf.put_unmanaged::<CmdMsg>(panic_buf[self.my_pe], pe, self.my_pe);
                 }
             }
             self.comm.thread_wait();
@@ -1051,7 +1056,11 @@ impl CQPutEager {
     }
 
     pub(crate) async fn send_vec(&self, vec_data: Vec<u8>, dst: usize) {
-        debug!("sending vec_data of len {:?} to dst {:?}", vec_data.len(), dst);
+        debug!(
+            "sending vec_data of len {:?} to dst {:?}",
+            vec_data.len(),
+            dst
+        );
         let vec_data_addr = vec_data.as_ptr() as usize;
         let mut hash = calc_hash(vec_data_addr, vec_data.len());
         if hash == 0 {
@@ -1183,9 +1192,11 @@ impl CQPutEager {
                             // INLINE: allocate recv buffer before spawning io_task so Ready
                             // is sent without depending on io_task scheduling.
                             let mut ser_data = loop {
-                                match self.cq.comm.new_serialized_data(
-                                    size + std::mem::size_of::<u64>(),
-                                ) {
+                                match self
+                                    .cq
+                                    .comm
+                                    .new_serialized_data(size + std::mem::size_of::<u64>())
+                                {
                                     Ok(sd) => break sd,
                                     Err(_) => {
                                         debug!("recv_data: waiting for alloc size={size} src={src} msg_id={msg_id}");
@@ -1217,9 +1228,8 @@ impl CQPutEager {
                                 let magic = cmd.msg_hash as u64;
                                 let mut timer = std::time::Instant::now();
                                 loop {
-                                    let val = unsafe {
-                                        (done_flag_addr as *mut u64).read_unaligned()
-                                    };
+                                    let val =
+                                        unsafe { (done_flag_addr as *mut u64).read_unaligned() };
                                     if val == magic {
                                         break;
                                     }
@@ -1254,17 +1264,13 @@ impl CQPutEager {
                     let head = self.cq.eager_recv_head[src].load(Ordering::Relaxed);
                     let slot_idx = head % EAGER_RING_SIZE;
                     let byte_offset = (src * EAGER_RING_SIZE + slot_idx) * EAGER_SLOT_SIZE;
-                    let magic_addr =
-                        self.cq.eager_recv_alloc_addr + byte_offset + EAGER_DATA_SIZE;
+                    let magic_addr = self.cq.eager_recv_alloc_addr + byte_offset + EAGER_DATA_SIZE;
                     // Volatile read so the compiler doesn't hoist this out of the loop.
-                    let magic =
-                        unsafe { (magic_addr as *const u64).read_volatile() };
+                    let magic = unsafe { (magic_addr as *const u64).read_volatile() };
 
                     if magic != 0 {
                         let size = magic as usize;
-                        debug!(
-                            "eager recv from src={src} slot={slot_idx} size={size}"
-                        );
+                        debug!("eager recv from src={src} slot={slot_idx} size={size}");
 
                         let data_addr = self.cq.eager_recv_alloc_addr + byte_offset;
 
@@ -1295,9 +1301,7 @@ impl CQPutEager {
                         // Advance head and send ack.
                         self.cq.eager_recv_head[src].fetch_add(1, Ordering::SeqCst);
                         let processed =
-                            self.cq.eager_recv_processed[src]
-                                .fetch_add(1, Ordering::SeqCst)
-                                + 1;
+                            self.cq.eager_recv_processed[src].fetch_add(1, Ordering::SeqCst) + 1;
                         self.cq.send_eager_ack(src, processed);
 
                         stats!(PE_RECVS[0][src].fetch_add(1, Ordering::SeqCst));

@@ -3,7 +3,7 @@ use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::private::*;
 use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
-use crate::array::{ArrayOps, Distribution, UnsafeArray,ElementArithmeticOps};
+use crate::array::{ArrayOps, Distribution, ElementArithmeticOps, UnsafeArray};
 use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;

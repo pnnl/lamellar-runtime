@@ -23,36 +23,86 @@ macro_rules! into_test_conv {
 }
 
 macro_rules! into_test {
-    (UnsafeArray, UnsafeArray) => { into_test_identity!(UnsafeArray) };
-    (ReadOnlyArray, ReadOnlyArray) => { into_test_identity!(ReadOnlyArray) };
-    (AtomicArray, AtomicArray) => { into_test_identity!(AtomicArray) };
-    (LocalLockArray, LocalLockArray) => { into_test_identity!(LocalLockArray) };
-    (GlobalLockArray, GlobalLockArray) => { into_test_identity!(GlobalLockArray) };
+    (UnsafeArray, UnsafeArray) => {
+        into_test_identity!(UnsafeArray)
+    };
+    (ReadOnlyArray, ReadOnlyArray) => {
+        into_test_identity!(ReadOnlyArray)
+    };
+    (AtomicArray, AtomicArray) => {
+        into_test_identity!(AtomicArray)
+    };
+    (LocalLockArray, LocalLockArray) => {
+        into_test_identity!(LocalLockArray)
+    };
+    (GlobalLockArray, GlobalLockArray) => {
+        into_test_identity!(GlobalLockArray)
+    };
 
-    (UnsafeArray, ReadOnlyArray) => { into_test_conv!(UnsafeArray, ReadOnlyArray, into_read_only) };
-    (UnsafeArray, AtomicArray) => { into_test_conv!(UnsafeArray, AtomicArray, into_atomic) };
-    (UnsafeArray, LocalLockArray) => { into_test_conv!(UnsafeArray, LocalLockArray, into_local_lock) };
-    (UnsafeArray, GlobalLockArray) => { into_test_conv!(UnsafeArray, GlobalLockArray, into_global_lock) };
+    (UnsafeArray, ReadOnlyArray) => {
+        into_test_conv!(UnsafeArray, ReadOnlyArray, into_read_only)
+    };
+    (UnsafeArray, AtomicArray) => {
+        into_test_conv!(UnsafeArray, AtomicArray, into_atomic)
+    };
+    (UnsafeArray, LocalLockArray) => {
+        into_test_conv!(UnsafeArray, LocalLockArray, into_local_lock)
+    };
+    (UnsafeArray, GlobalLockArray) => {
+        into_test_conv!(UnsafeArray, GlobalLockArray, into_global_lock)
+    };
 
-    (ReadOnlyArray, UnsafeArray) => { into_test_conv!(ReadOnlyArray, UnsafeArray, into_unsafe) };
-    (ReadOnlyArray, AtomicArray) => { into_test_conv!(ReadOnlyArray, AtomicArray, into_atomic) };
-    (ReadOnlyArray, LocalLockArray) => { into_test_conv!(ReadOnlyArray, LocalLockArray, into_local_lock) };
-    (ReadOnlyArray, GlobalLockArray) => { into_test_conv!(ReadOnlyArray, GlobalLockArray, into_global_lock) };
+    (ReadOnlyArray, UnsafeArray) => {
+        into_test_conv!(ReadOnlyArray, UnsafeArray, into_unsafe)
+    };
+    (ReadOnlyArray, AtomicArray) => {
+        into_test_conv!(ReadOnlyArray, AtomicArray, into_atomic)
+    };
+    (ReadOnlyArray, LocalLockArray) => {
+        into_test_conv!(ReadOnlyArray, LocalLockArray, into_local_lock)
+    };
+    (ReadOnlyArray, GlobalLockArray) => {
+        into_test_conv!(ReadOnlyArray, GlobalLockArray, into_global_lock)
+    };
 
-    (AtomicArray, UnsafeArray) => { into_test_conv!(AtomicArray, UnsafeArray, into_unsafe) };
-    (AtomicArray, ReadOnlyArray) => { into_test_conv!(AtomicArray, ReadOnlyArray, into_read_only) };
-    (AtomicArray, LocalLockArray) => { into_test_conv!(AtomicArray, LocalLockArray, into_local_lock) };
-    (AtomicArray, GlobalLockArray) => { into_test_conv!(AtomicArray, GlobalLockArray, into_global_lock) };
+    (AtomicArray, UnsafeArray) => {
+        into_test_conv!(AtomicArray, UnsafeArray, into_unsafe)
+    };
+    (AtomicArray, ReadOnlyArray) => {
+        into_test_conv!(AtomicArray, ReadOnlyArray, into_read_only)
+    };
+    (AtomicArray, LocalLockArray) => {
+        into_test_conv!(AtomicArray, LocalLockArray, into_local_lock)
+    };
+    (AtomicArray, GlobalLockArray) => {
+        into_test_conv!(AtomicArray, GlobalLockArray, into_global_lock)
+    };
 
-    (LocalLockArray, UnsafeArray) => { into_test_conv!(LocalLockArray, UnsafeArray, into_unsafe) };
-    (LocalLockArray, ReadOnlyArray) => { into_test_conv!(LocalLockArray, ReadOnlyArray, into_read_only) };
-    (LocalLockArray, AtomicArray) => { into_test_conv!(LocalLockArray, AtomicArray, into_atomic) };
-    (LocalLockArray, GlobalLockArray) => { into_test_conv!(LocalLockArray, GlobalLockArray, into_global_lock) };
+    (LocalLockArray, UnsafeArray) => {
+        into_test_conv!(LocalLockArray, UnsafeArray, into_unsafe)
+    };
+    (LocalLockArray, ReadOnlyArray) => {
+        into_test_conv!(LocalLockArray, ReadOnlyArray, into_read_only)
+    };
+    (LocalLockArray, AtomicArray) => {
+        into_test_conv!(LocalLockArray, AtomicArray, into_atomic)
+    };
+    (LocalLockArray, GlobalLockArray) => {
+        into_test_conv!(LocalLockArray, GlobalLockArray, into_global_lock)
+    };
 
-    (GlobalLockArray, UnsafeArray) => { into_test_conv!(GlobalLockArray, UnsafeArray, into_unsafe) };
-    (GlobalLockArray, ReadOnlyArray) => { into_test_conv!(GlobalLockArray, ReadOnlyArray, into_read_only) };
-    (GlobalLockArray, AtomicArray) => { into_test_conv!(GlobalLockArray, AtomicArray, into_atomic) };
-    (GlobalLockArray, LocalLockArray) => { into_test_conv!(GlobalLockArray, LocalLockArray, into_local_lock) };
+    (GlobalLockArray, UnsafeArray) => {
+        into_test_conv!(GlobalLockArray, UnsafeArray, into_unsafe)
+    };
+    (GlobalLockArray, ReadOnlyArray) => {
+        into_test_conv!(GlobalLockArray, ReadOnlyArray, into_read_only)
+    };
+    (GlobalLockArray, AtomicArray) => {
+        into_test_conv!(GlobalLockArray, AtomicArray, into_atomic)
+    };
+    (GlobalLockArray, LocalLockArray) => {
+        into_test_conv!(GlobalLockArray, LocalLockArray, into_local_lock)
+    };
 }
 
 macro_rules! match_array2 {

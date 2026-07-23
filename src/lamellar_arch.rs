@@ -43,7 +43,7 @@ impl std::fmt::Display for IdError {
 
 impl std::error::Error for IdError {}
 
-#[derive(Clone)]//, std::hash::Hash)]
+#[derive(Clone)] //, std::hash::Hash)]
 pub(crate) enum LamellarArchEnum {
     GlobalArch(GlobalArch),
     StridedArch(StridedArch),
@@ -127,7 +127,7 @@ impl LamellarArch for LamellarArchEnum {
     }
 }
 
-#[derive(Debug, Clone)]//, std::hash::Hash)]
+#[derive(Debug, Clone)] //, std::hash::Hash)]
 pub(crate) struct LamellarArchRT {
     pub(crate) parent: Option<Arc<LamellarArchRT>>,
     pub(crate) arch: LamellarArchEnum,

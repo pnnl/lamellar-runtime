@@ -7,8 +7,11 @@ use crate::lamellae::libfabric_async_lamellae::atomic::{
 use crate::lamellae::libfabric_lamellae::atomic::{
     LibfabricAtomicCompareExchangeFuture, LibfabricAtomicFetchFuture, LibfabricAtomicFuture,
 };
-#[cfg(feature="enable-libfabric-sys")]
-use crate::lamellae::libfabric_sys_lamellae::atomic::{LibfabricSysAtomicCompareExchangeFuture, LibfabricSysAtomicFetchFuture, LibfabricSysAtomicFuture};
+#[cfg(feature = "enable-libfabric-sys")]
+use crate::lamellae::libfabric_sys_lamellae::atomic::{
+    LibfabricSysAtomicCompareExchangeFuture, LibfabricSysAtomicFetchFuture,
+    LibfabricSysAtomicFuture,
+};
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::atomic::RofiCAtomicFuture;
 #[cfg(feature = "enable-rofi-c")]
@@ -473,7 +476,7 @@ impl<T> AtomicOp<T> {
             | AtomicOp::FetchBitOr(val)
             | AtomicOp::FetchBitXor(val)
             | AtomicOp::FetchBitAnd(val)
-            | AtomicOp::Read(val) =>val.as_ref().get_ref(),
+            | AtomicOp::Read(val) => val.as_ref().get_ref(),
             AtomicOp::Cas => panic!("CAS operations do not have a source value"),
         }
     }

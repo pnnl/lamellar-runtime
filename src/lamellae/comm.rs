@@ -1,9 +1,9 @@
 pub(crate) mod alloc;
 pub(crate) mod atomic;
+pub(crate) mod collective;
 pub(crate) mod error;
 pub(crate) mod rdma;
 pub(crate) mod slice;
-pub(crate) mod collective;
 
 pub(crate) use alloc::*;
 pub(crate) use atomic::*;
@@ -28,7 +28,8 @@ use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
 use crate::lamellae::{
-    collective::ReduceOp, local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType, SerializedData
+    collective::ReduceOp, local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm,
+    AllocationType, SerializedData,
 };
 
 use enum_dispatch::enum_dispatch;
@@ -47,12 +48,15 @@ pub(crate) enum CollectiveOpKind {
     Barrier,
     Broadcast,
     AllToAll,
-    #[allow(dead_code)] // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
+    #[allow(dead_code)]
+    // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
     AllReduce(ReduceOp),
     AllGather,
-    #[allow(dead_code)] // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
+    #[allow(dead_code)]
+    // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
     ReduceScatter(ReduceOp),
-    #[allow(dead_code)] // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
+    #[allow(dead_code)]
+    // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
     Reduce(ReduceOp),
     Scatter,
     Gather,

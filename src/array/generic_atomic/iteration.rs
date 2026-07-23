@@ -225,8 +225,6 @@ impl<T: Remote> InnerArray for GenericAtomicArray<T> {
 
 // impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {}
 
-
-
 /// A zero-clone element for framework iterators over `GenericAtomicArray`.
 ///
 /// Stores raw pointers into Darc-backed heap memory (stable addresses) plus
@@ -729,4 +727,3 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GenericAtomicArray<T> {
 impl<T: Dist> DistIteratorLauncher for GenericAtomicArray<T> {}
 
 impl<T: Dist> LocalIteratorLauncher for GenericAtomicArray<T> {}
-

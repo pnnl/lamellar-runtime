@@ -29,7 +29,6 @@ macro_rules! initialize_array {
     };
 }
 
-
 macro_rules! array_or_lock {
     (GlobalLockArray, $array: ident, $lock:ident) => {
         $lock

@@ -2,8 +2,7 @@ use crate::{
     active_messaging::AMCounters,
     lamellae::comm::atomic::{
         AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
-        AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
-        CommAllocAtomic,
+        AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle, CommAllocAtomic,
     },
     warnings::RuntimeWarning,
     LamellarTask, Remote,
@@ -267,7 +266,12 @@ impl CommAllocAtomic for LibfabricSysAlloc {
     ) {
         LibfabricSysAlloc::atomic_op_inner(self, pe, offset, &mut op, true);
     }
-    fn atomic_op_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_unmanaged<T: Remote + 'static>(
+        &self,
+        mut op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         LibfabricSysAlloc::atomic_op_inner(self, pe, offset, &mut op, false);
     }
     fn atomic_op_all<T: Remote>(
@@ -410,7 +414,12 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
         LibfabricSysAlloc::atomic_op_inner(&self.alloc, pe, offset, &mut op, true);
     }
 
-    fn atomic_op_unmanaged<T: Remote + 'static>(&self, mut op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_unmanaged<T: Remote + 'static>(
+        &self,
+        mut op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedLibfabricSysAlloc with incorrect pe: {} expected pe: {}",
@@ -506,7 +515,7 @@ impl CommAllocAtomic for OneSidedLibfabricSysAlloc {
         }
         .into()
     }
-        fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
         _scheduler: &Arc<Scheduler>,
         current: T,

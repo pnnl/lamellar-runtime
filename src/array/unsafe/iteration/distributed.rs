@@ -3,7 +3,7 @@ use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::private::Sealed;
 use crate::array::iterator::Schedule;
 use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
-use crate::array::{ArrayOps,ElementArithmeticOps, AsyncTeamFrom, Distribution, InnerArray};
+use crate::array::{ArrayOps, AsyncTeamFrom, Distribution, ElementArithmeticOps, InnerArray};
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::Dist;
 use crate::{LamellarTeam, Remote};

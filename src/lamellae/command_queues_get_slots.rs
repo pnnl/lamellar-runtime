@@ -6,9 +6,9 @@ use crate::{
     env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
     LamellarBuffer,
 };
+use async_lock::Mutex;
 use core::panic;
 use parking_lot::RwLock;
-use async_lock::Mutex;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -140,7 +140,13 @@ impl std::fmt::Debug for CmdMsg {
         write!(
             f,
             "daddr {:#x}({:?}) dsize {:?} ack_addr {:#x} cmd {:?} msg_hash {:?} cmd_hash {:?}",
-            self.daddr, self.daddr, self.dsize, self.ack_addr, self.cmd, self.msg_hash, self.cmd_hash,
+            self.daddr,
+            self.daddr,
+            self.dsize,
+            self.ack_addr,
+            self.cmd,
+            self.msg_hash,
+            self.cmd_hash,
         )
     }
 }
@@ -308,7 +314,13 @@ impl InnerCQ {
                     if cmd.daddr == 0 {
                         return None;
                     }
-                    trace!("received cmd:{:?} from pe {} slot {} -- [{:?}]", cmd.cmd, src, slot, cmd);
+                    trace!(
+                        "received cmd:{:?} from pe {} slot {} -- [{:?}]",
+                        cmd.cmd,
+                        src,
+                        slot,
+                        cmd
+                    );
                     let res = Some(cmd.clone());
                     recv_buffer[0] = **self.clear_cmd;
                     res
@@ -594,7 +606,8 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    let _ = panic_buf.put_unmanaged::<CmdMsg>(panic_buf[self.my_pe], pe, self.my_pe);
+                    let _ =
+                        panic_buf.put_unmanaged::<CmdMsg>(panic_buf[self.my_pe], pe, self.my_pe);
                 }
             }
             self.comm.thread_wait();
@@ -612,8 +625,8 @@ impl InnerCQ {
         let (local_ack_alloc, offset) = self
             .comm
             .local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.ack_addr);
-        let ack_slice = local_ack_alloc
-            .comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
+        let ack_slice =
+            local_ack_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
         let _ = ack_slice.put_unmanaged::<Cmd>(self.free_cmd.cmd, dst, 0);
     }
 
@@ -629,7 +642,7 @@ impl InnerCQ {
         let mut buffer = unsafe {
             LamellarBuffer::<u8, CommSlice<u8>>::from_comm_slice(
                 ser_data.header_and_data_as_bytes_mut(),
-                lamellae.clone()
+                lamellae.clone(),
             )
         };
         trace!("get_serialized_data {:?} {:?} {:x}", src, cmd, cmd.daddr);
@@ -686,7 +699,13 @@ impl InnerCQ {
         );
     }
 
-    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> SerializedData {
+    async fn get_cmd(
+        &self,
+        src: usize,
+        cmd: CmdMsg,
+        msg_id: usize,
+        lamellae: &Arc<Lamellae>,
+    ) -> SerializedData {
         trace!("getting cmd from {} of size {}", src, cmd.dsize);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut print = true;
@@ -701,7 +720,7 @@ impl InnerCQ {
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         }
         let mut ser_data = ser_data.unwrap();
-        self.get_serialized_data(src, cmd, &mut ser_data, msg_id,lamellae)
+        self.get_serialized_data(src, cmd, &mut ser_data, msg_id, lamellae)
             .await;
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
         ser_data
@@ -856,19 +875,25 @@ impl CQGetSlots {
     }
 
     pub(crate) async fn send_vec(&self, vec_data: Vec<u8>, dst: usize) {
-        trace!("sending vec_data of len {:?} to dst {:?}", vec_data.len(), dst);
-        let mut data = self.cq.comm.rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+        trace!(
+            "sending vec_data of len {:?} to dst {:?}",
+            vec_data.len(),
+            dst
+        );
+        let mut data = self
+            .cq
+            .comm
+            .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
         while let Err(_) = data {
             async_std::task::yield_now().await;
-            data = self.cq.comm.rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+            data = self
+                .cq
+                .comm
+                .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
         }
         let data = data.unwrap();
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                vec_data.as_ptr(),
-                data.as_mut_ptr(),
-                vec_data.len(),
-            );
+            std::ptr::copy_nonoverlapping(vec_data.as_ptr(), data.as_mut_ptr(), vec_data.len());
         }
         let data_slice = data.as_comm_slice().clone();
         let hash = calc_hash(data_slice.usize_addr(), data_slice.len());
@@ -917,13 +942,16 @@ impl CQGetSlots {
             for s in 0..N {
                 let send_buffer = self.cq.send_buffer[pe * N + s].lock_blocking();
                 let recv_buffer = self.cq.recv_buffer[pe * N + s].read();
-                println!("  slot {s}: send={:?} recv={:?}", send_buffer[0], recv_buffer[0]);
+                println!(
+                    "  slot {s}: send={:?} recv={:?}",
+                    send_buffer[0], recv_buffer[0]
+                );
             }
         }
         println!("finished command queue wait_all_print");
     }
 
-   pub(crate) async fn alloc_task(&self) {
+    pub(crate) async fn alloc_task(&self) {
         // let mut timer = std::time::Instant::now();
         let print = false;
         while self.scheduler.active(0)
@@ -989,7 +1017,8 @@ impl CQGetSlots {
                                     let task = async move {
                                         let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
                                         debug!("getting cmd from {src} {:?} msg_id: {msg_id}", cmd);
-                                        let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae).await;
+                                        let work_data =
+                                            cq.get_cmd(src, cmd, msg_id, &lamellae).await;
                                         debug!("msg_id: {msg_id} submitting remote am from {src}");
                                         scheduler1.submit_remote_am(work_data, &lamellae);
                                         cq.send_free(src, cmd);

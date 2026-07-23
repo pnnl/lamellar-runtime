@@ -3,9 +3,8 @@ use std::ops::{
     ShrAssign, SubAssign,
 };
 use std::sync::atomic::{
-    AtomicI8, AtomicI16, AtomicI32, AtomicI64, AtomicIsize,
-    AtomicU8, AtomicU16, AtomicU32, AtomicU64, AtomicUsize,
-    Ordering,
+    AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64,
+    AtomicU8, AtomicUsize, Ordering,
 };
 
 use crate::array::iterator::distributed_iterator::*;
@@ -18,8 +17,8 @@ use crate::array::iterator::{
 use crate::array::native_atomic::*;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
-use crate::array::{ElementArithmeticOps, ElementBitWiseOps, ElementShiftOps};
 use crate::array::*;
+use crate::array::{ElementArithmeticOps, ElementBitWiseOps, ElementShiftOps};
 use crate::memregion::Dist;
 
 use self::iterator::IterLockFuture;
@@ -104,16 +103,46 @@ macro_rules! ptr_nat_load {
     ($self:ident) => {
         unsafe {
             match $self.orig_t {
-                NativeAtomicType::I8    => *(&(&*($self.value as *const AtomicI8   )).load(Ordering::SeqCst) as *const i8    as *const T),
-                NativeAtomicType::I16   => *(&(&*($self.value as *const AtomicI16  )).load(Ordering::SeqCst) as *const i16   as *const T),
-                NativeAtomicType::I32   => *(&(&*($self.value as *const AtomicI32  )).load(Ordering::SeqCst) as *const i32   as *const T),
-                NativeAtomicType::I64   => *(&(&*($self.value as *const AtomicI64  )).load(Ordering::SeqCst) as *const i64   as *const T),
-                NativeAtomicType::Isize => *(&(&*($self.value as *const AtomicIsize)).load(Ordering::SeqCst) as *const isize as *const T),
-                NativeAtomicType::U8    => *(&(&*($self.value as *const AtomicU8   )).load(Ordering::SeqCst) as *const u8    as *const T),
-                NativeAtomicType::U16   => *(&(&*($self.value as *const AtomicU16  )).load(Ordering::SeqCst) as *const u16   as *const T),
-                NativeAtomicType::U32   => *(&(&*($self.value as *const AtomicU32  )).load(Ordering::SeqCst) as *const u32   as *const T),
-                NativeAtomicType::U64   => *(&(&*($self.value as *const AtomicU64  )).load(Ordering::SeqCst) as *const u64   as *const T),
-                NativeAtomicType::Usize => *(&(&*($self.value as *const AtomicUsize)).load(Ordering::SeqCst) as *const usize as *const T),
+                NativeAtomicType::I8 => {
+                    *(&(&*($self.value as *const AtomicI8)).load(Ordering::SeqCst) as *const i8
+                        as *const T)
+                }
+                NativeAtomicType::I16 => {
+                    *(&(&*($self.value as *const AtomicI16)).load(Ordering::SeqCst) as *const i16
+                        as *const T)
+                }
+                NativeAtomicType::I32 => {
+                    *(&(&*($self.value as *const AtomicI32)).load(Ordering::SeqCst) as *const i32
+                        as *const T)
+                }
+                NativeAtomicType::I64 => {
+                    *(&(&*($self.value as *const AtomicI64)).load(Ordering::SeqCst) as *const i64
+                        as *const T)
+                }
+                NativeAtomicType::Isize => {
+                    *(&(&*($self.value as *const AtomicIsize)).load(Ordering::SeqCst)
+                        as *const isize as *const T)
+                }
+                NativeAtomicType::U8 => {
+                    *(&(&*($self.value as *const AtomicU8)).load(Ordering::SeqCst) as *const u8
+                        as *const T)
+                }
+                NativeAtomicType::U16 => {
+                    *(&(&*($self.value as *const AtomicU16)).load(Ordering::SeqCst) as *const u16
+                        as *const T)
+                }
+                NativeAtomicType::U32 => {
+                    *(&(&*($self.value as *const AtomicU32)).load(Ordering::SeqCst) as *const u32
+                        as *const T)
+                }
+                NativeAtomicType::U64 => {
+                    *(&(&*($self.value as *const AtomicU64)).load(Ordering::SeqCst) as *const u64
+                        as *const T)
+                }
+                NativeAtomicType::Usize => {
+                    *(&(&*($self.value as *const AtomicUsize)).load(Ordering::SeqCst)
+                        as *const usize as *const T)
+                }
             }
         }
     };
@@ -123,16 +152,26 @@ macro_rules! ptr_nat_store {
     ($self:ident, $val:ident) => {
         unsafe {
             match $self.orig_t {
-                NativeAtomicType::I8    => (&*($self.value as *const AtomicI8   )).store(*(&$val as *const T as *const i8   ), Ordering::SeqCst),
-                NativeAtomicType::I16   => (&*($self.value as *const AtomicI16  )).store(*(&$val as *const T as *const i16  ), Ordering::SeqCst),
-                NativeAtomicType::I32   => (&*($self.value as *const AtomicI32  )).store(*(&$val as *const T as *const i32  ), Ordering::SeqCst),
-                NativeAtomicType::I64   => (&*($self.value as *const AtomicI64  )).store(*(&$val as *const T as *const i64  ), Ordering::SeqCst),
-                NativeAtomicType::Isize => (&*($self.value as *const AtomicIsize)).store(*(&$val as *const T as *const isize), Ordering::SeqCst),
-                NativeAtomicType::U8    => (&*($self.value as *const AtomicU8   )).store(*(&$val as *const T as *const u8   ), Ordering::SeqCst),
-                NativeAtomicType::U16   => (&*($self.value as *const AtomicU16  )).store(*(&$val as *const T as *const u16  ), Ordering::SeqCst),
-                NativeAtomicType::U32   => (&*($self.value as *const AtomicU32  )).store(*(&$val as *const T as *const u32  ), Ordering::SeqCst),
-                NativeAtomicType::U64   => (&*($self.value as *const AtomicU64  )).store(*(&$val as *const T as *const u64  ), Ordering::SeqCst),
-                NativeAtomicType::Usize => (&*($self.value as *const AtomicUsize)).store(*(&$val as *const T as *const usize), Ordering::SeqCst),
+                NativeAtomicType::I8 => (&*($self.value as *const AtomicI8))
+                    .store(*(&$val as *const T as *const i8), Ordering::SeqCst),
+                NativeAtomicType::I16 => (&*($self.value as *const AtomicI16))
+                    .store(*(&$val as *const T as *const i16), Ordering::SeqCst),
+                NativeAtomicType::I32 => (&*($self.value as *const AtomicI32))
+                    .store(*(&$val as *const T as *const i32), Ordering::SeqCst),
+                NativeAtomicType::I64 => (&*($self.value as *const AtomicI64))
+                    .store(*(&$val as *const T as *const i64), Ordering::SeqCst),
+                NativeAtomicType::Isize => (&*($self.value as *const AtomicIsize))
+                    .store(*(&$val as *const T as *const isize), Ordering::SeqCst),
+                NativeAtomicType::U8 => (&*($self.value as *const AtomicU8))
+                    .store(*(&$val as *const T as *const u8), Ordering::SeqCst),
+                NativeAtomicType::U16 => (&*($self.value as *const AtomicU16))
+                    .store(*(&$val as *const T as *const u16), Ordering::SeqCst),
+                NativeAtomicType::U32 => (&*($self.value as *const AtomicU32))
+                    .store(*(&$val as *const T as *const u32), Ordering::SeqCst),
+                NativeAtomicType::U64 => (&*($self.value as *const AtomicU64))
+                    .store(*(&$val as *const T as *const u64), Ordering::SeqCst),
+                NativeAtomicType::Usize => (&*($self.value as *const AtomicUsize))
+                    .store(*(&$val as *const T as *const usize), Ordering::SeqCst),
             }
         }
     };
@@ -143,16 +182,56 @@ macro_rules! ptr_nat_fetch_op {
     ($self:ident, $op:ident, $val:ident) => {
         unsafe {
             match $self.orig_t {
-                NativeAtomicType::I8    => *(&(&*($self.value as *const AtomicI8   )).$op(*(&$val as *const T as *const i8   ), Ordering::SeqCst) as *const i8    as *const T),
-                NativeAtomicType::I16   => *(&(&*($self.value as *const AtomicI16  )).$op(*(&$val as *const T as *const i16  ), Ordering::SeqCst) as *const i16   as *const T),
-                NativeAtomicType::I32   => *(&(&*($self.value as *const AtomicI32  )).$op(*(&$val as *const T as *const i32  ), Ordering::SeqCst) as *const i32   as *const T),
-                NativeAtomicType::I64   => *(&(&*($self.value as *const AtomicI64  )).$op(*(&$val as *const T as *const i64  ), Ordering::SeqCst) as *const i64   as *const T),
-                NativeAtomicType::Isize => *(&(&*($self.value as *const AtomicIsize)).$op(*(&$val as *const T as *const isize), Ordering::SeqCst) as *const isize as *const T),
-                NativeAtomicType::U8    => *(&(&*($self.value as *const AtomicU8   )).$op(*(&$val as *const T as *const u8   ), Ordering::SeqCst) as *const u8    as *const T),
-                NativeAtomicType::U16   => *(&(&*($self.value as *const AtomicU16  )).$op(*(&$val as *const T as *const u16  ), Ordering::SeqCst) as *const u16   as *const T),
-                NativeAtomicType::U32   => *(&(&*($self.value as *const AtomicU32  )).$op(*(&$val as *const T as *const u32  ), Ordering::SeqCst) as *const u32   as *const T),
-                NativeAtomicType::U64   => *(&(&*($self.value as *const AtomicU64  )).$op(*(&$val as *const T as *const u64  ), Ordering::SeqCst) as *const u64   as *const T),
-                NativeAtomicType::Usize => *(&(&*($self.value as *const AtomicUsize)).$op(*(&$val as *const T as *const usize), Ordering::SeqCst) as *const usize as *const T),
+                NativeAtomicType::I8 => {
+                    *(&(&*($self.value as *const AtomicI8))
+                        .$op(*(&$val as *const T as *const i8), Ordering::SeqCst)
+                        as *const i8 as *const T)
+                }
+                NativeAtomicType::I16 => {
+                    *(&(&*($self.value as *const AtomicI16))
+                        .$op(*(&$val as *const T as *const i16), Ordering::SeqCst)
+                        as *const i16 as *const T)
+                }
+                NativeAtomicType::I32 => {
+                    *(&(&*($self.value as *const AtomicI32))
+                        .$op(*(&$val as *const T as *const i32), Ordering::SeqCst)
+                        as *const i32 as *const T)
+                }
+                NativeAtomicType::I64 => {
+                    *(&(&*($self.value as *const AtomicI64))
+                        .$op(*(&$val as *const T as *const i64), Ordering::SeqCst)
+                        as *const i64 as *const T)
+                }
+                NativeAtomicType::Isize => {
+                    *(&(&*($self.value as *const AtomicIsize))
+                        .$op(*(&$val as *const T as *const isize), Ordering::SeqCst)
+                        as *const isize as *const T)
+                }
+                NativeAtomicType::U8 => {
+                    *(&(&*($self.value as *const AtomicU8))
+                        .$op(*(&$val as *const T as *const u8), Ordering::SeqCst)
+                        as *const u8 as *const T)
+                }
+                NativeAtomicType::U16 => {
+                    *(&(&*($self.value as *const AtomicU16))
+                        .$op(*(&$val as *const T as *const u16), Ordering::SeqCst)
+                        as *const u16 as *const T)
+                }
+                NativeAtomicType::U32 => {
+                    *(&(&*($self.value as *const AtomicU32))
+                        .$op(*(&$val as *const T as *const u32), Ordering::SeqCst)
+                        as *const u32 as *const T)
+                }
+                NativeAtomicType::U64 => {
+                    *(&(&*($self.value as *const AtomicU64))
+                        .$op(*(&$val as *const T as *const u64), Ordering::SeqCst)
+                        as *const u64 as *const T)
+                }
+                NativeAtomicType::Usize => {
+                    *(&(&*($self.value as *const AtomicUsize))
+                        .$op(*(&$val as *const T as *const usize), Ordering::SeqCst)
+                        as *const usize as *const T)
+                }
             }
         }
     };
@@ -296,7 +375,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicI8);
                     let new = *(&$val as *const T as *const i8);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -306,7 +388,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicI16);
                     let new = *(&$val as *const T as *const i16);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -316,7 +401,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicI32);
                     let new = *(&$val as *const T as *const i32);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -326,7 +414,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicI64);
                     let new = *(&$val as *const T as *const i64);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -336,7 +427,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicIsize);
                     let new = *(&$val as *const T as *const isize);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -346,7 +440,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicU8);
                     let new = *(&$val as *const T as *const u8);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -356,7 +453,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicU16);
                     let new = *(&$val as *const T as *const u16);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -366,7 +466,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicU32);
                     let new = *(&$val as *const T as *const u32);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -376,7 +479,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicU64);
                     let new = *(&$val as *const T as *const u64);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -386,7 +492,10 @@ macro_rules! ptr_nat_swap {
                     let a = &*($self.value as *const AtomicUsize);
                     let new = *(&$val as *const T as *const usize);
                     let mut cur = a.load(Ordering::SeqCst);
-                    while a.compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    while a
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
                         std::thread::yield_now();
                         cur = a.load(Ordering::SeqCst);
                     }
@@ -401,16 +510,86 @@ macro_rules! ptr_nat_compare_exchange {
     ($self:ident, $old:ident, $new:ident) => {
         unsafe {
             match $self.orig_t {
-                NativeAtomicType::I8    => *(&(&*($self.value as *const AtomicI8   )).compare_exchange(*(&$old as *const T as *const i8   ), *(&$new as *const T as *const i8   ), Ordering::SeqCst, Ordering::SeqCst) as *const Result<i8,    i8   > as *mut Result<T, T>),
-                NativeAtomicType::I16   => *(&(&*($self.value as *const AtomicI16  )).compare_exchange(*(&$old as *const T as *const i16  ), *(&$new as *const T as *const i16  ), Ordering::SeqCst, Ordering::SeqCst) as *const Result<i16,   i16  > as *mut Result<T, T>),
-                NativeAtomicType::I32   => *(&(&*($self.value as *const AtomicI32  )).compare_exchange(*(&$old as *const T as *const i32  ), *(&$new as *const T as *const i32  ), Ordering::SeqCst, Ordering::SeqCst) as *const Result<i32,   i32  > as *mut Result<T, T>),
-                NativeAtomicType::I64   => *(&(&*($self.value as *const AtomicI64  )).compare_exchange(*(&$old as *const T as *const i64  ), *(&$new as *const T as *const i64  ), Ordering::SeqCst, Ordering::SeqCst) as *const Result<i64,   i64  > as *mut Result<T, T>),
-                NativeAtomicType::Isize => *(&(&*($self.value as *const AtomicIsize)).compare_exchange(*(&$old as *const T as *const isize), *(&$new as *const T as *const isize), Ordering::SeqCst, Ordering::SeqCst) as *const Result<isize, isize> as *mut Result<T, T>),
-                NativeAtomicType::U8    => *(&(&*($self.value as *const AtomicU8   )).compare_exchange(*(&$old as *const T as *const u8   ), *(&$new as *const T as *const u8   ), Ordering::SeqCst, Ordering::SeqCst) as *const Result<u8,    u8   > as *mut Result<T, T>),
-                NativeAtomicType::U16   => *(&(&*($self.value as *const AtomicU16  )).compare_exchange(*(&$old as *const T as *const u16  ), *(&$new as *const T as *const u16  ), Ordering::SeqCst, Ordering::SeqCst) as *const Result<u16,   u16  > as *mut Result<T, T>),
-                NativeAtomicType::U32   => *(&(&*($self.value as *const AtomicU32  )).compare_exchange(*(&$old as *const T as *const u32  ), *(&$new as *const T as *const u32  ), Ordering::SeqCst, Ordering::SeqCst) as *const Result<u32,   u32  > as *mut Result<T, T>),
-                NativeAtomicType::U64   => *(&(&*($self.value as *const AtomicU64  )).compare_exchange(*(&$old as *const T as *const u64  ), *(&$new as *const T as *const u64  ), Ordering::SeqCst, Ordering::SeqCst) as *const Result<u64,   u64  > as *mut Result<T, T>),
-                NativeAtomicType::Usize => *(&(&*($self.value as *const AtomicUsize)).compare_exchange(*(&$old as *const T as *const usize), *(&$new as *const T as *const usize), Ordering::SeqCst, Ordering::SeqCst) as *const Result<usize, usize> as *mut Result<T, T>),
+                NativeAtomicType::I8 => {
+                    *(&(&*($self.value as *const AtomicI8)).compare_exchange(
+                        *(&$old as *const T as *const i8),
+                        *(&$new as *const T as *const i8),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<i8, i8> as *mut Result<T, T>)
+                }
+                NativeAtomicType::I16 => {
+                    *(&(&*($self.value as *const AtomicI16)).compare_exchange(
+                        *(&$old as *const T as *const i16),
+                        *(&$new as *const T as *const i16),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<i16, i16> as *mut Result<T, T>)
+                }
+                NativeAtomicType::I32 => {
+                    *(&(&*($self.value as *const AtomicI32)).compare_exchange(
+                        *(&$old as *const T as *const i32),
+                        *(&$new as *const T as *const i32),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<i32, i32> as *mut Result<T, T>)
+                }
+                NativeAtomicType::I64 => {
+                    *(&(&*($self.value as *const AtomicI64)).compare_exchange(
+                        *(&$old as *const T as *const i64),
+                        *(&$new as *const T as *const i64),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<i64, i64> as *mut Result<T, T>)
+                }
+                NativeAtomicType::Isize => {
+                    *(&(&*($self.value as *const AtomicIsize)).compare_exchange(
+                        *(&$old as *const T as *const isize),
+                        *(&$new as *const T as *const isize),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<isize, isize> as *mut Result<T, T>)
+                }
+                NativeAtomicType::U8 => {
+                    *(&(&*($self.value as *const AtomicU8)).compare_exchange(
+                        *(&$old as *const T as *const u8),
+                        *(&$new as *const T as *const u8),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<u8, u8> as *mut Result<T, T>)
+                }
+                NativeAtomicType::U16 => {
+                    *(&(&*($self.value as *const AtomicU16)).compare_exchange(
+                        *(&$old as *const T as *const u16),
+                        *(&$new as *const T as *const u16),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<u16, u16> as *mut Result<T, T>)
+                }
+                NativeAtomicType::U32 => {
+                    *(&(&*($self.value as *const AtomicU32)).compare_exchange(
+                        *(&$old as *const T as *const u32),
+                        *(&$new as *const T as *const u32),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<u32, u32> as *mut Result<T, T>)
+                }
+                NativeAtomicType::U64 => {
+                    *(&(&*($self.value as *const AtomicU64)).compare_exchange(
+                        *(&$old as *const T as *const u64),
+                        *(&$new as *const T as *const u64),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<u64, u64> as *mut Result<T, T>)
+                }
+                NativeAtomicType::Usize => {
+                    *(&(&*($self.value as *const AtomicUsize)).compare_exchange(
+                        *(&$old as *const T as *const usize),
+                        *(&$new as *const T as *const usize),
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) as *const Result<usize, usize> as *mut Result<T, T>)
+                }
             }
         }
     };
@@ -428,12 +607,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as i8) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<i8, i8> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<i8, i8>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::I16 => {
                     let a = &*($self.value as *const AtomicI16);
@@ -443,12 +634,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as i16) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<i16, i16> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<i16, i16>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::I32 => {
                     let a = &*($self.value as *const AtomicI32);
@@ -458,12 +661,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as i32) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<i32, i32> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<i32, i32>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::I64 => {
                     let a = &*($self.value as *const AtomicI64);
@@ -473,12 +688,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as i64) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<i64, i64> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<i64, i64>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::Isize => {
                     let a = &*($self.value as *const AtomicIsize);
@@ -488,12 +715,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as isize) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<isize, isize> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<isize, isize>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::U8 => {
                     let a = &*($self.value as *const AtomicU8);
@@ -503,12 +742,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as u8) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<u8, u8> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<u8, u8>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::U16 => {
                     let a = &*($self.value as *const AtomicU16);
@@ -518,12 +769,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as u16) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<u16, u16> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<u16, u16>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::U32 => {
                     let a = &*($self.value as *const AtomicU32);
@@ -533,12 +796,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as u32) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<u32, u32> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<u32, u32>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::U64 => {
                     let a = &*($self.value as *const AtomicU64);
@@ -548,12 +823,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as u64) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<u64, u64> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<u64, u64>
+                        as *mut Result<T, T>)
                 }
                 NativeAtomicType::Usize => {
                     let a = &*($self.value as *const AtomicUsize);
@@ -563,12 +850,24 @@ macro_rules! ptr_nat_compare_exchange_eps {
                     let mut cur = a.load(Ordering::SeqCst);
                     let mut done = false;
                     while (cur.abs_diff(old_a) as usize) < eps_a && !done {
-                        cur = match a.compare_exchange(old_a, val_a, Ordering::SeqCst, Ordering::SeqCst) {
-                            Ok(c) => { done = true; c }
-                            Err(c) => { std::thread::yield_now(); c }
+                        cur = match a.compare_exchange(
+                            old_a,
+                            val_a,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            Ok(c) => {
+                                done = true;
+                                c
+                            }
+                            Err(c) => {
+                                std::thread::yield_now();
+                                c
+                            }
                         };
                     }
-                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<usize, usize> as *mut Result<T, T>)
+                    *(&(if done { Ok(cur) } else { Err(cur) }) as *const Result<usize, usize>
+                        as *mut Result<T, T>)
                 }
             }
         }
@@ -591,61 +890,111 @@ unsafe impl<T: Dist> Send for NativeAtomicDistIterElement<'_, T> {}
 unsafe impl<T: Dist> Sync for NativeAtomicDistIterElement<'_, T> {}
 
 impl<'a, T: Dist> NativeAtomicDistIterElement<'a, T> {
-    pub fn load(&self) -> T { ptr_nat_load!(self) }
-    pub fn store(&self, val: T) { ptr_nat_store!(self, val); }
-    pub fn swap(&self, val: T) -> T { ptr_nat_swap!(self, val) }
-    pub fn compare_exchange(&self, old: T, new: T) -> Result<T, T> { ptr_nat_compare_exchange!(self, old, new) }
-    pub fn compare_exchange_epsilon(&self, old: T, val: T, eps: T) -> Result<T, T> { ptr_nat_compare_exchange_eps!(self, old, val, eps) }
+    pub fn load(&self) -> T {
+        ptr_nat_load!(self)
+    }
+    pub fn store(&self, val: T) {
+        ptr_nat_store!(self, val);
+    }
+    pub fn swap(&self, val: T) -> T {
+        ptr_nat_swap!(self, val)
+    }
+    pub fn compare_exchange(&self, old: T, new: T) -> Result<T, T> {
+        ptr_nat_compare_exchange!(self, old, new)
+    }
+    pub fn compare_exchange_epsilon(&self, old: T, val: T, eps: T) -> Result<T, T> {
+        ptr_nat_compare_exchange_eps!(self, old, val, eps)
+    }
 }
 
 impl<'a, T: Dist + ElementArithmeticOps> NativeAtomicDistIterElement<'a, T> {
-    pub fn fetch_add(&self, val: T) -> T { ptr_nat_fetch_op!(self, fetch_add, val) }
-    pub fn fetch_sub(&self, val: T) -> T { ptr_nat_fetch_op!(self, fetch_sub, val) }
-    pub fn fetch_mul(&self, val: T) -> T { ptr_nat_fetch_cas!(self, *, val) }
-    pub fn fetch_div(&self, val: T) -> T { ptr_nat_fetch_cas!(self, /, val) }
-    pub fn fetch_rem(&self, val: T) -> T { ptr_nat_fetch_cas!(self, %, val) }
+    pub fn fetch_add(&self, val: T) -> T {
+        ptr_nat_fetch_op!(self, fetch_add, val)
+    }
+    pub fn fetch_sub(&self, val: T) -> T {
+        ptr_nat_fetch_op!(self, fetch_sub, val)
+    }
+    pub fn fetch_mul(&self, val: T) -> T {
+        ptr_nat_fetch_cas!(self, *, val)
+    }
+    pub fn fetch_div(&self, val: T) -> T {
+        ptr_nat_fetch_cas!(self, /, val)
+    }
+    pub fn fetch_rem(&self, val: T) -> T {
+        ptr_nat_fetch_cas!(self, %, val)
+    }
 }
 
 impl<'a, T: Dist + ElementBitWiseOps + 'static> NativeAtomicDistIterElement<'a, T> {
-    pub fn fetch_and(&self, val: T) -> T { ptr_nat_fetch_op!(self, fetch_and, val) }
-    pub fn fetch_or(&self, val: T) -> T  { ptr_nat_fetch_op!(self, fetch_or,  val) }
-    pub fn fetch_xor(&self, val: T) -> T { ptr_nat_fetch_op!(self, fetch_xor, val) }
+    pub fn fetch_and(&self, val: T) -> T {
+        ptr_nat_fetch_op!(self, fetch_and, val)
+    }
+    pub fn fetch_or(&self, val: T) -> T {
+        ptr_nat_fetch_op!(self, fetch_or, val)
+    }
+    pub fn fetch_xor(&self, val: T) -> T {
+        ptr_nat_fetch_op!(self, fetch_xor, val)
+    }
 }
 
 impl<'a, T: Dist + ElementShiftOps + 'static> NativeAtomicDistIterElement<'a, T> {
-    pub fn fetch_shl(&self, val: T) -> T { ptr_nat_fetch_cas!(self, <<, val) }
-    pub fn fetch_shr(&self, val: T) -> T { ptr_nat_fetch_cas!(self, >>, val) }
+    pub fn fetch_shl(&self, val: T) -> T {
+        ptr_nat_fetch_cas!(self, <<, val)
+    }
+    pub fn fetch_shr(&self, val: T) -> T {
+        ptr_nat_fetch_cas!(self, >>, val)
+    }
 }
 
 impl<'a, T: Dist + ElementArithmeticOps> AddAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn add_assign(&mut self, val: T) { self.fetch_add(val); }
+    fn add_assign(&mut self, val: T) {
+        self.fetch_add(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> SubAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn sub_assign(&mut self, val: T) { self.fetch_sub(val); }
+    fn sub_assign(&mut self, val: T) {
+        self.fetch_sub(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> MulAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn mul_assign(&mut self, val: T) { self.fetch_mul(val); }
+    fn mul_assign(&mut self, val: T) {
+        self.fetch_mul(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> DivAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn div_assign(&mut self, val: T) { self.fetch_div(val); }
+    fn div_assign(&mut self, val: T) {
+        self.fetch_div(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> RemAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn rem_assign(&mut self, val: T) { self.fetch_rem(val); }
+    fn rem_assign(&mut self, val: T) {
+        self.fetch_rem(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitAndAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn bitand_assign(&mut self, val: T) { self.fetch_and(val); }
+    fn bitand_assign(&mut self, val: T) {
+        self.fetch_and(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitOrAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn bitor_assign(&mut self, val: T) { self.fetch_or(val); }
+    fn bitor_assign(&mut self, val: T) {
+        self.fetch_or(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitXorAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn bitxor_assign(&mut self, val: T) { self.fetch_xor(val); }
+    fn bitxor_assign(&mut self, val: T) {
+        self.fetch_xor(val);
+    }
 }
 impl<'a, T: Dist + ElementShiftOps> ShlAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn shl_assign(&mut self, val: T) { self.fetch_shl(val); }
+    fn shl_assign(&mut self, val: T) {
+        self.fetch_shl(val);
+    }
 }
 impl<'a, T: Dist + ElementShiftOps> ShrAssign<T> for NativeAtomicDistIterElement<'a, T> {
-    fn shr_assign(&mut self, val: T) { self.fetch_shr(val); }
+    fn shr_assign(&mut self, val: T) {
+        self.fetch_shr(val);
+    }
 }
 
 impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicDistIterElement<'a, T> {

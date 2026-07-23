@@ -70,7 +70,7 @@ macro_rules! create_sum_all_tests {
 }
 
 create_sum_all_tests!(
-     (AtomicArray, GlobalLockArray),
+    (AtomicArray, GlobalLockArray),
     ("Block", "Cyclic"),
     (u8),
     (2, 4),

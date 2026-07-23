@@ -799,7 +799,9 @@ impl<T: Dist> AtomicArray<T> {
     ///```
     pub fn blocking_get_buffer_pe(&self, pe: usize, offset: usize, num_elems: usize) -> Vec<T> {
         unsafe {
-            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(self, pe, offset, num_elems, Sealed)
+            <Self as LamellarRdmaGet<T>>::blocking_get_buffer_pe(
+                self, pe, offset, num_elems, Sealed,
+            )
         }
     }
 

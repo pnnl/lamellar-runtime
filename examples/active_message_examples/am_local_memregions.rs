@@ -8,7 +8,6 @@ use std::time::Instant;
 
 use rand::distr::{Distribution, Uniform};
 
-
 // const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
 #[lamellar::AmData(Clone, Debug)]
@@ -37,15 +36,15 @@ impl LamellarAM for DataAM {
                     lamellar::team.num_pes(),
                     lamellar::world.num_pes()
                 );
-                let _ = lamellar::team
-                    .spawn_am_pe(pe,
-                        DataAM {
-                            array: self.array.clone(),
-                            depth: self.depth - 1,
-                            width: self.width,
-                            path: path.clone(),
-                        },
-                    );
+                let _ = lamellar::team.spawn_am_pe(
+                    pe,
+                    DataAM {
+                        array: self.array.clone(),
+                        depth: self.depth - 1,
+                        width: self.width,
+                        path: path.clone(),
+                    },
+                );
             }
         }
     }
@@ -82,7 +81,12 @@ fn main() {
             (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
         ))
         .unwrap(); //okay to unwrap because we are creating a sub_team of the world (i.e. my_pe guaranteed to be in the parent or the subteam)
-    println!("first half team {:?} my pe {:?} team pe id {:?}", first_half_team, my_pe, first_half_team.team_pe_id());
+    println!(
+        "first half team {:?} my pe {:?} team pe id {:?}",
+        first_half_team,
+        my_pe,
+        first_half_team.team_pe_id()
+    );
     let odd_team = world
         .create_team_from_arch(StridedArch::new(
             1,                                      // start pe
@@ -90,7 +94,12 @@ fn main() {
             (num_pes as f64 / 2.0).ceil() as usize, //num pes in team
         ))
         .unwrap(); //okay to unwrap because we are creating a sub_team of the world (i.e. my_pe guaranteed to be in the parent or the subteam)
-    println!("odd team {:?} my pe {:?} team pe id {:?}", odd_team, my_pe, odd_team.team_pe_id());
+    println!(
+        "odd team {:?} my pe {:?} team pe id {:?}",
+        odd_team,
+        my_pe,
+        odd_team.team_pe_id()
+    );
     let s = Instant::now();
     let width = 2;
     if my_pe == 0 {
@@ -103,16 +112,15 @@ fn main() {
                 first_half_team.num_pes(),
                 world.num_pes()
             );
-            let _ = first_half_team
-                .spawn_am_pe(
-                    pe,
-                    DataAM {
-                        array: array.clone(),
-                        depth: 5,
-                        width: width,
-                        path: vec![(my_pe, first_half_team.team_pe_id().ok())],
-                    },
-                );
+            let _ = first_half_team.spawn_am_pe(
+                pe,
+                DataAM {
+                    array: array.clone(),
+                    depth: 5,
+                    width: width,
+                    path: vec![(my_pe, first_half_team.team_pe_id().ok())],
+                },
+            );
 
             println!(
                 "sending {:?} to {:?} of {} ({})",
@@ -121,15 +129,15 @@ fn main() {
                 odd_team.num_pes(),
                 world.num_pes()
             );
-            let _ = odd_team
-                .spawn_am_pe(pe,
-                    DataAM {
-                        array: array.clone(),
-                        depth: 5,
-                        width: width,
-                        path: vec![(my_pe, odd_team.team_pe_id().ok())],
-                    },
-                );
+            let _ = odd_team.spawn_am_pe(
+                pe,
+                DataAM {
+                    array: array.clone(),
+                    depth: 5,
+                    width: width,
+                    path: vec![(my_pe, odd_team.team_pe_id().ok())],
+                },
+            );
         }
     }
     world.wait_all();

@@ -3,7 +3,7 @@ use std::{mem::MaybeUninit, sync::Arc};
 
 use super::{context::Context, error::Error};
 
-use pmi::{pmi::Pmi};
+use pmi::pmi::Pmi;
 
 use tracing::*;
 
@@ -130,9 +130,7 @@ impl Worker {
         pmi.exchange().unwrap();
         let mut all_addresses = Vec::new();
         for pe in 0..pmi.ranks().len() {
-            let res = pmi
-                .get(&addr_key, &pe)
-                .unwrap();
+            let res = pmi.get(&addr_key, &pe).unwrap();
             all_addresses.push(res);
         }
 

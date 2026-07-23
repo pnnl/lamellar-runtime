@@ -5,26 +5,34 @@ macro_rules! initialize_array {
         unsafe {
             $array
                 .dist_iter_mut()
-                .for_each(move |x| {*x = $init_val; } )
+                .for_each(move |x| {
+                    *x = $init_val;
+                })
                 .block();
         }
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter()
-            .for_each(move |x| {x.store($init_val); } )
+            .for_each(move |x| {
+                x.store($init_val);
+            })
             .block();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter_mut()
-            .for_each(move |x| {*x = $init_val; } )
+            .for_each(move |x| {
+                *x = $init_val;
+            })
             .block();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter_mut()
-            .for_each(move |x| {*x = $init_val; } )
+            .for_each(move |x| {
+                *x = $init_val;
+            })
             .block();
     };
 }

@@ -190,7 +190,7 @@ macro_rules! load_store_test {
     }};
 }
 
-#[lamellar::main] 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array = args[1].clone();

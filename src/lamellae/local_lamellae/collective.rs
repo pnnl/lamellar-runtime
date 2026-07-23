@@ -1,4 +1,9 @@
-use std::{future::Future, pin::Pin, sync::Arc, task::{Context, Poll}};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use pin_project::{pin_project, pinned_drop};
 
@@ -16,9 +21,8 @@ use crate::{
             CollectiveBroadcastIntoBufferOpFuture, CollectiveBroadcastIntoBufferOpHandle,
             CollectiveBroadcastOpFuture, CollectiveBroadcastOpHandle,
             CollectiveGatherIntoBufferOpFuture, CollectiveGatherIntoBufferOpHandle,
-            CollectiveGatherOpFuture, CollectiveGatherOpHandle,
-            CollectiveReduceIntoBufferOpFuture, CollectiveReduceIntoBufferOpHandle,
-            CollectiveReduceOpFuture, CollectiveReduceOpHandle,
+            CollectiveGatherOpFuture, CollectiveGatherOpHandle, CollectiveReduceIntoBufferOpFuture,
+            CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpFuture, CollectiveReduceOpHandle,
             CollectiveReduceScatterIntoBufferOpFuture, CollectiveReduceScatterIntoBufferOpHandle,
             CollectiveReduceScatterOpFuture, CollectiveReduceScatterOpHandle,
             CollectiveScatterIntoBufferOpFuture, CollectiveScatterIntoBufferOpHandle,
@@ -130,7 +134,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LocalCollectiveAllReduceIntoBufferFuture
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for LocalCollectiveAllReduceIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for LocalCollectiveAllReduceIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a LocalCollectiveAllReduceIntoBufferFuture").print();
@@ -457,7 +463,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LocalCollectiveAllGatherIntoBufferFuture
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for LocalCollectiveAllGatherIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for LocalCollectiveAllGatherIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a LocalCollectiveAllGatherIntoBufferFuture").print();
@@ -727,7 +735,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LocalCollectiveAllToAllIntoBufferFuture<
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for LocalCollectiveAllToAllIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for LocalCollectiveAllToAllIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a LocalCollectiveAllToAllIntoBufferFuture").print();
@@ -853,7 +863,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LocalCollectiveBroadcastIntoBufferFuture
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for LocalCollectiveBroadcastIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for LocalCollectiveBroadcastIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a LocalCollectiveBroadcastIntoBufferFuture").print();
@@ -983,7 +995,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LocalCollectiveScatterIntoBufferFuture<T
 }
 
 #[pinned_drop]
-impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for LocalCollectiveScatterIntoBufferFuture<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
+    for LocalCollectiveScatterIntoBufferFuture<T, B>
+{
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a LocalCollectiveScatterIntoBufferFuture").print();
@@ -1113,8 +1127,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
 {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
-            RuntimeWarning::DroppedHandle("a LocalCollectiveReduceScatterIntoBufferFuture")
-                .print();
+            RuntimeWarning::DroppedHandle("a LocalCollectiveReduceScatterIntoBufferFuture").print();
         }
     }
 }

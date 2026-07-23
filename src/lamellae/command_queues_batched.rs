@@ -6,9 +6,9 @@ use crate::{
     env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
     LamellarBuffer,
 };
+use async_lock::Mutex; //, RwLock};
 use core::panic;
 use parking_lot::RwLock;
-use async_lock::{Mutex};//, RwLock};
 use std::collections::HashMap;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
@@ -715,21 +715,19 @@ impl InnerCQ {
                 if send_buf[0].dsize > 0 {
                     let recv_buffer = self.recv_buffer[self.my_pe].read();
                     // let recv_buffer = self.recv_buffer[self.my_pe].read_blocking(); //we can safely read here as the send_buffer lock prevents any other thread from writing to our recv buffer on the dst PE
-                                                                                    // debug! {"sending data to dst({dst}) {:x}    sending cmd {:?} {:?} {:?}",
-                                                                                    // recv_buffer.index_addr(0),send_buf, send_buf[0],send_buf[0].as_bytes()};
+                    // debug! {"sending data to dst({dst}) {:x}    sending cmd {:?} {:?} {:?}",
+                    // recv_buffer.index_addr(0),send_buf, send_buf[0],send_buf[0].as_bytes()};
                     stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
                     debug!("sending cmd to dst({dst}) {:?}", send_buf[0]);
 
                     let send_cmd = send_buf[0].clone();
-                    let _ = recv_buffer
-                        .put_unmanaged::<CmdMsg>(
-                            // &self.scheduler,
-                            // vec![],
-                            send_cmd, //send_buf.sub_slice(dst..=dst),
-                            dst,
-                            0,
-                        );
-                        // .block();
+                    let _ = recv_buffer.put_unmanaged::<CmdMsg>(
+                        // &self.scheduler,
+                        // vec![],
+                        send_cmd, //send_buf.sub_slice(dst..=dst),
+                        dst, 0,
+                    );
+                    // .block();
                     // recv_buffer.wait();
                     // .block();
                     // .spawn();
@@ -1102,7 +1100,13 @@ impl InnerCQ {
 
     //update cmdbuffers to include a hash the wait on that here
     // //#[tracing::instrument(skip(self), level = "debug")]
-    async fn get_data(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> Vec<CmdMsg> {
+    async fn get_data(
+        &self,
+        src: usize,
+        cmd: CmdMsg,
+        msg_id: usize,
+        lamellae: &Arc<Lamellae>,
+    ) -> Vec<CmdMsg> {
         trace!(target: "lamellae_debug", "entering get_data lamellae cnt: {:?}", Arc::strong_count(lamellae));
         let (local_daddr_alloc, offset) = self
             .comm
@@ -1119,17 +1123,20 @@ impl InnerCQ {
             remote_cmd_buffer,
         );
 
-
-        if let Ok(data) = self.comm.rt_alloc(cmd.dsize, std::mem::align_of::<CmdMsg>()) {
+        if let Ok(data) = self
+            .comm
+            .rt_alloc(cmd.dsize, std::mem::align_of::<CmdMsg>())
+        {
             trace!("msg_id: {msg_id} allocated local buffer for get_data at addr: {:?} for cmd from {src}", data);
             let mut buffer = unsafe {
                 LamellarBuffer::<CmdMsg, CommSlice<CmdMsg>>::from_comm_slice(
                     data.as_comm_slice(),
-                    lamellae.clone()
+                    lamellae.clone(),
                 )
             };
             remote_cmd_buffer
-                .get_into_buffer(&self.scheduler, None,src, 0, buffer.split_off(0)).await;
+                .get_into_buffer(&self.scheduler, None, src, 0, buffer.split_off(0))
+                .await;
             // let _ = remote_cmd_buffer.get_into_buffer_unmanaged(src, 0, buffer.split_off(0));
             // let mut timer = std::time::Instant::now();
             // while calc_hash(
@@ -1163,10 +1170,14 @@ impl InnerCQ {
             data_vec
         } else {
             let data = vec![CmdMsg::default(); num_cmds];
-            let mut buffer = LamellarBuffer::<CmdMsg, Vec<CmdMsg>>::from_vec_with_lamellae(data, lamellae.clone());
+            let mut buffer = LamellarBuffer::<CmdMsg, Vec<CmdMsg>>::from_vec_with_lamellae(
+                data,
+                lamellae.clone(),
+            );
 
             remote_cmd_buffer
-                .get_into_buffer(&self.scheduler, None, src, 0, buffer.split_off(0)).await;
+                .get_into_buffer(&self.scheduler, None, src, 0, buffer.split_off(0))
+                .await;
             // remote_cmd_buffer
             //     .get_into_buffer_unmanaged(src, 0, buffer.split_off(0));
             // let mut timer = std::time::Instant::now();
@@ -1195,9 +1206,8 @@ impl InnerCQ {
             //     async_std::task::yield_now().await;
             // }
             // task.await;
-            let data = buffer
-                .async_unwrap().await;
-                // .expect("Multiple copies of data still exist");
+            let data = buffer.async_unwrap().await;
+            // .expect("Multiple copies of data still exist");
 
             stats!(PE_RECVS[1][src].fetch_add(1, Ordering::SeqCst));
             debug!("got data from {src} -- {:?} cmds", data.len());
@@ -1221,7 +1231,7 @@ impl InnerCQ {
         let mut buffer = unsafe {
             LamellarBuffer::<u8, CommSlice<u8>>::from_comm_slice(
                 ser_data.header_and_data_as_bytes_mut(),
-                lamellae.clone()
+                lamellae.clone(),
             )
         };
         // let mut buffer = LamellarBuffer::<u8, Vec<u8>>::from_vec(vec);
@@ -1296,7 +1306,13 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> SerializedData {
+    async fn get_cmd(
+        &self,
+        src: usize,
+        cmd: CmdMsg,
+        msg_id: usize,
+        lamellae: &Arc<Lamellae>,
+    ) -> SerializedData {
         trace!(target: "lamellae_debug", "entering get_cmd from {} of size {} lamellae cnt: {:?}", src, cmd.dsize, Arc::strong_count(lamellae));
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut print = true;
@@ -1311,7 +1327,7 @@ impl InnerCQ {
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         }
         let mut ser_data = ser_data.unwrap();
-        self.get_serialized_data(src, cmd, &mut ser_data, msg_id,lamellae)
+        self.get_serialized_data(src, cmd, &mut ser_data, msg_id, lamellae)
             .await;
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
         trace!(target: "lamellae_debug", "leaving get_cmd lamellae cnt: {:?}", Arc::strong_count(lamellae));
@@ -1319,9 +1335,15 @@ impl InnerCQ {
     }
 
     // //#[tracing::instrument(skip_all, level = "debug")]
-    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> Vec<CmdMsg> {
+    async fn get_cmd_buf(
+        &self,
+        src: usize,
+        cmd: CmdMsg,
+        msg_id: usize,
+        lamellae: &Arc<Lamellae>,
+    ) -> Vec<CmdMsg> {
         // trace!("getting cmd buf from {}", src);
-        let data = self.get_data(src, cmd, msg_id,lamellae).await;
+        let data = self.get_data(src, cmd, msg_id, lamellae).await;
         data
     }
 }
@@ -1388,7 +1410,6 @@ pub(crate) struct CQBatched {
 
 #[lamellar_prof::prof]
 impl CQBatched {
-
     fn print_arc_cnts(&self) {
         trace!(target: "drop",
             "CQBatched Arc counts: cq: {:?}  cmd_buffers: {:?} comm: {:?}",
@@ -1535,29 +1556,37 @@ impl CQBatched {
         //         .get(data.len().saturating_sub(32)..data.len())
         // );
         let data_slice = data.ser_data_bytes.clone();
-        data.leak_alloc().leak().expect("failed to leak alloc in send_data");
+        data.leak_alloc()
+            .leak()
+            .expect("failed to leak alloc in send_data");
         self.cq.send(data_slice, dst, hash).await;
     }
 
-    pub(crate) async fn send_vec(&self,  vec_data: Vec<u8>, dst: usize)  {
-        trace!("sending vec_data of len {:?} to dst {:?}", vec_data.len(), dst);
-       let mut data= self.cq.comm.rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
-       while let Err(_) = data{
-            async_std::task::yield_now().await;
-            data = self.cq.comm.rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
-       }
-       let data = data.unwrap();
-       unsafe {
-        std::ptr::copy_nonoverlapping(
-            vec_data.as_ptr(),
-            data.as_mut_ptr(),
+    pub(crate) async fn send_vec(&self, vec_data: Vec<u8>, dst: usize) {
+        trace!(
+            "sending vec_data of len {:?} to dst {:?}",
             vec_data.len(),
+            dst
         );
-       }
-       let data_slice = data.as_comm_slice().clone();
-       let hash = calc_hash(data_slice.usize_addr(), data_slice.len());
-       data.leak().expect("failed to leak alloc in send_vec");
-       self.cq.send(data_slice, dst, hash).await;
+        let mut data = self
+            .cq
+            .comm
+            .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+        while let Err(_) = data {
+            async_std::task::yield_now().await;
+            data = self
+                .cq
+                .comm
+                .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+        }
+        let data = data.unwrap();
+        unsafe {
+            std::ptr::copy_nonoverlapping(vec_data.as_ptr(), data.as_mut_ptr(), vec_data.len());
+        }
+        let data_slice = data.as_comm_slice().clone();
+        let hash = calc_hash(data_slice.usize_addr(), data_slice.len());
+        data.leak().expect("failed to leak alloc in send_vec");
+        self.cq.send(data_slice, dst, hash).await;
     }
 
     pub(crate) fn wait_all_print(&self) {
@@ -1666,7 +1695,7 @@ impl CQBatched {
         // println!("finished command queue wait_all_print");
     }
 
-   pub(crate) async fn alloc_task(&self) {
+    pub(crate) async fn alloc_task(&self) {
         // let mut timer = std::time::Instant::now();
         let print = false;
         while self.scheduler.active(0)
@@ -1735,12 +1764,13 @@ impl CQBatched {
                                 let cq = self.cq.clone();
                                 let lamellae = lamellae.clone();
                                 trace!(target: "lamellae_debug", "[{:?}] recv_data got tx cmd_buf from {src} submitting get cmd buf task cq cloned {:?} lamellae cnt {:?}", std::thread::current().id(), Arc::strong_count(&cq), Arc::strong_count(&lamellae));
-                                
+
                                 let scheduler1 = self.scheduler.clone();
                                 let task = async move {
                                     trace!("going to get cmd_buf {:?} from {:?}", cmd_buf_cmd, src);
                                     let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
-                                    let data = cq.get_cmd_buf(src, cmd_buf_cmd, msg_id,&lamellae).await;
+                                    let data =
+                                        cq.get_cmd_buf(src, cmd_buf_cmd, msg_id, &lamellae).await;
                                     let mut i = 0;
                                     let len = data.len();
                                     let cmd_cnt: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(len));
@@ -1753,14 +1783,14 @@ impl CQBatched {
                                             let cq = cq.clone();
                                             let lamellae_c = lamellae.clone();
                                             trace!(target: "lamellae_debug", "[{:?}] recv_data submitting get command task for cmd {:?} from {src} msg_id: {msg_id} [{:?}/{:?}] cmd_cnt: {:?} cq cloned {:?} lamellae cnt {:?}", std::thread::current().id(), cmd, i, len, cmd_cnt, Arc::strong_count(&cq), Arc::strong_count(&lamellae_c));
-                                            
+
                                             let scheduler2 = scheduler1.clone();
                                             let cmd_cnt_clone = cmd_cnt.clone();
                                             let task = async move {
-                                                let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae_c).await;
+                                                let work_data =
+                                                    cq.get_cmd(src, cmd, msg_id, &lamellae_c).await;
                                                 debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
-                                                scheduler2
-                                                    .submit_remote_am(work_data, &lamellae_c);
+                                                scheduler2.submit_remote_am(work_data, &lamellae_c);
                                                 trace!(target: "lamellae_debug", "submitted_remote_am lamellae cnt: {:?}", Arc::strong_count(&lamellae_c));
                                                 if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
                                                 {

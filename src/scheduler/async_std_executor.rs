@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU8};
+use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
 
 use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};

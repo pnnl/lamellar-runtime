@@ -1,11 +1,31 @@
-use std::{collections::HashMap, mem::MaybeUninit, ops::{Range, RangeFrom, RangeFull, RangeTo}, sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}}};
+use std::{
+    collections::HashMap,
+    mem::MaybeUninit,
+    ops::{Range, RangeFrom, RangeFull, RangeTo},
+    sync::{
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 use libfabric_sys;
 use parking_lot::{Mutex, RwLock};
 use pmi::{Pmi, PmiBuilder};
 use tracing::{debug, trace};
 
-use crate::{lamellae::{AllocError, AllocResult, AllocationType, AtomicOp, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner, FabricError, FabricResult, calc_alloc_padding_size_align, collective::{AllReduceOp, ReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, decode_padding, decode_ref_count, decode_ref_count_and_padding, decrement_ref_count, encode_ref_count_and_padding, get_ref_count, increment_ref_count}, lamellar_alloc::{BTreeAlloc, LamellarAlloc}};
+use crate::{
+    lamellae::{
+        calc_alloc_padding_size_align,
+        collective::{
+            AllReduceOp, ReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone,
+        },
+        decode_padding, decode_ref_count, decode_ref_count_and_padding, decrement_ref_count,
+        encode_ref_count_and_padding, get_ref_count, increment_ref_count, AllocError, AllocResult,
+        AllocationType, AtomicOp, CollectiveOpKind, CommAlloc, CommAllocAddr, CommAllocInner,
+        FabricError, FabricResult,
+    },
+    lamellar_alloc::{BTreeAlloc, LamellarAlloc},
+};
 
 enum BarrierImpl {
     Uninit,
@@ -28,7 +48,7 @@ enum AtomicOpKind {
     Cas,
 }
 
-pub(crate) struct CommGroup{
+pub(crate) struct CommGroup {
     mapped_addresses: Vec<u64>,
     ep: *mut libfabric_sys::fid_ep,
     cq: *mut libfabric_sys::fid_cq,
@@ -48,7 +68,7 @@ pub(crate) struct CommGroup{
 unsafe impl Send for CommGroup {}
 unsafe impl Sync for CommGroup {}
 
-impl CommGroup{
+impl CommGroup {
     fn wait_for_join_event(&self, ctx: *mut std::ffi::c_void) {
         let _lock = self.lock.lock();
         loop {
@@ -60,10 +80,10 @@ impl CommGroup{
                     &mut event_type,
                     event_entry.as_mut_ptr() as *mut libc::c_void,
                     std::mem::size_of::<libfabric_sys::fi_eq_cm_entry>(),
-                    0
+                    0,
                 )
             };
-            
+
             if ret >= 0 {
                 let entry = unsafe { event_entry.assume_init() };
                 if event_type == libfabric_sys::FI_JOIN_COMPLETE && entry.context == ctx {
@@ -72,7 +92,7 @@ impl CommGroup{
             } else if ret != -(libfabric_sys::FI_EAGAIN as isize) {
                 panic!("Error reading EQ: {}", ret);
             }
-            
+
             self.progress();
         }
     }
@@ -83,7 +103,7 @@ impl CommGroup{
             libfabric_sys::inlined_fi_cq_read(
                 self.cq,
                 cq_entry.as_mut_ptr() as *mut libc::c_void,
-                1
+                1,
             )
         };
 
@@ -124,7 +144,9 @@ impl CommGroup{
             prev_expected_cnt = expected_cnt;
             old_cnt = cur_cnt;
             self.progress();
-            while self.coll_cnt_completed.load(Ordering::SeqCst) < self.coll_cnt_issued.load(Ordering::SeqCst) {
+            while self.coll_cnt_completed.load(Ordering::SeqCst)
+                < self.coll_cnt_issued.load(Ordering::SeqCst)
+            {
                 self.progress();
                 std::thread::yield_now();
             }
@@ -241,7 +263,6 @@ impl CommGroup{
     }
 }
 
-
 #[derive(Clone)]
 pub(crate) enum LibfabricSysMem {
     Mmap(Arc<memmap::MmapMut>),
@@ -277,7 +298,6 @@ impl LibfabricSysMem {
     }
 }
 
-
 pub(crate) struct Ofi {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
@@ -291,7 +311,6 @@ pub(crate) struct Ofi {
 
 unsafe impl Send for Ofi {}
 unsafe impl Sync for Ofi {}
-
 
 impl std::fmt::Debug for Ofi {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -311,30 +330,56 @@ impl Ofi {
 
         let num_pes = my_pmi.ranks().len();
 
-        let info = unsafe{
+        let info = unsafe {
             let hints = libfabric_sys::inlined_fi_allocinfo();
-            (*hints).caps = (libfabric_sys::FI_RMA | libfabric_sys::FI_ATOMIC | libfabric_sys::FI_COLLECTIVE) as u64;
+            (*hints).caps = (libfabric_sys::FI_RMA
+                | libfabric_sys::FI_ATOMIC
+                | libfabric_sys::FI_COLLECTIVE) as u64;
             (*hints).mode = libfabric_sys::FI_CONTEXT;
             (*(*hints).ep_attr).type_ = libfabric_sys::fi_ep_type_FI_EP_RDM;
             (*(*hints).domain_attr).threading = libfabric_sys::fi_threading_FI_THREAD_SAFE;
             // (*(*hints).domain_attr).control_progress = libfabric_sys::fi_progress_FI_PROGRESS_AUTO as u8;
             (*(*hints).domain_attr).data_progress = libfabric_sys::fi_progress_FI_PROGRESS_MANUAL;
-            (*(*hints).domain_attr).mr_mode = (libfabric_sys::FI_MR_PROV_KEY | libfabric_sys::FI_MR_VIRT_ADDR | libfabric_sys::FI_MR_ALLOCATED) as i32;
+            (*(*hints).domain_attr).mr_mode = (libfabric_sys::FI_MR_PROV_KEY
+                | libfabric_sys::FI_MR_VIRT_ADDR
+                | libfabric_sys::FI_MR_ALLOCATED)
+                as i32;
             (*(*hints).domain_attr).resource_mgmt = libfabric_sys::fi_resource_mgmt_FI_RM_ENABLED;
             (*(*hints).tx_attr).tclass = libfabric_sys::FI_TC_LOW_LATENCY;
-            (*(*hints).tx_attr).op_flags = (libfabric_sys::FI_DELIVERY_COMPLETE ) as u64;
+            (*(*hints).tx_attr).op_flags = (libfabric_sys::FI_DELIVERY_COMPLETE) as u64;
             (*hints).addr_format = libfabric_sys::FI_FORMAT_UNSPEC;
             let version = 1 << 16 | 22;
             let mut c_info = MaybeUninit::<*mut libfabric_sys::fi_info>::uninit();
-            libfabric_sys::fi_getinfo(version, std::ptr::null_mut(), std::ptr::null_mut(), 0, hints, c_info.as_mut_ptr());
+            libfabric_sys::fi_getinfo(
+                version,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                0,
+                hints,
+                c_info.as_mut_ptr(),
+            );
             let info = c_info.assume_init();
             let mut curr_info = info;
             while !curr_info.is_null() {
-                if !provider.is_none() && !std::ffi::CStr::from_ptr((*curr_info).fabric_attr.as_ref().unwrap().prov_name).to_str().unwrap().split(';').any(|p| p == provider.unwrap()) {
+                if !provider.is_none()
+                    && !std::ffi::CStr::from_ptr(
+                        (*curr_info).fabric_attr.as_ref().unwrap().prov_name,
+                    )
+                    .to_str()
+                    .unwrap()
+                    .split(';')
+                    .any(|p| p == provider.unwrap())
+                {
                     curr_info = (*curr_info).next;
                     continue;
                 }
-                if !domain.is_none() && !std::ffi::CStr::from_ptr((*curr_info).domain_attr.as_ref().unwrap().name).to_str().unwrap().split(';').any(|d| d == domain.unwrap()) {
+                if !domain.is_none()
+                    && !std::ffi::CStr::from_ptr((*curr_info).domain_attr.as_ref().unwrap().name)
+                        .to_str()
+                        .unwrap()
+                        .split(';')
+                        .any(|d| d == domain.unwrap())
+                {
                     curr_info = (*curr_info).next;
                     continue;
                 }
@@ -345,21 +390,29 @@ impl Ofi {
             libfabric_sys::fi_freeinfo(info);
             ret
         };
-        
-        let fabric =
-            unsafe {
-                let mut fabric =  MaybeUninit::<*mut libfabric_sys::fid_fabric>::uninit();
-                let ret = libfabric_sys::fi_fabric((*info).fabric_attr, fabric.as_mut_ptr(), std::ptr::null_mut());
-                if ret != 0 {
-                    eprintln!("Error creating fabric: {}", ret);
-                    Err(FabricError::InitError(-ret as u32))?;
-                }
-                fabric.assume_init()
-            };
-        
+
+        let fabric = unsafe {
+            let mut fabric = MaybeUninit::<*mut libfabric_sys::fid_fabric>::uninit();
+            let ret = libfabric_sys::fi_fabric(
+                (*info).fabric_attr,
+                fabric.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
+            if ret != 0 {
+                eprintln!("Error creating fabric: {}", ret);
+                Err(FabricError::InitError(-ret as u32))?;
+            }
+            fabric.assume_init()
+        };
+
         let domain = unsafe {
             let mut domain = MaybeUninit::<*mut libfabric_sys::fid_domain>::uninit();
-            let ret = libfabric_sys::inlined_fi_domain(fabric, info, domain.as_mut_ptr(), std::ptr::null_mut());
+            let ret = libfabric_sys::inlined_fi_domain(
+                fabric,
+                info,
+                domain.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
             if ret != 0 {
                 eprintln!("Error creating domain: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -377,7 +430,12 @@ impl Ofi {
                 wait_set: std::ptr::null_mut(),
             };
 
-            let ret = libfabric_sys::inlined_fi_eq_open(fabric, &mut eq_attr, eq.as_mut_ptr(), std::ptr::null_mut());
+            let ret = libfabric_sys::inlined_fi_eq_open(
+                fabric,
+                &mut eq_attr,
+                eq.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
             if ret != 0 {
                 eprintln!("Error creating EQ: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -396,7 +454,12 @@ impl Ofi {
                 wait_cond: libfabric_sys::fi_cq_wait_cond_FI_CQ_COND_NONE,
                 wait_set: std::ptr::null_mut(),
             };
-            let ret = libfabric_sys::inlined_fi_cq_open(domain, &mut cq_attr, cq.as_mut_ptr(), std::ptr::null_mut());
+            let ret = libfabric_sys::inlined_fi_cq_open(
+                domain,
+                &mut cq_attr,
+                cq.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
             if ret != 0 {
                 eprintln!("Error creating CQ: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -415,7 +478,12 @@ impl Ofi {
                 map_addr: std::ptr::null_mut(),
                 flags: 0,
             };
-            let ret = libfabric_sys::inlined_fi_av_open(domain, &mut av_attr, av.as_mut_ptr(), std::ptr::null_mut());
+            let ret = libfabric_sys::inlined_fi_av_open(
+                domain,
+                &mut av_attr,
+                av.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
             if ret != 0 {
                 eprintln!("Error creating AV: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -431,7 +499,12 @@ impl Ofi {
                 wait_set: std::ptr::null_mut(),
                 flags: 0,
             };
-            let ret = libfabric_sys::inlined_fi_cntr_open(domain, &mut cntr_attr, cntr.as_mut_ptr(), std::ptr::null_mut());
+            let ret = libfabric_sys::inlined_fi_cntr_open(
+                domain,
+                &mut cntr_attr,
+                cntr.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
             if ret != 0 {
                 eprintln!("Error creating put counter: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -447,7 +520,12 @@ impl Ofi {
                 wait_set: std::ptr::null_mut(),
                 flags: 0,
             };
-            let ret = libfabric_sys::inlined_fi_cntr_open(domain, &mut cntr_attr, cntr.as_mut_ptr(), std::ptr::null_mut());
+            let ret = libfabric_sys::inlined_fi_cntr_open(
+                domain,
+                &mut cntr_attr,
+                cntr.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
             if ret != 0 {
                 eprintln!("Error creating put counter: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -457,7 +535,12 @@ impl Ofi {
 
         let ep = unsafe {
             let mut ep = MaybeUninit::<*mut libfabric_sys::fid_ep>::uninit();
-            let ret = libfabric_sys::inlined_fi_endpoint(domain, info, ep.as_mut_ptr(), std::ptr::null_mut());
+            let ret = libfabric_sys::inlined_fi_endpoint(
+                domain,
+                info,
+                ep.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
             if ret != 0 {
                 eprintln!("Error creating endpoint: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -471,7 +554,8 @@ impl Ofi {
                 eprintln!("Error binding EQ: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
             }
-            let flags = (libfabric_sys::FI_TRANSMIT | libfabric_sys::FI_RECV)  as u64 | libfabric_sys::FI_SELECTIVE_COMPLETION;
+            let flags = (libfabric_sys::FI_TRANSMIT | libfabric_sys::FI_RECV) as u64
+                | libfabric_sys::FI_SELECTIVE_COMPLETION;
             let ret = libfabric_sys::inlined_fi_ep_bind(ep, &mut (*cq).fid, flags);
             if ret != 0 {
                 eprintln!("Error binding CQ: {}", ret);
@@ -482,12 +566,20 @@ impl Ofi {
                 eprintln!("Error binding AV: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
             }
-            let ret = libfabric_sys::inlined_fi_ep_bind(ep, &mut (*put_cntr).fid, libfabric_sys::FI_WRITE as u64);
+            let ret = libfabric_sys::inlined_fi_ep_bind(
+                ep,
+                &mut (*put_cntr).fid,
+                libfabric_sys::FI_WRITE as u64,
+            );
             if ret != 0 {
                 eprintln!("Error binding put counter: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
             }
-            let ret = libfabric_sys::inlined_fi_ep_bind(ep, &mut (*get_cntr).fid, libfabric_sys::FI_READ as u64);
+            let ret = libfabric_sys::inlined_fi_ep_bind(
+                ep,
+                &mut (*get_cntr).fid,
+                libfabric_sys::FI_READ as u64,
+            );
             if ret != 0 {
                 eprintln!("Error binding get counter: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -503,13 +595,18 @@ impl Ofi {
         }
         let address_bytes = unsafe {
             let mut len = 0;
-            let ret = libfabric_sys::inlined_fi_getname(&mut (*ep).fid, std::ptr::null_mut(), &mut len);
+            let ret =
+                libfabric_sys::inlined_fi_getname(&mut (*ep).fid, std::ptr::null_mut(), &mut len);
             if ret != -(libfabric_sys::FI_ETOOSMALL as i32) {
                 eprintln!("Error getting endpoint name: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
             }
             let mut addr = vec![0u8; len];
-            let ret = libfabric_sys::inlined_fi_getname(&mut (*ep).fid, addr.as_mut_ptr().cast(), &mut len);
+            let ret = libfabric_sys::inlined_fi_getname(
+                &mut (*ep).fid,
+                addr.as_mut_ptr().cast(),
+                &mut len,
+            );
             if ret != 0 {
                 eprintln!("Error getting endpoint name: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -523,21 +620,26 @@ impl Ofi {
         let unmapped_addresses: Vec<Vec<u8>> = my_pmi
             .ranks()
             .iter()
-            .map(|r| {
-                my_pmi
-                    .get(&format!("epname"), &r)
-                    .unwrap()
-            })
+            .map(|r| my_pmi.get(&format!("epname"), &r).unwrap())
             .collect();
 
         let mapped_addresses = unsafe {
             let mut mapped_addresses = vec![0u64; unmapped_addresses.len()];
-            let total_size = unmapped_addresses.iter().fold(0, |acc, unmapped_addresses| acc + unmapped_addresses.len());
+            let total_size = unmapped_addresses
+                .iter()
+                .fold(0, |acc, unmapped_addresses| acc + unmapped_addresses.len());
             let mut serialized: Vec<u8> = Vec::with_capacity(total_size);
             for a in unmapped_addresses {
                 serialized.extend(a.iter())
             }
-            let ret = libfabric_sys::inlined_fi_av_insert(av, serialized.as_mut_ptr().cast(), mapped_addresses.len(), mapped_addresses.as_mut_ptr(), 0, std::ptr::null_mut());
+            let ret = libfabric_sys::inlined_fi_av_insert(
+                av,
+                serialized.as_mut_ptr().cast(),
+                mapped_addresses.len(),
+                mapped_addresses.as_mut_ptr(),
+                0,
+                std::ptr::null_mut(),
+            );
             if ret < 0 {
                 eprintln!("Error inserting addresses into AV: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
@@ -545,7 +647,7 @@ impl Ofi {
             mapped_addresses
         };
 
-        let comm_group = CommGroup{
+        let comm_group = CommGroup {
             mapped_addresses,
             ep,
             cq,
@@ -560,7 +662,6 @@ impl Ofi {
             get_cnt: AtomicU64::new(0),
             lock: Mutex::new(()),
             barrier_impl: RwLock::new(BarrierImpl::Pmi(my_pmi.clone())),
-
         };
 
         let alloc_manager = AllocInfoManager::new();
@@ -593,41 +694,35 @@ impl Ofi {
         };
         let mut count: usize = 0;
         let mut avail = true;
-        let ret = unsafe {libfabric_sys::inlined_fi_atomicvalid(
-            cg.ep,
-            data_type, 
-            libfabric_sys::fi_op_FI_SUM, 
-            &mut count as *mut usize)
+        let ret = unsafe {
+            libfabric_sys::inlined_fi_atomicvalid(
+                cg.ep,
+                data_type,
+                libfabric_sys::fi_op_FI_SUM,
+                &mut count as *mut usize,
+            )
         };
-        avail &= if ret != 0 {
-            false
-        } else {
-            true
-        };
+        avail &= if ret != 0 { false } else { true };
 
-        let ret = unsafe {libfabric_sys::inlined_fi_fetch_atomicvalid(
-            cg.ep,
-            data_type, 
-            libfabric_sys::fi_op_FI_ATOMIC_READ, 
-            &mut count as *mut usize)
+        let ret = unsafe {
+            libfabric_sys::inlined_fi_fetch_atomicvalid(
+                cg.ep,
+                data_type,
+                libfabric_sys::fi_op_FI_ATOMIC_READ,
+                &mut count as *mut usize,
+            )
         };
-        avail &= if ret != 0 {
-            false
-        } else {
-            true
-        };
+        avail &= if ret != 0 { false } else { true };
 
-        let ret = unsafe {libfabric_sys::inlined_fi_compare_atomicvalid(
-            cg.ep,
-            data_type, 
-            libfabric_sys::fi_op_FI_CSWAP, 
-            &mut count as *mut usize)
+        let ret = unsafe {
+            libfabric_sys::inlined_fi_compare_atomicvalid(
+                cg.ep,
+                data_type,
+                libfabric_sys::fi_op_FI_CSWAP,
+                &mut count as *mut usize,
+            )
         };
-        avail &= if ret != 0 {
-            false
-        } else {
-            true
-        };
+        avail &= if ret != 0 { false } else { true };
         avail
     }
 
@@ -650,34 +745,23 @@ impl Ofi {
             AtomicOpKind::Read => libfabric_sys::fi_op_FI_ATOMIC_READ,
             AtomicOpKind::Write => libfabric_sys::fi_op_FI_ATOMIC_WRITE,
             AtomicOpKind::Cas => libfabric_sys::fi_op_FI_CSWAP,
-
         };
 
         let mut avail = true;
-        let ret = unsafe {libfabric_sys::inlined_fi_atomicvalid(
-            cg.ep,
-            data_type, 
-            fi_op, 
-            &mut count as *mut usize)
+        let ret = unsafe {
+            libfabric_sys::inlined_fi_atomicvalid(cg.ep, data_type, fi_op, &mut count as *mut usize)
         };
-        avail &= if ret != 0 {
-            false
-        } else {
-            true
-        };
+        avail &= if ret != 0 { false } else { true };
 
-        let ret = unsafe {libfabric_sys::inlined_fi_fetch_atomicvalid(
-            cg.ep,
-            data_type, 
-            fi_op, 
-            &mut count as *mut usize)
+        let ret = unsafe {
+            libfabric_sys::inlined_fi_fetch_atomicvalid(
+                cg.ep,
+                data_type,
+                fi_op,
+                &mut count as *mut usize,
+            )
         };
-        avail &= if ret != 0 {
-            false        
-        } 
-        else {
-            true
-        };
+        avail &= if ret != 0 { false } else { true };
         avail
     }
 
@@ -710,14 +794,14 @@ impl Ofi {
 
     pub(crate) fn atomic_op_avail<T: 'static>(&self, op: AtomicOp<T>) -> bool {
         let op_kind = match op {
-            AtomicOp::Min(_)| AtomicOp::FetchMin(_) => AtomicOpKind::Min,
-            AtomicOp::Max(_)| AtomicOp::FetchMax(_) => AtomicOpKind::Max,
-            AtomicOp::Sum(_)| AtomicOp::FetchSum(_) => AtomicOpKind::Sum,
-            AtomicOp::Sub(_)| AtomicOp::FetchSub(_) => AtomicOpKind::Sum, // Sub can be implemented as Add with negative value
-            AtomicOp::Prod(_)| AtomicOp::FetchProd(_) => AtomicOpKind::Prod,
-            AtomicOp::BitOr(_)| AtomicOp::FetchBitOr(_) => AtomicOpKind::BitOr,
-            AtomicOp::BitXor(_)| AtomicOp::FetchBitXor(_) => AtomicOpKind::BitXor,
-            AtomicOp::BitAnd(_)| AtomicOp::FetchBitAnd(_) => AtomicOpKind::BitAnd,
+            AtomicOp::Min(_) | AtomicOp::FetchMin(_) => AtomicOpKind::Min,
+            AtomicOp::Max(_) | AtomicOp::FetchMax(_) => AtomicOpKind::Max,
+            AtomicOp::Sum(_) | AtomicOp::FetchSum(_) => AtomicOpKind::Sum,
+            AtomicOp::Sub(_) | AtomicOp::FetchSub(_) => AtomicOpKind::Sum, // Sub can be implemented as Add with negative value
+            AtomicOp::Prod(_) | AtomicOp::FetchProd(_) => AtomicOpKind::Prod,
+            AtomicOp::BitOr(_) | AtomicOp::FetchBitOr(_) => AtomicOpKind::BitOr,
+            AtomicOp::BitXor(_) | AtomicOp::FetchBitXor(_) => AtomicOpKind::BitXor,
+            AtomicOp::BitAnd(_) | AtomicOp::FetchBitAnd(_) => AtomicOpKind::BitAnd,
             AtomicOp::Read(_) => AtomicOpKind::Read,
             AtomicOp::Write(_) => AtomicOpKind::Write,
             AtomicOp::Cas => AtomicOpKind::Cas,
@@ -754,10 +838,18 @@ impl Ofi {
             CollectiveOpKind::Barrier => (libfabric_sys::fi_collective_op_FI_BARRIER, None),
             CollectiveOpKind::Broadcast => (libfabric_sys::fi_collective_op_FI_BROADCAST, None),
             CollectiveOpKind::AllToAll => (libfabric_sys::fi_collective_op_FI_ALLTOALL, None),
-            CollectiveOpKind::AllReduce(reduce_op) => (libfabric_sys::fi_collective_op_FI_ALLREDUCE, Some(reduce_op)),
+            CollectiveOpKind::AllReduce(reduce_op) => (
+                libfabric_sys::fi_collective_op_FI_ALLREDUCE,
+                Some(reduce_op),
+            ),
             CollectiveOpKind::AllGather => (libfabric_sys::fi_collective_op_FI_ALLGATHER, None),
-            CollectiveOpKind::ReduceScatter(reduce_op) => (libfabric_sys::fi_collective_op_FI_REDUCE_SCATTER, Some(reduce_op)),
-            CollectiveOpKind::Reduce(reduce_op) => (libfabric_sys::fi_collective_op_FI_REDUCE, Some(reduce_op)),
+            CollectiveOpKind::ReduceScatter(reduce_op) => (
+                libfabric_sys::fi_collective_op_FI_REDUCE_SCATTER,
+                Some(reduce_op),
+            ),
+            CollectiveOpKind::Reduce(reduce_op) => {
+                (libfabric_sys::fi_collective_op_FI_REDUCE, Some(reduce_op))
+            }
             CollectiveOpKind::Scatter => (libfabric_sys::fi_collective_op_FI_SCATTER, None),
             CollectiveOpKind::Gather => (libfabric_sys::fi_collective_op_FI_GATHER, None),
         };
@@ -786,15 +878,9 @@ impl Ofi {
                 ReduceOp::BitXor => libfabric_sys::fi_op_FI_BXOR,
             };
             attr.op = reduce_fi_op;
-            
         }
         return unsafe {
-            libfabric_sys::inlined_fi_query_collective(
-                self.domain, 
-                fi_op, 
-                &mut attr, 
-                0
-            )
+            libfabric_sys::inlined_fi_query_collective(self.domain, fi_op, &mut attr, 0)
         } == 0;
     }
 
@@ -811,7 +897,12 @@ impl Ofi {
         };
         let av_set = unsafe {
             let mut av_set = MaybeUninit::<*mut libfabric_sys::fid_av_set>::uninit();
-            let res = libfabric_sys::inlined_fi_av_set(cg.av, &mut av_set_attr, av_set.as_mut_ptr(), std::ptr::null_mut());
+            let res = libfabric_sys::inlined_fi_av_set(
+                cg.av,
+                &mut av_set_attr,
+                av_set.as_mut_ptr(),
+                std::ptr::null_mut(),
+            );
             if res != 0 {
                 panic!("Error creating AV set: {}", res);
             }
@@ -819,7 +910,9 @@ impl Ofi {
         };
 
         for pe in pes.iter().skip(1) {
-            let ret = unsafe {libfabric_sys::inlined_fi_av_set_insert(av_set, cg.mapped_addresses[*pe])};
+            let ret = unsafe {
+                libfabric_sys::inlined_fi_av_set_insert(av_set, cg.mapped_addresses[*pe])
+            };
             if ret < 0 {
                 panic!("Error inserting address into AV set: {}", ret);
             }
@@ -840,17 +933,19 @@ impl Ofi {
         let mc = unsafe {
             let mut mc = MaybeUninit::<*mut libfabric_sys::fid_mc>::uninit();
             let ret = libfabric_sys::inlined_fi_join_collective(
-                cg.ep, 
-                av_set_addr, 
-                av_set, 
-                0, 
-                mc.as_mut_ptr(), 
-                (&mut ctx) as *mut libfabric_sys::fi_context2 as *mut libc::c_void
+                cg.ep,
+                av_set_addr,
+                av_set,
+                0,
+                mc.as_mut_ptr(),
+                (&mut ctx) as *mut libfabric_sys::fi_context2 as *mut libc::c_void,
             );
             if ret != 0 {
                 panic!("Error registering memory for MC group: {}", ret);
             }
-            cg.wait_for_join_event((&mut ctx) as *mut libfabric_sys::fi_context2 as *mut libc::c_void);
+            cg.wait_for_join_event(
+                (&mut ctx) as *mut libfabric_sys::fi_context2 as *mut libc::c_void,
+            );
             mc.assume_init()
         };
         (mc, av_set_addr)
@@ -864,20 +959,25 @@ impl Ofi {
     ) -> HashMap<usize, RemoteMemAddressInfo> {
         let (_mc, av_set_addr) = self.create_mc_group(pes);
         let cg = &self.comm_group;
-        let addr = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode } & (libfabric_sys::FI_MR_VIRT_ADDR | libfabric_sys::fi_mr_mode_FI_MR_BASIC) as i32 != 0 {
+        let addr = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode }
+            & (libfabric_sys::FI_MR_VIRT_ADDR | libfabric_sys::fi_mr_mode_FI_MR_BASIC) as i32
+            != 0
+        {
             mem.as_ptr() as u64
         } else {
             0u64
         };
 
-        let addr_size =
-            std::mem::size_of_val(mem);
+        let addr_size = std::mem::size_of_val(mem);
 
         let mut key_bytes = unsafe {
             let mut base_addr = addr;
-            let mut key_size = (*(*self.comm_group.info_entry).domain_attr).mr_key_size ;
+            let mut key_size = (*(*self.comm_group.info_entry).domain_attr).mr_key_size;
             let mut raw_key = vec![0u8; key_size + std::mem::size_of::<u64>()];
-            if  (*(*self.comm_group.info_entry).domain_attr).mr_mode & (libfabric_sys::FI_MR_RAW as i32) != 0  {
+            if (*(*self.comm_group.info_entry).domain_attr).mr_mode
+                & (libfabric_sys::FI_MR_RAW as i32)
+                != 0
+            {
                 let err = libfabric_sys::inlined_fi_mr_raw_attr(
                     mr,
                     &mut base_addr,
@@ -892,11 +992,10 @@ impl Ofi {
 
                 let raw_key_len = raw_key.len();
                 raw_key[raw_key_len - std::mem::size_of::<u64>()..].copy_from_slice(
-                    std::slice::from_raw_parts(&base_addr as *const u64 as *const u8, 8)
+                    std::slice::from_raw_parts(&base_addr as *const u64 as *const u8, 8),
                 );
                 raw_key
-            }
-            else {
+            } else {
                 let key = libfabric_sys::inlined_fi_mr_key(mr);
                 if key == u64::MAX {
                     panic!("Error getting MR key: {}", key);
@@ -924,36 +1023,51 @@ impl Ofi {
         });
 
         let mut all_mem_info_bytes = vec![0u8; key_bytes.len() * pes.len()];
-        cg.post_collective(
-            true,
-            || {
-                unsafe {
-                    libfabric_sys::inlined_fi_allgather(
-                        cg.ep,
-                        key_bytes.as_ptr().cast(),
-                        key_bytes.len(),
-                        std::ptr::null_mut(),
-                        all_mem_info_bytes.as_mut_ptr().cast(),
-                        std::ptr::null_mut(),
-                        av_set_addr,
-                        rust_type_to_fi_type::<u8>().unwrap(),
-                        0,
-                        std::ptr::null_mut(),
-                    )
-                }
-            }
-        );
+        cg.post_collective(true, || unsafe {
+            libfabric_sys::inlined_fi_allgather(
+                cg.ep,
+                key_bytes.as_ptr().cast(),
+                key_bytes.len(),
+                std::ptr::null_mut(),
+                all_mem_info_bytes.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                av_set_addr,
+                rust_type_to_fi_type::<u8>().unwrap(),
+                0,
+                std::ptr::null_mut(),
+            )
+        });
 
         let all_mem_info = all_mem_info_bytes
             .chunks_exact(key_bytes.len())
             .enumerate()
             .map(|(pe, chunk)| {
-                let addr_len  = unsafe{*(chunk[chunk.len() - std::mem::size_of::<usize>()..].as_ptr() as *const u64)};
-                let key_addr = unsafe{*(chunk[chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()..chunk.len() - std::mem::size_of::<usize>()].as_ptr() as *const u64)};
-                let mut key = chunk[..chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()].to_vec();
-                let mem_info = if unsafe{(*(*self.comm_group.info_entry).domain_attr).mr_mode} & (libfabric_sys::FI_MR_RAW as i32) != 0 {
+                let addr_len = unsafe {
+                    *(chunk[chunk.len() - std::mem::size_of::<usize>()..].as_ptr() as *const u64)
+                };
+                let key_addr = unsafe {
+                    *(chunk[chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()
+                        ..chunk.len() - std::mem::size_of::<usize>()]
+                        .as_ptr() as *const u64)
+                };
+                let mut key = chunk
+                    [..chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()]
+                    .to_vec();
+                let mem_info = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode }
+                    & (libfabric_sys::FI_MR_RAW as i32)
+                    != 0
+                {
                     let mut mapped_key = 0u64;
-                    let err = unsafe{libfabric_sys::inlined_fi_mr_map_raw(self.domain, key_addr, key.as_mut_ptr(), key.len(), &mut mapped_key, 0)};
+                    let err = unsafe {
+                        libfabric_sys::inlined_fi_mr_map_raw(
+                            self.domain,
+                            key_addr,
+                            key.as_mut_ptr(),
+                            key.len(),
+                            &mut mapped_key,
+                            0,
+                        )
+                    };
                     if err != 0 {
                         panic!("Error mapping raw MR key: {}", err);
                     }
@@ -962,8 +1076,7 @@ impl Ofi {
                         key: mapped_key,
                         len: addr_len as usize,
                     }
-                }
-                else {
+                } else {
                     let mut key_mapped = 0u64;
                     unsafe {
                         std::slice::from_raw_parts_mut(&mut key_mapped as *mut u64 as *mut u8, 8)
@@ -975,7 +1088,6 @@ impl Ofi {
                         len: addr_len as usize,
                     }
                 };
-
 
                 (pes[pe], mem_info)
             })
@@ -994,10 +1106,16 @@ impl Ofi {
             mode: 0,
         };
 
-        let err = unsafe{libfabric_sys::inlined_fi_query_collective(self.domain, libfabric_sys::fi_collective_op_FI_BARRIER, &mut coll_attr, 0)};
+        let err = unsafe {
+            libfabric_sys::inlined_fi_query_collective(
+                self.domain,
+                libfabric_sys::fi_collective_op_FI_BARRIER,
+                &mut coll_attr,
+                0,
+            )
+        };
 
-        if err != 0
-        {
+        if err != 0 {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
             let barrier_size = all_pes.len() * std::mem::size_of::<usize>();
             let barrier_addr = self
@@ -1010,7 +1128,8 @@ impl Ofi {
                     }
                 })?;
 
-            *self.comm_group.barrier_impl.write() = BarrierImpl::Manual(barrier_addr, AtomicUsize::new(0));
+            *self.comm_group.barrier_impl.write() =
+                BarrierImpl::Manual(barrier_addr, AtomicUsize::new(0));
             Ok(())
         } else {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
@@ -1038,7 +1157,11 @@ impl Ofi {
         }
     }
 
-    fn full_alloc(self: &Arc<Ofi>, data_size: usize, align: usize) -> AllocResult<LibfabricSysAlloc> {
+    fn full_alloc(
+        self: &Arc<Ofi>,
+        data_size: usize,
+        align: usize,
+    ) -> AllocResult<LibfabricSysAlloc> {
         //add space for ref count and padding to align it
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
 
@@ -1052,7 +1175,7 @@ impl Ofi {
         trace!(target: "libfabric-sys", "Full Allocating aligned size: {} aligned", aligned_size);
         #[cfg(not(feature = "enable-on-node-shmem"))]
         let (mem, mem_base_ptr) = {
-            let  mmap = memmap::MmapOptions::new()
+            let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
                 .expect(&format!(
@@ -1121,13 +1244,16 @@ impl Ofi {
         };
         let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
 
-        let mr = unsafe{
+        let mr = unsafe {
             let mut mr = MaybeUninit::<*mut libfabric_sys::fid_mr>::uninit();
             let ret = libfabric_sys::inlined_fi_mr_reg(
                 self.domain,
                 mem_base_ptr as *mut libc::c_void,
                 aligned_size,
-                (libfabric_sys::FI_READ | libfabric_sys::FI_WRITE | libfabric_sys::FI_REMOTE_READ | libfabric_sys::FI_REMOTE_WRITE) as u64,
+                (libfabric_sys::FI_READ
+                    | libfabric_sys::FI_WRITE
+                    | libfabric_sys::FI_REMOTE_READ
+                    | libfabric_sys::FI_REMOTE_WRITE) as u64,
                 0,
                 self.alloc_manager.next_key() as u64,
                 0,
@@ -1161,11 +1287,11 @@ impl Ofi {
         // };
 
         // let remote_alloc_infos = self.pmi_exchange_mr_info(&mem, &mr);
-        let remote_alloc_infos = self
-            .collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), mem_slice, mr);
+        let remote_alloc_infos =
+            self.collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), mem_slice, mr);
 
         let mcast_group = self.create_mc_group(&(0..self.num_pes).collect::<Vec<_>>());
-        
+
         let alloc = LibfabricSysAlloc::new(
             self.clone(),
             mem,
@@ -1204,7 +1330,7 @@ impl Ofi {
 
         #[cfg(not(feature = "enable-on-node-shmem"))]
         let (mem, mem_base_ptr) = {
-            let  mmap = memmap::MmapOptions::new()
+            let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
                 .expect("Error in allocating aligned memory");
@@ -1266,13 +1392,16 @@ impl Ofi {
         };
         let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
 
-        let mr = unsafe{
+        let mr = unsafe {
             let mut mr = MaybeUninit::<*mut libfabric_sys::fid_mr>::uninit();
             let ret = libfabric_sys::inlined_fi_mr_reg(
                 self.domain,
                 mem_base_ptr as *mut libc::c_void,
                 aligned_size,
-                (libfabric_sys::FI_READ | libfabric_sys::FI_WRITE | libfabric_sys::FI_REMOTE_READ | libfabric_sys::FI_REMOTE_WRITE) as u64,
+                (libfabric_sys::FI_READ
+                    | libfabric_sys::FI_WRITE
+                    | libfabric_sys::FI_REMOTE_READ
+                    | libfabric_sys::FI_REMOTE_WRITE) as u64,
                 0,
                 self.alloc_manager.next_key() as u64,
                 0,
@@ -1305,13 +1434,10 @@ impl Ofi {
         //     MaybeDisabledMemoryRegion::Enabled(mr) => mr,
         // };
 
-        let remote_alloc_infos = self
-            .collective_exchange_mr_info(pes, mem_slice, mr);
+        let remote_alloc_infos = self.collective_exchange_mr_info(pes, mem_slice, mr);
 
-        
         let mcast_group = self.create_mc_group(pes);
 
-        
         let alloc = LibfabricSysAlloc::new(
             self.clone(),
             mem,
@@ -1351,8 +1477,8 @@ impl Ofi {
             }
             BarrierImpl::Collective(_mc, coll_addr) => {
                 let cg = &self.comm_group;
-                cg.post_collective(true, || {
-                    unsafe{libfabric_sys::inlined_fi_barrier(cg.ep, *coll_addr, std::ptr::null_mut())}
+                cg.post_collective(true, || unsafe {
+                    libfabric_sys::inlined_fi_barrier(cg.ep, *coll_addr, std::ptr::null_mut())
                 });
                 // trace!("Done with barrier");
                 Ok(())
@@ -1403,7 +1529,6 @@ impl Ofi {
             }
         }
     }
-
 
     pub(crate) fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.alloc_manager
@@ -1465,7 +1590,7 @@ fn atomic_op_to_fi_atomic_op<T: 'static>(op: &AtomicOp<T>) -> u32 {
     match op {
         AtomicOp::Min(_) | AtomicOp::FetchMin(_) => libfabric_sys::fi_op_FI_MIN,
         AtomicOp::Max(_) | AtomicOp::FetchMax(_) => libfabric_sys::fi_op_FI_MAX,
-        AtomicOp::Sum(_) | AtomicOp::FetchSum(_) => libfabric_sys::fi_op_FI_SUM, 
+        AtomicOp::Sum(_) | AtomicOp::FetchSum(_) => libfabric_sys::fi_op_FI_SUM,
         AtomicOp::Sub(_) | AtomicOp::FetchSub(_) => libfabric_sys::fi_op_FI_SUM, // Sub can be implemented as Add with negative value
         AtomicOp::Prod(_) | AtomicOp::FetchProd(_) => libfabric_sys::fi_op_FI_PROD,
         AtomicOp::BitOr(_) | AtomicOp::FetchBitOr(_) => libfabric_sys::fi_op_FI_BOR,
@@ -1699,7 +1824,6 @@ pub(crate) struct RemoteMemAddressInfo {
 }
 
 impl RemoteMemAddressInfo {
-
     pub(crate) fn mem_address(&self) -> *const u8 {
         self.mem_address
     }
@@ -1772,7 +1896,6 @@ pub(crate) struct LibfabricSysAlloc {
 
 unsafe impl Send for LibfabricSysAlloc {}
 unsafe impl Sync for LibfabricSysAlloc {}
-
 
 impl std::fmt::Debug for LibfabricSysAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1858,7 +1981,6 @@ impl Clone for LibfabricSysAlloc {
     }
 }
 
-
 impl From<LibfabricSysAlloc> for CommAlloc {
     fn from(alloc: LibfabricSysAlloc) -> Self {
         CommAlloc {
@@ -1869,9 +1991,8 @@ impl From<LibfabricSysAlloc> for CommAlloc {
 
 static ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
 
-
 impl LibfabricSysAlloc {
-  unsafe fn negate_atomic_value<OFI>(value: *mut OFI) {
+    unsafe fn negate_atomic_value<OFI>(value: *mut OFI) {
         let num_bytes = std::mem::size_of::<OFI>();
         let mut bytes = vec![0u8; num_bytes];
         std::ptr::copy(value.cast::<u8>(), bytes.as_mut_ptr(), num_bytes);
@@ -2225,14 +2346,13 @@ impl LibfabricSysAlloc {
         self.mr.clone()
     }
 
-
     pub(crate) unsafe fn inner_put<T: Copy>(
         &self,
         pe: usize,
         offset: usize, //T-sized offset
         src_addr: &[T],
         blocking: bool,
-    )  {
+    ) {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
         #[cfg(feature = "enable-on-node-shmem")]
@@ -2263,7 +2383,9 @@ impl LibfabricSysAlloc {
         );
         let remote_key = remote_alloc_info.key();
         let cg = &self.ofi.comm_group;
-        if std::mem::size_of_val(src_addr) < (*(*self.ofi.comm_group.info_entry).tx_attr).inject_size {
+        if std::mem::size_of_val(src_addr)
+            < (*(*self.ofi.comm_group.info_entry).tx_attr).inject_size
+        {
             trace!(
                 target: "libfabric-sys",
                 "Injecting write to PE {} at address {:?}",
@@ -2285,7 +2407,8 @@ impl LibfabricSysAlloc {
             while curr_idx < src_addr.len() {
                 let msg_len = std::cmp::min(
                     src_addr.len() - curr_idx,
-                    (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size / std::mem::size_of::<T>(),
+                    (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size
+                        / std::mem::size_of::<T>(),
                 );
 
                 trace!(
@@ -2350,7 +2473,8 @@ impl LibfabricSysAlloc {
         //     std::mem::size_of_val(dst_addr)
         // );
         let cg = &self.ofi.comm_group;
-        if dst_addr.len() < (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size / std::mem::size_of::<T>()
+        if dst_addr.len()
+            < (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size / std::mem::size_of::<T>()
         {
             // trace!(
             //     target: "libfabric-sys",
@@ -2366,8 +2490,8 @@ impl LibfabricSysAlloc {
                     cg.ep,
                     dst_addr.as_mut_ptr().cast(),
                     std::mem::size_of_val(dst_addr),
-                     self.mr_desc,
-                     cg.mapped_addresses[pe],
+                    self.mr_desc,
+                    cg.mapped_addresses[pe],
                     remote_src_addr as u64,
                     remote_key,
                     std::ptr::null_mut(),
@@ -2379,7 +2503,8 @@ impl LibfabricSysAlloc {
             while curr_idx < dst_addr.len() {
                 let msg_len = std::cmp::min(
                     dst_addr.len() - curr_idx,
-                    (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size / std::mem::size_of::<T>(),
+                    (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size
+                        / std::mem::size_of::<T>(),
                 );
                 cg.post_get(blocking, || unsafe {
                     trace!(
@@ -2391,11 +2516,11 @@ impl LibfabricSysAlloc {
                         msg_len * std::mem::size_of::<T>()
                     );
                     libfabric_sys::inlined_fi_read(
-                         cg.ep,
-                         dst_addr[curr_idx..curr_idx + msg_len].as_mut_ptr().cast(),
-                         std::mem::size_of_val(&dst_addr[curr_idx..curr_idx + msg_len]),
-                         self.mr_desc,
-                         cg.mapped_addresses[pe],
+                        cg.ep,
+                        dst_addr[curr_idx..curr_idx + msg_len].as_mut_ptr().cast(),
+                        std::mem::size_of_val(&dst_addr[curr_idx..curr_idx + msg_len]),
+                        self.mr_desc,
+                        cg.mapped_addresses[pe],
                         remote_src_addr as u64,
                         remote_key,
                         std::ptr::null_mut(),
@@ -2439,8 +2564,8 @@ impl LibfabricSysAlloc {
                 cg.ep,
                 dst_addr.as_mut_ptr().cast(),
                 std::mem::size_of_val(dst_addr),
-                 self.mr_desc,
-                 cg.mapped_addresses[pe],
+                self.mr_desc,
+                cg.mapped_addresses[pe],
                 remote_src_addr as u64,
                 remote_key,
                 std::ptr::null_mut(),
@@ -2472,11 +2597,10 @@ impl LibfabricSysAlloc {
         let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
-        
         match op {
-            AtomicOp::Sub(src) => {
-                unsafe { Self::negate_atomic_value(src.as_mut().get_unchecked_mut()) }
-            }
+            AtomicOp::Sub(src) => unsafe {
+                Self::negate_atomic_value(src.as_mut().get_unchecked_mut())
+            },
             AtomicOp::FetchMin(_)
             | AtomicOp::FetchMax(_)
             | AtomicOp::FetchSum(_)
@@ -2498,21 +2622,18 @@ impl LibfabricSysAlloc {
         let cg = &self.ofi.comm_group;
         let data_type = rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation");
         let op = atomic_op_to_fi_atomic_op(op);
-        cg.post_put(blocking, || {
-            unsafe {
-                libfabric_sys::inlined_fi_inject_atomic(
-                    cg.ep, 
-                    buf.as_ptr().cast(), 
-                    buf.len(), 
-                    cg.mapped_addresses[pe], 
-                    remote_dst_addr as u64, 
-                    remote_key, 
-                    data_type, 
-                    op
-                )
-            } 
+        cg.post_put(blocking, || unsafe {
+            libfabric_sys::inlined_fi_inject_atomic(
+                cg.ep,
+                buf.as_ptr().cast(),
+                buf.len(),
+                cg.mapped_addresses[pe],
+                remote_dst_addr as u64,
+                remote_key,
+                data_type,
+                op,
+            )
         });
-        
     }
 
     pub(crate) fn atomic_fetch_op_inner<T: 'static>(
@@ -2544,9 +2665,9 @@ impl LibfabricSysAlloc {
         let cg = &self.ofi.comm_group;
         let data_type = rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation");
         match op {
-            AtomicOp::FetchSub(src) => {
-                unsafe { Self::negate_atomic_value(src.as_mut().get_unchecked_mut()) }
-            }
+            AtomicOp::FetchSub(src) => unsafe {
+                Self::negate_atomic_value(src.as_mut().get_unchecked_mut())
+            },
             AtomicOp::Min(_)
             | AtomicOp::Max(_)
             | AtomicOp::Sum(_)
@@ -2564,27 +2685,25 @@ impl LibfabricSysAlloc {
         };
         let src = op.src();
         let buf = unsafe { std::slice::from_raw_parts(src, 1) };
-        cg.post_get(blocking, || {
-            unsafe {
-                libfabric_sys::inlined_fi_fetch_atomic(
-                    cg.ep,
-                    buf.as_ptr().cast(),
-                    buf.len(),
-                    self.mr_desc,
-                    result.as_mut_ptr().cast(),
-                    std::ptr::null_mut(),
-                    cg.mapped_addresses[pe],
-                    remote_dst_addr as u64,
-                    remote_key,
-                    data_type,
-                    atomic_op_to_fi_atomic_op(op),
-                    std::ptr::null_mut(),
-                )
-            }
+        cg.post_get(blocking, || unsafe {
+            libfabric_sys::inlined_fi_fetch_atomic(
+                cg.ep,
+                buf.as_ptr().cast(),
+                buf.len(),
+                self.mr_desc,
+                result.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                cg.mapped_addresses[pe],
+                remote_dst_addr as u64,
+                remote_key,
+                data_type,
+                atomic_op_to_fi_atomic_op(op),
+                std::ptr::null_mut(),
+            )
         });
     }
 
- pub(crate) fn atomic_compare_exchange_op_inner<T: 'static + Copy>(
+    pub(crate) fn atomic_compare_exchange_op_inner<T: 'static + Copy>(
         &self,
         pe: usize,
         offset: usize,
@@ -2598,9 +2717,7 @@ impl LibfabricSysAlloc {
             let offset_bytes = offset * std::mem::size_of::<T>();
             if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
                 result[0] = match crate::lamellae::comm::atomic::net_atomic_compare_exchange(
-                    current,
-                    new,
-                    &addr,
+                    current, new, &addr,
                 ) {
                     Ok(old) | Err(old) => old,
                 };
@@ -2614,7 +2731,7 @@ impl LibfabricSysAlloc {
             "PE {} is not part of the sub allocation group",
             pe
         ));
-        let remote_dst_addr = unsafe{remote_alloc_info.mem_address().add(offset)};
+        let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
         // let new = *(&new as *const T as *const OFI);
@@ -2622,35 +2739,35 @@ impl LibfabricSysAlloc {
         // let res = &mut *(result as *mut [T] as *mut [OFI]);
         let cg = &self.ofi.comm_group;
 
-        cg.post_get(blocking, || {
-            unsafe {
-                libfabric_sys::inlined_fi_compare_atomic(
-                    cg.ep,
-                    new.cast(),
-                    1,
-                    std::ptr::null_mut(),
-                    current.cast(),
-                    std::ptr::null_mut(),
-                    result.as_mut_ptr().cast(),
-                    std::ptr::null_mut(),
-                    cg.mapped_addresses[pe],
-                    remote_dst_addr as u64,
-                    remote_key,
-                    rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation"),
-                    libfabric_sys::fi_op_FI_CSWAP,
-                    std::ptr::null_mut(),
-                )
-            }
+        cg.post_get(blocking, || unsafe {
+            libfabric_sys::inlined_fi_compare_atomic(
+                cg.ep,
+                new.cast(),
+                1,
+                std::ptr::null_mut(),
+                current.cast(),
+                std::ptr::null_mut(),
+                result.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                cg.mapped_addresses[pe],
+                remote_dst_addr as u64,
+                remote_key,
+                rust_type_to_fi_type::<T>().expect("Unsupported type for atomic operation"),
+                libfabric_sys::fi_op_FI_CSWAP,
+                std::ptr::null_mut(),
+            )
         });
     }
 
-    pub(crate) fn allreduce_inplace_inner<T: 'static>(        
+    pub(crate) fn allreduce_inplace_inner<T: 'static>(
         &self,
         op: &AllReduceOp,
         src_and_result: &mut [T],
         blocking: bool,
-    )  {
-        let dst = unsafe {std::slice::from_raw_parts_mut(src_and_result.as_mut_ptr(), src_and_result.len())};
+    ) {
+        let dst = unsafe {
+            std::slice::from_raw_parts_mut(src_and_result.as_mut_ptr(), src_and_result.len())
+        };
         self.allreduce_inner(op, src_and_result, dst, blocking)
     }
 
@@ -2664,26 +2781,27 @@ impl LibfabricSysAlloc {
         // let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
         // let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let (_, addr) = self.mcast_group.as_ref().expect("No multicast group for allreduce");
-        cg.post_collective(blocking, || {
-            unsafe {
-                libfabric_sys::inlined_fi_allreduce(
-                    cg.ep,
-                    src.as_ptr().cast(),
-                    src.len(),
-                    std::ptr::null_mut(),
-                    result.as_mut_ptr().cast(),
-                    std::ptr::null_mut(),
-                    *addr,
-                    rust_type_to_fi_type::<T>().expect("Unsupported type for allreduce operation"),
-                    op.into(),
-                    0,
-                    std::ptr::null_mut(),
-                )
-            }
+        let (_, addr) = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for allreduce");
+        cg.post_collective(blocking, || unsafe {
+            libfabric_sys::inlined_fi_allreduce(
+                cg.ep,
+                src.as_ptr().cast(),
+                src.len(),
+                std::ptr::null_mut(),
+                result.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                *addr,
+                rust_type_to_fi_type::<T>().expect("Unsupported type for allreduce operation"),
+                op.into(),
+                0,
+                std::ptr::null_mut(),
+            )
         });
     }
-    // pub(crate) fn reduce_inplace_inner<T: 'static>(        
+    // pub(crate) fn reduce_inplace_inner<T: 'static>(
     //     &self,
     //     op: &ReduceOp,
     //     root_pe: Option<usize>,
@@ -2697,64 +2815,54 @@ impl LibfabricSysAlloc {
     //     //     RootOrSliceMut::Root(dst)
     //     // };
 
-        
     //     self.reduce_inner(op, slice_or_pe, blocking)
     // }
 
-    pub(crate) fn allgather_inner<T: 'static>(
-        &self,
-        src: &[T],
-        result: &mut [T],
-        blocking: bool,
-    ) {
+    pub(crate) fn allgather_inner<T: 'static>(&self, src: &[T], result: &mut [T], blocking: bool) {
         // let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
         // let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let (_, coll_addr) = self.mcast_group.as_ref().expect("No multicast group for allgather");
-        cg.post_collective(blocking, || {
-            unsafe {
-                libfabric_sys::inlined_fi_allgather(
-                    cg.ep,
-                    src.as_ptr().cast(),
-                    src.len(),
-                    std::ptr::null_mut(),
-                    result.as_mut_ptr().cast(),
-                    std::ptr::null_mut(),
-                    *coll_addr,
-                    rust_type_to_fi_type::<T>().expect("Unsupported type for allgather operation"),
-                    0,
-                    std::ptr::null_mut(),
-                )
-
-            }
+        let (_, coll_addr) = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for allgather");
+        cg.post_collective(blocking, || unsafe {
+            libfabric_sys::inlined_fi_allgather(
+                cg.ep,
+                src.as_ptr().cast(),
+                src.len(),
+                std::ptr::null_mut(),
+                result.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                *coll_addr,
+                rust_type_to_fi_type::<T>().expect("Unsupported type for allgather operation"),
+                0,
+                std::ptr::null_mut(),
+            )
         });
     }
 
-    pub(crate) fn alltoall_inner<T: 'static>(
-        &self,
-        src: &[T],
-        result: &mut [T],
-        blocking: bool,
-    ) {
+    pub(crate) fn alltoall_inner<T: 'static>(&self, src: &[T], result: &mut [T], blocking: bool) {
         // let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
         // let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self.mcast_group.as_ref().expect("No multicast group for alltoall");
-        cg.post_collective(blocking, || {
-            unsafe {
-                libfabric_sys::inlined_fi_alltoall(
-                    cg.ep,
-                    src.as_ptr().cast(),
-                    src.len(),
-                    std::ptr::null_mut(),
-                    result.as_mut_ptr().cast(),
-                    std::ptr::null_mut(),
-                    *coll_addr,
-                    rust_type_to_fi_type::<T>().expect("Unsupported type for alltoall operation"),
-                    0,
-                    std::ptr::null_mut(),
-                )
-            }
+        let (_mc, coll_addr) = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for alltoall");
+        cg.post_collective(blocking, || unsafe {
+            libfabric_sys::inlined_fi_alltoall(
+                cg.ep,
+                src.as_ptr().cast(),
+                src.len(),
+                std::ptr::null_mut(),
+                result.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                *coll_addr,
+                rust_type_to_fi_type::<T>().expect("Unsupported type for alltoall operation"),
+                0,
+                std::ptr::null_mut(),
+            )
         });
     }
 
@@ -2764,41 +2872,42 @@ impl LibfabricSysAlloc {
         src: &[T],
         slice_or_pe: RootOrSliceMut<T>,
         blocking: bool,
-    )  {
+    ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (_mc, coll_addr) = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for collective reduce");
         let (result, root_pe) = match slice_or_pe {
-            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe),
             RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
         };
-        
+
         // let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let res = match result {
             Some(res) => res,
             None => {
-                let res_buf = unsafe {std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}; // if result is None, we are doing an in-place reduce or we reduce on a non-root PE, so we can reuse the source buffer as the destination buffer since it is either the destination or will be ignored by non-root PEs
+                let res_buf =
+                    unsafe { std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len()) }; // if result is None, we are doing an in-place reduce or we reduce on a non-root PE, so we can reuse the source buffer as the destination buffer since it is either the destination or will be ignored by non-root PEs
                 res_buf
             }
         };
-        cg.post_collective(blocking, || {
-            unsafe {
-                 libfabric_sys::inlined_fi_reduce(
-                    cg.ep,
-                    src.as_ptr().cast(),
-                    src.len(),
-                    std::ptr::null_mut(),
-                    res.as_mut_ptr().cast(),
-                    std::ptr::null_mut(),
-                    *coll_addr,
-                    cg.mapped_addresses[root_pe],
-                    rust_type_to_fi_type::<T>().expect("Unsupported type for reduce operation"),
-                    op.into(),
-                    0,
-                    std::ptr::null_mut(),
-                )
-            }
+        cg.post_collective(blocking, || unsafe {
+            libfabric_sys::inlined_fi_reduce(
+                cg.ep,
+                src.as_ptr().cast(),
+                src.len(),
+                std::ptr::null_mut(),
+                res.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                *coll_addr,
+                cg.mapped_addresses[root_pe],
+                rust_type_to_fi_type::<T>().expect("Unsupported type for reduce operation"),
+                op.into(),
+                0,
+                std::ptr::null_mut(),
+            )
         });
-
     }
 
     pub(crate) fn gather_inner<T: 'static>(
@@ -2808,34 +2917,36 @@ impl LibfabricSysAlloc {
         blocking: bool,
     ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (_mc, coll_addr) = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for collective reduce");
         let (result, root_pe) = match slice_or_pe {
-            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe),
             RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
         };
         let res = match result {
             Some(res) => res,
             None => {
-                let res_buf = unsafe {std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}; // if result is None, we are a non-root PE, so we can reuse the source buffer as the destination buffer since it will be ignored.
+                let res_buf =
+                    unsafe { std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len()) }; // if result is None, we are a non-root PE, so we can reuse the source buffer as the destination buffer since it will be ignored.
                 res_buf
             }
         };
-        cg.post_collective(blocking, || {
-            unsafe {
-                libfabric_sys::inlined_fi_gather(
-                    cg.ep,
-                    src.as_ptr().cast(),
-                    src.len(),
-                    std::ptr::null_mut(),
-                    res.as_mut_ptr().cast(),
-                    std::ptr::null_mut(),
-                    *coll_addr,
-                    cg.mapped_addresses[root_pe],
-                    rust_type_to_fi_type::<T>().expect("Unsupported type for gather operation"),
-                    0,
-                    std::ptr::null_mut(),
-                )
-            }
+        cg.post_collective(blocking, || unsafe {
+            libfabric_sys::inlined_fi_gather(
+                cg.ep,
+                src.as_ptr().cast(),
+                src.len(),
+                std::ptr::null_mut(),
+                res.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                *coll_addr,
+                cg.mapped_addresses[root_pe],
+                rust_type_to_fi_type::<T>().expect("Unsupported type for gather operation"),
+                0,
+                std::ptr::null_mut(),
+            )
         });
     }
 
@@ -2845,26 +2956,27 @@ impl LibfabricSysAlloc {
         blocking: bool,
     ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (_mc, coll_addr) = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for collective reduce");
         let (result, root_pe) = match root_src {
-            RootSrcOrSliceMut::Root(src) => (src, self.ofi.my_pe) ,
+            RootSrcOrSliceMut::Root(src) => (src, self.ofi.my_pe),
             RootSrcOrSliceMut::NotRoot(result, root_pe) => (result, root_pe),
         };
         // let res = unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(result)};
-        cg.post_collective(blocking, || {
-            unsafe {
-                libfabric_sys::inlined_fi_broadcast(
-                    cg.ep,
-                    result.as_mut_ptr().cast(),
-                    result.len(),
-                    std::ptr::null_mut(),
-                    *coll_addr,
-                    cg.mapped_addresses[root_pe],
-                    rust_type_to_fi_type::<T>().expect("Unsupported type for broadcast operation"),
-                    0,
-                    std::ptr::null_mut(),
-                )
-            }
+        cg.post_collective(blocking, || unsafe {
+            libfabric_sys::inlined_fi_broadcast(
+                cg.ep,
+                result.as_mut_ptr().cast(),
+                result.len(),
+                std::ptr::null_mut(),
+                *coll_addr,
+                cg.mapped_addresses[root_pe],
+                rust_type_to_fi_type::<T>().expect("Unsupported type for broadcast operation"),
+                0,
+                std::ptr::null_mut(),
+            )
         });
     }
 
@@ -2874,35 +2986,35 @@ impl LibfabricSysAlloc {
         src_or_root_pe: RootSrcSliceOrNone<'_, T>,
         blocking: bool,
     ) {
-
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (_mc, coll_addr) = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for collective reduce");
 
-        
         let (src, root_pe) = match src_or_root_pe {
             RootSrcSliceOrNone::Root(src) => (src, self.ofi.my_pe),
-            RootSrcSliceOrNone::NotRoot(root_pe) => (unsafe {std::slice::from_raw_parts(res.as_ptr(), res.len())}, root_pe),
+            RootSrcSliceOrNone::NotRoot(root_pe) => (
+                unsafe { std::slice::from_raw_parts(res.as_ptr(), res.len()) },
+                root_pe,
+            ),
         };
 
-
-        cg.post_collective(blocking, || {
-                unsafe {
-                    libfabric_sys::inlined_fi_scatter(
-                        cg.ep,
-                        src.as_ptr().cast(),
-                        src.len(),
-                        std::ptr::null_mut(),
-                        res.as_mut_ptr().cast(),
-                        std::ptr::null_mut(),
-                        *coll_addr,
-                        cg.mapped_addresses[root_pe],
-                        rust_type_to_fi_type::<T>().expect("Unsupported type for scatter operation"),
-                        0,
-                        std::ptr::null_mut(),
-                    )
-                }
-            }
-        );
+        cg.post_collective(blocking, || unsafe {
+            libfabric_sys::inlined_fi_scatter(
+                cg.ep,
+                src.as_ptr().cast(),
+                src.len(),
+                std::ptr::null_mut(),
+                res.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                *coll_addr,
+                cg.mapped_addresses[root_pe],
+                rust_type_to_fi_type::<T>().expect("Unsupported type for scatter operation"),
+                0,
+                std::ptr::null_mut(),
+            )
+        });
     }
 
     pub(crate) fn reduce_scatter_inner<T: 'static>(
@@ -2913,32 +3025,30 @@ impl LibfabricSysAlloc {
         blocking: bool,
     ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self.mcast_group.as_ref().expect("No multicast group for allreduce");
-        cg.post_collective(blocking, || {
-            unsafe {
-                 libfabric_sys::inlined_fi_reduce_scatter(
-                    cg.ep,
-                    src.as_ptr().cast(),
-                    src.len(),
-                    std::ptr::null_mut(),
-                    result.as_mut_ptr().cast(),
-                    std::ptr::null_mut(),
-                    *coll_addr,
-                    rust_type_to_fi_type::<T>().expect("Unsupported type for reduce_scatter operation"),
-                    op.into(),
-                    0,
-                    std::ptr::null_mut(),
-                )
-            }
+        let (_mc, coll_addr) = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for allreduce");
+        cg.post_collective(blocking, || unsafe {
+            libfabric_sys::inlined_fi_reduce_scatter(
+                cg.ep,
+                src.as_ptr().cast(),
+                src.len(),
+                std::ptr::null_mut(),
+                result.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                *coll_addr,
+                rust_type_to_fi_type::<T>().expect("Unsupported type for reduce_scatter operation"),
+                op.into(),
+                0,
+                std::ptr::null_mut(),
+            )
         });
     }
-
 
     pub(crate) fn wait(&self) {
         self.ofi.comm_group.wait_all()
     }
-    
-        
 }
 
 impl Drop for LibfabricSysAlloc {
@@ -2990,7 +3100,6 @@ impl Drop for LibfabricSysAlloc {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub(crate) struct OneSidedLibfabricSysAlloc {
     pub(crate) remote_pe: usize,
@@ -3023,7 +3132,6 @@ impl From<OneSidedLibfabricSysAlloc> for CommAlloc {
         }
     }
 }
-
 
 impl From<&ReduceOp> for libfabric_sys::fi_op {
     fn from(op: &ReduceOp) -> Self {

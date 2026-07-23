@@ -114,7 +114,9 @@ impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
     fn from(mem_reg: Arc<MemRegionHandleInner>) -> Self {
         trace!(
             "creating net handle {:?} addr 0x{:x} orig_pe: {:?}",
-            mem_reg, mem_reg.orig_addr, mem_reg.orig_pe
+            mem_reg,
+            mem_reg.orig_addr,
+            mem_reg.orig_pe
         );
         NetMemRegionHandle {
             mr_addr: mem_reg.orig_addr,
@@ -254,17 +256,17 @@ impl Drop for MemRegionHandle {
                             .inner
                             .team
                             .spawn_am_pe_tg(self.inner.parent_id.1, temp, None);
-                            
                     }
                 }
             } else {
                 //need to wait for references I sent to return
-                let _ = self
-                    .inner
-                    .team
-                    .spawn_am_local_tg(MemRegionDropWaitAm {
+                let _ = self.inner.team.spawn_am_local_tg(
+                    MemRegionDropWaitAm {
                         inner: self.inner.clone(),
-                    }, None,None);
+                    },
+                    None,
+                    None,
+                );
             }
         }
         trace!(target: "drop", "end drop MemRegionHandle");
@@ -326,10 +328,10 @@ impl LamellarAM for MemRegionDropWaitAm {
                                 cnt,
                                 parent_id: self.inner.grand_parent_id,
                             };
-                            let _ = self
-                                .inner
-                                .team
-                                .spawn_am_pe_tg(self.inner.parent_id.1, temp, None);
+                            let _ =
+                                self.inner
+                                    .team
+                                    .spawn_am_pe_tg(self.inner.parent_id.1, temp, None);
                         }
                     }
                     break;
@@ -393,9 +395,7 @@ impl<T: Remote> LamellarEnv for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Remote> OneSidedMemoryRegion<T> {
-    pub(crate) fn lamellae(
-        &self,
-    ) -> Arc<crate::lamellae::Lamellae> {
+    pub(crate) fn lamellae(&self) -> Arc<crate::lamellae::Lamellae> {
         self.mr.inner.team.lamellae.clone()
     }
 

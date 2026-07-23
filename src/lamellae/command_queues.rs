@@ -3,12 +3,15 @@ use super::{
     Comm, Lamellae, SerializedData,
 };
 use crate::{
-    env_var::{config, CmdQueue}, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
-    LamellarBuffer,
+    env_var::{config, CmdQueue},
+    lamellae::CommAllocRdma,
+    print_stats,
+    scheduler::Scheduler,
+    stats, LamellarBuffer,
 };
+use async_lock::Mutex;
 use core::panic;
 use parking_lot::RwLock;
-use async_lock::Mutex;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -141,7 +144,13 @@ impl std::fmt::Debug for CmdMsg {
         write!(
             f,
             "daddr {:#x}({:?}) dsize {:?} ack_addr {:#x} cmd {:?} msg_hash {:?} cmd_hash {:?}",
-            self.daddr, self.daddr, self.dsize, self.ack_addr, self.cmd, self.msg_hash, self.cmd_hash,
+            self.daddr,
+            self.daddr,
+            self.dsize,
+            self.ack_addr,
+            self.cmd,
+            self.msg_hash,
+            self.cmd_hash,
         )
     }
 }
@@ -601,7 +610,8 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    let _ = panic_buf.put_unmanaged::<CmdMsg>(panic_buf[self.my_pe], pe, self.my_pe);
+                    let _ =
+                        panic_buf.put_unmanaged::<CmdMsg>(panic_buf[self.my_pe], pe, self.my_pe);
                 }
             }
             self.comm.thread_wait();
@@ -620,8 +630,8 @@ impl InnerCQ {
         let (local_ack_alloc, offset) = self
             .comm
             .local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.ack_addr);
-        let ack_slice = local_ack_alloc
-            .comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
+        let ack_slice =
+            local_ack_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
         let _ = ack_slice.put_unmanaged::<Cmd>(self.free_cmd.cmd, dst, 0);
     }
 
@@ -696,7 +706,13 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize,lamellae: &Arc<Lamellae>,) -> SerializedData {
+    async fn get_cmd(
+        &self,
+        src: usize,
+        cmd: CmdMsg,
+        msg_id: usize,
+        lamellae: &Arc<Lamellae>,
+    ) -> SerializedData {
         trace!("getting cmd from {} of size {}", src, cmd.dsize);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut print = true;
@@ -872,19 +888,25 @@ impl CQGet {
     }
 
     async fn send_vec(&self, vec_data: Vec<u8>, dst: usize) {
-        trace!("sending vec_data of len {:?} to dst {:?}", vec_data.len(), dst);
-        let mut data = self.cq.comm.rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+        trace!(
+            "sending vec_data of len {:?} to dst {:?}",
+            vec_data.len(),
+            dst
+        );
+        let mut data = self
+            .cq
+            .comm
+            .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
         while let Err(_) = data {
             async_std::task::yield_now().await;
-            data = self.cq.comm.rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+            data = self
+                .cq
+                .comm
+                .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
         }
         let data = data.unwrap();
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                vec_data.as_ptr(),
-                data.as_mut_ptr(),
-                vec_data.len(),
-            );
+            std::ptr::copy_nonoverlapping(vec_data.as_ptr(), data.as_mut_ptr(), vec_data.len());
         }
         let data_slice = data.as_comm_slice().clone();
         let hash = calc_hash(data_slice.usize_addr(), data_slice.len());
@@ -962,7 +984,7 @@ impl CQGet {
             print = false;
             async_std::task::sleep(std::time::Duration::from_millis(10)).await;
         }
-    } 
+    }
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn panic_task(&self) {
@@ -1013,7 +1035,7 @@ impl CQGet {
                                 let task = async move {
                                     let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
                                     debug!("getting cmd from {src} {:?} msg_id: {msg_id}", cmd);
-                                    let work_data = cq.get_cmd(src, cmd, msg_id,&lamellae).await;
+                                    let work_data = cq.get_cmd(src, cmd, msg_id, &lamellae).await;
                                     debug!("msg_id: {msg_id} submitting remote am from {src}");
                                     scheduler1.submit_remote_am(work_data, &lamellae);
                                     cq.send_free(src, cmd);
@@ -1042,7 +1064,7 @@ impl CQGet {
             CmdQueue::Put => super::command_queues_put::CQPut::mem_per_pe(),
             CmdQueue::PutSlots => super::command_queues_put_slots::CQPutSlots::mem_per_pe(),
             CmdQueue::PutEager => super::command_queues_put_eager::CQPutEager::mem_per_pe(),
-        } 
+        }
     }
 
     fn available_to_send(&self, pe: usize) -> bool {
@@ -1105,28 +1127,64 @@ impl CommandQueue {
     ) -> CommandQueue {
         let inner = match crate::config().cmd_queue {
             CmdQueue::Batched => CQVariant::Batched(super::command_queues_batched::CQBatched::new(
-                comm, scheduler.clone(), my_pe, num_pes, active,
+                comm,
+                scheduler.clone(),
+                my_pe,
+                num_pes,
+                active,
             )),
-            CmdQueue::Get => CQVariant::Get(CQGet::new(
-                comm, scheduler.clone(), my_pe, num_pes, active,
-            )),
-            CmdQueue::GetEager => CQVariant::GetEager(super::command_queues_get_eager::CQGetEager::new(
-                comm, scheduler.clone(), my_pe, num_pes, active,
-            )),
-            CmdQueue::GetSlots => CQVariant::GetSlots(super::command_queues_get_slots::CQGetSlots::new(
-                comm, scheduler.clone(), my_pe, num_pes, active,
-            )),
+            CmdQueue::Get => {
+                CQVariant::Get(CQGet::new(comm, scheduler.clone(), my_pe, num_pes, active))
+            }
+            CmdQueue::GetEager => {
+                CQVariant::GetEager(super::command_queues_get_eager::CQGetEager::new(
+                    comm,
+                    scheduler.clone(),
+                    my_pe,
+                    num_pes,
+                    active,
+                ))
+            }
+            CmdQueue::GetSlots => {
+                CQVariant::GetSlots(super::command_queues_get_slots::CQGetSlots::new(
+                    comm,
+                    scheduler.clone(),
+                    my_pe,
+                    num_pes,
+                    active,
+                ))
+            }
             CmdQueue::Put => CQVariant::Put(super::command_queues_put::CQPut::new(
-                comm, scheduler.clone(), my_pe, num_pes, active,
+                comm,
+                scheduler.clone(),
+                my_pe,
+                num_pes,
+                active,
             )),
-            CmdQueue::PutSlots => CQVariant::PutSlots(super::command_queues_put_slots::CQPutSlots::new(
-                comm, scheduler.clone(), my_pe, num_pes, active,
-            )),
-            CmdQueue::PutEager => CQVariant::PutEager(super::command_queues_put_eager::CQPutEager::new(
-                comm, scheduler.clone(), my_pe, num_pes, active,
-            )),
+            CmdQueue::PutSlots => {
+                CQVariant::PutSlots(super::command_queues_put_slots::CQPutSlots::new(
+                    comm,
+                    scheduler.clone(),
+                    my_pe,
+                    num_pes,
+                    active,
+                ))
+            }
+            CmdQueue::PutEager => {
+                CQVariant::PutEager(super::command_queues_put_eager::CQPutEager::new(
+                    comm,
+                    scheduler.clone(),
+                    my_pe,
+                    num_pes,
+                    active,
+                ))
+            }
         };
-        CommandQueue { scheduler, inner, background_done: Arc::new(AtomicUsize::new(2)) }
+        CommandQueue {
+            scheduler,
+            inner,
+            background_done: Arc::new(AtomicUsize::new(2)),
+        }
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]

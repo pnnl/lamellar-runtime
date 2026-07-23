@@ -45,9 +45,7 @@ pub fn timer_start(func: &str) -> TimeInst {
 
 // Merges per-thread raw entries into a single path map, populating thread_times
 // so that print_subtree can show per-thread breakdown inline.
-fn merge_entries(
-    per_thread: &[Vec<(Vec<usize>, CallRecord)>],
-) -> Vec<(Vec<String>, CallRecord)> {
+fn merge_entries(per_thread: &[Vec<(Vec<usize>, CallRecord)>]) -> Vec<(Vec<String>, CallRecord)> {
     // First pass per thread: resolve IPs to paths, accumulate per-thread totals.
     let thread_maps: Vec<HashMap<Vec<String>, (usize, f64, f64)>> = per_thread
         .iter()
@@ -65,8 +63,7 @@ fn merge_entries(
         .collect();
 
     // Collect all known paths.
-    let mut all_paths: std::collections::HashSet<Vec<String>> =
-        std::collections::HashSet::new();
+    let mut all_paths: std::collections::HashSet<Vec<String>> = std::collections::HashSet::new();
     for tm in &thread_maps {
         for k in tm.keys() {
             all_paths.insert(k.clone());
@@ -339,14 +336,12 @@ impl MyTimer {
                 Some(s) => s,
                 None => continue,
             };
-            let clean =
-                Self::strip_generics(Self::strip_closure_suffix(Self::strip_hash(&sym)));
+            let clean = Self::strip_generics(Self::strip_closure_suffix(Self::strip_hash(&sym)));
             if Self::is_noise(&clean) {
                 continue;
             }
             if func_sym.is_none()
-                && (clean == current_base
-                    || clean.ends_with(&format!("::{}", current_base)))
+                && (clean == current_base || clean.ends_with(&format!("::{}", current_base)))
             {
                 func_sym = Some(clean);
                 continue;

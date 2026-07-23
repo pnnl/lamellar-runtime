@@ -225,7 +225,7 @@ impl<T: Remote> GetBufferFutureData<T> {
     async fn exec_at(mut self) -> Vec<T> {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
-            let mut dst: Vec<T> = (0..self.len).map(|_| std::mem::zeroed() ).collect();
+            let mut dst: Vec<T> = (0..self.len).map(|_| std::mem::zeroed()).collect();
             // let dst_mut_slice = std::slice::from_raw_parts_mut(dst.as_mut_ptr(), self.len);
 
             // dst.set_len(self.len);
@@ -724,7 +724,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
             }
         })
     }
-    
+
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
@@ -732,12 +732,12 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         async_std::task::block_on(async {
-        unsafe {
-            LibfabricAsyncAlloc::inner_get_unmanaged(&self, pe, offset, dst.as_mut_slice())
-                .await
-                .expect("error in get_into_buffer_unmanaged")
-        };});
-
+            unsafe {
+                LibfabricAsyncAlloc::inner_get_unmanaged(&self, pe, offset, dst.as_mut_slice())
+                    .await
+                    .expect("error in get_into_buffer_unmanaged")
+            };
+        });
     }
 }
 
@@ -1015,15 +1015,16 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     ) {
         assert_eq!(pe, self.remote_pe, "get_into_buffer_unmanaged called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
         async_std::task::block_on(async {
-        unsafe {
-            LibfabricAsyncAlloc::inner_get_unmanaged(
-                &self.alloc,
-                pe,
-                offset,
-                dst.as_mut_slice(),
-            )
-            .await
-            .expect("error in get_into_buffer_unmanaged")
-        };});
+            unsafe {
+                LibfabricAsyncAlloc::inner_get_unmanaged(
+                    &self.alloc,
+                    pe,
+                    offset,
+                    dst.as_mut_slice(),
+                )
+                .await
+                .expect("error in get_into_buffer_unmanaged")
+            };
+        });
     }
 }

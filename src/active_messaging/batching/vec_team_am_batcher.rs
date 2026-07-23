@@ -4,7 +4,7 @@ use crate::{
         registered_active_message::*,
         *,
     },
-    lamellae::{Lamellae, LamellaeUtil, SerializedData, SerializeHeader, comm::CommInfo},
+    lamellae::{comm::CommInfo, Lamellae, LamellaeUtil, SerializeHeader, SerializedData},
 };
 use batching::*;
 
@@ -109,7 +109,11 @@ impl VecTeamAmBatcherSlot {
     ) -> usize {
         let am_size = am_bytes.len();
         let mut data = self.data.lock();
-        let map = if is_return { &mut data.return_am_map } else { &mut data.am_map };
+        let map = if is_return {
+            &mut data.return_am_map
+        } else {
+            &mut data.am_map
+        };
         let am_id_map = map.entry(team_addr).or_insert_with(HashMap::new);
         am_id_map
             .entry(am_id)
@@ -155,7 +159,11 @@ pub(crate) struct VecTeamAmBatcher {
 
 impl std::fmt::Debug for VecTeamAmBatcherSlot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "VecTeamAmBatcherSlot(size={})", self.size.load(Ordering::Relaxed))
+        write!(
+            f,
+            "VecTeamAmBatcherSlot(size={})",
+            self.size.load(Ordering::Relaxed)
+        )
     }
 }
 
@@ -174,7 +182,9 @@ impl VecTeamAmBatcher {
             },
         });
         let header_bytes = Arc::new(crate::serialize(&header, false).unwrap());
-        let pe_batch = (0..num_pes).map(|_| Arc::new(VecTeamAmBatcherSlot::new())).collect();
+        let pe_batch = (0..num_pes)
+            .map(|_| Arc::new(VecTeamAmBatcherSlot::new()))
+            .collect();
         VecTeamAmBatcher {
             pe_batch: Arc::new(pe_batch),
             header_bytes,
@@ -217,7 +227,10 @@ impl VecTeamAmBatcher {
                 let cur = cur_stall_mark.load(Ordering::Acquire);
                 let size = slot.size.load(Ordering::SeqCst);
                 if slot.batch_id.load(Ordering::SeqCst) != batch_id {
-                    debug!("vec_team_am_batcher: batch {} for pe {} already sent", batch_id, pe);
+                    debug!(
+                        "vec_team_am_batcher: batch {} for pe {} already sent",
+                        batch_id, pe
+                    );
                     return;
                 }
                 if cur != stall_mark || size >= MAX_BATCH_SIZE {
@@ -225,7 +238,10 @@ impl VecTeamAmBatcher {
                 }
                 stall_mark = cur;
                 if timer.elapsed().as_secs_f32() > 10.0 {
-                    debug!("vec_team_am_batcher: waiting batch {} pe {} size {}", batch_id, pe, size);
+                    debug!(
+                        "vec_team_am_batcher: waiting batch {} pe {} size {}",
+                        batch_id, pe, size
+                    );
                     timer = std::time::Instant::now();
                 }
                 async_std::task::yield_now().await;
@@ -235,22 +251,26 @@ impl VecTeamAmBatcher {
             }
             if let Some(slot_data) = slot.swap() {
                 let buf = VecTeamAmBatcher::serialize_slot(slot_data, &header_bytes);
-                debug!("vec_team_am_batcher: flushing batch {} pe {} {} bytes", batch_id, pe, buf.len());
+                debug!(
+                    "vec_team_am_batcher: flushing batch {} pe {} {} bytes",
+                    batch_id,
+                    pe,
+                    buf.len()
+                );
                 lamellae.send_vec_to_pe_async(pe, buf).await;
             }
         });
     }
 
-    fn flush_now(
-        &self,
-        slot: Arc<VecTeamAmBatcherSlot>,
-        lamellae: Arc<Lamellae>,
-        pe: usize,
-    ) {
+    fn flush_now(&self, slot: Arc<VecTeamAmBatcherSlot>, lamellae: Arc<Lamellae>, pe: usize) {
         let header_bytes = Arc::clone(&self.header_bytes);
         if let Some(slot_data) = slot.swap() {
             let buf = VecTeamAmBatcher::serialize_slot(slot_data, &header_bytes);
-            debug!("vec_team_am_batcher: over-max flush pe {} {} bytes", pe, buf.len());
+            debug!(
+                "vec_team_am_batcher: over-max flush pe {} {} bytes",
+                pe,
+                buf.len()
+            );
             self.executor.submit_io_task(async move {
                 lamellae.send_vec_to_pe_async(pe, buf).await;
             });
@@ -362,11 +382,21 @@ impl Batcher for VecTeamAmBatcher {
                 };
                 let mut darcs = vec![];
                 am.ser(darc_ser_cnt, &mut darcs);
-                for pe in req_data.team.arch.team_iter()
+                for pe in req_data
+                    .team
+                    .arch
+                    .team_iter()
                     .filter(|pe| pe != &req_data.team.lamellae.comm().my_pe())
                 {
                     let slot = Arc::clone(&self.pe_batch[pe]);
-                    let prev = slot.add_am(team_addr, am_id, req_id, req_sub_id, am_bytes.clone(), false);
+                    let prev = slot.add_am(
+                        team_addr,
+                        am_id,
+                        req_id,
+                        req_sub_id,
+                        am_bytes.clone(),
+                        false,
+                    );
                     self.post_add(slot, req_data.lamellae.clone(), pe, prev, stall_mark);
                 }
             }
@@ -404,11 +434,15 @@ impl Batcher for VecTeamAmBatcher {
                 };
                 let mut darcs = vec![];
                 am.ser(darc_ser_cnt, &mut darcs);
-                for pe in req_data.team.arch.team_iter()
+                for pe in req_data
+                    .team
+                    .arch
+                    .team_iter()
                     .filter(|pe| pe != &req_data.team.lamellae.comm().my_pe())
                 {
                     let slot = Arc::clone(&self.pe_batch[pe]);
-                    let prev = slot.add_am(team_addr, am_id, req_id, req_sub_id, am_bytes.clone(), true);
+                    let prev =
+                        slot.add_am(team_addr, am_id, req_id, req_sub_id, am_bytes.clone(), true);
                     self.post_add(slot, req_data.lamellae.clone(), pe, prev, stall_mark);
                 }
             }
@@ -472,7 +506,10 @@ impl Batcher for VecTeamAmBatcher {
                 self.post_add(slot, req_data.lamellae.clone(), pe, prev, stall_mark);
             }
             None => {
-                for pe in req_data.team.arch.team_iter()
+                for pe in req_data
+                    .team
+                    .arch
+                    .team_iter()
                     .filter(|pe| pe != &req_data.team.lamellae.comm().my_pe())
                 {
                     let slot = Arc::clone(&self.pe_batch[pe]);
@@ -500,10 +537,14 @@ impl Batcher for VecTeamAmBatcher {
             offset += cmd_size;
             offset += match cmd {
                 Cmd::Am => exec_am_group(&data_bytes[offset..], src, lamellae, ame, &self.executor),
-                Cmd::ReturnAm => exec_return_am_group(&data_bytes[offset..], src, lamellae, ame).await,
+                Cmd::ReturnAm => {
+                    exec_return_am_group(&data_bytes[offset..], src, lamellae, ame).await
+                }
                 Cmd::Data => exec_data_am_inner(src, &data_bytes[offset..], ame),
                 Cmd::Unit => exec_unit_am_inner(src, &data_bytes[offset..], ame),
-                Cmd::BatchedMsg => unreachable!("VecTeamAmBatcher: unexpected BatchedMsg in payload"),
+                Cmd::BatchedMsg => {
+                    unreachable!("VecTeamAmBatcher: unexpected BatchedMsg in payload")
+                }
             };
         }
     }
@@ -521,28 +562,37 @@ fn exec_am_group(
     executor: &Arc<Executor>,
 ) -> usize {
     let mut offset = 0;
-    let group_header = MyAmGroupHeader::ref_from_bytes(&data[offset..offset + std::mem::size_of::<MyAmGroupHeader>()])
-        .expect("VecTeamAmBatcher: failed to parse MyAmGroupHeader");
+    let group_header = MyAmGroupHeader::ref_from_bytes(
+        &data[offset..offset + std::mem::size_of::<MyAmGroupHeader>()],
+    )
+    .expect("VecTeamAmBatcher: failed to parse MyAmGroupHeader");
     offset += std::mem::size_of::<MyAmGroupHeader>();
     let num_teams = group_header.num_teams.get() as usize;
 
     for _ in 0..num_teams {
-        let team_header = MyTeamHeader::ref_from_bytes(&data[offset..offset + std::mem::size_of::<MyTeamHeader>()])
-            .expect("VecTeamAmBatcher: failed to parse MyTeamHeader");
+        let team_header = MyTeamHeader::ref_from_bytes(
+            &data[offset..offset + std::mem::size_of::<MyTeamHeader>()],
+        )
+        .expect("VecTeamAmBatcher: failed to parse MyTeamHeader");
         offset += std::mem::size_of::<MyTeamHeader>();
-        let (team, world) = ame.get_team_and_world(src, team_header.team_addr.get() as usize, lamellae);
+        let (team, world) =
+            ame.get_team_and_world(src, team_header.team_addr.get() as usize, lamellae);
         let num_am_types = team_header.num_am_types.get() as usize;
 
         for _ in 0..num_am_types {
-            let type_header = MyAmTypeHeader::ref_from_bytes(&data[offset..offset + std::mem::size_of::<MyAmTypeHeader>()])
-                .expect("VecTeamAmBatcher: failed to parse MyAmTypeHeader");
+            let type_header = MyAmTypeHeader::ref_from_bytes(
+                &data[offset..offset + std::mem::size_of::<MyAmTypeHeader>()],
+            )
+            .expect("VecTeamAmBatcher: failed to parse MyAmTypeHeader");
             offset += std::mem::size_of::<MyAmTypeHeader>();
             let am_id = type_header.am_id.get();
             let am_cnt = type_header.am_cnt.get() as usize;
 
             for _ in 0..am_cnt {
-                let req_header = MyAmReqHeader::ref_from_bytes(&data[offset..offset + std::mem::size_of::<MyAmReqHeader>()])
-                    .expect("VecTeamAmBatcher: failed to parse MyAmReqHeader");
+                let req_header = MyAmReqHeader::ref_from_bytes(
+                    &data[offset..offset + std::mem::size_of::<MyAmReqHeader>()],
+                )
+                .expect("VecTeamAmBatcher: failed to parse MyAmReqHeader");
                 offset += std::mem::size_of::<MyAmReqHeader>();
                 let am = AMS_EXECS.get(&am_id).unwrap()(&data[offset..], team.team.team_pe);
                 offset += am.serialized_size();
@@ -565,7 +615,13 @@ fn exec_am_group(
                 team_arc.team.team_counters.inc_outstanding(1);
                 executor.submit_task(async move {
                     let am = match am
-                        .exec(team_arc.team.world_pe, team_arc.team.num_world_pes, false, world_arc.clone(), team_arc.clone())
+                        .exec(
+                            team_arc.team.world_pe,
+                            team_arc.team.num_world_pes,
+                            false,
+                            world_arc.clone(),
+                            team_arc.clone(),
+                        )
                         .await
                     {
                         LamellarReturn::Unit => Am::Unit(req_data),
@@ -592,28 +648,37 @@ async fn exec_return_am_group(
     ame: &RegisteredActiveMessages,
 ) -> usize {
     let mut offset = 0;
-    let group_header = MyAmGroupHeader::ref_from_bytes(&data[offset..offset + std::mem::size_of::<MyAmGroupHeader>()])
-        .expect("VecTeamAmBatcher: failed to parse MyAmGroupHeader (return)");
+    let group_header = MyAmGroupHeader::ref_from_bytes(
+        &data[offset..offset + std::mem::size_of::<MyAmGroupHeader>()],
+    )
+    .expect("VecTeamAmBatcher: failed to parse MyAmGroupHeader (return)");
     offset += std::mem::size_of::<MyAmGroupHeader>();
     let num_teams = group_header.num_teams.get() as usize;
 
     for _ in 0..num_teams {
-        let team_header = MyTeamHeader::ref_from_bytes(&data[offset..offset + std::mem::size_of::<MyTeamHeader>()])
-            .expect("VecTeamAmBatcher: failed to parse MyTeamHeader (return)");
+        let team_header = MyTeamHeader::ref_from_bytes(
+            &data[offset..offset + std::mem::size_of::<MyTeamHeader>()],
+        )
+        .expect("VecTeamAmBatcher: failed to parse MyTeamHeader (return)");
         offset += std::mem::size_of::<MyTeamHeader>();
-        let (team, world) = ame.get_team_and_world(src, team_header.team_addr.get() as usize, lamellae);
+        let (team, world) =
+            ame.get_team_and_world(src, team_header.team_addr.get() as usize, lamellae);
         let num_am_types = team_header.num_am_types.get() as usize;
 
         for _ in 0..num_am_types {
-            let type_header = MyAmTypeHeader::ref_from_bytes(&data[offset..offset + std::mem::size_of::<MyAmTypeHeader>()])
-                .expect("VecTeamAmBatcher: failed to parse MyAmTypeHeader (return)");
+            let type_header = MyAmTypeHeader::ref_from_bytes(
+                &data[offset..offset + std::mem::size_of::<MyAmTypeHeader>()],
+            )
+            .expect("VecTeamAmBatcher: failed to parse MyAmTypeHeader (return)");
             offset += std::mem::size_of::<MyAmTypeHeader>();
             let am_id = type_header.am_id.get();
             let am_cnt = type_header.am_cnt.get() as usize;
 
             for _ in 0..am_cnt {
-                let req_header = MyAmReqHeader::ref_from_bytes(&data[offset..offset + std::mem::size_of::<MyAmReqHeader>()])
-                    .expect("VecTeamAmBatcher: failed to parse MyAmReqHeader (return)");
+                let req_header = MyAmReqHeader::ref_from_bytes(
+                    &data[offset..offset + std::mem::size_of::<MyAmReqHeader>()],
+                )
+                .expect("VecTeamAmBatcher: failed to parse MyAmReqHeader (return)");
                 offset += std::mem::size_of::<MyAmReqHeader>();
                 let am = AMS_EXECS.get(&am_id).unwrap()(&data[offset..], team.team.team_pe);
                 offset += am.serialized_size();
@@ -629,7 +694,9 @@ async fn exec_return_am_group(
                     world: world.team.clone(),
                     team: team.team.clone(),
                 };
-                ame.clone().exec_local_am(req_data, am.as_local(), world.clone(), team.clone()).await;
+                ame.clone()
+                    .exec_local_am(req_data, am.as_local(), world.clone(), team.clone())
+                    .await;
             }
         }
     }
@@ -638,8 +705,10 @@ async fn exec_return_am_group(
 
 fn exec_data_am_inner(src: usize, data_bytes: &[u8], ame: &RegisteredActiveMessages) -> usize {
     let mut offset = 0;
-    let data_header = MyDataHeader::ref_from_bytes(&data_bytes[offset..offset + std::mem::size_of::<MyDataHeader>()])
-        .expect("VecTeamAmBatcher: failed to parse MyDataHeader");
+    let data_header = MyDataHeader::ref_from_bytes(
+        &data_bytes[offset..offset + std::mem::size_of::<MyDataHeader>()],
+    )
+    .expect("VecTeamAmBatcher: failed to parse MyDataHeader");
     offset += std::mem::size_of::<MyDataHeader>();
     let darc_list_size = data_header.darc_list_size.get() as usize;
     let darc_list: Vec<RemotePtr> =
@@ -652,13 +721,18 @@ fn exec_data_am_inner(src: usize, data_bytes: &[u8], ame: &RegisteredActiveMessa
         id: data_header.req_id.get() as usize,
         sub_id: data_header.req_sub_id.get() as usize,
     };
-    ame.send_data_to_user_handle(req_id, src, InternalResult::NewRemote(payload.to_vec(), darc_list));
+    ame.send_data_to_user_handle(
+        req_id,
+        src,
+        InternalResult::NewRemote(payload.to_vec(), darc_list),
+    );
     offset
 }
 
 fn exec_unit_am_inner(src: usize, data_bytes: &[u8], ame: &RegisteredActiveMessages) -> usize {
-    let unit_header = MyUnitHeader::ref_from_bytes(&data_bytes[..std::mem::size_of::<MyUnitHeader>()])
-        .expect("VecTeamAmBatcher: failed to parse MyUnitHeader");
+    let unit_header =
+        MyUnitHeader::ref_from_bytes(&data_bytes[..std::mem::size_of::<MyUnitHeader>()])
+            .expect("VecTeamAmBatcher: failed to parse MyUnitHeader");
     let req_id = ReqId {
         id: unit_header.req_id.get() as usize,
         sub_id: unit_header.req_sub_id.get() as usize,

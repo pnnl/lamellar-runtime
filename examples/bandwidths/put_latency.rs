@@ -19,10 +19,7 @@ const ITERS: usize = 200;
 
 // Same sizes as am_latency (bytes).
 const BUF_SIZES: &[usize] = &[
-    0,
-    8,
-    64,
-    512,
+    0, 8, 64, 512,
     4_096,
     // 16_384,
     // 65_536,
@@ -90,10 +87,8 @@ fn main() {
 
     let unsafe_u8 = UnsafeArray::<u8>::new(&world, total_u8, Distribution::Block).block();
     let atomic_u8 = AtomicArray::<u8>::new(&world, total_u8, Distribution::Block).block();
-    let local_lock_u8 =
-        LocalLockArray::<u8>::new(&world, total_u8, Distribution::Block).block();
-    let global_lock_u8 =
-        GlobalLockArray::<u8>::new(&world, total_u8, Distribution::Block).block();
+    let local_lock_u8 = LocalLockArray::<u8>::new(&world, total_u8, Distribution::Block).block();
+    let global_lock_u8 = GlobalLockArray::<u8>::new(&world, total_u8, Distribution::Block).block();
 
     let src_buf = world.alloc_one_sided_mem_region::<u8>(MAX_SIZE);
     unsafe {
@@ -109,10 +104,8 @@ fn main() {
     let total_usize = num_pes * max_n_ops;
     let remote_usize_base = dst * max_n_ops;
 
-    let unsafe_usize =
-        UnsafeArray::<usize>::new(&world, total_usize, Distribution::Block).block();
-    let atomic_usize =
-        AtomicArray::<usize>::new(&world, total_usize, Distribution::Block).block();
+    let unsafe_usize = UnsafeArray::<usize>::new(&world, total_usize, Distribution::Block).block();
+    let atomic_usize = AtomicArray::<usize>::new(&world, total_usize, Distribution::Block).block();
     let local_lock_usize =
         LocalLockArray::<usize>::new(&world, total_usize, Distribution::Block).block();
     let global_lock_usize =
@@ -130,10 +123,9 @@ fn main() {
     world.barrier();
 
     if my_pe == 0 {
-        let cq_variant =
-            std::env::var("LAMELLAR_CMD_QUEUE").unwrap_or_else(|_| "get".to_owned());
-        let threshold = std::env::var("LAMELLAR_AM_SIZE_THRESHOLD")
-            .unwrap_or_else(|_| "100000".to_owned());
+        let cq_variant = std::env::var("LAMELLAR_CMD_QUEUE").unwrap_or_else(|_| "get".to_owned());
+        let threshold =
+            std::env::var("LAMELLAR_AM_SIZE_THRESHOLD").unwrap_or_else(|_| "100000".to_owned());
         println!(
             "# Array operation latency  cmd_queue={cq_variant}  am_size_threshold={threshold}  \
              pe0->pe{dst}  iters={ITERS}"
@@ -368,7 +360,9 @@ fn main() {
         let idx = &indices_by_size[i];
         if my_pe == 0 {
             for _ in 0..WARMUP {
-                global_lock_usize.batch_store(idx.as_slice(), 1usize).block();
+                global_lock_usize
+                    .batch_store(idx.as_slice(), 1usize)
+                    .block();
             }
         }
         world.barrier();
@@ -376,7 +370,9 @@ fn main() {
         if my_pe == 0 {
             for _ in 0..ITERS {
                 let t = Instant::now();
-                global_lock_usize.batch_store(idx.as_slice(), 1usize).block();
+                global_lock_usize
+                    .batch_store(idx.as_slice(), 1usize)
+                    .block();
                 lat.push(t.elapsed().as_nanos() as u64);
             }
             print_row(size, &mut lat);

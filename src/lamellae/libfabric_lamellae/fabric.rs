@@ -6,14 +6,36 @@ use libfabric::{
         atomic::{AtomicCASEp, AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp},
         rma::{ReadEp, WriteEp},
-    }, connless_ep::ConnectionlessEndpoint, cq::{CompletionQueue, CompletionQueueBuilder, ReadCq}, domain::{Domain, DomainBuilder}, enums::{
-        AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp, EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ReduceOp, ResourceMgmt, TrafficClass, TransferOptions
-    }, ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder}, eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq}, fabric::{Fabric, FabricBuilder}, info::{libfabric_version, Info, InfoEntry}, infocapsoptions::InfoCaps, mcast::{MultiCastGroup, MulticastGroupBuilder}, mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder}, *
+    },
+    connless_ep::ConnectionlessEndpoint,
+    cq::{CompletionQueue, CompletionQueueBuilder, ReadCq},
+    domain::{Domain, DomainBuilder},
+    enums::{
+        AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp,
+        EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ReduceOp,
+        ResourceMgmt, TrafficClass, TransferOptions,
+    },
+    ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder},
+    eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq},
+    fabric::{Fabric, FabricBuilder},
+    info::{libfabric_version, Info, InfoEntry},
+    infocapsoptions::InfoCaps,
+    mcast::{MultiCastGroup, MulticastGroupBuilder},
+    mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder},
+    *,
 };
 
 use crate::{
     lamellae::{
-        collective::{AllReduceOp, ReduceOp as LamellarReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}, AllocationType, AtomicOp as LamellarAtomicOp, CollectiveOpKind
+        collective::{
+            AllReduceOp, ReduceOp as LamellarReduceOp, RootOrSliceMut, RootSrcOrSliceMut,
+            RootSrcSliceOrNone,
+        },
+        comm::{
+            alloc::*,
+            error::{AllocError, AllocResult, FabricError, FabricResult},
+        },
+        AllocationType, AtomicOp as LamellarAtomicOp, CollectiveOpKind,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -76,7 +98,7 @@ enum AtomicOpKind {
     Cas,
 }
 
-pub(crate) struct CommGroup{
+pub(crate) struct CommGroup {
     mapped_addresses: Vec<MappedAddress>,
     ep: ConnectionlessEndpoint<RmaAtomicCollEp>,
     cq: CompletionQueue<WaitableCq>,
@@ -94,21 +116,18 @@ pub(crate) struct CommGroup{
     contexts_cache_size: usize,
 }
 
-
-pub(crate) struct CachedContext{
+pub(crate) struct CachedContext {
     context: Option<libfabric::Context>,
     cache: Arc<Mutex<Vec<CachedContext>>>,
 }
 
-impl Drop for CachedContext{
+impl Drop for CachedContext {
     fn drop(&mut self) {
         let mut cache = self.cache.lock();
-        cache.push(
-            CachedContext{
-                context: self.context.take(),
-                cache: self.cache.clone(),
-            }
-        );
+        cache.push(CachedContext {
+            context: self.context.take(),
+            cache: self.cache.clone(),
+        });
     }
 }
 
@@ -163,32 +182,32 @@ pub(crate) struct Ofi {
     _fabric: Fabric,
     _my_pmi: Arc<dyn Pmi>,
     alloc_manager: Arc<AllocInfoManager>,
-    pub(crate)comm_group: CommGroup,
+    pub(crate) comm_group: CommGroup,
 }
 
-impl CommGroup{
-    
+impl CommGroup {
     fn allocate_context(&self) -> CachedContext {
         let mut cache = self.contexts_cache.lock();
         if let Some(ctx) = cache.pop() {
             ctx
         } else {
             for _ in 0..self.contexts_cache_size - 1 {
-                cache.push(
-                    CachedContext{
-                        context: Some(self.info_entry.allocate_context()),
-                        cache: self.contexts_cache.clone(),
-                    }
-                );
+                cache.push(CachedContext {
+                    context: Some(self.info_entry.allocate_context()),
+                    cache: self.contexts_cache.clone(),
+                });
             }
-            CachedContext{
+            CachedContext {
                 context: Some(self.info_entry.allocate_context()),
                 cache: self.contexts_cache.clone(),
             }
         }
     }
 
-    fn wait_for_join_event(&self, ctx: &Context) -> Result<JoinCompleteEvent, libfabric::error::Error> {
+    fn wait_for_join_event(
+        &self,
+        ctx: &Context,
+    ) -> Result<JoinCompleteEvent, libfabric::error::Error> {
         let _lock = self.lock.lock();
         loop {
             let eq_res = self.eq.read();
@@ -215,7 +234,10 @@ impl CommGroup{
         let cq_res = self.cq.read(1);
 
         match cq_res {
-            Ok(_) => {self.coll_cnt_completed.fetch_add(1, Ordering::SeqCst); Ok(())},
+            Ok(_) => {
+                self.coll_cnt_completed.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
             Err(err) => {
                 if !matches!(err.kind, libfabric::error::ErrorKind::TryAgain) {
                     Err(err)
@@ -320,16 +342,17 @@ impl CommGroup{
             prev_expected_cnt = expected_cnt;
             old_cnt = cur_cnt;
             let _ = self.progress();
-            while self.coll_cnt_completed.load(Ordering::SeqCst) <  self.coll_cnt_issued.load(Ordering::SeqCst) {
+            while self.coll_cnt_completed.load(Ordering::SeqCst)
+                < self.coll_cnt_issued.load(Ordering::SeqCst)
+            {
                 if let Err(err) = self.progress() {
-                            match err.kind {
-                                libfabric::error::ErrorKind::TryAgain => {}
-                                _ => return Err(err),
-                            }
-                        }
+                    match err.kind {
+                        libfabric::error::ErrorKind::TryAgain => {}
+                        _ => return Err(err),
+                    }
+                }
                 std::thread::yield_now();
             }
-            
 
             cur_cnt = self.coll_cnt_completed.load(Ordering::SeqCst);
             expected_cnt = self.coll_cnt_issued.load(Ordering::SeqCst);
@@ -656,51 +679,46 @@ impl Ofi {
             .ranks()
             .iter()
             .map(|r| {
-                let addr = my_pmi
-                    .get(&format!("epname"), &r)
-                    .unwrap();
+                let addr = my_pmi.get(&format!("epname"), &r).unwrap();
                 unsafe { Address::from_bytes(&addr) }
             })
             .collect();
 
-            let mapped_addresses = av
-                .insert(AvInAddress::Encoded(&unmapped_addresses), AVOptions::new())
-                .map_err(|e| FabricError::InitError(e.c_err))?;
-            let mapped_addresses: Vec<MappedAddress> =
-                mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
-                    
-            let contexts_cache_size = 10;
-            let contexts = Arc::new(Mutex::new(Vec::with_capacity(contexts_cache_size)));
-            for _ in 0..contexts_cache_size {
-                contexts.lock().push(
-                    CachedContext{
-                        context: Some(info_entry.allocate_context()),
-                        cache: contexts.clone(),
-                    }
-                );
-            }
-            
-            let comm_group = CommGroup{
-                mapped_addresses,
-                ep,
-                cq,
-                put_cntr,
-                get_cntr,
-                coll_cnt_completed: AtomicU64::new(0),
-                coll_cnt_issued: AtomicU64::new(0),
-                av,
-                eq,
-                info_entry: info_entry.clone(),
-                put_cnt: AtomicU64::new(0),
-                get_cnt: AtomicU64::new(0),
-                lock: Mutex::new(()),
-                contexts_cache: contexts,
-                contexts_cache_size,
-            };
-        
+        let mapped_addresses = av
+            .insert(AvInAddress::Encoded(&unmapped_addresses), AVOptions::new())
+            .map_err(|e| FabricError::InitError(e.c_err))?;
+        let mapped_addresses: Vec<MappedAddress> =
+            mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
+
+        let contexts_cache_size = 10;
+        let contexts = Arc::new(Mutex::new(Vec::with_capacity(contexts_cache_size)));
+        for _ in 0..contexts_cache_size {
+            contexts.lock().push(CachedContext {
+                context: Some(info_entry.allocate_context()),
+                cache: contexts.clone(),
+            });
+        }
+
+        let comm_group = CommGroup {
+            mapped_addresses,
+            ep,
+            cq,
+            put_cntr,
+            get_cntr,
+            coll_cnt_completed: AtomicU64::new(0),
+            coll_cnt_issued: AtomicU64::new(0),
+            av,
+            eq,
+            info_entry: info_entry.clone(),
+            put_cnt: AtomicU64::new(0),
+            get_cnt: AtomicU64::new(0),
+            lock: Mutex::new(()),
+            contexts_cache: contexts,
+            contexts_cache_size,
+        };
+
         let alloc_manager = AllocInfoManager::new();
 
-        
         let ofi = Arc::new(Self {
             num_pes,
             my_pe: my_pmi.rank(),
@@ -873,14 +891,30 @@ impl Ofi {
     pub(crate) fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
         match op {
             CollectiveOpKind::Barrier => self.barrier_avail(),
-            CollectiveOpKind::AllToAll => self.collective_data_op_avail::<T>(CollectiveOp::AllToAll, None),
-            CollectiveOpKind::Broadcast => self.collective_data_op_avail::<T>(CollectiveOp::Broadcast, None),
-            CollectiveOpKind::AllGather => self.collective_data_op_avail::<T>(CollectiveOp::AllGather, None),
-            CollectiveOpKind::Gather => self.collective_data_op_avail::<T>(CollectiveOp::Gather, None),
-            CollectiveOpKind::AllReduce(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::AllReduce, Some(reduce_op)),
-            CollectiveOpKind::Reduce(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::Reduce, Some(reduce_op)),
-            CollectiveOpKind::ReduceScatter(reduce_op) => self.collective_data_op_avail::<T>(CollectiveOp::ReduceScatter, Some(reduce_op)),
-            CollectiveOpKind::Scatter => self.collective_data_op_avail::<T>(CollectiveOp::Scatter, None),
+            CollectiveOpKind::AllToAll => {
+                self.collective_data_op_avail::<T>(CollectiveOp::AllToAll, None)
+            }
+            CollectiveOpKind::Broadcast => {
+                self.collective_data_op_avail::<T>(CollectiveOp::Broadcast, None)
+            }
+            CollectiveOpKind::AllGather => {
+                self.collective_data_op_avail::<T>(CollectiveOp::AllGather, None)
+            }
+            CollectiveOpKind::Gather => {
+                self.collective_data_op_avail::<T>(CollectiveOp::Gather, None)
+            }
+            CollectiveOpKind::AllReduce(reduce_op) => {
+                self.collective_data_op_avail::<T>(CollectiveOp::AllReduce, Some(reduce_op))
+            }
+            CollectiveOpKind::Reduce(reduce_op) => {
+                self.collective_data_op_avail::<T>(CollectiveOp::Reduce, Some(reduce_op))
+            }
+            CollectiveOpKind::ReduceScatter(reduce_op) => {
+                self.collective_data_op_avail::<T>(CollectiveOp::ReduceScatter, Some(reduce_op))
+            }
+            CollectiveOpKind::Scatter => {
+                self.collective_data_op_avail::<T>(CollectiveOp::Scatter, None)
+            }
         }
     }
 
@@ -890,177 +924,125 @@ impl Ofi {
             .is_ok()
     }
 
-    fn collective_data_op_avail<T: 'static>(&self, data_op: CollectiveOp, reduce_op: Option<LamellarReduceOp>) -> bool {
+    fn collective_data_op_avail<T: 'static>(
+        &self,
+        data_op: CollectiveOp,
+        reduce_op: Option<LamellarReduceOp>,
+    ) -> bool {
         let id = std::any::TypeId::of::<T>();
         if id == std::any::TypeId::of::<u8>() {
             let mut attr = CollectiveAttr::<u8>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<u16>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<u16>() {
             let mut attr = CollectiveAttr::<u16>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<u32>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<u32>() {
             let mut attr = CollectiveAttr::<u32>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<u64>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<u64>() {
             let mut attr = CollectiveAttr::<u64>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<u128>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<u128>() {
             let mut attr = CollectiveAttr::<u128>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<i8>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<i8>() {
             let mut attr = CollectiveAttr::<i8>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<i16>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<i16>() {
             let mut attr = CollectiveAttr::<i16>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<i32>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<i32>() {
             let mut attr = CollectiveAttr::<i32>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<i64>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<i64>() {
             let mut attr = CollectiveAttr::<i64>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<i128>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<i128>() {
             let mut attr = CollectiveAttr::<i128>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<usize>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<usize>() {
             let mut attr = CollectiveAttr::<usize>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<isize>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<isize>() {
             let mut attr = CollectiveAttr::<isize>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<f32>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<f32>() {
             let mut attr = CollectiveAttr::<f32>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else if id == std::any::TypeId::of::<f64>() {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else if id == std::any::TypeId::of::<f64>() {
             let mut attr = CollectiveAttr::<f64>::new();
             attr = if let Some(reduce_op) = reduce_op {
                 attr.op((&reduce_op).into())
-            }
-            else {
+            } else {
                 attr
             };
-            self
-                .domain.query_collective(data_op, &mut attr)
-                .is_ok()
-        }
-        else {
+            self.domain.query_collective(data_op, &mut attr).is_ok()
+        } else {
             false
         }
     }
@@ -1109,19 +1091,16 @@ impl Ofi {
         let mut mem_info_bytes = mem_info.to_bytes_mut();
         let mut all_mem_info_bytes = vec![0u8; mem_info_bytes.len() * pes.len()];
 
-        cg.post_collective(
-            true,
-            ||  {
-                cg.ep.allgather(
+        cg.post_collective(true, || {
+            cg.ep.allgather(
                 &mut mem_info_bytes,
                 None,
                 &mut all_mem_info_bytes,
                 None,
                 &mc,
                 CollectiveOptions::new(),
-                )
-            }
-        )?;
+            )
+        })?;
         let all_mem_info: HashMap<_, _> = all_mem_info_bytes
             .chunks_exact(std::mem::size_of::<MemAddressInfo>())
             .enumerate()
@@ -1312,7 +1291,8 @@ impl Ofi {
             .collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), mem_slice, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
-        let mcast_group = self.create_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
+        let mcast_group = self
+            .create_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         let alloc = LibfabricAlloc::new(
             self.clone(),
@@ -1446,11 +1426,10 @@ impl Ofi {
             .collective_exchange_mr_info(pes, mem_slice, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
-        
-        let mcast_group = self.create_mc_group(pes)
+        let mcast_group = self
+            .create_mc_group(pes)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
-        
         let alloc = LibfabricAlloc::new(
             self.clone(),
             mem,
@@ -1554,7 +1533,6 @@ impl Ofi {
     //     self.comm_group.wait_for_completion(ctx)
     // }
 
-    
     pub(crate) fn thread_wait(&self) -> Result<(), libfabric::error::Error> {
         self.comm_group.wait_all()
     }
@@ -2653,9 +2631,13 @@ impl LibfabricAlloc {
                     pe, offset, current, new, result, blocking,
                 )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-                self.typed_atomic_compare_exchange_op::<T, u64>(pe, offset, current, new, result, blocking,)
+                self.typed_atomic_compare_exchange_op::<T, u64>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u128>() {
-                self.typed_atomic_compare_exchange_op::<T, u128>(pe, offset, current, new, result, blocking,)
+                self.typed_atomic_compare_exchange_op::<T, u128>(
+                    pe, offset, current, new, result, blocking,
+                )
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
                 self.typed_atomic_compare_exchange_op::<T, usize>(
                     pe, offset, current, new, result, blocking,
@@ -2737,13 +2719,15 @@ impl LibfabricAlloc {
         Ok(())
     }
 
-    pub(crate) fn allreduce_inplace_inner<T: 'static>(        
+    pub(crate) fn allreduce_inplace_inner<T: 'static>(
         &self,
         op: &AllReduceOp,
         src_and_result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        let dst = unsafe {std::slice::from_raw_parts_mut(src_and_result.as_mut_ptr(), src_and_result.len())};
+        let dst = unsafe {
+            std::slice::from_raw_parts_mut(src_and_result.as_mut_ptr(), src_and_result.len())
+        };
         self.allreduce_inner(op, src_and_result, dst, blocking)
     }
 
@@ -2796,26 +2780,28 @@ impl LibfabricAlloc {
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let res = unsafe { &mut *(result as *mut [T] as *mut [OFI]) };
         let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+        let mc = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for allreduce");
         cg.post_collective(blocking, || {
-                cg.ep.allreduce(
-                    buf,
-                    None,
-                    res,
-                    None,
-                    mc,
-                    op.into(),
-                    CollectiveOptions::default(),
-                )
-            }
-        )?;
+            cg.ep.allreduce(
+                buf,
+                None,
+                res,
+                None,
+                mc,
+                op.into(),
+                CollectiveOptions::default(),
+            )
+        })?;
 
         Ok(())
     }
-    // pub(crate) fn reduce_inplace_inner<T: 'static>(        
+    // pub(crate) fn reduce_inplace_inner<T: 'static>(
     //     &self,
     //     op: &LamellarReduceOp,
     //     root_pe: Option<usize>,
@@ -2829,7 +2815,6 @@ impl LibfabricAlloc {
     //         RootOrSliceMut::Root(dst)
     //     };
 
-        
     //     self.reduce_inner(op, slice_or_pe, blocking)
     // }
 
@@ -2880,21 +2865,17 @@ impl LibfabricAlloc {
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let res = unsafe { &mut *(result as *mut [T] as *mut [OFI]) };
         let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for allgather");
+        let mc = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for allgather");
         cg.post_collective(blocking, || {
-                cg.ep.allgather(
-                    buf,
-                    None,
-                    res,
-                    None,
-                    mc,
-                    CollectiveOptions::default(),
-                )
-            }
-        )?;
+            cg.ep
+                .allgather(buf, None, res, None, mc, CollectiveOptions::default())
+        })?;
 
         Ok(())
     }
@@ -2946,21 +2927,17 @@ impl LibfabricAlloc {
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let res = unsafe { &mut *(result as *mut [T] as *mut [OFI]) };
         let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for alltoall");
+        let mc = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for alltoall");
         cg.post_collective(blocking, || {
-                cg.ep.alltoall(
-                    buf,
-                    None,
-                    res,
-                    None,
-                    mc,
-                    CollectiveOptions::default(),
-                )
-            }
-        )?;
+            cg.ep
+                .alltoall(buf, None, res, None, mc, CollectiveOptions::default())
+        })?;
 
         Ok(())
     }
@@ -2972,7 +2949,6 @@ impl LibfabricAlloc {
         slice_or_pe: RootOrSliceMut<T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_reduce::<T, u8>(op, src, slice_or_pe, blocking)
@@ -3016,33 +2992,36 @@ impl LibfabricAlloc {
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let mc = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for collective reduce");
         let (result, root_pe) = match slice_or_pe {
-            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe),
             RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
         };
-        
+
         let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let res = match result {
-            Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+            Some(res) => unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res) },
             None => {
-                let res_buf = unsafe {std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}; // if result is None, we are doing an in-place reduce or we reduce on a non-root PE, so we can reuse the source buffer as the destination buffer since it is either the destination or will be ignored by non-root PEs
+                let res_buf =
+                    unsafe { std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len()) }; // if result is None, we are doing an in-place reduce or we reduce on a non-root PE, so we can reuse the source buffer as the destination buffer since it is either the destination or will be ignored by non-root PEs
                 unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
             }
         };
         cg.post_collective(blocking, || {
-                cg.ep.reduce(
-                    buf,
-                    None,
-                    res,
-                    None,
-                    mc,
-                    &cg.mapped_addresses[root_pe],
-                    op.into(),
-                    CollectiveOptions::default(),
-                )
-            }
-        )?;
+            cg.ep.reduce(
+                buf,
+                None,
+                res,
+                None,
+                mc,
+                &cg.mapped_addresses[root_pe],
+                op.into(),
+                CollectiveOptions::default(),
+            )
+        })?;
 
         Ok(())
     }
@@ -3053,7 +3032,6 @@ impl LibfabricAlloc {
         slice_or_pe: RootOrSliceMut<T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_gather::<T, u8>(src, slice_or_pe, blocking)
@@ -3096,31 +3074,34 @@ impl LibfabricAlloc {
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let mc = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for collective reduce");
         let (result, root_pe) = match slice_or_pe {
-            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe),
             RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
         };
         let res = match result {
-            Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+            Some(res) => unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res) },
             None => {
-                let res_buf = unsafe {std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())}; // if result is None, we are a non-root PE, so we can reuse the source buffer as the destination buffer since it will be ignored.
+                let res_buf =
+                    unsafe { std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len()) }; // if result is None, we are a non-root PE, so we can reuse the source buffer as the destination buffer since it will be ignored.
                 unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
             }
         };
         let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         cg.post_collective(blocking, || {
-                cg.ep.gather(
-                    buf,
-                    None,
-                    res,
-                    None,
-                    mc,
-                    &cg.mapped_addresses[root_pe],
-                    CollectiveOptions::default(),
-                )
-            }
-        )?;
+            cg.ep.gather(
+                buf,
+                None,
+                res,
+                None,
+                mc,
+                &cg.mapped_addresses[root_pe],
+                CollectiveOptions::default(),
+            )
+        })?;
 
         Ok(())
     }
@@ -3130,7 +3111,6 @@ impl LibfabricAlloc {
         root_src: RootSrcOrSliceMut<T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_broadcast::<T, u8>(root_src, blocking)
@@ -3172,22 +3152,24 @@ impl LibfabricAlloc {
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let mc = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for collective reduce");
         let (result, root_pe) = match slice_or_pe {
-            RootSrcOrSliceMut::Root(src) => (src, self.ofi.my_pe) ,
+            RootSrcOrSliceMut::Root(src) => (src, self.ofi.my_pe),
             RootSrcOrSliceMut::NotRoot(result, root_pe) => (result, root_pe),
         };
-        let res = unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(result)};
+        let res = unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(result) };
         cg.post_collective(blocking, || {
-                cg.ep.broadcast(
-                    res,
-                    None,
-                    mc,
-                    &cg.mapped_addresses[root_pe],
-                    CollectiveOptions::default(),
-                )
-            }
-        )?;
+            cg.ep.broadcast(
+                res,
+                None,
+                mc,
+                &cg.mapped_addresses[root_pe],
+                CollectiveOptions::default(),
+            )
+        })?;
 
         Ok(())
     }
@@ -3198,7 +3180,6 @@ impl LibfabricAlloc {
         src_or_root_pe: RootSrcSliceOrNone<'_, T>,
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
                 self.typed_scatter::<T, u8>(res, src_or_root_pe, blocking)
@@ -3241,28 +3222,35 @@ impl LibfabricAlloc {
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let mc = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for collective reduce");
 
-        let res = unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)};
-        
+        let res = unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res) };
+
         let (src, root_pe) = match src_or_root_pe {
-            RootSrcSliceOrNone::Root(src) => (unsafe { std::mem::transmute::<&[T], &[OFI]>(src) }, self.ofi.my_pe),
-            RootSrcSliceOrNone::NotRoot(root_pe) => (unsafe {std::slice::from_raw_parts(res.as_ptr(), res.len())}, root_pe),
+            RootSrcSliceOrNone::Root(src) => (
+                unsafe { std::mem::transmute::<&[T], &[OFI]>(src) },
+                self.ofi.my_pe,
+            ),
+            RootSrcSliceOrNone::NotRoot(root_pe) => (
+                unsafe { std::slice::from_raw_parts(res.as_ptr(), res.len()) },
+                root_pe,
+            ),
         };
 
-
         cg.post_collective(blocking, || {
-                cg.ep.scatter(
-                    src,
-                    None,
-                    res,
-                    None,
-                    mc,
-                    &cg.mapped_addresses[root_pe],
-                    CollectiveOptions::default(),
-                )
-            }
-        )?;
+            cg.ep.scatter(
+                src,
+                None,
+                res,
+                None,
+                mc,
+                &cg.mapped_addresses[root_pe],
+                CollectiveOptions::default(),
+            )
+        })?;
 
         Ok(())
     }
@@ -3316,22 +3304,24 @@ impl LibfabricAlloc {
         result: &mut [T],
         blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
-        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let res = unsafe { &mut *(result as *mut [T] as *mut [OFI]) };
         let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+        let mc = self
+            .mcast_group
+            .as_ref()
+            .expect("No multicast group for allreduce");
         cg.post_collective(blocking, || {
-                cg.ep.reduce_scatter(
-                    buf,
-                    None,
-                    res,
-                    None,
-                    mc,
-                    op.into(),
-                    CollectiveOptions::default(),
-                )
-            }
-        )?;
+            cg.ep.reduce_scatter(
+                buf,
+                None,
+                res,
+                None,
+                mc,
+                op.into(),
+                CollectiveOptions::default(),
+            )
+        })?;
 
         Ok(())
     }

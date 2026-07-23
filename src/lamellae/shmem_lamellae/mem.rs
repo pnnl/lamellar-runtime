@@ -263,7 +263,9 @@ impl CommMem for ShmemComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(inner_alloc.sub_alloc(addr.0, size)?)),
+                    inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(
+                        inner_alloc.sub_alloc(addr.0, size)?,
+                    )),
                     // alloc_type: CommAllocType::RtHeap,
                 });
             }

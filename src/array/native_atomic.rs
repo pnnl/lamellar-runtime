@@ -3,10 +3,10 @@
 mod handle;
 pub(crate) use handle::NativeAtomicArrayHandle;
 
+pub(crate) mod collective;
 pub(crate) mod iteration;
 pub(crate) mod operations;
 pub(crate) mod rdma;
-pub(crate) mod collective;
 use crate::array::atomic::AtomicElement;
 
 // use crate::array::private::LamellarArrayPrivate;
@@ -27,7 +27,10 @@ use std::ops::{
     AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
     ShrAssign, SubAssign,
 };
-use std::sync::atomic::{ AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{
+    AtomicI16, AtomicI32, AtomicI64, AtomicI8, AtomicIsize, AtomicU16, AtomicU32, AtomicU64,
+    AtomicU8, AtomicUsize, Ordering,
+};
 
 // macro_rules! impl_atomic_ops{
 //     { $A:ty, $B:ty , $C:ident} => {
@@ -1100,34 +1103,54 @@ impl<'a, T: ElementComparePartialEqOps + 'static> NativeAtomicElementRef<'a, T> 
 }
 
 impl<'a, T: Dist + ElementArithmeticOps> AddAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn add_assign(&mut self, val: T) { self.fetch_add(val); }
+    fn add_assign(&mut self, val: T) {
+        self.fetch_add(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> SubAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn sub_assign(&mut self, val: T) { self.fetch_sub(val); }
+    fn sub_assign(&mut self, val: T) {
+        self.fetch_sub(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> MulAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn mul_assign(&mut self, val: T) { self.fetch_mul(val); }
+    fn mul_assign(&mut self, val: T) {
+        self.fetch_mul(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> DivAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn div_assign(&mut self, val: T) { self.fetch_div(val); }
+    fn div_assign(&mut self, val: T) {
+        self.fetch_div(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> RemAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn rem_assign(&mut self, val: T) { self.fetch_rem(val); }
+    fn rem_assign(&mut self, val: T) {
+        self.fetch_rem(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitAndAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn bitand_assign(&mut self, val: T) { self.fetch_and(val); }
+    fn bitand_assign(&mut self, val: T) {
+        self.fetch_and(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitOrAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn bitor_assign(&mut self, val: T) { self.fetch_or(val); }
+    fn bitor_assign(&mut self, val: T) {
+        self.fetch_or(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitXorAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn bitxor_assign(&mut self, val: T) { self.fetch_xor(val); }
+    fn bitxor_assign(&mut self, val: T) {
+        self.fetch_xor(val);
+    }
 }
 impl<'a, T: Dist + ElementShiftOps> ShlAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn shl_assign(&mut self, val: T) { self.fetch_shl(val); }
+    fn shl_assign(&mut self, val: T) {
+        self.fetch_shl(val);
+    }
 }
 impl<'a, T: Dist + ElementShiftOps> ShrAssign<T> for NativeAtomicElementRef<'a, T> {
-    fn shr_assign(&mut self, val: T) { self.fetch_shr(val); }
+    fn shr_assign(&mut self, val: T) {
+        self.fetch_shr(val);
+    }
 }
 
 impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElementRef<'a, T> {
@@ -1741,14 +1764,28 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> NativeAtomicArray<T> {
     #[doc(hidden)]
     pub fn sum(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Sum))),
+            Some((scalar_type, _)) => {
+                self.array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Sum,
+                    )))
+            }
             None => self.array.reduce_data_user("sum", self.clone().into()),
         }
     }
     #[doc(hidden)]
     pub fn prod(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Prod))),
+            Some((scalar_type, _)) => {
+                self.array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Prod,
+                    )))
+            }
             None => self.array.reduce_data_user("prod", self.clone().into()),
         }
     }
@@ -1757,14 +1794,28 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> NativeAtomicArray<
     #[doc(hidden)]
     pub fn max(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Max))),
+            Some((scalar_type, _)) => {
+                self.array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Max,
+                    )))
+            }
             None => self.array.reduce_data_user("max", self.clone().into()),
         }
     }
     #[doc(hidden)]
     pub fn min(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Min))),
+            Some((scalar_type, _)) => {
+                self.array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Min,
+                    )))
+            }
             None => self.array.reduce_data_user("min", self.clone().into()),
         }
     }
@@ -1773,21 +1824,42 @@ impl<T: Dist + AmDist + ElementBitWiseOps + 'static> NativeAtomicArray<T> {
     #[doc(hidden)]
     pub fn and(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::And))),
+            Some((scalar_type, _)) => {
+                self.array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.clone().into(),
+                        scalar_type,
+                        BuiltinOp::And,
+                    )))
+            }
             None => self.array.reduce_data_user("and", self.clone().into()),
         }
     }
     #[doc(hidden)]
     pub fn or(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Or))),
+            Some((scalar_type, _)) => {
+                self.array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Or,
+                    )))
+            }
             None => self.array.reduce_data_user("or", self.clone().into()),
         }
     }
     #[doc(hidden)]
     pub fn xor(&self) -> crate::array::ArrayReduceHandle<T> {
         match ScalarType::get_type::<T>() {
-            Some((scalar_type,_)) => self.array.reduce_data(Arc::new(ScalarBuiltinReductionAm::new(self.clone().into(), scalar_type, BuiltinOp::Xor))),
+            Some((scalar_type, _)) => {
+                self.array
+                    .reduce_data(Arc::new(ScalarBuiltinReductionAm::new(
+                        self.clone().into(),
+                        scalar_type,
+                        BuiltinOp::Xor,
+                    )))
+            }
             None => self.array.reduce_data_user("xor", self.clone().into()),
         }
     }

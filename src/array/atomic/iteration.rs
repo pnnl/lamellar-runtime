@@ -18,8 +18,8 @@ use crate::array::native_atomic::iteration::NativeAtomicDistIterElement;
 use crate::array::network_atomic::iteration::NetworkAtomicDistIterElement;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
-use crate::array::{ElementArithmeticOps, ElementBitWiseOps, ElementShiftOps};
 use crate::array::*;
+use crate::array::{ElementArithmeticOps, ElementBitWiseOps, ElementShiftOps};
 use crate::memregion::Dist;
 
 use self::iterator::IterLockFuture;
@@ -341,34 +341,54 @@ impl<'a, T: Dist + ElementShiftOps + 'static> AtomicDistIterElement<'a, T> {
 }
 
 impl<'a, T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicDistIterElement<'a, T> {
-    fn add_assign(&mut self, val: T) { self.fetch_add(val); }
+    fn add_assign(&mut self, val: T) {
+        self.fetch_add(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> SubAssign<T> for AtomicDistIterElement<'a, T> {
-    fn sub_assign(&mut self, val: T) { self.fetch_sub(val); }
+    fn sub_assign(&mut self, val: T) {
+        self.fetch_sub(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> MulAssign<T> for AtomicDistIterElement<'a, T> {
-    fn mul_assign(&mut self, val: T) { self.fetch_mul(val); }
+    fn mul_assign(&mut self, val: T) {
+        self.fetch_mul(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicDistIterElement<'a, T> {
-    fn div_assign(&mut self, val: T) { self.fetch_div(val); }
+    fn div_assign(&mut self, val: T) {
+        self.fetch_div(val);
+    }
 }
 impl<'a, T: Dist + ElementArithmeticOps> RemAssign<T> for AtomicDistIterElement<'a, T> {
-    fn rem_assign(&mut self, val: T) { self.fetch_rem(val); }
+    fn rem_assign(&mut self, val: T) {
+        self.fetch_rem(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicDistIterElement<'a, T> {
-    fn bitand_assign(&mut self, val: T) { self.fetch_and(val); }
+    fn bitand_assign(&mut self, val: T) {
+        self.fetch_and(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicDistIterElement<'a, T> {
-    fn bitor_assign(&mut self, val: T) { self.fetch_or(val); }
+    fn bitor_assign(&mut self, val: T) {
+        self.fetch_or(val);
+    }
 }
 impl<'a, T: Dist + ElementBitWiseOps> BitXorAssign<T> for AtomicDistIterElement<'a, T> {
-    fn bitxor_assign(&mut self, val: T) { self.fetch_xor(val); }
+    fn bitxor_assign(&mut self, val: T) {
+        self.fetch_xor(val);
+    }
 }
 impl<'a, T: Dist + ElementShiftOps> ShlAssign<T> for AtomicDistIterElement<'a, T> {
-    fn shl_assign(&mut self, val: T) { self.fetch_shl(val); }
+    fn shl_assign(&mut self, val: T) {
+        self.fetch_shl(val);
+    }
 }
 impl<'a, T: Dist + ElementShiftOps> ShrAssign<T> for AtomicDistIterElement<'a, T> {
-    fn shr_assign(&mut self, val: T) { self.fetch_shr(val); }
+    fn shr_assign(&mut self, val: T) {
+        self.fetch_shr(val);
+    }
 }
 
 impl<'a, T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicDistIterElement<'a, T> {

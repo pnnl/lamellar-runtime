@@ -5,7 +5,7 @@ use crate::scheduler::{
 use crate::MAIN_THREAD;
 
 //use tracing::*;
- use tracing::trace;
+use tracing::trace;
 
 use async_task::{Builder, Runnable};
 use core_affinity::CoreId;

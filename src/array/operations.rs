@@ -8,14 +8,11 @@ use crate::array::network_atomic::*;
 use crate::array::*;
 use crate::config;
 
-
 pub(crate) mod scalar_impls;
 
 // use crate::lamellar_request::LamellarRequest;
 // use crate::scheduler::Scheduler;
 // use crate::LamellarTeamRT;
-
-
 
 pub(crate) mod handle;
 pub use handle::{
@@ -250,7 +247,6 @@ impl<T: Dist> From<&ArrayOpCmd<Vec<u8>>> for ArrayOpCmd<T> {
         }
     }
 }
-
 
 #[doc(hidden)]
 #[repr(C, packed)] //required as we reinterpret as bytes
@@ -1043,7 +1039,6 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for __NetworkAtomicLocalData<T> {
 /// Supertrait specifying that array elements must be [Sized] and must be able to be used in remote operations [Dist].
 pub trait ElementOps: Dist + Sized {}
 impl<T> ElementOps for T where T: Dist {}
-
 
 impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {}
 
