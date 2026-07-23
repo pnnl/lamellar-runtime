@@ -1,7 +1,6 @@
 use crate::OneSidedMemoryRegion;
 use crate::array::*;
 use crate::Remote;
-use crate::memregion::{RegisteredMemoryRegion, MemRegionId};
 
 
 

@@ -6,7 +6,6 @@ use crate::{
         AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, RdmaGetHandle, Remote,
     },
     memregion::one_sided::OneSidedMemoryRegion,
-    lamellar_request::LamellarRequest,
     scheduler::LamellarTask,
     warnings::RuntimeWarning,
     AmHandle, Dist, RdmaHandle,
