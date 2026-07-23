@@ -8,7 +8,7 @@
 ///   spawn_am_pe().block() — eager: AM submitted to scheduler immediately, worker thread sends
 ///
 /// Useful env vars to compare variants:
-///   LAMELLAR_CMD_QUEUE=get|get2|getn|put|put2|put2n|put3
+///   LAMELLAR_CMD_QUEUE=batched|get|geteager|getslots|put|putslots|puteager
 ///   LAMELLAR_AM_SIZE_THRESHOLD=0    (disable aggregation batching)
 ///   LAMELLAR_BATCHER=simple|direct|team_am
 use lamellar::ActiveMessaging;

@@ -8,7 +8,7 @@
 /// n_ops = size_B / sizeof(usize), matching the BUF_SIZES from am_latency.
 ///
 /// Useful env vars:
-///   LAMELLAR_CMD_QUEUE=get|get2|getn|put|put2|put2n|put3
+///   LAMELLAR_CMD_QUEUE=batched|get|geteager|getslots|put|putslots|puteager
 ///   LAMELLAR_AM_SIZE_THRESHOLD=0    (disable aggregation batching)
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
