@@ -3,6 +3,7 @@ use crate::env_var::config;
 use crate::scheduler::{
     Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus,
 };
+use crate::stats;
 use crate::LAMELLAR_THREAD_ID;
 
 //use tracing::*;
@@ -301,10 +302,10 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::Spawn)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         trace!(target: "collective", "executor spawn task id: {:?}", task_id);
         // trace_span!("spawn_task").in_scope(|| {
@@ -315,10 +316,10 @@ impl LamellarExecutor for WorkStealing {
                 async move {
                     trace!(target: "collective", "starting spawn task id: {:?} ", task_id);
                     let res = task.await;
-                    TASKS_FINISHED
+                    stats!(TASKS_FINISHED
                         .get(&TaskType::Spawn)
                         .unwrap()
-                        .fetch_add(1, Ordering::Relaxed);
+                        .fetch_add(1, Ordering::Relaxed));
                     trace!(target: "collective", "finished spawn task id: {:?} ", task_id);
                     res
                 }
@@ -341,10 +342,10 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::LongSubmit)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace!("submit long task id: {:?}", task_id);
         // trace_span!("submit_task").in_scope(|| {
@@ -355,10 +356,10 @@ impl LamellarExecutor for WorkStealing {
                 async move {
                     // trace!("starting long submit task id: {:?} ", task_id);
                     let res = task.await;
-                    TASKS_FINISHED
+                    stats!(TASKS_FINISHED
                         .get(&TaskType::LongSubmit)
                         .unwrap()
-                        .fetch_add(1, Ordering::Relaxed);
+                        .fetch_add(1, Ordering::Relaxed));
                     // trace!("finished long submit task id: {:?} ", task_id);
                     res
                 }
@@ -376,10 +377,10 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::Submit)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         trace!(target: "collective", " submit task id: {:?}", task_id);
         // trace_span!("submit_task").in_scope(|| {
@@ -390,10 +391,10 @@ impl LamellarExecutor for WorkStealing {
                 async move {
                     trace!(target: "collective", "starting submit task id: {:?} ", task_id);
                     let res = task.await;
-                    TASKS_FINISHED
+                    stats!(TASKS_FINISHED
                         .get(&TaskType::Submit)
                         .unwrap()
-                        .fetch_add(1, Ordering::Relaxed);
+                        .fetch_add(1, Ordering::Relaxed));
                     trace!(target: "collective", "finished submit task id: {:?} ", task_id);
                     res
                 }
@@ -412,10 +413,10 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::Submit)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         trace!(target: "collective", "submit task thread id: {:?} task id: {:?}", tid, task_id);
         // trace_span!("submit_task_thread").in_scope(|| {
@@ -426,10 +427,10 @@ impl LamellarExecutor for WorkStealing {
                 async move {
                     trace!(target: "collective", "starting thread submit task id: {:?} ", task_id);
                     let res = task.await;
-                    TASKS_FINISHED
+                    stats!(TASKS_FINISHED
                         .get(&TaskType::Submit)
                         .unwrap()
-                        .fetch_add(1, Ordering::Relaxed);
+                        .fetch_add(1, Ordering::Relaxed));
                     trace!(target: "collective", "finished thread submit task id: {:?} ", task_id);
                     res
                 }
@@ -448,10 +449,10 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::IO)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         trace!("submitting IO task id: {:?}", task_id);
         // trace!("submit IO task id: {:?}", task_id);
@@ -463,10 +464,10 @@ impl LamellarExecutor for WorkStealing {
                 async move {
                     // trace!("starting IO task id: {:?} ", task_id);
                     let res = task.await;
-                    TASKS_FINISHED
+                    stats!(TASKS_FINISHED
                         .get(&TaskType::IO)
                         .unwrap()
-                        .fetch_add(1, Ordering::Relaxed);
+                        .fetch_add(1, Ordering::Relaxed));
                     // trace!("finished IO task id: {:?} ", task_id);
                     res
                 }
@@ -485,10 +486,10 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::Immediate)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace!("submit immediate task id: {:?}", task_id);
         // trace_span!("submit_immediate_task").in_scope(|| {
@@ -499,10 +500,10 @@ impl LamellarExecutor for WorkStealing {
                 async move {
                     // trace!("starting immediate task id: {:?} ", task_id);
                     let res = task.await;
-                    TASKS_FINISHED
+                    stats!(TASKS_FINISHED
                         .get(&TaskType::Immediate)
                         .unwrap()
-                        .fetch_add(1, Ordering::Relaxed);
+                        .fetch_add(1, Ordering::Relaxed));
                     // trace!("finished immediate task id: {:?} ", task_id);
                     res
                 }
@@ -518,10 +519,10 @@ impl LamellarExecutor for WorkStealing {
     }
 
     fn block_on<F: Future>(&self, fut: F) -> F::Output {
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::BlockOn)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         trace!(target: "collective", "executor block_on task id: {:?}", task_id);
         // trace!("block on task id: {:?}", task_id);
@@ -534,10 +535,10 @@ impl LamellarExecutor for WorkStealing {
                     async move {
                         trace!(target: "collective","starting block on task id: {:?} ", task_id);
                         let res = fut.await;
-                        TASKS_FINISHED
+                        stats!(TASKS_FINISHED
                             .get(&TaskType::BlockOn)
                             .unwrap()
-                            .fetch_add(1, Ordering::Relaxed);
+                            .fetch_add(1, Ordering::Relaxed));
                         trace!(target: "collective", "finished block on task id: {:?} ", task_id);
                         res
                     }

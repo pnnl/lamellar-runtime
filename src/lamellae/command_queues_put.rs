@@ -465,7 +465,7 @@ impl InnerCQ {
                         .await;
                     magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
 
-                    sent_cnt.fetch_add(1, Ordering::SeqCst);
+                    stats!(sent_cnt.fetch_add(1, Ordering::SeqCst));
                     break;
                 }
                 comm.thread_flush();
@@ -571,7 +571,7 @@ impl InnerCQ {
 
                     // magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
 
-                    sent_cnt.fetch_add(1, Ordering::SeqCst);
+                    stats!(sent_cnt.fetch_add(1, Ordering::SeqCst));
                     return;
                 }
                 comm.thread_flush();
@@ -1096,7 +1096,7 @@ impl CQPut {
                                         "msg_id: {msg_id} done flag received from {src}, submitting remote am"
                                     );
 
-                                    cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
+                                    stats!(cq.recv_cnt.fetch_add(1, Ordering::SeqCst));
                                     scheduler1.submit_remote_am(
                                         ser_data.drop_payload_bytes(std::mem::size_of::<u64>()),
                                         &lamellae,

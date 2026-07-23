@@ -794,7 +794,7 @@ impl InnerCQ {
                 //this is to tell the compiler we wont hold the mutex lock if we have to yield
                 let mut cmd_buffer = self.cmd_buffers[dst].lock_blocking();
                 if cmd_buffer.try_push(data.clone(), hash) {
-                    self.sent_cnt.fetch_add(1, Ordering::SeqCst);
+                    stats!(self.sent_cnt.fetch_add(1, Ordering::SeqCst));
                     self.put_amt.fetch_add(data.len(), Ordering::Relaxed);
                     let _cnt = self.pending_cmds.fetch_sub(1, Ordering::SeqCst);
                     debug!(
@@ -1329,7 +1329,7 @@ impl InnerCQ {
         let mut ser_data = ser_data.unwrap();
         self.get_serialized_data(src, cmd, &mut ser_data, msg_id, lamellae)
             .await;
-        self.recv_cnt.fetch_add(1, Ordering::SeqCst);
+        stats!(self.recv_cnt.fetch_add(1, Ordering::SeqCst));
         trace!(target: "lamellae_debug", "leaving get_cmd lamellae cnt: {:?}", Arc::strong_count(lamellae));
         ser_data
     }

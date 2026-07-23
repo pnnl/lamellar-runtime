@@ -475,7 +475,7 @@ impl InnerCQ {
         dst_magic.put_unmanaged::<u64>(size as u64, dst, 0);
 
         stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
-        self.sent_cnt.fetch_add(1, Ordering::SeqCst);
+        stats!(self.sent_cnt.fetch_add(1, Ordering::SeqCst));
     }
 
     // Eager send for Vec<u8>: same as send_eager but copies into registered memory first.
@@ -505,7 +505,7 @@ impl InnerCQ {
         dst_magic.put_unmanaged::<u64>(size as u64, dst, 0);
 
         stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
-        self.sent_cnt.fetch_add(1, Ordering::SeqCst);
+        stats!(self.sent_cnt.fetch_add(1, Ordering::SeqCst));
     }
 
     // Send an ack counter back to src. Uses eager_send_acks_comm_alloc which has
@@ -609,7 +609,7 @@ impl InnerCQ {
                         .await;
                     magic_data.put_unmanaged::<u64>(ready.msg_hash as u64, dst, 0);
 
-                    sent_cnt.fetch_add(1, Ordering::SeqCst);
+                    stats!(sent_cnt.fetch_add(1, Ordering::SeqCst));
                     break;
                 }
                 comm.thread_flush();
@@ -719,7 +719,7 @@ impl InnerCQ {
                             .await;
                     }
 
-                    sent_cnt.fetch_add(1, Ordering::SeqCst);
+                    stats!(sent_cnt.fetch_add(1, Ordering::SeqCst));
                     break;
                 }
                 comm.thread_flush();
@@ -1248,7 +1248,7 @@ impl CQPutEager {
                                     "msg_id: {msg_id} done flag received from {src}, submitting remote am"
                                 );
 
-                                cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
+                                stats!(cq.recv_cnt.fetch_add(1, Ordering::SeqCst));
                                 scheduler1.submit_remote_am(
                                     ser_data.drop_payload_bytes(std::mem::size_of::<u64>()),
                                     &lamellae,
@@ -1305,7 +1305,7 @@ impl CQPutEager {
                         self.cq.send_eager_ack(src, processed);
 
                         stats!(PE_RECVS[0][src].fetch_add(1, Ordering::SeqCst));
-                        self.cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
+                        stats!(self.cq.recv_cnt.fetch_add(1, Ordering::SeqCst));
                         self.scheduler.submit_remote_am(ser_data, &lamellae);
                     }
                 }

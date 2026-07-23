@@ -494,7 +494,7 @@ impl InnerCQ {
                     let _ = recv_buffer.put_unmanaged::<CmdMsg>(send_cmd, dst, 0);
                     self.put_amt
                         .fetch_add(send_buf[0].as_bytes().len(), Ordering::Relaxed);
-                    self.sent_cnt.fetch_add(1, Ordering::SeqCst);
+                    stats!(self.sent_cnt.fetch_add(1, Ordering::SeqCst));
                     break;
                 } else {
                     if !printed {
@@ -757,7 +757,7 @@ impl InnerCQ {
         let mut ser_data = ser_data.unwrap();
         self.get_serialized_data(src, cmd, &mut ser_data, msg_id, lamellae)
             .await;
-        self.recv_cnt.fetch_add(1, Ordering::SeqCst);
+        stats!(self.recv_cnt.fetch_add(1, Ordering::SeqCst));
         ser_data
     }
 
@@ -801,7 +801,7 @@ impl InnerCQ {
         dst_magic.put_unmanaged::<u64>(size as u64, dst, 0);
 
         stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
-        self.sent_cnt.fetch_add(1, Ordering::SeqCst);
+        stats!(self.sent_cnt.fetch_add(1, Ordering::SeqCst));
     }
 
     // Eager send for Vec<u8>: stage into registered memory then PUT, or PUT directly.
@@ -831,7 +831,7 @@ impl InnerCQ {
         dst_magic.put_unmanaged::<u64>(size as u64, dst, 0);
 
         stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
-        self.sent_cnt.fetch_add(1, Ordering::SeqCst);
+        stats!(self.sent_cnt.fetch_add(1, Ordering::SeqCst));
     }
 
     // Send ack back to src after processing one of its eager slots.
@@ -1194,7 +1194,7 @@ impl CQGetEager {
                                 .fetch_add(1, Ordering::SeqCst)
                                 + 1;
                             self.cq.send_eager_ack(src, processed);
-                            self.cq.recv_cnt.fetch_add(1, Ordering::SeqCst);
+                            stats!(self.cq.recv_cnt.fetch_add(1, Ordering::SeqCst));
                             stats!(PE_RECVS[1][src].fetch_add(1, Ordering::SeqCst));
                             self.scheduler.submit_remote_am(ser_data, &lamellae);
                         }

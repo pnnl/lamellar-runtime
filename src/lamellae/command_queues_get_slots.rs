@@ -464,7 +464,7 @@ impl InnerCQ {
                             .put_unmanaged::<CmdMsg>(cmd_clone, dst, 0);
 
                         self.put_amt.fetch_add(put_bytes, Ordering::Relaxed);
-                        self.sent_cnt.fetch_add(1, Ordering::SeqCst);
+                        stats!(self.sent_cnt.fetch_add(1, Ordering::SeqCst));
                         stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
                         break 'outer;
                     }
@@ -722,7 +722,7 @@ impl InnerCQ {
         let mut ser_data = ser_data.unwrap();
         self.get_serialized_data(src, cmd, &mut ser_data, msg_id, lamellae)
             .await;
-        self.recv_cnt.fetch_add(1, Ordering::SeqCst);
+        stats!(self.recv_cnt.fetch_add(1, Ordering::SeqCst));
         ser_data
     }
 }
