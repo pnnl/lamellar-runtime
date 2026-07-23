@@ -442,10 +442,13 @@ impl LamellarTeam {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Launch and execute a local active message, pinned to the specified worker thread index.
+    /// Launches and executes a local active message, with a hint to try and schedule to the specified worker thread index.
     ///
     /// This is a lower-level variant of [`ActiveMessaging::exec_am_local`] that allows the caller
     /// to direct the active message to a particular worker thread within this PE.
+    /// The executor may choose to ignore this hint and schedule the active message on a different worker thread.
+    /// The Lamellar executor will initially schedule the active message to the specified worker thread, but it may be stolen by another thread.
+    /// The Tokio and async-std executors ignore the thread hint and schedule the active message on any available worker thread.
     ///
     /// Execute an active message on a specific thread of the calling PE.
     ///
@@ -1633,11 +1636,16 @@ impl LamellarTeamRT {
         let mut world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
         let mut world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
 
-        trace!(
-            "in team wait_all mype: {:?} cnt: {:?} {:?}",
-            self.world_pe,
-            self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-            self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        debug!(
+            target: "barrier",
+            my_pe = self.world_pe,
+            send_req_cnt = self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+            send_req_cnt_addr = ?(&self.team_counters.send_req_cnt as *const _),
+            outstanding_reqs = self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+            outstanding_reqs_addr = ?Arc::as_ptr(&self.team_counters.outstanding_reqs),
+            launched_req_cnt = self.team_counters.launched_req_cnt.load(Ordering::SeqCst),
+            launched_req_cnt_addr = ?(&self.team_counters.launched_req_cnt as *const _),
+            "team wait_all: entering poll loop"
         );
         let mut done = false;
         while !done {
@@ -1662,17 +1670,21 @@ impl LamellarTeamRT {
                     self.scheduler.exec_task()
                 }; //mmight as well do useful work while we wait }
                 if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                    println!(
-                        "in team wait_all mype: {:?} cnt: {:?} {:?} {:?} send/recv cnts: {:?} {:?} launched_tasks {:?} finished_tasks {:?} {:?}",
-                        self.world_pe,
-                        self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-                        self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-                        self.team_counters.launched_req_cnt.load(Ordering::SeqCst),
-                        print_stats!(&*BATCHER_AM_PE_SEND_CNTS),
-                        print_stats!(&*BATCHER_AM_PE_RECV_CNTS),
-                        task_launched_to_string(),
-                        task_finished_to_string(),
-                        io_task_stats(),
+                    debug!(
+                        target: "counters",
+                        mype = ?self.world_pe,
+                        send_req_cnt = self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+                        send_req_cnt_addr = ?(&self.team_counters.send_req_cnt as *const _),
+                        outstanding_reqs = self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+                        outstanding_reqs_addr = ?Arc::as_ptr(&self.team_counters.outstanding_reqs),
+                        launched_req_cnt = self.team_counters.launched_req_cnt.load(Ordering::SeqCst),
+                        launched_req_cnt_addr = ?(&self.team_counters.launched_req_cnt as *const _),
+                        send_cnts = ?print_stats!(&*BATCHER_AM_PE_SEND_CNTS),
+                        recv_cnts = ?print_stats!(&*BATCHER_AM_PE_RECV_CNTS),
+                        launched_tasks = ?task_launched_to_string(),
+                        finished_tasks = ?task_finished_to_string(),
+                        io_task_stats = ?io_task_stats(),
+                        "in team wait_all"
                     );
                     self.lamellae.wait_all_print();
                     temp_now = Instant::now();
@@ -1710,11 +1722,13 @@ impl LamellarTeamRT {
             }
             done = true;
         }
-        trace!(
-            "leaving team wait_all mype: {:?} cnt: {:?} {:?}",
-            self.world_pe,
-            self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-            self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        debug!(
+            target: "barrier",
+            my_pe = self.world_pe,
+            send_req_cnt = self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+            outstanding_reqs = self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+            launched_req_cnt = self.team_counters.launched_req_cnt.load(Ordering::SeqCst),
+            "team wait_all: leaving poll loop"
         );
     }
 
@@ -2024,8 +2038,6 @@ impl Darc<LamellarTeamRT> {
         // trace!("[{:?}] team exec am all request", self.world_pe);
         // event!(Level::TRACE, "team exec am all request");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
-            task_group_cnts.inc_outstanding(self.num_pes);
-            task_group_cnts.inc_launched(self.num_pes);
             task_group_cnts.inc_send_req(self.num_pes);
         }
 
