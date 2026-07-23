@@ -198,7 +198,7 @@ fn create_launch_block(
                 );
                 prterun_args.insert(
                     0,
-                    format!("--output=file={}/", __dir),
+                    format!("--output=file={}/lamellar", __dir),
                 );
             }
         }
