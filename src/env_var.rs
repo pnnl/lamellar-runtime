@@ -3,9 +3,13 @@
 //!
 //! - `LAMELLAR_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
 //!     - possible values
-//!         - `local` -- default (if none of `enable-rofi-c`, `enable-libfabric`, `enable-libfabric-async`, or `enable-ucx` features are active)
+//!         - `local` -- default (if none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric`, `enable-libfabric-async`, or `enable-ucx` features are active)
 //!         - `shmem`
-//!         - `rofi`  -- only available with the `enable-rofi-c` feature in which case it is the default backend
+//!         - `rofi_c`  -- only available with the `enable-rofi-c` feature; default if active, checked first
+//!         - `libfabric-sys` -- only available with the `enable-libfabric-sys` feature; default if active and `enable-rofi-c` is not
+//!         - `libfabric` -- only available with the `enable-libfabric` feature; default if active and neither `enable-rofi-c` nor `enable-libfabric-sys` are
+//!         - `libfabric-async` -- only available with the `enable-libfabric-async` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric` are
+//!         - `ucx` -- only available with the `enable-ucx` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric`, `enable-libfabric-async` are
 //! - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
 //!     - possible values
 //!         - `lamellar` -- default, work stealing backend
@@ -70,10 +74,14 @@ fn default_dissemination_factor() -> usize {
 fn default_backend() -> String {
     if cfg!(feature = "enable-rofi-c") {
         return "rofi_c".to_owned();
+    } else if cfg!(feature = "enable-libfabric-sys") {
+        return "libfabric-sys".to_owned();
     } else if cfg!(feature = "enable-libfabric") {
         return "libfabric".to_owned();
     } else if cfg!(feature = "enable-libfabric-async") {
         return "libfabric-async".to_owned();
+    } else if cfg!(feature = "enable-ucx") {
+        return "ucx".to_owned();
     } else {
         return "local".to_owned();
     }
@@ -257,7 +265,7 @@ pub struct Config {
     //used internally by the command queues
     #[serde(default = "default_cmd_buf_cnt")]
     pub cmd_buf_cnt: usize,
-    /// Command queue protocol variant: `old`, `get` (default), `get2`, `getn`, `put`, `put2`, `put2n`, or `put3`
+    /// Command queue protocol variant: `batched`, `get` (default), `geteager`, `getslots`, `put`, `putslots`, or `puteager`
     #[serde(default = "default_cmd_queue")]
     pub cmd_queue: CmdQueue,
 
