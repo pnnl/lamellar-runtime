@@ -943,7 +943,7 @@ impl CQGet {
             println!("recv buffer: {:?}", recv_buffer[0]);
             println!("send buffer: {:?}", send_buffer[0]);
         }
-        panic!("finished command queue wait_all_print");
+        println!("finished command queue wait_all_print");
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]

@@ -893,7 +893,7 @@ impl CQPut2N {
                 println!("  slot {s}: send={:?} recv={:?}", send_buffer[0], recv_buffer[0]);
             }
         }
-        // panic!("finished command queue wait_all_print");
+        // println!("finished command queue wait_all_print");
     }
 
     pub(crate) async fn alloc_task(&self) {

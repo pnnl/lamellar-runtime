@@ -886,7 +886,7 @@ impl CQPut {
             println!("recv buffer: {:?}", recv_buffer[0]);
             println!("send buffer: {:?}", send_buffer[0]);
         }
-        panic!("finished command queue wait_all_print");
+        println!("finished command queue wait_all_print");
     }
 
     pub(crate) async fn alloc_task(&self) {
