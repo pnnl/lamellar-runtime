@@ -1,4 +1,5 @@
 pub(crate) mod atomic;
+pub(crate) mod collective;
 pub(crate) mod comm;
 pub(crate) mod mem;
 pub(crate) mod rdma;

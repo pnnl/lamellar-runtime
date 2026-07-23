@@ -146,13 +146,11 @@ impl CommInfo for ShmemComm {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
             / 1_000_000.0
     }
-    fn collective_avail<T: 'static>(&self, _op: CollectiveOpKind) -> bool {
-        // if std::any::TypeId::of::<T>() == std::any::TypeId::of::<()>() {
-        //     assert!(matches!(op, CollectiveOpKind::Barrier), "only barrier collective is available for unit type");
-        //     return true; // barrier is available
-        // }
-        // atomic_type_supported::<T>()
-        false // Always use fallback methods for collectives
+    fn collective_avail<T: 'static>(&self, op: CollectiveOpKind) -> bool {
+        match op {
+            CollectiveOpKind::Barrier => true,
+            _ => atomic_type_supported::<T>(),
+        }
     }
 }
 

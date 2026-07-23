@@ -47,6 +47,7 @@ pub(crate) struct ShmemAlloc {
     pub(crate) my_alloc_pe: usize, //pe id relative to the pes associated with the alloc
     fabric_ref_cnt_offset: usize,
     rt_ref_cnt_offset: usize,
+    coll_meta_offset: usize, // offset (relative to shmem.base_ptr()) of this allocation's collective barrier/index registers
     pe_map: Arc<HashMap<usize, usize>>,
     remote_addrs: Arc<Vec<usize>>,
     alloc_table: AllocTable,
@@ -132,6 +133,7 @@ impl Clone for ShmemAlloc {
             my_alloc_pe: self.my_alloc_pe,
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
+            coll_meta_offset: self.coll_meta_offset,
             pe_map: self.pe_map.clone(),
             remote_addrs: self.remote_addrs.clone(),
             alloc_table: self.alloc_table.clone(),
@@ -160,6 +162,7 @@ impl ShmemAlloc {
         remote_addrs: Vec<usize>,
         alloc_table: Arc<RwLock<Vec<ShmemAlloc>>>,
         shmem: Arc<ShmemHandle>,
+        coll_meta_offset: usize,
     ) -> AllocResult<Self> {
         let ref_cnt_offset = data_num_bytes + padding;
         let encoded = encode_ref_count_and_padding(1, padding);
@@ -174,6 +177,7 @@ impl ShmemAlloc {
             my_alloc_pe,
             fabric_ref_cnt_offset: ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
+            coll_meta_offset,
             pe_map: Arc::new(pe_map),
             remote_addrs: Arc::new(remote_addrs),
             alloc_table: AllocTable::Fabric(alloc_table),
@@ -242,6 +246,7 @@ impl ShmemAlloc {
             my_alloc_pe: self.my_alloc_pe,
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
+            coll_meta_offset: self.coll_meta_offset,
             pe_map: self.pe_map.clone(),
             remote_addrs: Arc::new(remote_addrs),
             alloc_table: self.alloc_table.clone(),
@@ -289,6 +294,7 @@ impl ShmemAlloc {
             my_alloc_pe: self.my_alloc_pe,
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
+            coll_meta_offset: self.coll_meta_offset,
             pe_map: self.pe_map.clone(),
             remote_addrs: Arc::new(remote_addrs),
             alloc_table: AllocTable::Runtime(alloc_table, new_data as usize, allocs),
@@ -327,6 +333,7 @@ impl ShmemAlloc {
             my_alloc_pe: self.my_alloc_pe,
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
+            coll_meta_offset: self.coll_meta_offset,
             pe_map: self.pe_map.clone(),
             remote_addrs: self.remote_addrs.clone(),
             alloc_table: AllocTable::Runtime(alloc_table, self.data as usize, allocs),
@@ -387,6 +394,46 @@ impl ShmemAlloc {
 
     pub(crate) fn wait(&self) {
         //shmem is always ready
+    }
+
+    // Per-allocation collective barrier generation counter, used by the star
+    // all-reduce algorithm to synchronize root/non-root PEs. Distinct from
+    // ShmemAllocator::barrier(), which is a single global barrier shared across
+    // all concurrent allocations and would cross-talk between unrelated collectives.
+    fn coll_barrier_atomic(&self) -> &AtomicUsize {
+        unsafe { &*(self.shmem.base_ptr().add(self.coll_meta_offset) as *const AtomicUsize) }
+    }
+
+    // Per-root index register: which offset (in elements) within the root's data
+    // the current collective op is targeting.
+    fn coll_index_atomic(&self, pe: usize) -> &AtomicUsize {
+        unsafe {
+            &*(self.shmem.base_ptr().add(
+                self.coll_meta_offset
+                    + std::mem::size_of::<AtomicUsize>()
+                    + pe * std::mem::size_of::<AtomicUsize>(),
+            ) as *const AtomicUsize)
+        }
+    }
+
+    pub(crate) fn coll_inc_barrier(&self) -> usize {
+        self.coll_barrier_atomic().fetch_add(1, Ordering::SeqCst)
+    }
+
+    pub(crate) fn coll_get_barrier(&self) -> usize {
+        self.coll_barrier_atomic().load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn coll_reset_barrier(&self) {
+        self.coll_barrier_atomic().store(0, Ordering::SeqCst);
+    }
+
+    pub(crate) fn coll_set_index(&self, pe: usize, index: usize) {
+        self.coll_index_atomic(pe).store(index, Ordering::SeqCst);
+    }
+
+    pub(crate) fn coll_index(&self, pe: usize) -> usize {
+        self.coll_index_atomic(pe).load(Ordering::SeqCst)
     }
 }
 
@@ -789,11 +836,18 @@ impl ShmemAllocator {
         }
         let (padding, size, align) = calc_alloc_padding_size_align(data_size, align);
 
+        // extra shmem-local (not shared with other allocations) space for this
+        // allocation's own collective barrier generation counter + one index
+        // register per potential root PE
+        let coll_meta_offset = size * pes.len();
+        let coll_meta_size =
+            std::mem::size_of::<AtomicUsize>() + pes.len() * std::mem::size_of::<AtomicUsize>();
+
         // println!("going to attach to shmem {:?} {:?} {:?} {:?} {:?}",size*pes_len,*self.id,self.my_pe, barrier1,barrier2);
         let shmem = attach_to_shmem(
             pes.len(),
             self.job_id,
-            size * pes.len(),
+            size * pes.len() + coll_meta_size,
             align,
             &((*self.id).load(Ordering::SeqCst).to_string()),
             (*self.id).load(Ordering::SeqCst),
@@ -802,6 +856,12 @@ impl ShmemAllocator {
         // let base_ptr = shmem.base_ptr();
         let my_base_ptr = shmem.base_ptr().add(size * sub_alloc_pe_id);
         barrier2[self.my_pe] = my_base_ptr as usize; //save the start of my segment in my address space
+
+        if sub_alloc_pe_id == 0 {
+            let coll_meta =
+                std::slice::from_raw_parts_mut(shmem.base_ptr().add(coll_meta_offset), coll_meta_size);
+            coll_meta.fill(0);
+        }
 
         //temporarily use the first element of the shared segment as a counter barrier
         let cnt = shmem.base_ptr() as *mut AtomicIsize;
@@ -844,6 +904,7 @@ impl ShmemAllocator {
             addrs,
             self.allocs.clone(),
             Arc::new(shmem),
+            coll_meta_offset,
         )
         .expect("failed to create shmem alloc");
         allocs.push(alloc.clone());
