@@ -273,7 +273,6 @@ impl Des for SerializedData {
     }
 }
 
-// impl SubData for SubSerializedData {
 #[lamellar_prof::prof]
 impl SerializedData {
     // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data

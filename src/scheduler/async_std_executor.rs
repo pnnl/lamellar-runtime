@@ -1,4 +1,3 @@
-use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
 
 use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
@@ -10,8 +9,6 @@ use futures_util::Future;
 #[derive(Debug)]
 pub(crate) struct AsyncStdRt {
     max_num_threads: usize,
-    #[allow(dead_code)]
-    status: Arc<AtomicU8>,
 }
 
 impl LamellarExecutor for AsyncStdRt {
@@ -103,7 +100,7 @@ impl LamellarExecutor for AsyncStdRt {
 }
 
 impl AsyncStdRt {
-    pub(crate) fn new(num_workers: usize, status: Arc<AtomicU8>) -> AsyncStdRt {
+    pub(crate) fn new(num_workers: usize) -> AsyncStdRt {
         // println!("New TokioRT with {} workers", num_workers);
         async_global_executor::init_with_config(
             async_global_executor::GlobalExecutorConfig::default()
@@ -113,7 +110,6 @@ impl AsyncStdRt {
         );
         Self {
             max_num_threads: num_workers,
-            status,
         }
     }
 }

@@ -915,61 +915,6 @@ impl From<LamellarWorld> for ArcLamellarTeam {
     }
 }
 
-// #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-// pub(crate) enum LamellarTeamRemote {
-//     World(LamellarTeamRemotePtr),
-//     SubTeam(Darc<Darc<LamellarTeamRT>>),
-// }
-
-// impl From<LamellarTeamRemote> for Darc<LamellarTeamRT> {
-//     //#[tracing::instrument(skip_all, level = "debug")]
-//     fn from(remote: LamellarTeamRemote) -> Self {
-//         match remote {
-//             LamellarTeamRemote::World(remote_ptr) => remote_ptr.into(),
-//             LamellarTeamRemote::SubTeam(darc_team) => darc_team.clone(),
-//         }
-//     }
-// }
-
-// #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-// pub(crate) struct LamellarTeamRemotePtr {
-//     pub(crate) addr: usize,
-//     pub(crate) pe: usize,
-//     pub(crate) backend: crate::Backend,
-// }
-
-// impl From<LamellarTeamRemotePtr> for Darc<LamellarTeamRT> {
-//     //#[tracing::instrument(skip_all, level = "debug")]
-//     fn from(remote_ptr: LamellarTeamRemotePtr) -> Self {
-//         let lamellae = if let Some(lamellae) = crate::LAMELLAES.read().get(&remote_ptr.backend) {
-//             lamellae.clone()
-//         } else {
-//             panic!("unexepected lamellae backend {:?}", &remote_ptr.backend);
-//         };
-//         let local_team_addr = lamellae.comm().local_addr(remote_ptr.pe, remote_ptr.addr);
-
-//         unsafe {
-//             let team_ptr = *local_team_addr.as_ptr::<*const LamellarTeamRT>();
-//             trace!("team_ptr from local_team_addr {:?}", team_ptr);
-//             Arc::increment_strong_count(team_ptr);
-//             let team = Pin::new_unchecked(Arc::from_raw(team_ptr));
-//             trace!("team from remote ptr {:?}", team.dropped);
-//             team
-//         }
-//     }
-// }
-
-// impl From<Darc<LamellarTeamRT>> for LamellarTeamRemotePtr {
-//     //#[tracing::instrument(skip_all, level = "debug")]
-//     fn from(team: Darc<LamellarTeamRT>) -> Self {
-//         LamellarTeamRemotePtr {
-//             addr: team.remote_ptr_alloc.comm_addr().into(),
-//             pe: team.world_pe,
-//             backend: team.lamellae.comm().backend(),
-//         }
-//     }
-// }
-
 /// Internal Runtime handle to a lamellar team
 /// this is typically used by proc macros (hence why it is public)
 /// end users should never use this directly and should instead use the [LamellarTeam] and/or [LamellarWorld] struct

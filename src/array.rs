@@ -397,18 +397,11 @@ pub trait LamellarWrite {}
 /// Trait for types that can be used as input to various LamellarArray RDMA operations.
 pub trait LamellarRead {}
 
-// impl<T: Dist> LamellarRead for T {}
 impl<T: Dist> LamellarRead for &T {}
 
 impl<T: Dist> LamellarRead for Vec<T> {}
 impl<T: Dist> LamellarRead for &Vec<T> {}
 impl<T: Dist> LamellarRead for &[T] {}
-
-// impl<T: Dist> TeamFrom<LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput<T> {
-//     fn team_from(lai: LamellarArrayRdmaInput<T>, _team: &Arc<LamellarTeam>) -> Self {
-//         lai
-//     }
-// }
 
 impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
@@ -573,13 +566,6 @@ impl<T: Clone> TeamTryFrom<(&Vec<T>, Distribution)> for Vec<T> {
         Ok(vals.0.to_vec())
     }
 }
-
-// #[async_trait]
-// impl<T: Clone> AsyncTeamFrom<(&Vec<T>, Distribution)> for Vec<T> {
-//     async fn team_from(vals: (&Vec<T>, Distribution), _team: &Arc<LamellarTeam>) -> Self {
-//         vals.0.to_vec()
-//     }
-// }
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for Vec<T> {

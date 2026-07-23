@@ -1,10 +1,5 @@
 use std::any;
 
-// #[cfg(feature = "SocketsBackend")]
-// use crate::runtime::Arch;
-// #[cfg(feature = "SocketsBackend")]
-// use std::env;
-
 #[doc(hidden)]
 #[allow(dead_code)]
 pub fn print_type_of<T>(_: &T) {

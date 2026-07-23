@@ -2,7 +2,7 @@ use async_task::Builder;
 use futures_util::Future;
 use std::collections::VecDeque;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
@@ -15,14 +15,12 @@ static TASK_ID: AtomicUsize = AtomicUsize::new(0);
 #[derive(Debug)]
 pub(crate) struct SingleThread {
     queue: Arc<Mutex<VecDeque<async_task::Runnable<usize>>>>,
-    #[allow(dead_code)]
-    status: Arc<AtomicU8>,
 }
 
 impl SingleThread {
-    pub(crate) fn new(status: Arc<AtomicU8>) -> Self {
+    pub(crate) fn new() -> Self {
         let queue = Arc::new(Mutex::new(VecDeque::new()));
-        Self { queue, status }
+        Self { queue }
     }
 
     // fn schedule<F>(&self, task_id: usize, future: F) -> async_task::Task<F::Output,usize>

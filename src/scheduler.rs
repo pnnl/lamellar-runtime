@@ -75,18 +75,6 @@ pub(crate) enum SchedulerStatus {
     Panic,
 }
 
-// pub(crate) mod numa_work_stealing;
-// use numa_work_stealing::{NumaWorkStealing, NumaWorkStealingInner};
-
-// pub(crate) mod numa_work_stealing2;
-// use numa_work_stealing2::{NumaWorkStealing2, NumaWorkStealing2Inner};
-
-// static AM_SAME_THREAD: AtomicUsize = AtomicUsize::new(0);
-// static AM_DIFF_THREAD: AtomicUsize = AtomicUsize::new(0);
-
-// static TASK_SAME_THREAD: AtomicUsize = AtomicUsize::new(0);
-// static TASK_DIFF_THREAD: AtomicUsize = AtomicUsize::new(0);
-
 // static IO_SAME_THREAD: AtomicUsize = AtomicUsize::new(0);
 // static IO_DIFF_THREAD: AtomicUsize = AtomicUsize::new(0);
 
@@ -710,11 +698,11 @@ impl Scheduler {
             ExecutorType::LamellarWorkStealing3 => {
                 WorkStealing3::new(num_workers, status.clone(), panic.clone()).into()
             }
-            ExecutorType::AsyncStd => AsyncStdRt::new(num_workers, status.clone()).into(),
+            ExecutorType::AsyncStd => AsyncStdRt::new(num_workers).into(),
 
             #[cfg(feature = "tokio-executor")]
-            ExecutorType::Tokio => TokioRt::new(num_workers, status.clone()).into(),
-            ExecutorType::SingleThread => SingleThread::new(status.clone()).into(),
+            ExecutorType::Tokio => TokioRt::new(num_workers).into(),
+            ExecutorType::SingleThread => SingleThread::new().into(),
         });
 
         let batcher = match config().batcher.as_str() {
