@@ -5,16 +5,12 @@ use crate::lamellae::libfabric_async_lamellae::fabric::{
 use crate::lamellae::collective::{BroadcastInput, CollectiveAllToAllIntoBufferOpHandle, CollectiveAllToAllOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpHandle, CollectiveReduceScatterOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle, CommAllocCollectiveAllToAll, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput};
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::fabric::{LibfabricAlloc, OneSidedLibfabricAlloc};
-#[cfg(feature = "enable-libfabric-mt")]
-use crate::lamellae::libfabric_lamellae_mt::fabric::{LibfabricMtAlloc, OneSidedLibfabricMtAlloc};
 #[cfg(feature = "enable-libfabric-sys")]
 use crate::lamellae::libfabric_sys_lamellae::fabric::{LibfabricSysAlloc, OneSidedLibfabricSysAlloc};
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::fabric::{OneSidedRofiCAlloc, RofiCAlloc};
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::fabric::{OneSidedUcxAlloc, UcxAlloc};
-#[cfg(feature = "enable-ucx-mt")]
-use crate::lamellae::ucx_lamellae_mt::fabric::{OneSidedUcxMtAlloc, UcxMtAlloc};
 
 use crate::{
     active_messaging::AMCounters,
@@ -48,7 +44,7 @@ pub(crate) fn encode_ref_count_and_padding(ref_count: usize, padding: usize) -> 
 }
 
 
-#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async"))]
+#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async"))]
 pub(crate) fn decode_ref_count_and_padding(encoded: usize) -> (usize, usize) {
     let ref_count = encoded & COUNT_MASK;
     let padding = (encoded & PADDING_MASK) >> (usize::BITS - 8);
@@ -77,7 +73,7 @@ pub(crate) fn decrement_ref_count(counter: &AtomicUsize) -> usize {
 //     decode_padding(counter.load(Ordering::SeqCst))
 // }
 
-#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async"))]
+#[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async"))]
 pub(crate) fn get_ref_count(counter: &AtomicUsize) -> usize {
     decode_ref_count(counter.load(Ordering::SeqCst))
 }
@@ -110,16 +106,12 @@ pub(crate) enum CommAllocInner {
     LibfabricSysAlloc(LibfabricSysAlloc),
     #[cfg(feature = "enable-libfabric")]
     LibfabricAlloc(LibfabricAlloc),
-    #[cfg(feature = "enable-libfabric-mt")]
-    LibfabricMtAlloc(LibfabricMtAlloc),
     #[cfg(feature = "enable-libfabric-async")]
     LibfabricAsyncAlloc(LibfabricAsyncAlloc),
     #[cfg(feature = "enable-libfabric-sys")]
     OneSidedLibfabricSysAlloc(OneSidedLibfabricSysAlloc),
     #[cfg(feature = "enable-libfabric")]
     OneSidedLibfabricAlloc(OneSidedLibfabricAlloc),
-    #[cfg(feature = "enable-libfabric-mt")]
-    OneSidedLibfabricMtAlloc(OneSidedLibfabricMtAlloc),
     #[cfg(feature = "enable-libfabric-async")]
     OneSidedLibfabricAsyncAlloc(OneSidedLibfabricAsyncAlloc),
     #[cfg(feature = "enable-rofi-c")]
@@ -128,12 +120,8 @@ pub(crate) enum CommAllocInner {
     OneSidedRofiCAlloc(OneSidedRofiCAlloc),
     #[cfg(feature = "enable-ucx")]
     UcxAlloc(UcxAlloc),
-    #[cfg(feature = "enable-ucx-mt")]
-    UcxMtAlloc(UcxMtAlloc),
     #[cfg(feature = "enable-ucx")]
     OneSidedUcxAlloc(OneSidedUcxAlloc),
-    #[cfg(feature = "enable-ucx-mt")]
-    OneSidedUcxMtAlloc(OneSidedUcxMtAlloc),
 }
 
 impl CommAllocInner {
@@ -149,12 +137,6 @@ impl CommAllocInner {
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocAddr(inner_alloc.start())
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocAddr(inner_alloc.start())
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-libfabric-async")]
@@ -167,12 +149,8 @@ impl CommAllocInner {
             CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-libfabric-sys")]
@@ -200,12 +178,6 @@ impl CommAllocInner {
             CommAllocInner::OneSidedLibfabricAlloc(_inner_alloc) => {
                 panic!("OneSidedLibfabricAlloc cannot be leaked")
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => inner_alloc.leak(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(_inner_alloc) => {
-                panic!("OneSidedLibfabricMtAlloc cannot be leaked")
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => inner_alloc.leak(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -220,15 +192,9 @@ impl CommAllocInner {
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => inner_alloc.leak(),
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => inner_alloc.leak(),
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(_inner_alloc) => {
                 panic!("OneSidedUcxAlloc cannot be leaked")
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(_inner_alloc) => {
-                panic!("OneSidedUcxMtAlloc cannot be leaked")
             }
         }
     }
@@ -246,10 +212,6 @@ impl CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => inner_alloc.num_bytes(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => inner_alloc.num_bytes(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -260,12 +222,8 @@ impl CommAllocInner {
             CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => inner_alloc.num_bytes(),
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => inner_alloc.num_bytes(),
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => inner_alloc.num_bytes(),
         }
     }
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAllocInner {
@@ -316,20 +274,6 @@ impl CommAllocInner {
                         .expect("Invalid sub allocation"),
                 )
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => CommAllocInner::LibfabricMtAlloc(
-                inner_alloc
-                    .sub_alloc(offset, size)
-                    .expect("Invalid sub allocation"),
-            ),
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocInner::OneSidedLibfabricMtAlloc(
-                    inner_alloc
-                        .sub_alloc(offset, size)
-                        .expect("Invalid sub allocation"),
-                )
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 CommAllocInner::LibfabricAsyncAlloc(
@@ -364,20 +308,8 @@ impl CommAllocInner {
                     .sub_alloc(offset, size)
                     .expect("Invalid sub allocation"),
             ),
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => CommAllocInner::UcxMtAlloc(
-                inner_alloc
-                    .sub_alloc(offset, size)
-                    .expect("Invalid sub allocation"),
-            ),
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => CommAllocInner::OneSidedUcxAlloc(
-                inner_alloc
-                    .sub_alloc(offset, size)
-                    .expect("Invalid sub allocation"),
-            ),
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => CommAllocInner::OneSidedUcxMtAlloc(
                 inner_alloc
                     .sub_alloc(offset, size)
                     .expect("Invalid sub allocation"),
@@ -422,19 +354,6 @@ impl CommAllocInner {
                     .wait()
                     .expect("error waiting on onesided libfabric alloc");
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc
-                    .wait()
-                    .expect("error waiting on libfabric mt alloc");
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc
-                    .alloc
-                    .wait()
-                    .expect("error waiting on onesided libfabric mt alloc");
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc
@@ -448,17 +367,9 @@ impl CommAllocInner {
                     .wait()
                     .expect("error waiting on onesided libfabric async alloc");
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.wait();
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.wait();
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
-                inner_alloc.alloc.wait();
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
@@ -513,14 +424,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
@@ -545,16 +448,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
             }
         }
@@ -591,14 +486,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
@@ -623,16 +510,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
             }
         }
@@ -664,14 +543,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
@@ -696,16 +567,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
             }
         }
@@ -743,14 +606,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
@@ -775,16 +630,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
             }
         }
@@ -820,14 +667,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
@@ -852,16 +691,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
             }
         }
@@ -898,14 +729,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
@@ -930,16 +753,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
             }
         }
@@ -970,14 +785,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
@@ -1002,16 +809,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
             }
         }
@@ -1048,14 +847,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
@@ -1080,16 +871,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
             }
         }
@@ -1124,14 +907,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
@@ -1156,16 +931,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
             }
         }
@@ -1203,14 +970,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
@@ -1235,16 +994,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
             }
         }
@@ -1276,14 +1027,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
@@ -1308,16 +1051,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
             }
         }
@@ -1356,14 +1091,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
@@ -1388,16 +1115,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
             }
         }
@@ -1434,14 +1153,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
@@ -1466,16 +1177,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
             }
         }
@@ -1513,14 +1216,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
@@ -1537,16 +1232,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -1591,14 +1278,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
@@ -1615,16 +1294,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -1668,14 +1339,6 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
@@ -1692,16 +1355,8 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -1750,14 +1405,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
@@ -1774,16 +1421,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -1828,14 +1467,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
@@ -1852,16 +1483,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -1900,14 +1523,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_unmanaged(op, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_unmanaged(op, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_unmanaged(op, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_unmanaged(op, pe, offset)
@@ -1924,16 +1539,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_unmanaged(op, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_unmanaged(op, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_unmanaged(op, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_unmanaged(op, pe, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -1978,14 +1585,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all(scheduler, counters, op, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all(scheduler, counters, op, offset)
@@ -2002,16 +1601,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all(scheduler, counters, op, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all(scheduler, counters, op, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -2050,14 +1641,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all_unmanaged(op, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_all_unmanaged(op, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_all_unmanaged(op, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all_unmanaged(op, offset)
@@ -2074,16 +1657,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all_unmanaged(op, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_all_unmanaged(op, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_op_all_unmanaged(op, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all_unmanaged(op, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -2129,14 +1704,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
@@ -2153,16 +1720,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -2207,14 +1766,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
@@ -2231,16 +1782,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -2283,14 +1826,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
@@ -2311,16 +1846,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -2362,14 +1889,6 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
-            }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
-            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
@@ -2390,16 +1909,8 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
             }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-                inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
             }
             #[cfg(feature = "enable-rofi-c")]
@@ -2440,20 +1951,12 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce_all(scheduler, counters, index, len, op)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.reduce_all(scheduler, counters, index, len, op)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.reduce_all(scheduler, counters, index, len, op)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_all(scheduler, counters, index, len, op)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.reduce_all(scheduler, counters, index, len, op)
             }
             _ => {
@@ -2504,20 +2007,12 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
             }
             _ => {
@@ -2633,16 +2128,8 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
-            }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
             }
             #[cfg(feature = "enable-libfabric-async")]
@@ -2696,20 +2183,12 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
             }
             _ => {
@@ -2820,20 +2299,12 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.gather_all(scheduler, counters, index, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.gather_all(scheduler, counters, index, len)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.gather_all(scheduler, counters, index, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.gather_all(scheduler, counters, index, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.gather_all(scheduler, counters, index, len)
             }
             _ => {
@@ -2882,20 +2353,12 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
             }
             _ => {
@@ -2947,20 +2410,12 @@ impl CommAllocCollectiveGather for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.gather(scheduler, counters, index, len, root_pe)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.gather(scheduler, counters, index, len, root_pe)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.gather(scheduler, counters, index, len, root_pe)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.gather(scheduler, counters, index, len, root_pe)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.gather(scheduler, counters, index, len, root_pe)
             }
             _ => {
@@ -3009,20 +2464,12 @@ impl CommAllocCollectiveGather for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
             }
             _ => {
@@ -3075,20 +2522,12 @@ impl CommAllocCollectiveAllToAll for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.alltoall(scheduler, counters, index, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.alltoall(scheduler, counters, index, len)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.alltoall(scheduler, counters, index, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.alltoall(scheduler, counters, index, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.alltoall(scheduler, counters, index, len)
             }
             _ => {
@@ -3139,20 +2578,12 @@ impl CommAllocCollectiveAllToAll for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.alltoall_into_buffer(scheduler, counters, index, len, buffer)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.alltoall_into_buffer(scheduler, counters, index, len, buffer)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.alltoall_into_buffer(scheduler, counters, index, len, buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.alltoall_into_buffer(scheduler, counters, index, len, buffer)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.alltoall_into_buffer(scheduler, counters, index, len, buffer)
             }
             _ => {
@@ -3189,20 +2620,12 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
             }
             _ => {
@@ -3250,20 +2673,12 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
             }
             _ => {
@@ -3315,20 +2730,12 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
             }
             _ => {
@@ -3378,20 +2785,12 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
             }
             _ => {
@@ -3444,20 +2843,12 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
             }
             _ => {
@@ -3507,20 +2898,12 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
             }
-            #[cfg(feature = "enable-libfabric-mt")]
-            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
-            }
             #[cfg(feature = "enable-libfabric-async")]
             CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
-            }
-            #[cfg(feature = "enable-ucx-mt")]
-            CommAllocInner::UcxMtAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
             }
             _ => {

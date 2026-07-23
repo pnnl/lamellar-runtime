@@ -20,9 +20,6 @@ use crate::lamellae::libfabric_sys_lamellae::comm::LibfabricSysComm;
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::comm::LibfabricComm;
 
-#[cfg(feature = "enable-libfabric-mt")]
-use crate::lamellae::libfabric_lamellae_mt::comm::LibfabricMtComm;
-
 #[cfg(feature = "enable-libfabric-async")]
 use crate::lamellae::libfabric_async_lamellae::comm::LibfabricAsyncComm;
 
@@ -30,8 +27,6 @@ use crate::lamellae::libfabric_async_lamellae::comm::LibfabricAsyncComm;
 use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
-#[cfg(feature = "enable-ucx-mt")]
-use crate::lamellae::ucx_lamellae_mt::comm::UcxMtComm;
 use crate::lamellae::{
     collective::ReduceOp, local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType, SerializedData
 };
@@ -70,14 +65,10 @@ pub(crate) enum Comm {
     LibfabricSys(LibfabricSysComm),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(LibfabricComm),
-    #[cfg(feature = "enable-libfabric-mt")]
-    LibfabricMt(LibfabricMtComm),
     #[cfg(feature = "enable-libfabric-async")]
     LibfabricAsync(LibfabricAsyncComm),
     #[cfg(feature = "enable-ucx")]
     Ucx(UcxComm),
-    #[cfg(feature = "enable-ucx-mt")]
-    UcxMt(UcxMtComm),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(RofiCComm),
     Shmem(ShmemComm),

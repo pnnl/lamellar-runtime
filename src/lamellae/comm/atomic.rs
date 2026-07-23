@@ -7,10 +7,6 @@ use crate::lamellae::libfabric_async_lamellae::atomic::{
 use crate::lamellae::libfabric_lamellae::atomic::{
     LibfabricAtomicCompareExchangeFuture, LibfabricAtomicFetchFuture, LibfabricAtomicFuture,
 };
-#[cfg(feature = "enable-libfabric-mt")]
-use crate::lamellae::libfabric_lamellae_mt::atomic::{
-    LibfabricMtAtomicCompareExchangeFuture, LibfabricMtAtomicFetchFuture, LibfabricMtAtomicFuture,
-};
 #[cfg(feature="enable-libfabric-sys")]
 use crate::lamellae::libfabric_sys_lamellae::atomic::{LibfabricSysAtomicCompareExchangeFuture, LibfabricSysAtomicFetchFuture, LibfabricSysAtomicFuture};
 #[cfg(feature = "enable-rofi-c")]
@@ -23,10 +19,6 @@ use crate::lamellae::rofi_c_lamellae::atomic::{
 use crate::lamellae::ucx_lamellae::atomic::UcxAtomicCompareExchangeFuture;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
-#[cfg(feature = "enable-ucx-mt")]
-use crate::lamellae::ucx_lamellae_mt::atomic::UcxMtAtomicCompareExchangeFuture;
-#[cfg(feature = "enable-ucx-mt")]
-use crate::lamellae::ucx_lamellae_mt::atomic::{UcxMtAtomicFetchFuture, UcxMtAtomicFuture};
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
@@ -138,14 +130,10 @@ pub(crate) enum AtomicOpFuture<T> {
     LibfabricSys(#[pin] LibfabricSysAtomicFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicFuture<T>),
-    #[cfg(feature = "enable-libfabric-mt")]
-    LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
     LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicFuture<T>),
-    #[cfg(feature = "enable-ucx-mt")]
-    UcxMt(#[pin] UcxMtAtomicFuture<T>),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicFuture<T>),
     Shmem(#[pin] ShmemAtomicFuture<T>),
@@ -160,14 +148,10 @@ impl<T: Remote> AtomicOpHandle<T> {
             AtomicOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFuture::Libfabric(f) => f.block(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicOpFuture::LibfabricMt(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFuture::Ucx(f) => f.block(),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicOpFuture::UcxMt(f) => f.block(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFuture::RofiC(f) => f.block(),
             AtomicOpFuture::Shmem(f) => f.block(),
@@ -186,14 +170,10 @@ impl<T: Remote> AtomicOpHandle<T> {
             AtomicOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFuture::Libfabric(f) => f.spawn(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicOpFuture::LibfabricMt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFuture::Ucx(f) => f.spawn(),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicOpFuture::UcxMt(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFuture::RofiC(f) => f.spawn(),
             AtomicOpFuture::Shmem(f) => f.spawn(),
@@ -212,14 +192,10 @@ impl<T: Remote> Future for AtomicOpHandle<T> {
             AtomicOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFutureProj::Libfabric(f) => f.poll(cx),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicOpFutureProj::LibfabricMt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFutureProj::Ucx(f) => f.poll(cx),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicOpFutureProj::UcxMt(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFutureProj::RofiC(f) => f.poll(cx),
             AtomicOpFutureProj::Shmem(f) => f.poll(cx),
@@ -246,14 +222,10 @@ pub(crate) enum AtomicFetchOpFuture<T> {
     LibfabricSys(#[pin] LibfabricSysAtomicFetchFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicFetchFuture<T>),
-    #[cfg(feature = "enable-libfabric-mt")]
-    LibfabricMt(#[pin] LibfabricMtAtomicFetchFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
     LibfabricAsync(#[pin] LibfabricAsyncAtomicFetchFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicFetchFuture<T>),
-    #[cfg(feature = "enable-ucx-mt")]
-    UcxMt(#[pin] UcxMtAtomicFetchFuture<T>),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicFetchFuture<T>),
     Shmem(#[pin] ShmemAtomicFetchFuture<T>),
@@ -268,14 +240,10 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             AtomicFetchOpFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFuture::Libfabric(f) => f.block(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFuture::Ucx(f) => f.block(),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicFetchOpFuture::UcxMt(f) => f.block(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFuture::RofiC(f) => f.block(),
             AtomicFetchOpFuture::Shmem(f) => f.block(),
@@ -294,14 +262,10 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             AtomicFetchOpFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFuture::Libfabric(f) => f.spawn(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFuture::Ucx(f) => f.spawn(),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicFetchOpFuture::UcxMt(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFuture::RofiC(f) => f.spawn(),
             AtomicFetchOpFuture::Shmem(f) => f.spawn(),
@@ -320,14 +284,10 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
             AtomicFetchOpFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFutureProj::Libfabric(f) => f.poll(cx),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicFetchOpFutureProj::UcxMt(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFutureProj::RofiC(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
@@ -356,14 +316,10 @@ pub(crate) enum AtomicCompareExchangeFuture<T> {
     LibfabricSys(#[pin] LibfabricSysAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicCompareExchangeFuture<T>),
-    #[cfg(feature = "enable-libfabric-mt")]
-    LibfabricMt(#[pin] LibfabricMtAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
     LibfabricAsync(#[pin] LibfabricAsyncAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicCompareExchangeFuture<T>),
-    #[cfg(feature = "enable-ucx-mt")]
-    UcxMt(#[pin] UcxMtAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicCompareExchangeFuture<T>),
     Shmem(#[pin] ShmemAtomicCompareExchangeFuture<T>),
@@ -380,14 +336,10 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFuture::LibfabricSys(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFuture::Libfabric(f) => f.block(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicCompareExchangeFuture::LibfabricMt(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicCompareExchangeFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicCompareExchangeFuture::Ucx(f) => f.block(),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicCompareExchangeFuture::UcxMt(f) => f.block(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFuture::RofiC(f) => f.block(),
             AtomicCompareExchangeFuture::Shmem(f) => f.block(),
@@ -407,14 +359,10 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFuture::LibfabricSys(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFuture::Libfabric(f) => f.spawn(),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicCompareExchangeFuture::LibfabricMt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicCompareExchangeFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicCompareExchangeFuture::Ucx(f) => f.spawn(),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicCompareExchangeFuture::UcxMt(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFuture::RofiC(f) => f.spawn(),
             AtomicCompareExchangeFuture::Shmem(f) => f.spawn(),
@@ -433,14 +381,10 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFutureProj::LibfabricSys(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFutureProj::Libfabric(f) => f.poll(cx),
-            #[cfg(feature = "enable-libfabric-mt")]
-            AtomicCompareExchangeFutureProj::LibfabricMt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
             AtomicCompareExchangeFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicCompareExchangeFutureProj::Ucx(f) => f.poll(cx),
-            #[cfg(feature = "enable-ucx-mt")]
-            AtomicCompareExchangeFutureProj::UcxMt(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFutureProj::RofiC(f) => f.poll(cx),
             AtomicCompareExchangeFutureProj::Shmem(f) => f.poll(cx),
@@ -509,7 +453,7 @@ impl<T> std::fmt::Debug for AtomicOp<T> {
 }
 
 impl<T> AtomicOp<T> {
-    #[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-mt", feature = "enable-libfabric-async"))]
+    #[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async"))]
     pub(crate) fn src(&self) -> *const T {
         match self {
             AtomicOp::Min(val)
