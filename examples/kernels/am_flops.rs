@@ -71,6 +71,7 @@ fn main() {
         .build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    let num_threads = world.num_threads_per_pe();
     world.barrier();
     let s = Instant::now();
     world.barrier();
@@ -81,12 +82,8 @@ fn main() {
         println!("==================Flop test===========================");
     }
     let mut flops = vec![];
-    let num_tasks = 1000;
-    let num_cores = match std::env::var("LAMELLAR_THREADS") {
-        Ok(n) => n.parse::<usize>().unwrap() as f64,
-        Err(_) => 4 as f64,
-    };
-
+    let num_tasks_per_thread = 16;
+    let num_tasks = num_tasks_per_thread * num_threads;
     for i in 0..27 {
         let num_iterations = 2_u64.pow(i) as usize;
 
@@ -116,7 +113,7 @@ fn main() {
             .drain(0..)
             .map(|r| r.block().drain(0..).sum::<usize>())
             .sum();
-        let task_granularity = ((cur_t * num_cores) / (num_tasks * num_pes) as f64) * 1000.0f64;
+        let task_granularity = ((cur_t * num_threads as f64) / (num_tasks * num_pes) as f64) * 1000.0f64;
         if my_pe == 0 {
             println!(
                 "iter size: {:?} tot_flop: {:?} time: {:?} (issue time: {:?})
