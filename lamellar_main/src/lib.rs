@@ -419,7 +419,6 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     // Output redirection is handled at the launcher level so capture starts before
     // user code executes (including C library output during initialization).
     // srun uses --output/--error, while prterun uses --output directives.
-    #[cfg(any(feature = "use-srun", feature = "use-prterun"))]
     let pe_output_dir_block = quote! {};
 
     let res = quote! {

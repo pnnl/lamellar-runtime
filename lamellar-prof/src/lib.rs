@@ -469,6 +469,10 @@ pub fn init_prof(_item: TokenStream) -> TokenStream {
 /// lives in `lamellar::prof` directly — no codegen needed).
 #[proc_macro]
 pub fn init_prof_bt(_item: TokenStream) -> TokenStream {
+    #[cfg_attr(
+        not(all(feature = "backtrace-prof", not(feature = "use-lamellar"))),
+        allow(unused_mut)
+    )]
     let mut output = quote! {};
     // When use-lamellar is active, the timer infrastructure is already compiled
     // into lamellar/src/prof.rs — emitting it again would produce duplicate items.

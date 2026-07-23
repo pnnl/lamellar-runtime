@@ -315,6 +315,7 @@ pub use crate::scheduler::LamellarTask;
 // //#[doc(hidden)]
 pub use lamellar_impl::Dist;
 
+/// Lightweight backtrace-based profiler used by the `#[lamellar::prof]` macros.
 #[cfg(feature = "enable-prof")]
 pub mod prof;
 

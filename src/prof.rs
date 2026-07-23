@@ -21,6 +21,8 @@ pub(crate) fn _prof_timer() -> RefMut<'static, MyTimer> {
         .borrow_mut()
 }
 
+/// Starts timing a call to `func`, capturing a backtrace to build its call path.
+/// Records the elapsed time when the returned [`TimeInst`] is dropped.
 pub fn timer_start(func: &str) -> TimeInst {
     let ips = {
         let mut timer = _prof_timer();
@@ -79,7 +81,6 @@ fn merge_entries(per_thread: &[Vec<(Vec<usize>, CallRecord)>]) -> Vec<(Vec<Strin
             let mut await_time = 0.0f64;
             let mut func_name = String::new();
             let mut thread_times: Vec<f64> = Vec::with_capacity(thread_maps.len());
-            let mut thread_await_times: Vec<f64> = Vec::with_capacity(thread_maps.len());
 
             for tm in &thread_maps {
                 if let Some(&(c, t, a)) = tm.get(&path) {
@@ -87,13 +88,11 @@ fn merge_entries(per_thread: &[Vec<(Vec<usize>, CallRecord)>]) -> Vec<(Vec<Strin
                     total_time += t;
                     await_time += a;
                     thread_times.push(t);
-                    thread_await_times.push(a);
                     if func_name.is_empty() {
                         func_name = path.last().cloned().unwrap_or_default();
                     }
                 } else {
                     thread_times.push(0.0);
-                    thread_await_times.push(0.0);
                 }
             }
 
@@ -105,7 +104,6 @@ fn merge_entries(per_thread: &[Vec<(Vec<usize>, CallRecord)>]) -> Vec<(Vec<Strin
                     await_time,
                     func_name,
                     thread_times,
-                    thread_await_times,
                 },
             )
         })
@@ -170,6 +168,8 @@ fn print_tree(entries: &[(Vec<String>, CallRecord)]) -> String {
     out
 }
 
+/// Merges all threads' recorded call timings and prints them as a call tree.
+/// Call after all worker threads have finished.
 pub fn timer_print() {
     // Safety: called after all worker threads have completed (e.g., after world drops),
     // so no thread is currently accessing its cell — iter_mut() exclusivity holds.
@@ -194,6 +194,7 @@ pub fn timer_print() {
     print!("{}", print_tree(&entries));
 }
 
+/// RAII guard returned by [`timer_start`] that records the call's elapsed time on drop.
 pub struct TimeInst {
     ips: Vec<usize>,
     func: String,
@@ -212,7 +213,6 @@ impl Drop for TimeInst {
             await_time: 0.0,
             func_name: func,
             thread_times: Vec::new(),
-            thread_await_times: Vec::new(),
         });
         record.count += 1;
         record.total_time += elapsed;
@@ -227,7 +227,6 @@ pub(crate) struct CallRecord {
     func_name: String,
     // Populated during merge: one element per thread that contributed to this entry.
     thread_times: Vec<f64>,
-    thread_await_times: Vec<f64>,
 }
 
 pub(crate) struct MyTimer {
@@ -317,7 +316,7 @@ impl MyTimer {
         s
     }
 
-    pub fn resolve_path(ips: &[usize], func_name: &str) -> Vec<String> {
+    fn resolve_path(ips: &[usize], func_name: &str) -> Vec<String> {
         let current_base = func_name.split('<').next().unwrap_or(func_name);
         let mut raw: Vec<String> = Vec::new();
         let mut func_sym: Option<String> = None;
@@ -356,7 +355,7 @@ impl MyTimer {
         path
     }
 
-    pub fn print_subtree(
+    fn print_subtree(
         entries: &[(Vec<String>, CallRecord)],
         prefix: &[String],
         depth: usize,
@@ -444,6 +443,8 @@ impl MyTimer {
     }
 }
 
+/// Wraps a [`Future`](std::future::Future), tracking active/await time across polls
+/// and recording it to the profiler timer when the future completes or is dropped.
 pub struct ProfFuture<F: std::future::Future> {
     inner: F,
     func: String,
@@ -455,6 +456,7 @@ pub struct ProfFuture<F: std::future::Future> {
 }
 
 impl<F: std::future::Future> ProfFuture<F> {
+    /// Wraps `inner`, profiling it under the given call `name` once polled.
     pub fn new(name: &str, inner: F) -> Self {
         ProfFuture {
             inner,
@@ -482,7 +484,6 @@ impl<F: std::future::Future> ProfFuture<F> {
             await_time: 0.0,
             func_name: func,
             thread_times: Vec::new(),
-            thread_await_times: Vec::new(),
         });
         record.count += 1;
         record.total_time += active;
