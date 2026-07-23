@@ -301,6 +301,49 @@ impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
     }
 }
 
+impl<T: ElementComparePartialEqOps> GenericAtomicElement<T> {
+    /// Atomically set the current value to the max of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_max(10);
+    ///```
+    pub fn fetch_max(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            if val > old {
+                self.array.__local_as_mut_slice()[self.local_index] = val;
+            }
+            old
+        }
+    }
+    /// Atomically set the current value to the min of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_min(10);
+    ///```
+    pub fn fetch_min(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            if val < old {
+                self.array.__local_as_mut_slice()[self.local_index] = val;
+            }
+            old
+        }
+    }
+}
+
 impl<T: ElementShiftOps + 'static> GenericAtomicElement<T> {
     /// Atomically left-shift the current value by `val` bits, returning the previous value
     ///
@@ -712,6 +755,53 @@ impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
         unsafe {
             let old = self.array.__local_as_mut_slice()[self.local_index];
             self.array.__local_as_mut_slice()[self.local_index] ^= val;
+            old
+        }
+    }
+}
+
+impl<'a, T: ElementComparePartialEqOps + 'static> GenericAtomicElementRef<'a, T> {
+    /// Atomically set the current value to the max of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_max(10);
+    /// }
+    ///```
+    pub fn fetch_max(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            if val > old {
+                self.array.__local_as_mut_slice()[self.local_index] = val;
+            }
+            old
+        }
+    }
+    /// Atomically set the current value to the min of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// for elem in &local_data {
+    ///     let old = elem.fetch_min(10);
+    /// }
+    ///```
+    pub fn fetch_min(&self, val: T) -> T {
+        let _lock = self.array.lock_index(self.local_index);
+        unsafe {
+            let old = self.array.__local_as_mut_slice()[self.local_index];
+            if val < old {
+                self.array.__local_as_mut_slice()[self.local_index] = val;
+            }
             old
         }
     }
@@ -1710,6 +1800,45 @@ impl<T: ElementBitWiseOps + 'static> LocalGenericAtomicElement<T> {
         let mut guard = self.val.lock();
         let old = *guard;
         *guard ^= val;
+        old
+    }
+}
+
+impl<T: ElementComparePartialEqOps + 'static> LocalGenericAtomicElement<T> {
+    /// Atomically set the current value to the max of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_max(10);
+    ///```
+    pub fn fetch_max(&self, val: T) -> T {
+        let mut guard = self.val.lock();
+        let old = *guard;
+        if val > old {
+            *guard = val;
+        }
+        old
+    }
+    /// Atomically set the current value to the min of `val` and the current value, returning the previous value
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// let local_data = array.local_data();
+    /// let old = local_data.at(0).fetch_min(10);
+    ///```
+    pub fn fetch_min(&self, val: T) -> T {
+        let mut guard = self.val.lock();
+        let old = *guard;
+        if val < old {
+            *guard = val;
+        }
         old
     }
 }

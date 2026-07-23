@@ -1,4 +1,4 @@
-use crate::{AsLamellarBuffer, AtomicArray, Dist, ElementArithmeticOps, ElementBitWiseOps, LamellarBuffer, array::{collective::{broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceIntoBufferHandle}, reduce_scatter_handle::{ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle}}}, lamellae::collective::{BroadcastInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}};
+use crate::{AsLamellarBuffer, AtomicArray, Dist, ElementArithmeticOps, ElementBitWiseOps, ElementComparePartialEqOps, LamellarBuffer, array::{collective::{broadcast_handle::{ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceIntoBufferHandle}, reduce_scatter_handle::{ArrayCollectiveReduceScatterHandle, ArrayCollectiveReduceScatterIntoBufferHandle}}}, lamellae::collective::{BroadcastInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}};
 
 impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
@@ -37,6 +37,44 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
         }
     }
 
+    #[doc(alias("Collective", "collective"))]
+    /// All-reduce product of `len` elements starting at `index`, delivering the result to all PEs.
+    ///
+    /// Performs a collective all-reduce product over `len` array elements beginning at `index`.
+    /// Every PE participates and receives the final reduced value. The returned
+    /// `ArrayCollectiveAllReduceHandle` must be driven to completion by calling `.spawn()` or
+    /// `.block()` on it. Atomicity is at the element level.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let _result = unsafe { array.prod_all(0, 1) }.block();
+    ///```
+    pub unsafe fn prod_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                array
+                    .prod_all(index, len)
+            },
+            AtomicArray::NativeAtomicArray(array) => {
+                array
+                    .prod_all(index, len)
+            },
+            AtomicArray::GenericAtomicArray(array) => {
+                array
+                    .prod_all(index, len)
+            },
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// All-reduce max of `len` elements starting at `index`, delivering the result to all PEs.
     ///
@@ -108,43 +146,8 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
             },
         }
     }
-
-    #[doc(alias("Collective", "collective"))]
-    /// All-reduce product of `len` elements starting at `index`, delivering the result to all PEs.
-    ///
-    /// Performs a collective all-reduce product over `len` array elements beginning at `index`.
-    /// Every PE participates and receives the final reduced value. The returned
-    /// `ArrayCollectiveAllReduceHandle` must be driven to completion by calling `.spawn()` or
-    /// `.block()` on it. Atomicity is at the element level.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_all(0, 1) }.block();
-    ///```
-    pub unsafe fn prod_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
-        match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_all(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_all(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_all(index, len)
-            },
-        }
-    }
 }
+
 impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
     #[doc(alias("Collective", "collective"))]
     /// All-reduce bitwise AND of `len` elements starting at `index`, delivering the result to all PEs.
@@ -295,6 +298,46 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     }
 
     #[doc(alias("Collective", "collective"))]
+    /// Like `prod_all` but places the result into caller-supplied `buffer`. Returns an `ArrayCollectiveAllReduceIntoBufferHandle`.
+    ///
+    /// Performs a collective all-reduce product over `len` array elements beginning at `index` and
+    /// writes the result into `buffer` rather than allocating a new buffer. Every PE participates
+    /// and receives the result. The returned `ArrayCollectiveAllReduceIntoBufferHandle` must be
+    /// driven to completion by calling `.spawn()` or `.block()` on it. Atomicity is at the
+    /// element level.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// unsafe { array.prod_all_into_buffer(0, 1, buf) }.block();
+    ///```
+    pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                array
+                    .prod_all_into_buffer(index, len, buffer)
+            },
+            AtomicArray::NativeAtomicArray(array) => {
+                array
+                    .prod_all_into_buffer(index, len, buffer)
+            },
+            AtomicArray::GenericAtomicArray(array) => {
+                array
+                    .prod_all_into_buffer(index, len, buffer)
+            },
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
+    #[doc(alias("Collective", "collective"))]
     /// Like `max_all` but places the result into caller-supplied `buffer`. Returns an `ArrayCollectiveAllReduceIntoBufferHandle`.
     ///
     /// Performs a collective all-reduce maximum over `len` array elements beginning at `index` and
@@ -366,44 +409,6 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => {
                 array
                     .min_all_into_buffer(index, len, buffer)
-            },
-        }
-    }
-
-    #[doc(alias("Collective", "collective"))]
-    /// Like `prod_all` but places the result into caller-supplied `buffer`. Returns an `ArrayCollectiveAllReduceIntoBufferHandle`.
-    ///
-    /// Performs a collective all-reduce product over `len` array elements beginning at `index` and
-    /// writes the result into `buffer` rather than allocating a new buffer. Every PE participates
-    /// and receives the result. The returned `ArrayCollectiveAllReduceIntoBufferHandle` must be
-    /// driven to completion by calling `.spawn()` or `.block()` on it. Atomicity is at the
-    /// element level.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// unsafe { array.prod_all_into_buffer(0, 1, buf) }.block();
-    ///```
-    pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
-        match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_all_into_buffer(index, len, buffer)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_all_into_buffer(index, len, buffer)
             },
         }
     }
@@ -822,6 +827,44 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     }
 
     #[doc(alias("Collective", "collective"))]
+    /// Reduce product of `len` elements starting at `index`, delivering the result only to PE `pe`.
+    ///
+    /// Performs a collective reduce product over `len` array elements beginning at `index`. Every
+    /// PE participates but only the designated PE `pe` receives the final value. The returned
+    /// `ArrayCollectiveReduceHandle` must be driven to completion by calling `.spawn()` or
+    /// `.block()` on it. Atomicity is at the element level.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let _result = unsafe { array.prod_at_pe(0, 1, 0) }.block();
+    ///```
+    pub unsafe fn prod_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                array
+                    .prod_at_pe(index, len, pe)
+            },
+            AtomicArray::NativeAtomicArray(array) => {
+                array
+                    .prod_at_pe(index, len, pe)
+            },
+            AtomicArray::GenericAtomicArray(array) => {
+                array
+                    .prod_at_pe(index, len, pe)
+            },
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
+    #[doc(alias("Collective", "collective"))]
     /// Reduce max of `len` elements starting at `index`, delivering the result only to PE `pe`.
     ///
     /// Performs a collective reduce maximum over `len` array elements beginning at `index`. Every
@@ -889,42 +932,6 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => {
                 array
                     .min_at_pe(index, len, pe)
-            },
-        }
-    }
-
-    #[doc(alias("Collective", "collective"))]
-    /// Reduce product of `len` elements starting at `index`, delivering the result only to PE `pe`.
-    ///
-    /// Performs a collective reduce product over `len` array elements beginning at `index`. Every
-    /// PE participates but only the designated PE `pe` receives the final value. The returned
-    /// `ArrayCollectiveReduceHandle` must be driven to completion by calling `.spawn()` or
-    /// `.block()` on it. Atomicity is at the element level.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_at_pe(0, 1, 0) }.block();
-    ///```
-    pub unsafe fn prod_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
-        match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_at_pe(index, len, pe)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_at_pe(index, len, pe)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_at_pe(index, len, pe)
             },
         }
     }
@@ -1081,6 +1088,46 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     }
 
     #[doc(alias("Collective", "collective"))]
+    /// Like `prod_at_pe` but places the result into caller-supplied `target: RootOrLamellarBuffer`.
+    ///
+    /// Performs a collective reduce product over `len` array elements beginning at `index` and
+    /// writes the result into `target` on the root PE rather than allocating a new buffer. Every
+    /// PE participates but only the designated root PE receives the result. The returned
+    /// `ArrayCollectiveReduceIntoBufferHandle` must be driven to completion by calling `.spawn()`
+    /// or `.block()` on it. Atomicity is at the element level.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// unsafe { array.prod_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
+    ///```
+    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                array
+                    .prod_at_pe_into_buffer(index, len, target)
+            },
+            AtomicArray::NativeAtomicArray(array) => {
+                array
+                    .prod_at_pe_into_buffer(index, len, target)
+            },
+            AtomicArray::GenericAtomicArray(array) => {
+                array
+                    .prod_at_pe_into_buffer(index, len, target)
+            },
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
+    #[doc(alias("Collective", "collective"))]
     /// Like `max_at_pe` but places the result into caller-supplied `target: RootOrLamellarBuffer`.
     ///
     /// Performs a collective reduce maximum over `len` array elements beginning at `index` and
@@ -1152,44 +1199,6 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => {
                 array
                     .min_at_pe_into_buffer(index, len, target)
-            },
-        }
-    }
-
-    #[doc(alias("Collective", "collective"))]
-    /// Like `prod_at_pe` but places the result into caller-supplied `target: RootOrLamellarBuffer`.
-    ///
-    /// Performs a collective reduce product over `len` array elements beginning at `index` and
-    /// writes the result into `target` on the root PE rather than allocating a new buffer. Every
-    /// PE participates but only the designated root PE receives the result. The returned
-    /// `ArrayCollectiveReduceIntoBufferHandle` must be driven to completion by calling `.spawn()`
-    /// or `.block()` on it. Atomicity is at the element level.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// unsafe { array.prod_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)) }.block();
-    ///```
-    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
-        match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_at_pe_into_buffer(index, len, target)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_at_pe_into_buffer(index, len, target)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_at_pe_into_buffer(index, len, target)
             },
         }
     }
@@ -1803,6 +1812,44 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     }
 
     #[doc(alias("Collective", "collective"))]
+    /// Reduce-scatter product: reduces `len` elements starting at `index` and distributes disjoint result segments across all PEs.
+    ///
+    /// Performs a collective reduce-scatter product over `len` array elements beginning at
+    /// `index`. After reduction each PE receives a disjoint segment of the result. The returned
+    /// `ArrayCollectiveReduceScatterHandle` must be driven to completion by calling `.spawn()` or
+    /// `.block()` on it. Atomicity is at the element level.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let _result = unsafe { array.prod_scatter(0, 1) }.block();
+    ///```
+    pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                array
+                    .prod_scatter(index, len)
+            },
+            AtomicArray::NativeAtomicArray(array) => {
+                array
+                    .prod_scatter(index, len)
+            },
+            AtomicArray::GenericAtomicArray(array) => {
+                array
+                    .prod_scatter(index, len)
+            },
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
+    #[doc(alias("Collective", "collective"))]
     /// Reduce-scatter max: reduces `len` elements starting at `index` and distributes disjoint result segments across all PEs.
     ///
     /// Performs a collective reduce-scatter maximum over `len` array elements beginning at
@@ -1870,42 +1917,6 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => {
                 array
                     .min_scatter(index, len)
-            },
-        }
-    }
-
-    #[doc(alias("Collective", "collective"))]
-    /// Reduce-scatter product: reduces `len` elements starting at `index` and distributes disjoint result segments across all PEs.
-    ///
-    /// Performs a collective reduce-scatter product over `len` array elements beginning at
-    /// `index`. After reduction each PE receives a disjoint segment of the result. The returned
-    /// `ArrayCollectiveReduceScatterHandle` must be driven to completion by calling `.spawn()` or
-    /// `.block()` on it. Atomicity is at the element level.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_scatter(0, 1) }.block();
-    ///```
-    pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
-        match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_scatter(index, len)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_scatter(index, len)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_scatter(index, len)
             },
         }
     }
@@ -2063,6 +2074,46 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
     }
 
     #[doc(alias("Collective", "collective"))]
+    /// Like `prod_scatter` but places received segment into caller-supplied `buffer`.
+    ///
+    /// Performs a collective reduce-scatter product over `len` array elements beginning at
+    /// `index` and writes each PE's disjoint result segment into `buffer` rather than allocating
+    /// a new buffer. The returned `ArrayCollectiveReduceScatterIntoBufferHandle` must be driven
+    /// to completion by calling `.spawn()` or `.block()` on it. Atomicity is at the element
+    /// level.
+    ///
+    /// # Collective Operation
+    /// All PEs in the team must call this function.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// world.barrier();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// unsafe { array.prod_scatter_into_buffer(0, 1, buf) }.block();
+    ///```
+    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                array
+                    .prod_scatter_into_buffer(index, len, buffer)
+            },
+            AtomicArray::NativeAtomicArray(array) => {
+                array
+                    .prod_scatter_into_buffer(index, len, buffer)
+            },
+            AtomicArray::GenericAtomicArray(array) => {
+                array
+                    .prod_scatter_into_buffer(index, len, buffer)
+            },
+        }
+    }
+}
+
+impl<T: ElementComparePartialEqOps + Default> AtomicArray<T> {
+    #[doc(alias("Collective", "collective"))]
     /// Like `max_scatter` but places received segment into caller-supplied `buffer`.
     ///
     /// Performs a collective reduce-scatter maximum over `len` array elements beginning at
@@ -2134,44 +2185,6 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => {
                 array
                     .min_scatter_into_buffer(index, len, buffer)
-            },
-        }
-    }
-
-    #[doc(alias("Collective", "collective"))]
-    /// Like `prod_scatter` but places received segment into caller-supplied `buffer`.
-    ///
-    /// Performs a collective reduce-scatter product over `len` array elements beginning at
-    /// `index` and writes each PE's disjoint result segment into `buffer` rather than allocating
-    /// a new buffer. The returned `ArrayCollectiveReduceScatterIntoBufferHandle` must be driven
-    /// to completion by calling `.spawn()` or `.block()` on it. Atomicity is at the element
-    /// level.
-    ///
-    /// # Collective Operation
-    /// All PEs in the team must call this function.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// unsafe { array.prod_scatter_into_buffer(0, 1, buf) }.block();
-    ///```
-    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
-        match self {
-            AtomicArray::NetworkAtomicArray(array) => {
-                array
-                    .prod_scatter_into_buffer(index, len, buffer)
-            },
-            AtomicArray::NativeAtomicArray(array) => {
-                array
-                    .prod_scatter_into_buffer(index, len, buffer)
-            },
-            AtomicArray::GenericAtomicArray(array) => {
-                array
-                    .prod_scatter_into_buffer(index, len, buffer)
             },
         }
     }

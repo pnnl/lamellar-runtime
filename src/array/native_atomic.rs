@@ -929,6 +929,42 @@ impl<T: ElementBitWiseOps + 'static> NativeAtomicElement<T> {
     }
 }
 
+impl<T: ElementComparePartialEqOps + 'static> NativeAtomicElement<T> {
+    /// Atomically sets the current value to the max of the current value and `val`, returning the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_max(10);
+    /// }
+    ///```
+    pub fn fetch_max(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_max, val)
+    }
+
+    /// Atomically sets the current value to the min of the current value and `val`, returning the old value.
+    ///
+    /// # Examples
+    ///```no_run
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::NativeAtomicArray(ref array) = array {
+    ///     let local_data = array.local_data();
+    ///     let elem = local_data.at(0);
+    ///     let old = elem.fetch_min(10);
+    /// }
+    ///```
+    pub fn fetch_min(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_min, val)
+    }
+}
+
 impl<T: Dist + ElementArithmeticOps> AddAssign<T> for NativeAtomicElement<T> {
     fn add_assign(&mut self, val: T) {
         self.fetch_add(val);
@@ -1051,6 +1087,15 @@ impl<'a, T: ElementBitWiseOps + 'static> NativeAtomicElementRef<'a, T> {
     }
     pub fn fetch_xor(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_xor, val)
+    }
+}
+
+impl<'a, T: ElementComparePartialEqOps + 'static> NativeAtomicElementRef<'a, T> {
+    pub fn fetch_max(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_max, val)
+    }
+    pub fn fetch_min(&self, val: T) -> T {
+        impl_add_sub_and_or_xor!(self, fetch_min, val)
     }
 }
 
