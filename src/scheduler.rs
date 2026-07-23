@@ -9,6 +9,7 @@ use crate::active_messaging::*;
 use crate::env_var::config;
 use crate::lamellae::{Des, Lamellae, SerializedData};
 use crate::scheduler::work_stealing::{TaskType, TASKS_FINISHED, TASKS_LAUNCHED};
+use crate::stats;
 use crate::warnings::RuntimeWarning;
 
 use enum_dispatch::enum_dispatch;
@@ -74,9 +75,6 @@ pub(crate) enum SchedulerStatus {
     Finished,
     Panic,
 }
-
-// static IO_SAME_THREAD: AtomicUsize = AtomicUsize::new(0);
-// static IO_DIFF_THREAD: AtomicUsize = AtomicUsize::new(0);
 
 #[repr(C)]
 #[derive(
@@ -320,19 +318,19 @@ impl Scheduler {
         num_ams.fetch_add(1, Ordering::Relaxed);
         let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[AM_ID {am_id}] launched");
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::AmSubmit)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         // println!("am ptr {:p} ", &am);
         let am_future = async move {
             trace!(target: "tasks", "[AM_ID {am_id}] execing");
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::AmSubmit)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[AM_ID {am_id}] finished");
         };
         self.executor.submit_task(am_future);
@@ -343,20 +341,20 @@ impl Scheduler {
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::AmSubmit)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[AM_ID {am_id}] launched on thread {tid}");
         let am_future = async move {
             trace!(target: "tasks", "[AM_ID {am_id}] execing on thread {tid}");
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::AmSubmit)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[AM_ID {am_id}] finished on thread {tid}");
         };
         self.executor.submit_task_thread(am_future, tid);
@@ -368,20 +366,20 @@ impl Scheduler {
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::AmImmediate)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[AM_ID {am_id}] launched immediate");
         let am_future = async move {
             trace!(target: "tasks", "[AM_ID {am_id}] execing immediate");
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::AmImmediate)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[AM_ID {am_id}] finished immediate");
         };
         self.executor.submit_immediate_task(am_future);
@@ -391,20 +389,20 @@ impl Scheduler {
     pub(crate) async fn exec_am(&self, am: Am) {
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::AmExec)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         self.num_ams.fetch_add(1, Ordering::Relaxed);
         let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[AM_ID {am_id}] launched");
         trace!(target: "tasks", "[AM_ID {am_id}] execing");
         ame.process_msg(am, am_stall_mark, false).await;
         self.num_ams.fetch_sub(1, Ordering::Relaxed);
-        TASKS_FINISHED
+        stats!(TASKS_FINISHED
             .get(&TaskType::AmExec)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         trace!(target: "tasks", "[AM_ID {am_id}] finished");
     }
 
@@ -414,10 +412,10 @@ impl Scheduler {
         num_ams.fetch_add(1, Ordering::Relaxed);
         let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[AM_ID {am_id}] launched remote");
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::AmRemote)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let lamellae_clone = lamellae.clone();
         trace!(target: "lamellae_debug", "submit_remote_am:  lamellae cnt: {:?}", Arc::strong_count(lamellae));
 
@@ -431,10 +429,10 @@ impl Scheduler {
                 panic!("should i be here?");
             }
             num_ams.fetch_sub(1, Ordering::Relaxed);
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::AmRemote)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[AM_ID {am_id}] finished remote");
         };
         self.executor.submit_task(am_future);
@@ -458,10 +456,10 @@ impl Scheduler {
         }
         let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[TASK_ID {task_id}] launched");
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::TaskSpawn)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let future = async move {
             trace!(target: "tasks", "[TASK_ID {task_id}] execing");
             let result = task.await;
@@ -471,10 +469,10 @@ impl Scheduler {
                     cntr.dec_outstanding(1);
                 }
             }
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::TaskSpawn)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[TASK_ID {task_id}] finished");
             result
         };
@@ -489,18 +487,18 @@ impl Scheduler {
         num_tasks.fetch_add(1, Ordering::Relaxed);
         let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[TASK_ID {task_id}] launched");
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::TaskSubmit)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let future = async move {
             trace!(target: "tasks", "[TASK_ID {task_id}] execing");
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::TaskSubmit)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[TASK_ID {task_id}] finished");
         };
         self.executor.submit_task(future);
@@ -514,18 +512,18 @@ impl Scheduler {
         num_tasks.fetch_add(1, Ordering::Relaxed);
         let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[TASK_ID {task_id}] launched");
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::TaskLongSubmit)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let future = async move {
             trace!(target: "tasks", "[TASK_ID {task_id}] execing");
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::TaskLongSubmit)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[TASK_ID {task_id}] finished");
         };
         self.executor.submit_long_task(future);
@@ -539,17 +537,17 @@ impl Scheduler {
         num_tasks.fetch_add(1, Ordering::Relaxed);
         let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[TASK_ID {task_id}] launched");
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::TaskImmediate)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let future = async move {
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::TaskImmediate)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[TASK_ID {task_id}] finished");
         };
         self.executor.submit_immediate_task(future);
@@ -563,17 +561,17 @@ impl Scheduler {
         num_tasks.fetch_add(1, Ordering::Relaxed);
         let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[TASK_ID {task_id}] launched");
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::TaskIo)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let future = async move {
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
-            TASKS_FINISHED
+            stats!(TASKS_FINISHED
                 .get(&TaskType::TaskIo)
                 .unwrap()
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed));
             trace!(target: "tasks", "[TASK_ID {task_id}] finished");
         };
 
@@ -581,32 +579,32 @@ impl Scheduler {
     }
 
     pub(crate) fn exec_task(&self) {
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::TaskExec)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         self.executor.exec_task();
-        TASKS_FINISHED
+        stats!(TASKS_FINISHED
             .get(&TaskType::TaskExec)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
     }
 
     pub(crate) fn block_on<F: Future>(&self, task: F) -> F::Output {
         RuntimeWarning::BlockOn.print();
-        TASKS_LAUNCHED
+        stats!(TASKS_LAUNCHED
             .get(&TaskType::SchedBlockOn)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
         trace!(target: "tasks", "[TASK_ID {task_id}] launched block_on");
         trace!(target: "tasks", "[TASK_ID {task_id}] execing block_on");
         let res = self.executor.block_on(task);
         trace!(target: "tasks", "[TASK_ID {task_id}] finished block_on");
-        TASKS_FINISHED
+        stats!(TASKS_FINISHED
             .get(&TaskType::SchedBlockOn)
             .unwrap()
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed));
         res
     }
 
