@@ -6,7 +6,7 @@ use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tracing::trace;
+use tracing::{debug, trace};
 
 use crate::{
     active_messaging::RemotePtr,
@@ -34,7 +34,8 @@ enum LockType {
 pub(crate) struct DistRwLock<T> {
     readers: AtomicUsize,
     writer: AtomicUsize,
-    collective_writer: AtomicUsize,
+    lock_arrivals: AtomicUsize,
+    unlock_arrivals: AtomicUsize,
     collective_cnt: AtomicUsize,
     // local_cnt: AtomicUsize, //eventually we can do an optimization potentially where if we already have the global lock and another local request comes in we keep it (although this could cause starvation)
     // local_state: Mutex<Option<LockType>>,
@@ -56,7 +57,8 @@ impl<T> DistRwLock<T> {
         DistRwLock {
             readers: AtomicUsize::new(0),
             writer: AtomicUsize::new(team.num_pes),
-            collective_writer: AtomicUsize::new(team.num_pes),
+            lock_arrivals: AtomicUsize::new(0),
+            unlock_arrivals: AtomicUsize::new(0),
             collective_cnt: AtomicUsize::new(team.num_pes + 1),
             // local_cnt: AtomicUsize::new(0),
             // local_state: Mutex::new(None),
@@ -74,10 +76,20 @@ impl<T> DistRwLock<T> {
         if self.writer.load(Ordering::SeqCst) != self.team.num_pes {
             locks += 1;
         }
-        if self.collective_writer.load(Ordering::SeqCst) != self.team.num_pes {
+        if self.lock_arrivals.load(Ordering::SeqCst) != self.unlock_arrivals.load(Ordering::SeqCst)
+        {
             locks += 1;
         }
         locks
+    }
+
+    /// Cumulative arrival count (across the whole lifetime of this lock) required for
+    /// every PE to have arrived at the given `collective_cnt` generation's barrier.
+    /// `collective_cnt` starts at `num_pes + 1` and increases by 1 per `collective_write()`
+    /// call, so this converts it back into a 1-indexed generation number and scales by
+    /// `num_pes` to get the running total needed for that generation to be fully arrived.
+    fn collective_barrier_target(&self, collective_cnt: usize) -> usize {
+        (collective_cnt - self.team.num_pes) * self.team.num_pes
     }
 
     async fn async_reader_lock(&self, _pe: usize) {
@@ -135,17 +147,11 @@ impl<T> DistRwLock<T> {
     }
 
     async fn async_collective_writer_lock(&self, pe: usize, collective_cnt: usize) {
-        // println!("{:?} collective writer lock {:?}", pe, collective_cnt);
+        debug!(target: "darc::global_rw", pe, collective_cnt, writer = self.writer.load(Ordering::SeqCst), lock_arrivals = self.lock_arrivals.load(Ordering::SeqCst), "async_collective_writer_lock: entering");
         // first lets set the normal writer lock, but will set it to a unique id all the PEs should have (it is initialized to num_pes+1 and is incremented by one after each lock)
         if pe == 0 {
             self.async_writer_lock(collective_cnt).await;
         } else {
-            // println!(
-            //     "\t{:?} write lock checking for readers {:?} {:?}",
-            //     pe,
-            //     self.readers.load(Ordering::SeqCst),
-            //     self.writer.load(Ordering::SeqCst)
-            // );
             while self.writer.load(Ordering::SeqCst) != collective_cnt {
                 async_std::task::yield_now().await;
             }
@@ -156,11 +162,13 @@ impl<T> DistRwLock<T> {
         // at this point at least PE pe and PE 0 have entered the lock,
         // and PE 0 has obtained the global lock
         // we need to ensure everyone else has.
-        self.collective_writer.fetch_sub(1, Ordering::SeqCst);
-        while self.collective_writer.load(Ordering::SeqCst) != 0 {
-            //
+        let target = self.collective_barrier_target(collective_cnt);
+        let arrived = self.lock_arrivals.fetch_add(1, Ordering::SeqCst) + 1;
+        debug!(target: "darc::global_rw", pe, collective_cnt, arrived, target, "async_collective_writer_lock: entered collective barrier, waiting for all PEs");
+        while self.lock_arrivals.load(Ordering::SeqCst) < target {
             async_std::task::yield_now().await;
         }
+        debug!(target: "darc::global_rw", pe, collective_cnt, "async_collective_writer_lock: all PEs entered, lock acquired");
         //at this point we have to global write lock and everyone has entered the collective write lock
     }
 
@@ -210,7 +218,7 @@ impl<T> DistRwLock<T> {
     }
 
     async unsafe fn collective_writer_unlock(&self, pe: usize, collective_cnt: usize) {
-        // println!("\t{pe} {collective_cnt} writer unlocking {:?} {:?} {:?}",self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst),self.collective_writer.load(Ordering::SeqCst));
+        debug!(target: "darc::global_rw", pe, collective_cnt, writer = self.writer.load(Ordering::SeqCst), unlock_arrivals = self.unlock_arrivals.load(Ordering::SeqCst), "collective_writer_unlock: entering");
         if collective_cnt != self.writer.load(Ordering::SeqCst) {
             panic!(
                 "ERROR: Mismatched collective lock calls {collective_cnt} {:?}",
@@ -218,11 +226,13 @@ impl<T> DistRwLock<T> {
             );
         }
         // wait for everyone to enter the collective unlock call
-        let _temp = self.collective_writer.fetch_add(1, Ordering::SeqCst);
-        // println!("collective unlock PE{:?} {:?} {:?} {:?}",pe,temp,self.collective_writer.load(Ordering::SeqCst),self.team.num_pes);
-        while self.collective_writer.load(Ordering::SeqCst) != self.team.num_pes {
+        let target = self.collective_barrier_target(collective_cnt);
+        let arrived = self.unlock_arrivals.fetch_add(1, Ordering::SeqCst) + 1;
+        debug!(target: "darc::global_rw", pe, collective_cnt, arrived, target, "collective_writer_unlock: entered collective barrier, waiting for all PEs");
+        while self.unlock_arrivals.load(Ordering::SeqCst) < target {
             async_std::task::yield_now().await;
         }
+        debug!(target: "darc::global_rw", pe, collective_cnt, "collective_writer_unlock: all PEs entered unlock");
         //we have all entered the unlock
         //now have pe 0 unlock the global write lock (other PEs are free to finish)
         if pe == 0 {
