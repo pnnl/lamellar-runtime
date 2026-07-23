@@ -52,9 +52,12 @@ pub(crate) enum CollectiveOpKind {
     Barrier,
     Broadcast,
     AllToAll,
+    #[allow(dead_code)] // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
     AllReduce(ReduceOp),
     AllGather,
+    #[allow(dead_code)] // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
     ReduceScatter(ReduceOp),
+    #[allow(dead_code)] // ReduceOp payload only read by libfabric/ucx-family collective_avail impls
     Reduce(ReduceOp),
     Scatter,
     Gather,

@@ -1985,6 +1985,7 @@ pub(crate) enum ReduceOp {
     BitAnd,
 }
 
+#[allow(dead_code)] // used only by libfabric/ucx-family fabric.rs, feature-gated out of default build
 pub(crate) type AllReduceOp = ReduceOp;
 
 pub(crate) enum RootOrBuffer<T> {
@@ -2093,18 +2094,21 @@ impl From<ScatterInput> for ScatterInputInner {
 }
 
 
+#[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
 pub(crate) enum RootSrcSliceOrNone<'a, T> {
-    Root(&'a [T]), 
-    NotRoot(usize) 
+    Root(&'a [T]),
+    NotRoot(usize)
 }
 
 
+#[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
 pub(crate) enum RootSrcOrSliceMut<'a, T> {
-    Root(&'a mut [T]), 
-    NotRoot(&'a mut [T], usize) 
+    Root(&'a mut [T]),
+    NotRoot(&'a mut [T], usize)
 }
 
 impl<T: Remote>  RootSrcOrBuffer<T> {
+    #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
     pub(crate) fn as_mut_slice<'a>(&'a mut self, alloc_slice: &'a mut [T], len: usize) -> RootSrcOrSliceMut<'a, T> {
         match self {
             RootSrcOrBuffer::Root(index) => RootSrcOrSliceMut::Root(&mut alloc_slice[*index..*index + len]),
@@ -2114,6 +2118,7 @@ impl<T: Remote>  RootSrcOrBuffer<T> {
 }
 
 impl ScatterInputInner {
+    #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
     pub(crate) fn as_slice<'a, T>(&'a self, alloc_slice: &'a [T], len: usize) -> RootSrcSliceOrNone<'a, T> {
         match self {
             ScatterInputInner::Root(index) => RootSrcSliceOrNone::Root(&alloc_slice[*index..*index + len]),
@@ -2125,6 +2130,7 @@ impl ScatterInputInner {
 
 
 impl<T> RootOrBuffer<T> {
+    #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
     pub(crate) fn as_mut_slice<'a>(&'a mut self) -> RootOrSliceMut<'a, T> {
         match self {
             RootOrBuffer::Root(items) => RootOrSliceMut::Root(items),
@@ -2134,8 +2140,11 @@ impl<T> RootOrBuffer<T> {
 }
 
 
+/// Input type for gather-to-root collective operations, providing the root PE's destination buffer or a non-root PE's root index.
 pub enum RootOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
+    /// This PE is the root; buffer to gather results into.
     Root(LamellarBuffer<T, B>),
+    /// This PE is not the root; `usize` is the PE index of the root.
     NotRoot(usize),
 }
 
@@ -2143,15 +2152,17 @@ pub enum RootOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
 
 
 impl<T: Remote, B: AsLamellarBuffer<T>> RootOrLamellarBuffer<T, B> {
+    #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
     pub(crate) fn as_mut_slice<'a>(&'a mut self) -> RootOrSliceMut<'a, T> {
         match self {
             RootOrLamellarBuffer::Root(lamellar_buffer) => RootOrSliceMut::Root(lamellar_buffer.as_mut_slice()),
             RootOrLamellarBuffer::NotRoot(pe) => RootOrSliceMut::NotRoot(*pe),
         }
     }
-} 
+}
 
 impl<T: Remote, B: AsLamellarBuffer<T>> RootSrcOrLamellarBufferInner<T, B> {
+    #[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
     pub(crate) fn as_mut_slice<'a>(&'a mut self, alloc_slice: &'a mut [T], len: usize) -> RootSrcOrSliceMut<'a, T> {
         match self {
             RootSrcOrLamellarBufferInner::Root(index) => RootSrcOrSliceMut::Root(&mut alloc_slice[*index..*index + len]),
@@ -2164,11 +2175,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RootSrcOrLamellarBufferInner<T, B> {
             },
         }
     }
-} 
+}
 
+#[allow(dead_code)] // consumed only by libfabric/ucx-family fabric.rs, feature-gated out of default build
 pub(crate) enum RootOrSliceMut<'a, T> {
-    Root(&'a mut [T]), 
-    NotRoot(usize) 
+    Root(&'a mut [T]),
+    NotRoot(usize)
 }
 
 impl std::fmt::Debug for ReduceOp {
