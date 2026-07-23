@@ -103,12 +103,12 @@ impl<T: Remote> PutFutureData<T> {
         }
     }
 
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.scheduler.clone().block_on(async move {
             self.exec_op().await;
         });
     }
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {
@@ -164,12 +164,12 @@ impl<T: Remote> GetFutureData<T> {
         }
     }
 
-    pub(crate) fn block(mut self) -> T {
+    pub(crate) fn block(self) -> T {
         self.scheduler
             .clone()
             .block_on(async { self.exec_at().await })
     }
-    pub(crate) fn spawn(mut self) -> LamellarTask<T> {
+    pub(crate) fn spawn(self) -> LamellarTask<T> {
         let counters = self.counters.clone();
         self.scheduler
             .clone()
@@ -241,12 +241,12 @@ impl<T: Remote> GetBufferFutureData<T> {
         }
     }
 
-    pub(crate) fn block(mut self) -> Vec<T> {
+    pub(crate) fn block(self) -> Vec<T> {
         self.scheduler
             .clone()
             .block_on(async { self.exec_at().await })
     }
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();
         self.scheduler
             .clone()
@@ -311,12 +311,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> GetIntoBufferFutureData<T, B> {
         };
     }
 
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         self.scheduler.clone().block_on(async move {
             self.exec_op().await;
         });
     }
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(
             async move {

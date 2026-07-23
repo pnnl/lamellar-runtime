@@ -60,10 +60,10 @@ fn main() {
     println!("cargo:rerun-if-env-changed=DEP_PMINATIVE_ROOT");
     if let Ok(pmi_native_lib_dir) = env::var("DEP_PMINATIVE_ROOT") {
         let lib_path = PathBuf::from(pmi_native_lib_dir).join("lib");
-        println!(
-            "cargo:warning=Adding PMI native lib path: {}",
-            lib_path.display()
-        );
+        // println!(
+        //     "cargo:warning=Adding PMI native lib path: {}",
+        //     lib_path.display()
+        // );
         println!("cargo:rustc-link-search=native={}", lib_path.display());
         println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_path.display());
         lib_paths.push(lib_path.display().to_string());
@@ -78,9 +78,9 @@ fn main() {
     let profile_output_dir = determine_profile_output_dir(&out_path);
     copy_dependency_libs(&lib_paths, &profile_output_dir);
 
-    if let Ok(origin) = env::var("ORIGIN") {
-        println!("cargo:warning=rpath for sharedlibs: {}/shared_libs", origin);
-    }
+    // if let Ok(origin) = env::var("ORIGIN") {
+    //     println!("cargo:warning=rpath for sharedlibs: {}/shared_libs", origin);
+    // }
     println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/shared_libs");
 
     // Link system libraries required by libfabric/ROFI providers
@@ -137,10 +137,10 @@ fn main() {
             writeln!(file, ":$LD_LIBRARY_PATH").ok();
         }
 
-        println!(
-            "cargo:warning=Generated library path script: {}",
-            script_path.display()
-        );
+        // println!(
+        //     "cargo:warning=Generated library path script: {}",
+        //     script_path.display()
+        // );
     } else {
         panic!("Failed to create lamellar_env.sh");
     }
@@ -265,13 +265,13 @@ fn copy_dependency_libs(lib_paths: &[String], output_dir: &Path) {
         linked.push(candidate.name.clone());
     }
 
-    if !linked.is_empty() {
-        println!(
-            "cargo:warning=Linked {} shared libs into {}",
-            linked.len(),
-            shared_libs_dir.display()
-        );
-    }
+    // if !linked.is_empty() {
+    //     println!(
+    //         "cargo:warning=Linked {} shared libs into {}",
+    //         linked.len(),
+    //         shared_libs_dir.display()
+    //     );
+    // }
 }
 
 fn is_shared_object(file_name: &str) -> bool {

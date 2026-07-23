@@ -174,7 +174,7 @@ impl WorkStealingThread {
         active_cnt: Arc<AtomicUsize>,
         // num_tasks: Arc<AtomicUsize>,
         ids: Arc<Vec<CoreId>>,
-        my_pe: usize,
+        _my_pe: usize,
 
     ) -> thread::JoinHandle<()> {
         let builder = thread::Builder::new().name("worker_thread".into());
