@@ -1499,10 +1499,13 @@ impl LamellarTaskGroup {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Launch and execute a local active message, pinned to the specified worker thread index.
+    /// Launches and executes a local active message, with a hint to try and schedule to the specified worker thread index.
     ///
     /// This is a lower-level variant of [`ActiveMessaging::exec_am_local`] that allows the caller
     /// to direct the active message to a particular worker thread within this PE.
+    /// The executor may choose to ignore this hint and schedule the active message on a different worker thread.
+    /// The Lamellar executor will initially schedule the active message to the specified worker thread, but it may be stolen by another thread.
+    /// The Tokio and async-std executors ignore the thread hint and schedule the active message on any available worker thread.
     ///
     /// Returns a lazy handle; call `.spawn()`, `.block()`, or `.await` to initiate execution.
     ///
