@@ -20,8 +20,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use zerocopy_derive::*;
-use tracing::trace;
-
+use tracing::{trace, debug};
 
 static LAMELLAR_THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 thread_local! {
@@ -146,6 +145,7 @@ pub struct LamellarTask<T> {
     #[pin]
     pub(crate) task: LamellarTaskInner<T>,
     pub(crate) executor: Arc<Executor>,
+    task_id: usize,
 }
 
 unsafe impl<T: Send> Send for LamellarTask<T> {}
@@ -155,6 +155,7 @@ impl<T> LamellarTask<T> {
     /// Calls the underlying scheduler block_on method to block the current thread until the task is completed.
     pub fn block(self) -> T {
         RuntimeWarning::BlockingCall("LamellarTask::block", "<task>.await").print();
+        debug!(target: "collective", "LamellarTask::block called task_id: {:?} ", self.task_id);
         self.executor.clone().block_on(self)
     }
 }
@@ -162,7 +163,12 @@ impl<T> LamellarTask<T> {
 impl<T> Future for LamellarTask<T> {
     type Output = T;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.project().task.poll(cx)
+        let task_id = self.task_id;
+        let results = self.project().task.poll(cx);
+        if let Poll::Ready(_) = results {
+            debug!(target: "collective", "LamellarTask::poll finished task_id: {:?} ", task_id);
+        }
+        results
     }
 }
 
@@ -324,19 +330,23 @@ impl Scheduler {
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
-        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[AM_ID {am_id}] launched");
         TASKS_LAUNCHED
             .get(&TaskType::AmSubmit)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         // println!("am ptr {:p} ", &am);
         let am_future = async move {
+           trace!(target: "tasks", "[AM_ID {am_id}] execing");
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::AmSubmit)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "tasks", "[AM_ID {am_id}] finished");
+            
         };
         self.executor.submit_task(am_future);
     }
@@ -350,14 +360,17 @@ impl Scheduler {
             .get(&TaskType::AmSubmit)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
-        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[AM_ID {am_id}] launched on thread {tid}");
         let am_future = async move {
+            trace!(target: "tasks", "[AM_ID {am_id}] execing on thread {tid}");
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::AmSubmit)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "tasks", "[AM_ID {am_id}] finished on thread {tid}");
         };
         self.executor.submit_task_thread(am_future, tid);
     }
@@ -372,14 +385,17 @@ impl Scheduler {
             .get(&TaskType::AmImmediate)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
-        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[AM_ID {am_id}] launched immediate");
         let am_future = async move {
+            trace!(target: "tasks", "[AM_ID {am_id}] execing immediate");
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::AmImmediate)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "tasks", "[AM_ID {am_id}] finished immediate");
         };
         self.executor.submit_immediate_task(am_future);
     }
@@ -393,20 +409,24 @@ impl Scheduler {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         self.num_ams.fetch_add(1, Ordering::Relaxed);
-        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[AM_ID {am_id}] launched");
+        trace!(target: "tasks", "[AM_ID {am_id}] execing");
         ame.process_msg(am, am_stall_mark, false).await;
         self.num_ams.fetch_sub(1, Ordering::Relaxed);
         TASKS_FINISHED
             .get(&TaskType::AmExec)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[AM_ID {am_id}] finished");
     }
 
     pub(crate) fn submit_remote_am(&self, data: SerializedData, lamellae: &Arc<Lamellae>) {
         let num_ams = self.num_ams.clone();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
-        let _am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        let am_id = self.max_ams.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[AM_ID {am_id}] launched remote");
         TASKS_LAUNCHED
             .get(&TaskType::AmRemote)
             .unwrap()
@@ -415,6 +435,7 @@ impl Scheduler {
         trace!(target: "lamellae_debug", "submit_remote_am:  lamellae cnt: {:?}", Arc::strong_count(lamellae));
         
         let am_future = async move {
+            trace!(target: "tasks", "[AM_ID {am_id}] execing remote");
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
                 ame.exec_msg(msg, data, &lamellae_clone).await;
@@ -427,7 +448,7 @@ impl Scheduler {
                 .get(&TaskType::AmRemote)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
-            trace!(target: "lamellae_debug", "finished submit_remote_am:  lamellae cnt: {:?}", Arc::strong_count(&lamellae_clone));
+            trace!(target: "tasks", "[AM_ID {am_id}] finished remote");
         };
         self.executor.submit_task(am_future);
     }
@@ -448,12 +469,14 @@ impl Scheduler {
                 cntr.inc_outstanding(1);
             }
         }
-        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[TASK_ID {task_id}] launched");
         TASKS_LAUNCHED
             .get(&TaskType::TaskSpawn)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let future = async move {
+            trace!(target: "tasks", "[TASK_ID {task_id}] execing");
             let result = task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             if let Some(reqs) = &outstanding_reqs {
@@ -465,6 +488,7 @@ impl Scheduler {
                 .get(&TaskType::TaskSpawn)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "tasks", "[TASK_ID {task_id}] finished");
             result
         };
         self.executor.spawn_task(future, self.executor.clone())
@@ -478,18 +502,21 @@ impl Scheduler {
     {
         let num_tasks = self.num_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[TASK_ID {task_id}] launched");
         TASKS_LAUNCHED
             .get(&TaskType::TaskSubmit)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let future = async move {
+            trace!(target: "tasks", "[TASK_ID {task_id}] execing");
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::TaskSubmit)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "tasks", "[TASK_ID {task_id}] finished");
         };
         self.executor.submit_task(future);
     }
@@ -500,18 +527,21 @@ impl Scheduler {
     {
         let num_tasks = self.num_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[TASK_ID {task_id}] launched");
         TASKS_LAUNCHED
             .get(&TaskType::TaskLongSubmit)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let future = async move {
+            trace!(target: "tasks", "[TASK_ID {task_id}] execing");
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             TASKS_FINISHED
                 .get(&TaskType::TaskLongSubmit)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "tasks", "[TASK_ID {task_id}] finished");
         };
         self.executor.submit_long_task(future);
     }
@@ -522,7 +552,8 @@ impl Scheduler {
     {
         let num_tasks = self.num_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[TASK_ID {task_id}] launched");
         TASKS_LAUNCHED
             .get(&TaskType::TaskImmediate)
             .unwrap()
@@ -534,6 +565,7 @@ impl Scheduler {
                 .get(&TaskType::TaskImmediate)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "tasks", "[TASK_ID {task_id}] finished");
         };
         self.executor.submit_immediate_task(future);
     }
@@ -544,7 +576,8 @@ impl Scheduler {
     {
         let num_tasks = self.num_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
-        let _task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[TASK_ID {task_id}] launched");
         TASKS_LAUNCHED
             .get(&TaskType::TaskIo)
             .unwrap()
@@ -556,6 +589,7 @@ impl Scheduler {
                 .get(&TaskType::TaskIo)
                 .unwrap()
                 .fetch_add(1, Ordering::Relaxed);
+            trace!(target: "tasks", "[TASK_ID {task_id}] finished");
         };
 
         self.executor.submit_io_task(future);
@@ -579,7 +613,11 @@ impl Scheduler {
             .get(&TaskType::SchedBlockOn)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
+        let task_id = self.max_tasks.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "tasks", "[TASK_ID {task_id}] launched block_on");
+        trace!(target: "tasks", "[TASK_ID {task_id}] execing block_on");
         let res = self.executor.block_on(task);
+        trace!(target: "tasks", "[TASK_ID {task_id}] finished block_on");
         TASKS_FINISHED
             .get(&TaskType::SchedBlockOn)
             .unwrap()
@@ -668,7 +706,7 @@ impl Scheduler {
         let status = Arc::new(AtomicU8::new(SchedulerStatus::Active as u8));
         let executor: Arc<Executor> = Arc::new(match executor {
             ExecutorType::LamellarWorkStealing => {
-                WorkStealing::new(num_workers, status.clone(), panic.clone()).into()
+                WorkStealing::new(num_workers, status.clone(), panic.clone(), my_pe).into()
             }
             ExecutorType::LamellarWorkStealing2 => {
                 WorkStealing2::new(num_workers, status.clone(), panic.clone()).into()

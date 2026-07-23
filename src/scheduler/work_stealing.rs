@@ -164,6 +164,7 @@ pub(crate) struct WorkStealingThread {
     work_flag: Arc<AtomicU8>,
     status: Arc<AtomicU8>,
     panic: Arc<AtomicU8>,
+    
 }
 
 impl WorkStealingThread {
@@ -173,11 +174,16 @@ impl WorkStealingThread {
         active_cnt: Arc<AtomicUsize>,
         // num_tasks: Arc<AtomicUsize>,
         ids: Arc<Vec<CoreId>>,
+        my_pe: usize,
+
     ) -> thread::JoinHandle<()> {
         let builder = thread::Builder::new().name("worker_thread".into());
         builder
             .spawn(move || {
+                
                 let tid = LAMELLAR_THREAD_ID.with(|tid| *tid);
+                // let log_name= format!("lamellar_log-pe-{}-thread-{}-", my_pe, tid);
+                // file_per_thread_logger::initialize(&log_name);
                 let id = ids[tid % ids.len()];
                 trace!(
                     "WorkStealing Worker thread running {:?} core: {:?} tid: {:?}",
@@ -185,6 +191,7 @@ impl WorkStealingThread {
                     id,
                     tid
                 );
+                
                 let _span = trace_span!("WorkStealingThread::run");
                 core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
@@ -303,20 +310,20 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
-        // trace!("spawn task id: {:?}", task_id);
+        trace!(target: "collective", "executor spawn task id: {:?}", task_id);
         // trace_span!("spawn_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
-                    // trace!("starting spawn task id: {:?} ", task_id);
+                    trace!(target: "collective", "starting spawn task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::Spawn)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        // trace!("finished spawn task id: {:?} ", task_id);
+                        trace!(target: "collective", "finished spawn task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Spawned Task", task_id = task_id))
@@ -328,6 +335,7 @@ impl LamellarExecutor for WorkStealing {
         LamellarTask {
             task: LamellarTaskInner::LamellarTask(Some(task)),
             executor,
+            task_id,
         }
         // })
     }
@@ -377,20 +385,20 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
-        // trace!("submit task id: {:?}", task_id);
+        trace!(target: "collective", " submit task id: {:?}", task_id);
         // trace_span!("submit_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
-                    // trace!("starting submit task id: {:?} ", task_id);
+                    trace!(target: "collective", "starting submit task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::Submit)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        // trace!("finished submit task id: {:?} ", task_id);
+                        trace!(target: "collective", "finished submit task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Submitted Task", task_id = task_id))
@@ -413,20 +421,20 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
-        // trace!("submit task thread id: {:?} task id: {:?}", tid, task_id);
+        trace!(target: "collective", "submit task thread id: {:?} task id: {:?}", tid, task_id);
         // trace_span!("submit_task_thread").in_scope(|| {
         let work_inj = self.thread_injs[tid].clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
                 async move {
-                    // trace!("starting thread submit task id: {:?} ", task_id);
+                    trace!(target: "collective", "starting thread submit task id: {:?} ", task_id);
                     let res = task.await;
                     TASKS_FINISHED
                         .get(&TaskType::Submit)
                         .unwrap()
                         .fetch_add(1, Ordering::Relaxed);
-                        // trace!("finished thread submit task id: {:?} ", task_id);
+                        trace!(target: "collective", "finished thread submit task id: {:?} ", task_id);
                     res
                 }
                 .instrument(trace_span!("Submitted Task", task_id = task_id))
@@ -519,6 +527,7 @@ impl LamellarExecutor for WorkStealing {
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        trace!(target: "collective", "executor block_on task id: {:?}", task_id);
         // trace!("block on task id: {:?}", task_id);
         // trace_span!("block_on").in_scope(|| {
         let work_inj = self.work_inj.clone();
@@ -527,13 +536,13 @@ impl LamellarExecutor for WorkStealing {
             Builder::new().metadata(task_id).spawn_unchecked(
                 move |_task_id| {
                     async move {
-                        // trace!("starting block on task id: {:?} ", task_id);
+                        trace!(target: "collective","starting block on task id: {:?} ", task_id);
                         let res = fut.await;
                         TASKS_FINISHED
                             .get(&TaskType::BlockOn)
                             .unwrap()
                             .fetch_add(1, Ordering::Relaxed);
-                        // trace!("finished block on task id: {:?} ", task_id);
+                        trace!(target: "collective", "finished block on task id: {:?} ", task_id);
                         res
                     }
                     .instrument(trace_span!("Block OnTask", task_id = task_id))
@@ -548,6 +557,7 @@ impl LamellarExecutor for WorkStealing {
         }
         let cx = &mut Context::from_waker(&waker);
         if let Poll::Ready(output) = Pin::new(&mut task).poll(cx) {
+            trace!(target: "collective", "executor block_on task id: {:?} finished", task_id);
             output
         } else {
             println!(
@@ -641,6 +651,7 @@ impl WorkStealing {
         num_workers: usize,
         status: Arc<AtomicU8>,
         panic: Arc<AtomicU8>,
+        my_pe: usize,
     ) -> WorkStealing {
         let core_ids = match core_affinity::get_core_ids() {
             Some(core_ids) => core_ids,
@@ -671,11 +682,11 @@ impl WorkStealing {
             active_cnt: Arc::new(AtomicUsize::new(0)),
             panic,
         };
-        ws.init(Arc::new(core_ids));
+        ws.init(Arc::new(core_ids),my_pe);
         ws
     }
     // //#[tracing::instrument(skip_all)]
-    fn init(&mut self, core_ids: Arc<Vec<CoreId>>) {
+    fn init(&mut self, core_ids: Arc<Vec<CoreId>>,my_pe: usize,) {
         let mut work_workers: std::vec::Vec<crossbeam::deque::Worker<Runnable<usize>>> = vec![];
         for _i in 0..self.max_num_threads {
             let work_worker: crossbeam::deque::Worker<Runnable<usize>> =
@@ -718,6 +729,7 @@ impl WorkStealing {
                 self.active_cnt.clone(),
                 // self.num_tasks.clone(),
                 core_ids.clone(),
+                my_pe,
             ));
         }
         while self.active_cnt.load(Ordering::SeqCst) != self.threads.len() {

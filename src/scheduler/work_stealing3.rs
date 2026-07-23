@@ -166,6 +166,7 @@ impl LamellarExecutor for WorkStealing3 {
         LamellarTask {
             task: LamellarTaskInner::LamellarTask(Some(task)),
             executor,
+            task_id: 0,
         }
         // });
     }

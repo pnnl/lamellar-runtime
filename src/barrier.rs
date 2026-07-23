@@ -21,7 +21,7 @@ use std::sync::{
 };
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
-use tracing::trace;
+use tracing::{debug, trace};
 
 pub(crate) struct Barrier {
     my_pe: usize, // global pe id
@@ -350,10 +350,12 @@ impl Barrier {
                 if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
                     trace!("barrier id: {:?}", barrier_id);
+                    debug!(target: "barrier", my_pe = self.my_pe, thread = ?std::thread::current().id(), barrier_id, cur_barrier_id = self.cur_barrier_id.load(Ordering::SeqCst), "barrier_handle created, drew barrier_id");
                     handle.barrier_id = barrier_id;
                     handle.my_index = my_index;
 
                     if barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                        debug!(target: "barrier", my_pe = self.my_pe, thread = ?std::thread::current().id(), barrier_id, cur_barrier_id = self.cur_barrier_id.load(Ordering::SeqCst), "barrier_id ahead of cur_barrier_id, entering Waiting state");
                         handle.state = State::Waiting;
                         return handle;
                     }
@@ -366,11 +368,13 @@ impl Barrier {
                     while round < self.num_rounds {
                         handle.do_send_round(round);
                         if let Some(recv_pe) = handle.do_recv_round(round, 1) {
+                            debug!(target: "barrier", my_pe = self.my_pe, thread = ?std::thread::current().id(), barrier_id, round, recv_pe, "round in progress, awaiting recv_pe (sync path)");
                             handle.state = State::RoundInProgress(round, recv_pe);
                             return handle;
                         }
                         round += 1;
                     }
+                    debug!(target: "barrier", my_pe = self.my_pe, thread = ?std::thread::current().id(), barrier_id, "barrier completed synchronously in barrier_handle(), advancing cur_barrier_id");
                     self.cur_barrier_id.store(barrier_id + 1, Ordering::SeqCst);
                     handle.state = State::RoundInit(self.num_rounds);
                 }
@@ -475,13 +479,16 @@ impl Future for BarrierHandle {
         self.launched = true;
         match self.state {
             State::Waiting => {
-                if self.barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                let cur = self.cur_barrier_id.load(Ordering::SeqCst);
+                if self.barrier_id > cur {
+                    debug!(target: "barrier", thread = ?std::thread::current().id(), barrier_id = self.barrier_id, cur_barrier_id = cur, "poll: still Waiting, barrier_id ahead");
                     cx.waker().wake_by_ref();
                     return Poll::Pending;
                 }
                 // else if self.barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
                 //     println!("barrier id is less than cur barrier id");
                 // }
+                debug!(target: "barrier", thread = ?std::thread::current().id(), barrier_id = self.barrier_id, cur_barrier_id = cur, "poll: Waiting -> RoundInit(0)");
                 *self.project().state = State::RoundInit(0);
                 cx.waker().wake_by_ref();
                 Poll::Pending
@@ -492,12 +499,14 @@ impl Future for BarrierHandle {
                     self.do_send_round(round);
                     if let Some(recv_pe) = self.do_recv_round(round, 1) {
                         // println!("waiting for pe {:?}", recv_pe);
+                        debug!(target: "barrier", thread = ?std::thread::current().id(), barrier_id = self.barrier_id, round, recv_pe, "poll: RoundInit -> RoundInProgress, waiting on recv_pe");
                         *self.project().state = State::RoundInProgress(round, recv_pe);
                         cx.waker().wake_by_ref();
                         return Poll::Pending;
                     }
                     round += 1;
                 }
+                debug!(target: "barrier", thread = ?std::thread::current().id(), barrier_id = self.barrier_id, "poll: RoundInit complete, all rounds done, advancing cur_barrier_id, Ready");
                 self.cur_barrier_id
                     .store(self.barrier_id + 1, Ordering::SeqCst);
                 *self.project().state = State::RoundInit(round);
@@ -517,12 +526,14 @@ impl Future for BarrierHandle {
                     self.do_send_round(round);
                     if let Some(recv_pe) = self.do_recv_round(round, 1) {
                         // println!("waiting for pe {:?}", recv_pe);
+                        debug!(target: "barrier", thread = ?std::thread::current().id(), barrier_id = self.barrier_id, round, recv_pe, "poll: RoundInProgress continuing, waiting on next recv_pe");
                         *self.project().state = State::RoundInProgress(round, recv_pe);
                         cx.waker().wake_by_ref();
                         return Poll::Pending;
                     }
                     round += 1;
                 }
+                debug!(target: "barrier", thread = ?std::thread::current().id(), barrier_id = self.barrier_id, "poll: RoundInProgress complete, all rounds done, advancing cur_barrier_id, Ready");
                 self.cur_barrier_id
                     .store(self.barrier_id + 1, Ordering::SeqCst);
                 *self.project().state = State::RoundInit(round);

@@ -240,6 +240,7 @@ impl LamellarExecutor for WorkStealing2 {
         LamellarTask {
             task: LamellarTaskInner::LamellarTask(Some(task)),
             executor,
+            task_id: 0,
         }
     }
     fn submit_task<F>(&self, task: F)

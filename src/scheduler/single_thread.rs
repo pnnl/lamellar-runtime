@@ -98,6 +98,7 @@ impl LamellarExecutor for SingleThread {
         LamellarTask {
             task: LamellarTaskInner::LamellarTask(Some(task)),
             executor,
+            task_id,
         }
     }
 

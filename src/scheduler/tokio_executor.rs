@@ -24,6 +24,7 @@ impl LamellarExecutor for TokioRt {
         LamellarTask {
             task: LamellarTaskInner::TokioTask(task),
             executor,
+            task_id: 0,
         }
         // })
     }

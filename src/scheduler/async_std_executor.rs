@@ -25,6 +25,7 @@ impl LamellarExecutor for AsyncStdRt {
         LamellarTask {
             task: LamellarTaskInner::AsyncStdTask(task),
             executor,
+            task_id: 0,
         }
         // })
     }
