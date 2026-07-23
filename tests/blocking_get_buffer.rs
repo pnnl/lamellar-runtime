@@ -7,7 +7,7 @@ macro_rules! create_test {
             #[test]
             #[serial]
             #[allow(non_snake_case)]
-            fn [<$array _ $dist _ $elem _ $num_pes _ $len _blocking__get_buffer>](){
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len _blocking_get__buffer>](){
                 let profile = std::env::var("LAMELLAR_TEST_PROFILE").unwrap_or_else(|_| "release".to_string());
                 let result = Command::new(format!("./target/{}/examples/blocking_get_buffer_test",profile))
                     .arg(stringify!($array))

@@ -16,6 +16,14 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 }
 
 macro_rules! initialize_array {
+    (UnsafeArray,$array:ident,$init_val:ident) => {
+        unsafe {
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
+        }
+    };
     (AtomicArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter()
@@ -129,6 +137,23 @@ fn main() {
     };
 
     match array.as_str() {
+        "UnsafeArray" => match elem.as_str() {
+            "u8" => broadcast_from_pe_into_buffer_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => broadcast_from_pe_into_buffer_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => broadcast_from_pe_into_buffer_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => broadcast_from_pe_into_buffer_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => broadcast_from_pe_into_buffer_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => broadcast_from_pe_into_buffer_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => broadcast_from_pe_into_buffer_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => broadcast_from_pe_into_buffer_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => broadcast_from_pe_into_buffer_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => broadcast_from_pe_into_buffer_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => broadcast_from_pe_into_buffer_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => broadcast_from_pe_into_buffer_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => broadcast_from_pe_into_buffer_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => broadcast_from_pe_into_buffer_test!(UnsafeArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
         "AtomicArray" => match elem.as_str() {
             "u8" => broadcast_from_pe_into_buffer_test!(AtomicArray, u8, len, dist_type),
             "u16" => broadcast_from_pe_into_buffer_test!(AtomicArray, u16, len, dist_type),
@@ -144,6 +169,23 @@ fn main() {
             "isize" => broadcast_from_pe_into_buffer_test!(AtomicArray, isize, len, dist_type),
             "f32" => broadcast_from_pe_into_buffer_test!(AtomicArray, f32, len, dist_type),
             "f64" => broadcast_from_pe_into_buffer_test!(AtomicArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
+        "GlobalLockArray" => match elem.as_str() {
+            "u8" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, u8, len, dist_type),
+            "u16" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, u16, len, dist_type),
+            "u32" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, u32, len, dist_type),
+            "u64" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, u64, len, dist_type),
+            "u128" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, u128, len, dist_type),
+            "usize" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, usize, len, dist_type),
+            "i8" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, i8, len, dist_type),
+            "i16" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, i16, len, dist_type),
+            "i32" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, i32, len, dist_type),
+            "i64" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, i64, len, dist_type),
+            "i128" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, i128, len, dist_type),
+            "isize" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, isize, len, dist_type),
+            "f32" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, f32, len, dist_type),
+            "f64" => broadcast_from_pe_into_buffer_test!(GlobalLockArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         _ => eprintln!("unsupported array type"),

@@ -122,6 +122,23 @@ fn main() {
         _ => panic!("unsupported dist type"),
     };
     match array.as_str() {
+        "UnsafeArray" => match elem.as_str() {
+            "u8" => alltoall_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => alltoall_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => alltoall_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => alltoall_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => alltoall_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => alltoall_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => alltoall_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => alltoall_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => alltoall_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => alltoall_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => alltoall_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => alltoall_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => alltoall_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => alltoall_test!(UnsafeArray, f64, len, dist_type),
+            _ => eprintln!("from test unsupported element type"),
+        },
         "AtomicArray" => match elem.as_str() {
             "u8" => alltoall_test!(AtomicArray, u8, len, dist_type),
             "u16" => alltoall_test!(AtomicArray, u16, len, dist_type),

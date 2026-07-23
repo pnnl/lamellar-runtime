@@ -7,7 +7,7 @@ macro_rules! create_test {
             #[test]
             #[serial]
             #[allow(non_snake_case)]
-            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ xor_at_pe>](){
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ xor__at_pe>](){
                 let profile = std::env::var("LAMELLAR_TEST_PROFILE").unwrap_or_else(|_| "release".to_string());
                 let result = Command::new(format!("./target/{}/examples/xor_at_pe_test",profile))
                     .arg(stringify!($array))

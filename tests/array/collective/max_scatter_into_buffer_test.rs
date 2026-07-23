@@ -16,6 +16,14 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 }
 
 macro_rules! initialize_array {
+    (UnsafeArray,$array:ident,$init_val:ident) => {
+        unsafe {
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
+        }
+    };
     (AtomicArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter()
@@ -57,7 +65,7 @@ macro_rules! max_scatter_into_buffer_test{
             let array_total_len = $len;
             let mem_seg_len = array_total_len;
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into();
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len * num_pes, $dist).block().into();
 
             let mut shared_mem_region = world.alloc_shared_mem_region(mem_seg_len).block();
 
@@ -123,6 +131,23 @@ fn main() {
     };
 
     match array.as_str() {
+        "UnsafeArray" => match elem.as_str() {
+            "u8" => max_scatter_into_buffer_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => max_scatter_into_buffer_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => max_scatter_into_buffer_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => max_scatter_into_buffer_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => max_scatter_into_buffer_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => max_scatter_into_buffer_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => max_scatter_into_buffer_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => max_scatter_into_buffer_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => max_scatter_into_buffer_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => max_scatter_into_buffer_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => max_scatter_into_buffer_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => max_scatter_into_buffer_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => max_scatter_into_buffer_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => max_scatter_into_buffer_test!(UnsafeArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
         "AtomicArray" => match elem.as_str() {
             "u8" => max_scatter_into_buffer_test!(AtomicArray, u8, len, dist_type),
             "u16" => max_scatter_into_buffer_test!(AtomicArray, u16, len, dist_type),

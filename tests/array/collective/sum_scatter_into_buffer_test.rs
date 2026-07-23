@@ -16,6 +16,14 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 }
 
 macro_rules! initialize_array {
+    (UnsafeArray,$array:ident,$init_val:ident) => {
+        unsafe {
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
+        }
+    };
     (AtomicArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter()
@@ -123,6 +131,23 @@ fn main() {
     };
 
     match array.as_str() {
+        "UnsafeArray" => match elem.as_str() {
+            "u8" => sum_scatter_into_buffer_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => sum_scatter_into_buffer_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => sum_scatter_into_buffer_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => sum_scatter_into_buffer_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => sum_scatter_into_buffer_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => sum_scatter_into_buffer_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => sum_scatter_into_buffer_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => sum_scatter_into_buffer_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => sum_scatter_into_buffer_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => sum_scatter_into_buffer_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => sum_scatter_into_buffer_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => sum_scatter_into_buffer_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => sum_scatter_into_buffer_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => sum_scatter_into_buffer_test!(UnsafeArray, f64, len, dist_type),
+            _ => eprintln!("unsupported element type"),
+        },
         "AtomicArray" => match elem.as_str() {
             "u8" => sum_scatter_into_buffer_test!(AtomicArray, u8, len, dist_type),
             "u16" => sum_scatter_into_buffer_test!(AtomicArray, u16, len, dist_type),
