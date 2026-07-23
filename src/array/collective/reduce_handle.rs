@@ -4,7 +4,7 @@ use std::{
     pin::Pin, sync::Arc, task::{Context, Poll}
 };
 
-use crate::{AsLamellarBuffer, Dist, LamellarTask, active_messaging::AMCounters, lamellae::collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle}, scheduler::Scheduler};
+use crate::{AsLamellarBuffer, Dist, LamellarTask, active_messaging::AMCounters, lamellae::collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle}, scheduler::Scheduler};
 use crate::array::LamellarByteArray;
 use crate::lamellae::comm::collective::CollectiveAllReduceOpHandle;
 use crate::warnings::RuntimeWarning;
@@ -564,25 +564,25 @@ impl<T: Dist, B: AsLamellarBuffer<T>> Future for ArrayCollectiveReduceIntoBuffer
     }
 }
 
-#[pin_project]
-pub(crate) struct ArrayCollectiveReduceInPlaceHandle<T: Dist> {
-    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
-    #[pin]
-    pub(crate) state: ArrayCollectiveReduceInPlaceState<T>,
-    pub(crate) spawned: bool,
-}
-
-#[pin_project(project = ArrayCollectiveReduceInPlaceStateProj)]
-pub(crate) enum ArrayCollectiveReduceInPlaceState<T: Dist> {
-    #[allow(dead_code)]
-    CollectiveReduceInPlace(#[pin] CollectiveReduceInPlaceOpHandle<T>),
-    // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
-    // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
-    // // LoadOp(ArrayFetchOpHandle<T>),
-    // RdmaGet(RdmaGetHandle<T>),
-    // AtomicGet(AtomicFetchOpHandle<T>),
-}
-
+// TODO: reduce_in_place never wired up for any backend, CollectiveReduceInPlaceOpHandle commented out in comm/collective.rs
+// #[pin_project]
+// pub(crate) struct ArrayCollectiveReduceInPlaceHandle<T: Dist> {
+//     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
+//     #[pin]
+//     pub(crate) state: ArrayCollectiveReduceInPlaceState<T>,
+//     pub(crate) spawned: bool,
+// }
+//
+// #[pin_project(project = ArrayCollectiveReduceInPlaceStateProj)]
+// pub(crate) enum ArrayCollectiveReduceInPlaceState<T: Dist> {
+//     CollectiveReduceInPlace(#[pin] CollectiveReduceInPlaceOpHandle<T>),
+//     // LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
+//     // RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
+//     // // LoadOp(ArrayFetchOpHandle<T>),
+//     // RdmaGet(RdmaGetHandle<T>),
+//     // AtomicGet(AtomicFetchOpHandle<T>),
+// }
+//
 // impl<T: Dist> ArrayCollectiveReduceInPlaceHandle<T> {
 //     /// This method will spawn the associated Array RDMA Operation on the work queue,
 //     /// initiating the remote operation.
@@ -608,17 +608,16 @@ pub(crate) enum ArrayCollectiveReduceInPlaceState<T: Dist> {
 //         }
 //     }
 // }
-
-
-impl<T: Dist> Future for ArrayCollectiveReduceInPlaceHandle<T> {
-    type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        match this.state.project() {
-            ArrayCollectiveReduceInPlaceStateProj::CollectiveReduceInPlace(req) => {
-                req.poll(cx)
-            }
-        }
-    }
-}
+//
+// impl<T: Dist> Future for ArrayCollectiveReduceInPlaceHandle<T> {
+//     type Output = ();
+//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+//         let this = self.project();
+//         match this.state.project() {
+//             ArrayCollectiveReduceInPlaceStateProj::CollectiveReduceInPlace(req) => {
+//                 req.poll(cx)
+//             }
+//         }
+//     }
+// }
 
