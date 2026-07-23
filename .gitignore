@@ -17,3 +17,13 @@ TODO
 /.cargo
 /test_results
 /stable
+/.claude
+/.github
+/archive_results
+/bin
+/examples_results
+/graphify*
+/node_modules
+/output*
+/test_out*
+/test_results*
