@@ -239,13 +239,24 @@ fn create_launch_block(
                 }
                 if pes_per_node.is_some() && !has_flag(&prterun_args, &["--map-by"]) {
                     // Keep the mapping *policy* as "node" so ranks still spread across
-                    // all allocated nodes. `PE=<n>` already binds each rank to <n>
+                    // all allocated nodes. `PE=<n>` implicitly binds each rank to <n>
                     // cpus, and PRRTE rejects combining a PE= directive with any
                     // --bind-to other than "core"/"hwt" -- so NUMA-awareness here
-                    // comes entirely from sizing PE= to threads_per_pe (derived from
-                    // available cores / pes_per_node), not from an explicit --bind-to.
+                    // comes entirely from sizing PE= to threads_per_pe. But if a single
+                    // PE needs more cores than fit in one NUMA domain, that per-core
+                    // binding would have to span multiple packages, which PRRTE always
+                    // refuses ("bound to CPUs in more than one package"). In that case
+                    // drop PE= entirely and let the rank float across the whole node.
+                    let spans_multiple_domains = match numa_domains {
+                        Some(d) if d > 1 => pes_per_node.unwrap_or(1) < d,
+                        _ => false,
+                    };
                     prterun_args.push("--map-by".to_string());
-                    prterun_args.push(format!("node:PE={}", threads_per_pe));
+                    if spans_multiple_domains {
+                        prterun_args.push("node".to_string());
+                    } else {
+                        prterun_args.push(format!("node:PE={}", threads_per_pe));
+                    }
                 }
             }
         }
@@ -589,7 +600,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
                 #fini_prof
                 result
             }
-            println!("lamellar_main: process exiting");
+            // println!("lamellar_main: process exiting");
         }
     };
     TokenStream::from(res)
