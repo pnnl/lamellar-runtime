@@ -254,20 +254,28 @@ Instead of hand-writing launcher-native flags (`--map-by node:PE=<N> --np <N>` f
 - `--pes <N>` — total number of PEs across all nodes
 - `--pes-per-node <N>` — PEs per node
 
-Give either or both (`LAMELLAR_PES`/`LAMELLAR_PES_PER_NODE` env vars work as fallbacks too). If neither is given (and `--nodes` wasn't either): with the `local` backend (the default when no other backend feature is enabled, or set explicitly via `LAMELLAR_BACKEND=local`), defaults to a single PE using all available threads; every other backend (e.g. `shmem`) defaults to one PE per NUMA domain on the host. Cores bound per PE come from `LAMELLAR_THREADS`; if unset, it defaults to `available cores / --pes-per-node` (or just available cores, if `--pes-per-node` wasn't given). For prterun, this is injected as `--map-by node:PE=<N>` — PRRTE's `PE=<N>` already binds each rank to N cpus, so on a host with more than one NUMA domain (detected via the `hwlocality`/hwloc bindings) NUMA-awareness comes from sizing `<N>` correctly rather than an explicit `--bind-to` (PRRTE rejects combining `PE=` with any `--bind-to` other than `core`/`hwt`). If `--pes-per-node` is smaller than the NUMA domain count, a single PE's cores would have to span more than one domain/package, which PRRTE always refuses — in that case `PE=` is dropped entirely and `--map-by node` is used instead, letting the rank float across the whole node. For srun, `--cpu-bind=ldoms` is added when multiple NUMA domains are detected. If you already pass a native flag (`--np`, `--map-by`, `--ntasks[-per-node]`, `--cpus-per-task`, `--cpu-bind`) yourself, it's left alone and nothing is injected on top of it.
+Give either or both (`LAMELLAR_PES`/`LAMELLAR_PES_PER_NODE` env vars work as fallbacks too). If neither is given (and `--nodes` wasn't either): with the `local` backend (the default when no other backend feature is enabled, or set explicitly via `LAMELLAR_BACKEND=local`), defaults to a single PE using all available threads; every other backend (e.g. `shmem`) defaults to one PE per NUMA domain on the host. Cores bound per PE come from `--threads-per-pe <N>` (or `LAMELLAR_THREADS` if the flag isn't given); if neither is set, it defaults to `available cores / --pes-per-node` (or just available cores, if `--pes-per-node` wasn't given). For prterun, this is injected as `--map-by node:PE=<N>` — PRRTE's `PE=<N>` already binds each rank to N cpus, so on a host with more than one NUMA domain (detected via the `hwlocality`/hwloc bindings) NUMA-awareness comes from sizing `<N>` correctly rather than an explicit `--bind-to` (PRRTE rejects combining `PE=` with any `--bind-to` other than `core`/`hwt`). If `--pes-per-node` is smaller than the NUMA domain count, a single PE's cores would have to span more than one domain/package, which PRRTE always refuses — in that case `PE=` is dropped entirely and `--map-by node` is used instead, letting the rank float across the whole node. For srun, `--cpu-bind=ldoms` is added when multiple NUMA domains are detected. If you already pass a native flag (`--np`, `--map-by`, `--ntasks[-per-node]`, `--cpus-per-task`, `--cpu-bind`) yourself, it's left alone and nothing is injected on top of it.
 
 ```
-cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --pes 8 --pes-per-node 4
+cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --pes 8 --pes-per-node 4 --threads-per-pe 4
 ```
+
+### Other launch flags
+
+- `--lamellae <name>` — sets `LAMELLAR_BACKEND` for the launched job (same values as the `LAMELLAR_BACKEND` env var: `local`, `shmem`, `rofi_c`, `libfabric`, `libfabric-sys`, `libfabric-async`, `ucx`).
+- `--cmd-queue <variant>` — sets `LAMELLAR_CMD_QUEUE` for the launched job (`batched`, `get`, `geteager`, `getslots`, `put`, `putslots`, `puteager`).
+- `--help` / `-h` — print all launch flags recognized after the second `--` and exit, without launching anything.
 
 ## distributed backends (multi-process, multi-system)
 1. allocate compute nodes on the cluster:
     - ```salloc -N 2```
 2. run your application the same way as above (`cargo run ... -- <app args> -- <launcher args>`) — `#[lamellar::main]` handles invoking `prterun`/`srun` across the allocated nodes; select the distributed backend via `LAMELLAR_BACKEND` (e.g. `rofi_c`, `libfabric`, `ucx`) or the corresponding `Backend::*` variant in the world builder.
 
-### Auto-allocation (`--nodes`)
+### Auto-allocation (`--nodes`, requires the `with-salloc` feature)
 
 Step 1 above can be skipped: pass `--nodes <N>` after the second `--` (or set `LAMELLAR_NODES`) and, if you're not already inside a SLURM allocation, `#[lamellar::main]` runs `salloc -N <N> <your original command>` for you and blocks until it's granted, then proceeds as normal inside the allocation. If `--pes`/`--pes-per-node` is given without `--nodes`, the node count is derived from it (`nodes = ceil(pes / pes_per_node)`); giving all three requires them to agree (`pes == nodes * pes_per_node`) or the run fails fast with an error instead of guessing. If `salloc` isn't found, or no node count can be resolved, this step is skipped and behavior is unchanged from before.
+
+This behavior is opt-in: build with `--features with-salloc` (in addition to `enable-lamellar-main`). Without it, `--nodes`/`LAMELLAR_NODES` is still parsed and still feeds PE-count defaults, but no `salloc` call is made — a warning is printed and the run proceeds as if `--nodes` weren't given.
 
 Extra `salloc` flags (partition, time limit, account, qos, ...) can be passed through with `--salloc-opts`: everything after it, up to the next `--` (or end of args), is forwarded to `salloc` verbatim.
 

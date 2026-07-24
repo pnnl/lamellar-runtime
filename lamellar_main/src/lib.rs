@@ -272,6 +272,53 @@ fn create_launch_block(
         }
     };
 
+    let salloc_opts_help = if cfg!(feature = "with-salloc") {
+        quote! {
+            println!("  --salloc-opts ...      extra salloc args, terminated by `--` or end of args");
+        }
+    } else {
+        quote! {}
+    };
+
+    let salloc_block = if cfg!(feature = "with-salloc") {
+        quote! {
+            // If we're not already inside a SLURM allocation and a node count was
+            // resolved, request one via `salloc` and re-invoke this same binary
+            // (with its original argv) inside it.
+            let in_allocation = std::env::var("SLURM_JOB_ID").is_ok();
+            if !in_allocation {
+                if let Some(n) = nodes {
+                    let salloc_result = std::process::Command::new("salloc")
+                        .arg("-N")
+                        .arg(n.to_string())
+                        .arg("--exclusive")
+                        .args(&salloc_opts)
+                        .args(&original_args)
+                        .status();
+                    match salloc_result {
+                        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+                        Err(e) => {
+                            eprintln!(
+                                "lamellar_main: --nodes given but failed to spawn salloc ({}), continuing without allocation",
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        quote! {
+            let _ = &salloc_opts;
+            let _ = &original_args;
+            if nodes.is_some() && std::env::var("SLURM_JOB_ID").is_err() {
+                eprintln!(
+                    "lamellar_main: --nodes given but this binary was built without the \"with-salloc\" feature; not requesting a SLURM allocation."
+                );
+            }
+        }
+    };
+
     let binary_update_block = create_binary_update_block();
     quote! {
         let prte_launched = std::env::var(#env_var).is_ok();
@@ -298,12 +345,32 @@ fn create_launch_block(
             let mut pes: Option<u32> = None;
             let mut pes_per_node: Option<u32> = None;
             let mut salloc_opts: Vec<String> = Vec::new();
+            let mut threads_per_pe_flag: Option<u32> = None;
+            let mut lamellae: Option<String> = None;
+            let mut cmd_queue: Option<String> = None;
 
             // Collect any additional arguments after "--" to pass to prterun
             let pos = args.iter().position(|x| x == "--");
             // println!("-- position: {:?}", pos);
             if let Some(pos) = pos {
-                let mut extra = args.split_off(pos).into_iter().skip(1).peekable();
+                let extra_args: Vec<String> = args.split_off(pos).into_iter().skip(1).collect();
+                if extra_args.iter().any(|a| a == "--help" || a == "-h") {
+                    println!("lamellar_main launch options (pass after `--`):");
+                    println!("  --nodes <N>            nodes to allocate via salloc (requires \"with-salloc\" feature) [env: LAMELLAR_NODES]");
+                    println!("  --pes <N>              total PEs across all nodes [env: LAMELLAR_PES]");
+                    println!("  --pes-per-node <N>     PEs per node [env: LAMELLAR_PES_PER_NODE]");
+                    println!("  --threads-per-pe <N>   worker threads per PE [env: LAMELLAR_THREADS]");
+                    println!("  --lamellae <name>      lamellae backend for the launched job [env: LAMELLAR_BACKEND]");
+                    println!("  --cmd-queue <variant>  command queue protocol for the launched job [env: LAMELLAR_CMD_QUEUE]");
+                    #salloc_opts_help
+                    println!("  --output-dir <dir>     redirect per-PE stdout/stderr into <dir>");
+                    println!("  --time                 print world-build/application timing");
+                    println!("  --gdb [bt]             (experimental) launch each PE under rust-gdb (bt = auto backtrace on crash)");
+                    println!("  --help, -h             print this message and exit");
+                    println!("Any other flags are passed through verbatim to the underlying launcher (prterun/srun).");
+                    std::process::exit(0);
+                }
+                let mut extra = extra_args.into_iter().peekable();
                 while let Some(x) = extra.next() {
                     if x == "--time" {
                         time = true;
@@ -324,6 +391,12 @@ fn create_launch_block(
                         pes = extra.next().and_then(|n| n.parse().ok());
                     } else if x == "--pes-per-node" {
                         pes_per_node = extra.next().and_then(|n| n.parse().ok());
+                    } else if x == "--threads-per-pe" {
+                        threads_per_pe_flag = extra.next().and_then(|n| n.parse().ok());
+                    } else if x == "--lamellae" {
+                        lamellae = extra.next();
+                    } else if x == "--cmd-queue" {
+                        cmd_queue = extra.next();
                     } else if x == "--salloc-opts" {
                         // Everything up to the next "--" (or end of args) is passed
                         // through to `salloc` verbatim, e.g.
@@ -377,30 +450,7 @@ fn create_launch_block(
                 other => other,
             };
 
-            // If we're not already inside a SLURM allocation and a node count was
-            // resolved, request one via `salloc` and re-invoke this same binary
-            // (with its original argv) inside it.
-            let in_allocation = std::env::var("SLURM_JOB_ID").is_ok();
-            if !in_allocation {
-                if let Some(n) = nodes {
-                    let salloc_result = std::process::Command::new("salloc")
-                        .arg("-N")
-                        .arg(n.to_string())
-                        .arg("--exclusive")
-                        .args(&salloc_opts)
-                        .args(&original_args)
-                        .status();
-                    match salloc_result {
-                        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
-                        Err(e) => {
-                            eprintln!(
-                                "lamellar_main: --nodes given but failed to spawn salloc ({}), continuing without allocation",
-                                e
-                            );
-                        }
-                    }
-                }
-            }
+            #salloc_block
 
             // Best-effort NUMA domain count on the current host, used to decide
             // whether to bind PEs by NUMA domain instead of plain node. Absence of
@@ -426,9 +476,8 @@ fn create_launch_block(
                 (pes, pes_per_node)
             };
 
-            let threads_per_pe: u32 = std::env::var("LAMELLAR_THREADS")
-                .ok()
-                .and_then(|s| s.parse().ok())
+            let threads_per_pe: u32 = threads_per_pe_flag
+                .or_else(|| std::env::var("LAMELLAR_THREADS").ok().and_then(|s| s.parse().ok()))
                 .unwrap_or_else(|| {
                     let cores = std::thread::available_parallelism()
                         .map(|n| n.get() as u32)
@@ -461,6 +510,12 @@ fn create_launch_block(
             let mut launcher_cmd = std::process::Command::new(#launcher_path);
             if time {
                 launcher_cmd.env("LAMELLAR_MAIN_TIME", "1");
+            }
+            if let Some(ref backend) = lamellae {
+                launcher_cmd.env("LAMELLAR_BACKEND", backend);
+            }
+            if let Some(ref cq) = cmd_queue {
+                launcher_cmd.env("LAMELLAR_CMD_QUEUE", cq);
             }
             #output_dir_block
             println!("Launching with {:?}: {:?} {:?}", #env_var, #launcher_path, prterun_args.join(" "));

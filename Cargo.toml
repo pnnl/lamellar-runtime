@@ -140,6 +140,7 @@ opt-level = 3
 default = ["with-pmix-vendored", "enable-lamellar-main"]
 
 enable-lamellar-main = ["lamellar_main/use-prterun", "prrte-sys/vendored", "hwlocality"]
+with-salloc = ["lamellar_main/with-salloc"]
 enable-stats = []
 enable-rofi-c = [
     "rofisys/pmix",
