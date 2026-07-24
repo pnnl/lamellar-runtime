@@ -36,7 +36,10 @@ pub(crate) struct LocalAtomicFuture<T> {
 impl<T: 'static> LocalAtomicFuture<T> {
     fn exec_op(&mut self) {
         assert!(self.offset < unsafe { self.alloc.as_mut_slice::<T>().len() });
-        net_atomic_op(&self.op, &CommAllocAddr(self.alloc.start() + self.offset));
+        net_atomic_op(
+            &self.op,
+            &CommAllocAddr(self.alloc.start() + self.offset * std::mem::size_of::<T>()),
+        );
         self.spawned = true;
     }
     pub(crate) fn block(mut self) {
@@ -92,7 +95,7 @@ impl<T: Remote> LocalAtomicFetchFuture<T> {
         assert!(self.offset < unsafe { self.alloc.as_mut_slice::<T>().len() });
         net_atomic_fetch_op(
             &self.op,
-            &CommAllocAddr(self.alloc.start() + self.offset),
+            &CommAllocAddr(self.alloc.start() + self.offset * std::mem::size_of::<T>()),
             self.result.as_mut(),
         );
 
@@ -157,7 +160,7 @@ impl<T: Remote> LocalAtomicCompareExchangeFuture<T> {
         self.result = Some(net_atomic_compare_exchange(
             self.current,
             self.new,
-            &CommAllocAddr(self.alloc.start() + self.offset),
+            &CommAllocAddr(self.alloc.start() + self.offset * std::mem::size_of::<T>()),
         ));
         self.spawned = true;
     }
@@ -242,11 +245,17 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         offset: usize,
     ) {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
-        net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
+        net_atomic_op(
+            &op,
+            &CommAllocAddr(self.start() + offset * std::mem::size_of::<T>()),
+        );
     }
     fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, _pe: usize, offset: usize) {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
-        net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
+        net_atomic_op(
+            &op,
+            &CommAllocAddr(self.start() + offset * std::mem::size_of::<T>()),
+        );
     }
     fn atomic_op_all<T: Remote>(
         &self,
@@ -267,7 +276,10 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
     }
     fn atomic_op_all_unmanaged<T: Remote>(&self, op: AtomicOp<T>, offset: usize) {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
-        net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
+        net_atomic_op(
+            &op,
+            &CommAllocAddr(self.start() + offset * std::mem::size_of::<T>()),
+        );
     }
     fn atomic_fetch_op<T: Remote>(
         &self,
@@ -297,7 +309,11 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
     ) -> T {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
         let mut result: T = unsafe { std::mem::zeroed() };
-        net_atomic_fetch_op(&op, &CommAllocAddr(self.start() + offset), &mut result);
+        net_atomic_fetch_op(
+            &op,
+            &CommAllocAddr(self.start() + offset * std::mem::size_of::<T>()),
+            &mut result,
+        );
         result
     }
     fn atomic_compare_exchange<T: Remote + PartialEq>(
@@ -330,6 +346,10 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         offset: usize,
     ) -> Result<T, T> {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
-        net_atomic_compare_exchange(current, new, &CommAllocAddr(self.start() + offset))
+        net_atomic_compare_exchange(
+            current,
+            new,
+            &CommAllocAddr(self.start() + offset * std::mem::size_of::<T>()),
+        )
     }
 }
