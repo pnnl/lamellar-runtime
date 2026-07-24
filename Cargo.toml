@@ -37,6 +37,9 @@ prrte-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", opti
 lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
 lamellar-ucc-sys = { git = "https://github.com/pnnl/lamellar.git", branch = "dev", optional = true }
 rofisys = { git = "https://github.com/pnnl/rofi-sys.git", optional = true }
+hwlocality = { version = "1.0.0-alpha.12", optional = true, features = [
+    "vendored",
+] }
 
 # libfabric = { path = "../lamellar-repo/communication_frameworks/libfabric", features = [
 #     # "use-async-std",
@@ -136,7 +139,7 @@ opt-level = 3
 # default = ["pmi/with-pmix-vendored", "pmix-sys/vendored"]
 default = ["with-pmix-vendored", "enable-lamellar-main"]
 
-enable-lamellar-main = ["lamellar_main/use-prterun", "prrte-sys/vendored"]
+enable-lamellar-main = ["lamellar_main/use-prterun", "prrte-sys/vendored", "hwlocality"]
 enable-stats = []
 enable-rofi-c = [
     "rofisys/pmix",

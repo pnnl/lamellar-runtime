@@ -205,12 +205,61 @@ fn create_launch_block(
     };
     // dbg!("env var: {:?}", std::env::vars());
 
+    let pe_injection_block = if launcher_type == "srun" {
+        quote! {
+            if pes.is_some() || pes_per_node.is_some() {
+                if let Some(ppn) = pes_per_node {
+                    if !has_flag(&prterun_args, &["--ntasks-per-node"]) {
+                        prterun_args.push(format!("--ntasks-per-node={}", ppn));
+                    }
+                } else if let Some(p) = pes {
+                    if !has_flag(&prterun_args, &["--ntasks"]) {
+                        prterun_args.push(format!("--ntasks={}", p));
+                    }
+                }
+                if !has_flag(&prterun_args, &["--cpus-per-task"]) {
+                    prterun_args.push(format!("--cpus-per-task={}", threads_per_pe));
+                }
+                if let Some(d) = numa_domains {
+                    if d > 1 && !has_flag(&prterun_args, &["--cpu-bind"]) {
+                        prterun_args.push("--cpu-bind=ldoms".to_string());
+                    }
+                }
+            }
+        }
+    } else {
+        // prterun (or other launcher using prterun-style flags)
+        quote! {
+            if pes.is_some() || pes_per_node.is_some() {
+                if let Some(p) = pes {
+                    if !has_flag(&prterun_args, &["--np", "-np"]) {
+                        prterun_args.push("--np".to_string());
+                        prterun_args.push(p.to_string());
+                    }
+                }
+                if pes_per_node.is_some() && !has_flag(&prterun_args, &["--map-by"]) {
+                    // Keep the mapping *policy* as "node" so ranks still spread across
+                    // all allocated nodes. `PE=<n>` already binds each rank to <n>
+                    // cpus, and PRRTE rejects combining a PE= directive with any
+                    // --bind-to other than "core"/"hwt" -- so NUMA-awareness here
+                    // comes entirely from sizing PE= to threads_per_pe (derived from
+                    // available cores / pes_per_node), not from an explicit --bind-to.
+                    prterun_args.push("--map-by".to_string());
+                    prterun_args.push(format!("node:PE={}", threads_per_pe));
+                }
+            }
+        }
+    };
+
     let binary_update_block = create_binary_update_block();
     quote! {
         let prte_launched = std::env::var(#env_var).is_ok();
         if !prte_launched {
             // Collect command line arguments
             let mut args: Vec<String> = std::env::args().collect();
+            // Full original argv, preserved so we can re-invoke this same binary+args
+            // under `salloc` if an allocation needs to be requested first.
+            let original_args = args.clone();
 
             // println!("args: {:?}", args);
 
@@ -224,6 +273,9 @@ fn create_launch_block(
             let mut time=false;
             let mut output_dir = String::new();
             let mut gdb_mode: Option<String> = None;
+            let mut nodes: Option<u32> = None;
+            let mut pes: Option<u32> = None;
+            let mut pes_per_node: Option<u32> = None;
 
             // Collect any additional arguments after "--" to pass to prterun
             let pos = args.iter().position(|x| x == "--");
@@ -244,6 +296,12 @@ fn create_launch_block(
                         } else {
                             gdb_mode = Some("plain".to_string());
                         }
+                    } else if x == "--nodes" {
+                        nodes = extra.next().and_then(|n| n.parse().ok());
+                    } else if x == "--pes" {
+                        pes = extra.next().and_then(|n| n.parse().ok());
+                    } else if x == "--pes-per-node" {
+                        pes_per_node = extra.next().and_then(|n| n.parse().ok());
                     } else {
                         prterun_args.push(x.to_string());
                     }
@@ -263,6 +321,87 @@ fn create_launch_block(
                 }
                 prterun_args.push("--args".to_string());
             }
+
+            // Resolve --nodes/--pes/--pes-per-node, falling back to env vars, then
+            // deriving whichever of the three wasn't given from the other two.
+            let nodes = nodes.or_else(|| std::env::var("LAMELLAR_NODES").ok().and_then(|s| s.parse().ok()));
+            let pes = pes.or_else(|| std::env::var("LAMELLAR_PES").ok().and_then(|s| s.parse().ok()));
+            let pes_per_node = pes_per_node.or_else(|| std::env::var("LAMELLAR_PES_PER_NODE").ok().and_then(|s| s.parse().ok()));
+
+            let (nodes, pes, pes_per_node): (Option<u32>, Option<u32>, Option<u32>) = match (nodes, pes, pes_per_node) {
+                (Some(n), Some(p), Some(ppn)) if n > 0 && ppn > 0 => {
+                    if p != n * ppn {
+                        eprintln!(
+                            "lamellar_main: inconsistent --nodes {} / --pes {} / --pes-per-node {} (expected pes == nodes * pes_per_node)",
+                            n, p, ppn
+                        );
+                        std::process::exit(1);
+                    }
+                    (Some(n), Some(p), Some(ppn))
+                }
+                (None, Some(p), Some(ppn)) if ppn > 0 => (Some((p + ppn - 1) / ppn), Some(p), Some(ppn)),
+                (Some(n), None, Some(ppn)) if n > 0 => (Some(n), Some(n * ppn), Some(ppn)),
+                (Some(n), Some(p), None) if n > 0 => (Some(n), Some(p), Some((p + n - 1) / n)),
+                other => other,
+            };
+
+            // If we're not already inside a SLURM allocation and a node count was
+            // resolved, request one via `salloc` and re-invoke this same binary
+            // (with its original argv) inside it.
+            let in_allocation = std::env::var("SLURM_JOB_ID").is_ok();
+            if !in_allocation {
+                if let Some(n) = nodes {
+                    let salloc_result = std::process::Command::new("salloc")
+                        .arg("-N")
+                        .arg(n.to_string())
+                        .arg("--exclusive")
+                        .args(&original_args)
+                        .status();
+                    match salloc_result {
+                        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+                        Err(e) => {
+                            eprintln!(
+                                "lamellar_main: --nodes given but failed to spawn salloc ({}), continuing without allocation",
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Best-effort NUMA domain count on the current host, used to decide
+            // whether to bind PEs by NUMA domain instead of plain node. Absence of
+            // a usable hwloc topology just disables NUMA-aware binding.
+            let numa_domains: Option<u32> = ::lamellar::numa_domain_count();
+
+            // If only --nodes was given (no --pes/--pes-per-node), default to one
+            // PE per NUMA domain on the allocated node(s).
+            let (pes, pes_per_node) = if pes.is_none() && pes_per_node.is_none() {
+                if let Some(n) = nodes {
+                    let ppn = numa_domains.unwrap_or(1);
+                    (Some(n * ppn), Some(ppn))
+                } else {
+                    (pes, pes_per_node)
+                }
+            } else {
+                (pes, pes_per_node)
+            };
+
+            let threads_per_pe: u32 = std::env::var("LAMELLAR_THREADS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_else(|| {
+                    let cores = std::thread::available_parallelism()
+                        .map(|n| n.get() as u32)
+                        .unwrap_or(4);
+                    (cores / pes_per_node.unwrap_or(1).max(1)).max(1)
+                });
+
+            let has_flag = |args: &Vec<String>, needles: &[&str]| {
+                args.iter().any(|a| needles.iter().any(|n| a.starts_with(n)))
+            };
+
+            #pe_injection_block
 
             let mut ld_library_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_else(|_| String::new());
 

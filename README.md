@@ -100,6 +100,7 @@ Below are a few small examples highlighting some of the features of lamellar, mo
 You can select which backend to use at runtime as shown below:
 ```
 use lamellar::Backend;
+#[lamellar::main]
 fn main(){
  let mut world = lamellar::LamellarWorldBuilder::new()
         .with_lamellae( Default::default() ) //default is `Local` unless a distributed backend feature is active
@@ -134,6 +135,7 @@ impl LamellarAM for HelloWorld {
     }
 }
 
+#[lamellar::main] // launches the requested PEs (via prterun/srun) for you, see "Running Lamellar Applications" below; you still build the world yourself
 fn main(){
     let mut world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -154,6 +156,7 @@ Please refer to the [LamellarArray](https://docs.rs/lamellar/latest/lamellar/arr
 ```
 use lamellar::array::prelude::*;
 
+#[lamellar::main]
 fn main(){
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -186,6 +189,7 @@ impl LamellarAM for DarcAm {
     }
 }
 
+#[lamellar::main]
 fn main(){
     let mut world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -218,23 +222,56 @@ For both environments, build your application as normal
 
 ```cargo build (--release)```
 # Running Lamellar Applications
-There are a number of ways to run Lamellar applications, mostly dictated by the lamellae you want to use.
-## local (single-process, single system)
-1. directly launch the executable
-    - ```cargo run --release```
-## shmem (multi-process, single system)
-1. grab the [lamellar_run.sh](https://github.com/pnnl/lamellar-runtime/blob/master/lamellar_run.sh)
-2. Use `lamellar_run.sh` to launch your application
-    - ```./lamellar_run -N=2 -T=10 <appname>```
-        - `N` number of PEs (processes) to launch (Default=1)
-        - `T` number of threads Per PE (Default = number of cores/ number of PEs)
-        - assumes `<appname>` executable is located at `./target/release/<appname>`
-## rofi (multi-process, multi-system)
+A Lamellar application's `main` function must be annotated with `#[lamellar::main]` (see examples above), which is responsible for launching the requested number of PEs. You still construct the world yourself (e.g. via `LamellarWorldBuilder`) inside `main`.
+
+The generated `main` detects whether it's already running as a launched PE (e.g. under PRRTE/srun); if not, it re-executes itself under a launcher (`prterun` by default, or `srun` with the `use-srun` feature) using the arguments given after the launcher-args separator described below. This means a single `cargo run`/binary invocation transparently becomes a multi-PE job — you no longer need a separate `lamellar_run.sh` step.
+
+Before launching, `#[lamellar::main]` also patches the binary's `RPATH`/`RUNPATH` (via `readelf`/`patchelf`) with the build-output library directories found on `LD_LIBRARY_PATH`, so launched PEs can find dependencies like libfabric/UCX/rofi without you having to export `LD_LIBRARY_PATH` yourself. If this patching fails for some reason (e.g. `patchelf`/`readelf` unavailable), fall back to sourcing the generated `lamellar_env.sh` (built by `build.rs`) before running:
+```
+source lamellar_env.sh
+```
+
+## local / shmem (single system, one or many processes)
+Launch directly, no separate launcher required:
+```cargo run --release --example <example-name> -- <app args>```
+
+To run multiple PEs on a single system (shared-memory backend), add a second `--`-separated section with launcher args:
+```
+LAMELLAR_BACKEND=shmem cargo run --profile release --features '<feature-list>' --example <example-name> -- <app args> -- --map-by node:PE=4 --np <N>
+```
+- everything before the first `--` is `cargo`'s own arguments (profile, features, which binary/example to build)
+- everything between the two `--` is forwarded to your application unmodified
+- everything after the second `--` is forwarded to the launcher (`prterun`/`srun`) — `--np <N>` sets the number of PEs, `--map-by` controls process/thread placement, etc.
+
+Example (uses `enable-ucx`, `enable-libfabric*`, `enable-rofi-c`, and `tokio-executor` features together, launching 2 PEs, 4 threads each):
+```
+cargo run --profile release --features 'enable-ucx,enable-libfabric,enable-libfabric-sys,enable-libfabric-async,enable-rofi-c,tokio-executor' --example load_store_test -- AtomicArray Block f32 128 -- --map-by node:PE=4 --np 2
+```
+
+### Consistent PE flags (`--pes` / `--pes-per-node`)
+
+Instead of hand-writing launcher-native flags (`--map-by node:PE=<N> --np <N>` for prterun, `--ntasks-per-node=<N> --cpus-per-task=<N>` for srun), you can use two launcher-agnostic flags after the second `--`, and `#[lamellar::main]` translates them to whichever launcher is active (`prterun` or `srun`):
+- `--pes <N>` — total number of PEs across all nodes
+- `--pes-per-node <N>` — PEs per node
+
+Give either or both (`LAMELLAR_PES`/`LAMELLAR_PES_PER_NODE` env vars work as fallbacks too). Cores bound per PE come from `LAMELLAR_THREADS`; if unset, it defaults to `available cores / --pes-per-node` (or just available cores, if `--pes-per-node` wasn't given). For prterun, this is injected as `--map-by node:PE=<N>` — PRRTE's `PE=<N>` already binds each rank to N cpus, so on a host with more than one NUMA domain (detected via the `hwlocality`/hwloc bindings) NUMA-awareness comes from sizing `<N>` correctly rather than an explicit `--bind-to` (PRRTE rejects combining `PE=` with any `--bind-to` other than `core`/`hwt`). For srun, `--cpu-bind=ldoms` is added when multiple NUMA domains are detected. If you already pass a native flag (`--np`, `--map-by`, `--ntasks[-per-node]`, `--cpus-per-task`, `--cpu-bind`) yourself, it's left alone and nothing is injected on top of it.
+
+```
+cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --pes 8 --pes-per-node 4
+```
+
+## distributed backends (multi-process, multi-system)
 1. allocate compute nodes on the cluster:
     - ```salloc -N 2```
-2. launch application using cluster launcher
-    - ```srun -N 2 --mpi=pmi2 ./target/release/<appname>``` 
-        - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
+2. run your application the same way as above (`cargo run ... -- <app args> -- <launcher args>`) — `#[lamellar::main]` handles invoking `prterun`/`srun` across the allocated nodes; select the distributed backend via `LAMELLAR_BACKEND` (e.g. `rofi_c`, `libfabric`, `ucx`) or the corresponding `Backend::*` variant in the world builder.
+
+### Auto-allocation (`--nodes`)
+
+Step 1 above can be skipped: pass `--nodes <N>` after the second `--` (or set `LAMELLAR_NODES`) and, if you're not already inside a SLURM allocation, `#[lamellar::main]` runs `salloc -N <N> <your original command>` for you and blocks until it's granted, then proceeds as normal inside the allocation. If `--pes`/`--pes-per-node` is given without `--nodes`, the node count is derived from it (`nodes = ceil(pes / pes_per_node)`); giving all three requires them to agree (`pes == nodes * pes_per_node`) or the run fails fast with an error instead of guessing. If `salloc` isn't found, or no node count can be resolved, this step is skipped and behavior is unchanged from before.
+
+```
+cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --nodes 2 --pes-per-node 4
+```
 
 
 Repository Organization 
