@@ -287,6 +287,7 @@ fn create_launch_block(
             let mut nodes: Option<u32> = None;
             let mut pes: Option<u32> = None;
             let mut pes_per_node: Option<u32> = None;
+            let mut salloc_opts: Vec<String> = Vec::new();
 
             // Collect any additional arguments after "--" to pass to prterun
             let pos = args.iter().position(|x| x == "--");
@@ -313,6 +314,16 @@ fn create_launch_block(
                         pes = extra.next().and_then(|n| n.parse().ok());
                     } else if x == "--pes-per-node" {
                         pes_per_node = extra.next().and_then(|n| n.parse().ok());
+                    } else if x == "--salloc-opts" {
+                        // Everything up to the next "--" (or end of args) is passed
+                        // through to `salloc` verbatim, e.g.
+                        // -- --nodes 2 --salloc-opts --partition foo --time 01:00:00 -- <launcher args>
+                        while let Some(y) = extra.next() {
+                            if y == "--" {
+                                break;
+                            }
+                            salloc_opts.push(y);
+                        }
                     } else {
                         prterun_args.push(x.to_string());
                     }
@@ -366,6 +377,7 @@ fn create_launch_block(
                         .arg("-N")
                         .arg(n.to_string())
                         .arg("--exclusive")
+                        .args(&salloc_opts)
                         .args(&original_args)
                         .status();
                     match salloc_result {

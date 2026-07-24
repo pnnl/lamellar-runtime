@@ -269,8 +269,12 @@ cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --
 
 Step 1 above can be skipped: pass `--nodes <N>` after the second `--` (or set `LAMELLAR_NODES`) and, if you're not already inside a SLURM allocation, `#[lamellar::main]` runs `salloc -N <N> <your original command>` for you and blocks until it's granted, then proceeds as normal inside the allocation. If `--pes`/`--pes-per-node` is given without `--nodes`, the node count is derived from it (`nodes = ceil(pes / pes_per_node)`); giving all three requires them to agree (`pes == nodes * pes_per_node`) or the run fails fast with an error instead of guessing. If `salloc` isn't found, or no node count can be resolved, this step is skipped and behavior is unchanged from before.
 
+Extra `salloc` flags (partition, time limit, account, qos, ...) can be passed through with `--salloc-opts`: everything after it, up to the next `--` (or end of args), is forwarded to `salloc` verbatim.
+
 ```
 cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --nodes 2 --pes-per-node 4
+
+cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --nodes 2 --salloc-opts --partition foo --time 01:00:00 --
 ```
 
 
