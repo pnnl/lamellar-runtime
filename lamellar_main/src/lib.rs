@@ -254,6 +254,16 @@ fn create_launch_block(
                     prterun_args.push("--map-by".to_string());
                     if spans_multiple_domains {
                         prterun_args.push("node".to_string());
+                        // No PE= directive here, so PRRTE falls back to its own
+                        // default binding policy (CORE:IF-SUPPORTED), pinning the
+                        // rank to a single core -- which would make
+                        // available_parallelism() (and thus the LAMELLAR_THREADS
+                        // fallback) see only 1 core. Explicitly unbind instead so
+                        // the rank can use every core it spans.
+                        if !has_flag(&prterun_args, &["--bind-to"]) {
+                            prterun_args.push("--bind-to".to_string());
+                            prterun_args.push("none".to_string());
+                        }
                     } else {
                         prterun_args.push(format!("node:PE={}", threads_per_pe));
                     }
@@ -397,14 +407,20 @@ fn create_launch_block(
             // a usable hwloc topology just disables NUMA-aware binding.
             let numa_domains: Option<u32> = ::lamellar::numa_domain_count();
 
-            // If only --nodes was given (no --pes/--pes-per-node), default to one
-            // PE per NUMA domain on the allocated node(s).
+            // If neither --pes nor --pes-per-node was given, pick a sensible default:
+            // - if --nodes was given, one PE per NUMA domain on the allocated node(s).
+            // - otherwise (no node allocation involved), the `local` backend defaults
+            //   to a single PE using all available threads; every other backend
+            //   (e.g. shmem) defaults to one PE per NUMA domain on this host.
             let (pes, pes_per_node) = if pes.is_none() && pes_per_node.is_none() {
                 if let Some(n) = nodes {
                     let ppn = numa_domains.unwrap_or(1);
                     (Some(n * ppn), Some(ppn))
+                } else if ::lamellar::config().backend == "local" {
+                    (Some(1), Some(1))
                 } else {
-                    (pes, pes_per_node)
+                    let ppn = numa_domains.unwrap_or(1);
+                    (Some(ppn), Some(ppn))
                 }
             } else {
                 (pes, pes_per_node)

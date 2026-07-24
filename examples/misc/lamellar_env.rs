@@ -15,6 +15,8 @@ fn print_env<T: LamellarEnv>(env: &T) {
 #[lamellar::main]
 fn main() {
     let world = LamellarWorldBuilder::new().build();
+    println!("environment from world");
+    print_env(&world);
     let darc = Darc::new(&world, 0).block().unwrap();
     let lrw_darc = LocalRwDarc::new(&world, 0).block().unwrap();
     let grw_darc = GlobalRwDarc::new(&world, 0).block().unwrap();
@@ -22,8 +24,6 @@ fn main() {
     let team = world
         .create_team_from_arch(StridedArch::new(0, 2, world.num_pes() / 2))
         .unwrap();
-    println!("environment from world");
-    print_env(&world);
     println!("environment from darc");
     print_env(&darc);
     println!("environment from lrw_darc");
