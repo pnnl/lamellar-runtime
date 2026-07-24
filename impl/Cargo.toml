@@ -1,6 +1,6 @@
 [package]
 name = "lamellar-impl"
-version = "0.8.0"
+version = "0.8.0-rc.1"
 authors = [
     "Ryan D. Friese <ryan.friese@pnnl.gov>",
     "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>",
@@ -10,10 +10,10 @@ authors = [
 ]
 edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
-readme = "../README.md"
+readme = "README.md"
 repository = "https://github.com/pnnl/lamellar-runtime"
 homepage = "https://github.com/pnnl/lamellar-runtime"
-license-file = "../LICENSE"
+license-file = "LICENSE"
 keywords = ["hpc", "runtime", "pgas", "distributed", "asynchronous"]
 categories = ["asynchronous", "concurrency", "network-programming", "science"]
 

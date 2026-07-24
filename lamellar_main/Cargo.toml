@@ -1,7 +1,15 @@
 [package]
 name = "lamellar_main"
-version = "0.1.0"
+version = "0.1.0-rc.1"
 edition = "2021"
+authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>"]
+description = "Proc-macro launcher for Lamellar applications (#[lamellar::main]), developed for use by the Lamellar runtime."
+readme = "README.md"
+repository = "https://github.com/pnnl/lamellar-runtime"
+homepage = "https://github.com/pnnl/lamellar-runtime"
+license-file = "LICENSE"
+keywords = ["hpc", "runtime", "pgas", "distributed", "asynchronous"]
+categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 [lib]
 proc-macro = true
