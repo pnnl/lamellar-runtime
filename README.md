@@ -295,10 +295,10 @@ All other branches are active feature branches and may or may not be in a workin
 
 NEWS
 ----
-* v0.8.0
+* July 2026: Alpha release -- v0.8.0
 * November 2024: Alpha release -- v0.7.1
-* February 2023: Alpha release -- v0.6.1
-* November 2023: Alpha release -- v0.6
+* November 2023: Alpha release -- v0.6.1
+* February 2023: Alpha release -- v0.6
 * January 2023: Alpha release -- v0.5
 * March 2022: Alpha release -- v0.4
 * April 2021: Alpha release -- v0.3
@@ -315,10 +315,11 @@ BUILD REQUIREMENTS
 
 Optional:
 Lamellar requires the following dependencies if wanting to run in a distributed HPC environment:
-the rofi lamellae is enabled by adding "enable-rofi" to features either in cargo.toml or the command line when building. i.e. cargo build --features enable-rofi
-Rofi can either be built from source and then setting the ROFI_DIR environment variable to the Rofi install directory, or by letting the rofi-sys crate build it automatically.
+the rofi lamellae is enabled by adding "enable-rofi-c" (or "enable-rofi-c-shared"/"enable-rofi-rust") to features either in cargo.toml or the command line when building. i.e. cargo build --features enable-rofi-c
+Rofi can either be built from source and then setting the ROFI_DIR environment variable to the Rofi install directory, or by letting the rofi-sys crate build it automatically. Similarly, the `enable-ucx`/`enable-libfabric*` features enable the UCX/libfabric backends, each with their own `-sys` crate that can build its dependency automatically.
 
 * [libfabric](https://github.com/ofiwg/libfabric) 
+* [UCX](https://github.com/openucx/ucx)
 * [ROFI](https://github.com/pnnl/rofi)
 * [rofi-sys](https://github.com/pnnl/rofi-sys) -- available in [crates.io](https://crates.io/crates/rofisys)
 
@@ -339,17 +340,17 @@ In the following, assume a root directory ${ROOT}
  `cd ${ROOT} && git clone https://github.com/pnnl/lamellar-runtime`
 
 1. Select Lamellae to use:
-    * In Cargo.toml add "enable-rofi" feature if wanting to use rofi (or pass --features enable-rofi to your cargo build command ), otherwise only support for local and shmem backends will be built.
+    * In Cargo.toml add "enable-rofi-c" (or "enable-ucx", "enable-libfabric") feature if wanting to use a distributed backend (or pass --features enable-rofi-c to your cargo build command), otherwise only support for local and shmem backends will be built.
 
 2. Compile Lamellar lib and test executable (feature flags can be passed to command line instead of specifying in cargo.toml)
 
-`cargo build (--release) (--features enable-rofi)`
+`cargo build (--release) (--features enable-rofi-c)`
 
     executables located at ./target/debug(release)/test
 
 3. Compile Examples
 
-`cargo build --examples (--release) (--features enable-rofi) `
+`cargo build --examples (--release) (--features enable-rofi-c) `
 
     executables located at ./target/debug(release)/examples/
 
@@ -478,7 +479,7 @@ Mark Raugas           - mark.raugas@pnnl.gov
 
 ## License
 
-This project is licensed under the BSD License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the BSD License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 

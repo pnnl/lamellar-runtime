@@ -187,11 +187,11 @@
 //! Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 //! For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 //!
-//!``` lamellar = "0.7.0-rc.1" ```
+//!``` lamellar = "0.8.0-rc.1" ```
 //!
 //! If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
 //!
-//! ``` lamellar = { version = "0.7.0-rc.1", features = ["enable-rofi-c"]}```
+//! ``` lamellar = { version = "0.8.0-rc.1", features = ["enable-rofi-c"]}```
 //!
 //! NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
 //! If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR environment variable.
@@ -201,23 +201,21 @@
 //!
 //! ```cargo build (--release)```
 //! # Running Lamellar Applications
-//! There are a number of ways to run Lamellar applications, mostly dictated by the lamellae you want to use.
-//! ## local (single-process, single system)
+//! A Lamellar application's `main` function must be annotated with `#[lamellar::main]` (see examples above), which is responsible for launching the requested number of PEs. You still construct the world yourself (e.g. via `LamellarWorldBuilder`) inside `main`.
+//!
+//! The generated `main` detects whether it's already running as a launched PE (e.g. under PRRTE/srun); if not, it re-executes itself under a launcher (`prterun` by default, or `srun` with the `use-srun` feature). A single `cargo run`/binary invocation transparently becomes a multi-PE job -- no separate `lamellar_run.sh` step is needed.
+//! ## local / shmem (single system, one or many processes)
 //! 1. directly launch the executable
 //!     - ```cargo run --release```
-//! ## shmem (multi-process, single system)
-//! 1. grab the [lamellar_run.sh](https://github.com/pnnl/lamellar-runtime/blob/master/lamellar_run.sh)
-//! 2. Use `lamellar_run.sh` to launch your application
-//!     - ```./lamellar_run -N=2 -T=10 <appname>```
-//!         - `N` number of PEs (processes) to launch (Default=1)
-//!         - `T` number of threads Per PE (Default = number of cores/ number of PEs)
-//!         - assumes `<appname>` executable is located at `./target/release/<appname>`
-//! ## rofi (multi-process, multi-system)
+//! 2. to run multiple PEs on a single system (shared-memory backend), add launcher args after a `--`-separated section:
+//!     - ```LAMELLAR_BACKEND=shmem cargo run --release -- <app args> -- --pes 4```
+//! ## distributed (multi-process, multi-system)
 //! 1. allocate compute nodes on the cluster:
 //!     - ```salloc -N 2```
-//! 2. launch application using cluster launcher
-//!     - ```srun -N 2 -mpi=pmi2 ./target/release/<appname>```
-//!         - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
+//! 2. run your application the same way as above -- `#[lamellar::main]` handles invoking `prterun`/`srun` across the allocated nodes; select the distributed backend via `LAMELLAR_BACKEND` (e.g. `rofi_c`, `libfabric`, `ucx`) or the corresponding `Backend::*` variant in the world builder:
+//!     - ```cargo run --release -- <app args> -- --pes 8 --pes-per-node 4```
+//!
+//! See the [README](https://github.com/pnnl/lamellar-runtime#running-lamellar-applications) for the full set of launch flags (`--nodes`, `--lamellae`, `--cmd-queue`, etc.).
 //!
 
 extern crate self as lamellar;
