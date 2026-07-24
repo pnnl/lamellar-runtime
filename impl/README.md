@@ -470,12 +470,15 @@ CONTACTS
 Current Team Members
 
 Ryan Friese           - ryan.friese@pnnl.gov  
-Roberto Gioiosa       - roberto.gioiosa@pnnl.gov
-Polykarpos Thomadakis - polykarpos.thomadakis@pnnl.gov
 Erdal Mutlu           - erdal.mutlu@pnnl.gov  
 Joseph Cottam         - joseph.cottam@pnnl.gov
 Greg Roek             - gregory.roek@pnnl.gov
 Mark Raugas           - mark.raugas@pnnl.gov  
+
+Past Team Members
+
+Roberto Gioiosa       - roberto.gioiosa@pnnl.gov
+Polykarpos Thomadakis - polykarpos.thomadakis@pnnl.gov
 
 ## License
 
