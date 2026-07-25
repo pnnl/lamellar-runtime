@@ -8,6 +8,7 @@ Cargo.lock
 /bin
 /output
 run*.sh
+lamellar_env.sh
 *.ansi
 *.log
 *.tmp
