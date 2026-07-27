@@ -9,12 +9,14 @@ pub(crate) enum AllocError {
     // RemoteNotFound(CommAllocAddr),
     #[cfg(any(
         feature = "enable-libfabric",
+        feature = "enable-libfabric-sys",
         feature = "enable-libfabric-async",
         feature = "enable-rofi-c"
     ))]
     UnexpectedAllocationType(crate::lamellae::AllocationType),
     #[cfg(any(
         feature = "enable-libfabric",
+        feature = "enable-libfabric-sys",
         feature = "enable-libfabric-async",
         feature = "enable-rofi-c"
     ))]
@@ -48,6 +50,7 @@ impl std::fmt::Display for AllocError {
             // }
             #[cfg(any(
                 feature = "enable-libfabric",
+                feature = "enable-libfabric-sys",
                 feature = "enable-libfabric-async",
                 feature = "enable-rofi-c"
             ))]
@@ -56,6 +59,7 @@ impl std::fmt::Display for AllocError {
             }
             #[cfg(any(
                 feature = "enable-libfabric",
+                feature = "enable-libfabric-sys",
                 feature = "enable-libfabric-async",
                 feature = "enable-rofi-c"
             ))]
@@ -81,6 +85,7 @@ pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
 #[cfg(any(
     feature = "enable-libfabric",
+    feature = "enable-libfabric-sys",
     feature = "enable-libfabric-async",
     feature = "enable-rofi-c",
     feature = "enable-ucx"
@@ -88,13 +93,14 @@ pub(crate) type AllocResult<T> = Result<T, AllocError>;
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum FabricError {
     InitError(u32),
-    #[cfg(feature = "enable-libfabric-async")]
+    #[cfg(any(feature = "enable-libfabric-async", feature = "enable-libfabric-sys"))]
     BarrierError(u32),
     // FabricError(u32),
 }
 
 #[cfg(any(
     feature = "enable-libfabric",
+    feature = "enable-libfabric-sys",
     feature = "enable-libfabric-async",
     feature = "enable-rofi-c",
     feature = "enable-ucx"
@@ -105,7 +111,7 @@ impl std::fmt::Display for FabricError {
             FabricError::InitError(err_no) => {
                 write!(f, "Fabric initialization error: {}", err_no)
             }
-            #[cfg(feature = "enable-libfabric-async")]
+            #[cfg(any(feature = "enable-libfabric-async", feature = "enable-libfabric-sys"))]
             FabricError::BarrierError(err_no) => {
                 write!(f, "Barrier error: {}", err_no)
             } // FabricError::FabricError(err_no) => {
@@ -117,6 +123,7 @@ impl std::fmt::Display for FabricError {
 
 #[cfg(any(
     feature = "enable-libfabric",
+    feature = "enable-libfabric-sys",
     feature = "enable-libfabric-async",
     feature = "enable-rofi-c",
     feature = "enable-ucx"
@@ -125,6 +132,7 @@ impl std::error::Error for FabricError {}
 
 #[cfg(any(
     feature = "enable-libfabric",
+    feature = "enable-libfabric-sys",
     feature = "enable-libfabric-async",
     feature = "enable-rofi-c"
 ))]

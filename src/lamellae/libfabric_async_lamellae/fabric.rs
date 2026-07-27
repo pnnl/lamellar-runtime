@@ -65,6 +65,7 @@ use libfabric::enums::JoinOptions;
 use libfabric::enums::Mode;
 use libfabric::enums::MrMode;
 use libfabric::enums::Progress;
+use libfabric::enums::ReduceOp;
 use libfabric::enums::ResourceMgmt;
 use libfabric::enums::TrafficClass;
 use libfabric::enums::TransferOptions;
@@ -3389,6 +3390,48 @@ impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
             LamellarAtomicOp::Read(_) => FetchAtomicOp::AtomicRead,
             _ => panic!("Non-fetch atomic ops must use non-fetch path"),
+        }
+    }
+}
+
+impl From<LamellarReduceOp> for ReduceOp {
+    fn from(op: LamellarReduceOp) -> Self {
+        match op {
+            LamellarReduceOp::Min => ReduceOp::Min,
+            LamellarReduceOp::Max => ReduceOp::Max,
+            LamellarReduceOp::Sum => ReduceOp::Sum,
+            LamellarReduceOp::Prod => ReduceOp::Prod,
+            LamellarReduceOp::BitOr => ReduceOp::Bor,
+            LamellarReduceOp::BitXor => ReduceOp::Bxor,
+            LamellarReduceOp::BitAnd => ReduceOp::Band,
+        }
+    }
+}
+
+impl From<&LamellarReduceOp> for ReduceOp {
+    fn from(op: &LamellarReduceOp) -> Self {
+        match op {
+            LamellarReduceOp::Min => ReduceOp::Min,
+            LamellarReduceOp::Max => ReduceOp::Max,
+            LamellarReduceOp::Sum => ReduceOp::Sum,
+            LamellarReduceOp::Prod => ReduceOp::Prod,
+            LamellarReduceOp::BitOr => ReduceOp::Bor,
+            LamellarReduceOp::BitXor => ReduceOp::Bxor,
+            LamellarReduceOp::BitAnd => ReduceOp::Band,
+        }
+    }
+}
+
+impl From<&LamellarReduceOp> for &ReduceOp {
+    fn from(op: &LamellarReduceOp) -> Self {
+        match op {
+            LamellarReduceOp::Min => &ReduceOp::Min,
+            LamellarReduceOp::Max => &ReduceOp::Max,
+            LamellarReduceOp::Sum => &ReduceOp::Sum,
+            LamellarReduceOp::Prod => &ReduceOp::Prod,
+            LamellarReduceOp::BitOr => &ReduceOp::Bor,
+            LamellarReduceOp::BitXor => &ReduceOp::Bxor,
+            LamellarReduceOp::BitAnd => &ReduceOp::Band,
         }
     }
 }

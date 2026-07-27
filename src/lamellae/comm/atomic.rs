@@ -456,7 +456,11 @@ impl<T> std::fmt::Debug for AtomicOp<T> {
 }
 
 impl<T> AtomicOp<T> {
-    #[cfg(any(feature = "enable-libfabric", feature = "enable-libfabric-async"))]
+    #[cfg(any(
+        feature = "enable-libfabric",
+        feature = "enable-libfabric-sys",
+        feature = "enable-libfabric-async"
+    ))]
     pub(crate) fn src(&self) -> *const T {
         match self {
             AtomicOp::Min(val)

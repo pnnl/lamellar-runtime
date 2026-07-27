@@ -1464,12 +1464,12 @@ impl Ofi {
         self.alloc_manager.get_alloc_from_start_addr(addr)
     }
 
-    pub(crate) fn clear_allocs(&self) -> Result<(), libfabric::error::Error> {
+    pub(crate) fn clear_allocs(&self) -> Result<(), FabricError> {
         self.alloc_manager.clear();
         Ok(())
     }
 
-    pub(crate) fn barrier(&self) -> Result<(), libfabric::error::Error> {
+    pub(crate) fn barrier(&self) -> Result<(), FabricError> {
         // trace!("Running barrier");
         match &*self.comm_group.barrier_impl.read() {
             BarrierImpl::Uninit => {
