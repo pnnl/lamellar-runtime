@@ -105,6 +105,169 @@ use std::sync::Arc;
 ///     - requires [ShlAssign][std::ops::ShlAssign], [ShrAssign][std::ops::ShrAssign] to be implemented on you data type
 ///
 /// Alternatively, if you plan to derive all the above traits you can simply supply `All` as the single argument to [ArrayOps]
+///
+/// # Examples
+///
+/// ```
+/// // this import includes everything we need
+/// use lamellar::array::prelude::*;
+///
+/// #[lamellar::AmData(
+///     // Lamellar traits
+///     ArrayOps(Arithmetic,CompExEps,Shift), // needed to derive various LamellarArray Op traits (provided as a list)
+///     Default,       // needed to be able to initialize a LamellarArray
+///     //  Notice we use `lamellar::AmData` instead of `derive`
+///     //  for common traits, e.g. Debug, Clone.
+///     PartialEq,     // needed for CompareExchangeEpsilonOps
+///     PartialOrd,    // needed for CompareExchangeEpsilonOps
+///     Debug,         // any addition traits you want derived
+///     Clone,
+/// )]
+/// struct Custom {
+///     int: usize,
+///     float: f32,
+/// }
+///
+/// // We need to impl various arithmetic ops if we want to be able to
+/// // perform remote arithmetic operations with this type
+/// impl std::ops::AddAssign for Custom {
+///     fn add_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int + other.int,
+///             float: self.float + other.float,
+///         }
+///     }
+/// }
+///
+/// impl std::ops::SubAssign for Custom {
+///     fn sub_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int - other.int,
+///             float: self.float - other.float,
+///         }
+///     }
+/// }
+///
+/// impl std::ops::Sub for Custom {
+///     type Output = Self;
+///     fn sub(self, other: Self) -> Self {
+///         Self {
+///             int: self.int - other.int,
+///             float: self.float - other.float,
+///         }
+///     }
+/// }
+///
+/// impl std::ops::MulAssign for Custom {
+///     fn mul_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int * other.int,
+///             float: self.float * other.float,
+///         }
+///     }
+/// }
+///
+/// impl std::ops::DivAssign for Custom {
+///     fn div_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int / other.int,
+///             float: self.float / other.float,
+///         }
+///     }
+/// }
+/// impl std::ops::ShlAssign for Custom {
+///     fn shl_assign(&mut self, other: Self){
+///         self.int <<= other.int;
+///     }
+/// }
+///
+/// impl std::ops::ShrAssign for Custom {
+///     fn shr_assign(&mut self, other: Self){
+///         self.int >>= other.int;
+///     }
+/// }
+///
+/// impl std::ops::RemAssign for Custom {
+///     fn rem_assign(&mut self, other: Self) {
+///        self.int %= other.int;
+///    }
+/// }
+///
+/// fn main(){
+///
+///     // initialize
+///     // -----------
+///
+///     let world = LamellarWorldBuilder::new().build(); // the world
+///
+///     let array =  // the atomic distributed array
+///         AtomicArray::<Custom>::new(&world,3,Distribution::Block).block();
+///
+///     println!();
+///     println!("initialize a length-3 array:\n");  // print the entries
+///     array.dist_iter()
+///         .enumerate()
+///         .for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///     array.wait_all();
+///
+///     // call various operations on the array!
+///     // -------------------------------------
+///
+///     world.block_on( async move {  // we will just use the world as our future driver so we dont have to deal with cloning array
+///
+///         println!();
+///         println!("add (1, 0.01) to the first entry:\n");
+///         let val = Custom{int: 1, float: 0.01};
+///         array.add(0, val ).await;
+///         array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///         array.wait_all();
+///
+///         println!();
+///         println!("batch compare/exchange:");
+///         let indices = vec![0,1,2,];
+///         let current = val;
+///         let new = Custom{int: 1, float: 0.0};
+///         let epsilon = Custom{int: 0, float: 0.01};
+///         let _results = array.batch_compare_exchange_epsilon(indices,current,new,epsilon).await;
+///         println!();
+///         println!("(1) the updated array");
+///         array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///         array.wait_all();
+///         println!();
+///         println!("(2) the return values");
+///         for (i, entry) in _results.iter().enumerate() { println!("entry {:?}: {:?}", i, entry ) }
+///     });
+///
+///     // inspect the results
+///     // -------------------------------------
+///     // NB:  because we're working with multithreaded async
+///     //      environments, entries may be printed out of order
+///     //
+///     // initialize a length-3 array:
+///     //
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     // entry 0: Custom { int: 0, float: 0.0 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     //
+///     // add (1, 0.01) to the first entry:
+///     //
+///     // entry 0: Custom { int: 1, float: 0.01 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     //
+///     // batch compare/exchange:
+///     //
+///     // (1) the updatd array
+///     // entry 0: Custom { int: 1, float: 0.0 }
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     //
+///     // (2) the return values
+///     // entry 0: Ok(Custom { int: 1, float: 0.01 })
+///     // entry 1: Err(Custom { int: 0, float: 0.0 })
+///     // entry 2: Err(Custom { int: 0, float: 0.0 })
+/// }
+/// ```
 pub use lamellar_impl::ArrayOps;
 
 // //#[doc(hidden)]
