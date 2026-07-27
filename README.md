@@ -65,6 +65,22 @@ Currently the inverse is true, if it compiles and runs using a distributed backe
 
 Additional information on using each of the lamellae backends can be found below in the `Running Lamellar Applications` section
 
+## Vendored Dependencies
+
+The distributed backends above depend on native C libraries (PMIx, PRRTE, libfabric, UCX, hwloc, libevent). For each of these, lamellar can either build a bundled ("vendored") copy from source, or link against a system-installed version. Vendoring trades a longer first build for not requiring these libraries to be preinstalled on the target system — useful on clusters/containers where you don't control what's installed, or where the installed versions are outdated/incompatible.
+
+The relevant feature flags:
+- `with-pmix-vendored` (**enabled by default**) - builds PMIx from source (via `pmix-sys/vendored`) instead of requiring a system PMIx install.
+- `vendored-pmi` - builds PMI/PMI2 from source (via `pmi/vendored`) instead of requiring a system PMI install.
+- `enable-lamellar-main` (**enabled by default**) - pulls in `prrte-sys/vendored`, building PRRTE from source for the `#[lamellar::main]` launcher.
+- `enable-rofi-c` / `enable-rofi-c-shared` - pull in `pmix-sys/vendored` (PMIx is required by ROFI's PMIx backend).
+
+To link against system libraries instead, disable default features and select only what you need, e.g.:
+```toml
+lamellar = { version = "...", default-features = false, features = ["enable-rofi-c"] }
+```
+Note that disabling vendoring still requires the corresponding `-sys` crate to find the system library/headers (see each `-sys` crate's README, e.g. `pmix-sys`, `prrte-sys`, for the relevant environment variables such as `PMIX_DIR`/`PRRTE_DIR`).
+
 # Environment Variables
 
 Please see [env_var.rs] for a description of available environment variables.
@@ -221,6 +237,42 @@ If this process fails, it is still possible to pass in a manual libfabric instal
 For both environments, build your application as normal
 
 ```cargo build (--release)```
+
+## Release Profiles
+Lamellar's `Cargo.toml` defines three release profiles, tuned for different stages of development:
+
+- `release` — fully optimized (`opt-level = 3`, `lto = true`, `codegen-units = 1`). Slowest to compile, best runtime performance. Use this for benchmarking and production runs.
+  ```toml
+  [profile.release]
+  opt-level = 3
+  lto = true
+  codegen-units = 1
+  ```
+- `release-dev` — same optimization level as `release` but with LTO disabled and parallel codegen units, trading a bit of runtime performance for much faster incremental builds. We recommend copying this profile into your own application's `Cargo.toml` and using it during active development.
+  ```toml
+  [profile.release-dev]
+  inherits = "release"
+  opt-level = 3
+  lto = false
+  codegen-units = 256
+  ```
+- `release-debug` — `release-dev` plus debug symbols (including for dependencies), for when you need a debugger or backtraces on an otherwise optimized build.
+  ```toml
+  [profile.release-debug]
+  inherits = "release-dev"
+  debug = true
+  [profile.release-debug.package."*"]
+  debug = true
+  ```
+
+To build/run with a custom profile:
+```
+cargo build --profile release-dev --example <example-name>
+cargo run --profile release-dev --example <example-name> -- <app args>
+```
+
+We do **not** recommend using the default `debug` profile (i.e. building without `--release`/`--profile`) for anything beyond quick correctness checks — the performance impact of unoptimized builds can significantly affect Lamellar's runtime execution, especially for communication-heavy applications.
+
 # Running Lamellar Applications
 A Lamellar application's `main` function must be annotated with `#[lamellar::main]` (see examples above), which is responsible for launching the requested number of PEs. You still construct the world yourself (e.g. via `LamellarWorldBuilder`) inside `main`.
 
