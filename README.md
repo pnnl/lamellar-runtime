@@ -314,8 +314,9 @@ cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --
 
 ### Other launch flags
 
-- `--lamellae <name>` — sets `LAMELLAR_BACKEND` for the launched job (same values as the `LAMELLAR_BACKEND` env var: `local`, `shmem`, `rofi_c`, `libfabric`, `libfabric-sys`, `libfabric-async`, `ucx`).
-- `--cmd-queue <variant>` — sets `LAMELLAR_CMD_QUEUE` for the launched job (`batched`, `get`, `geteager`, `getslots`, `put`, `putslots`, `puteager`).
+- `--lamellae <name>` — sets `LAMELLAR_BACKEND` for the launched job (same values as the `LAMELLAR_BACKEND` env var: `local`, `shmem`, `rofi_c`, `libfabric`, `libfabric-sys`, `libfabric-async`, `ucx`). `--help` lists which of these are actually available in the build (backend features that weren't enabled at compile time aren't offered) and which one is the compiled-in default.
+- `--cmd-queue <variant>` — sets `LAMELLAR_CMD_QUEUE` for the launched job (`batched`, `get` (default), `geteager`, `getslots`, `put`, `putslots`, `puteager`).
+- `--batcher <variant>` — sets `LAMELLAR_BATCHER` for the launched job (`simple` (default), `direct`, `team_am`, `vec_simple` (experimental), `vec_team_am` (experimental)).
 - `--help` / `-h` — print all launch flags recognized after the second `--` and exit, without launching anything.
 
 ## distributed backends (multi-process, multi-system)

@@ -348,6 +348,7 @@ fn create_launch_block(
             let mut threads_per_pe_flag: Option<u32> = None;
             let mut lamellae: Option<String> = None;
             let mut cmd_queue: Option<String> = None;
+            let mut batcher: Option<String> = None;
 
             // Collect any additional arguments after "--" to pass to prterun
             let pos = args.iter().position(|x| x == "--");
@@ -361,7 +362,11 @@ fn create_launch_block(
                     println!("  --pes-per-node <N>     PEs per node [env: LAMELLAR_PES_PER_NODE]");
                     println!("  --threads-per-pe <N>   worker threads per PE [env: LAMELLAR_THREADS]");
                     println!("  --lamellae <name>      lamellae backend for the launched job [env: LAMELLAR_BACKEND]");
+                    println!("      available: {} (default: {})", ::lamellar::available_backends().join(", "), ::lamellar::compiled_default_backend());
                     println!("  --cmd-queue <variant>  command queue protocol for the launched job [env: LAMELLAR_CMD_QUEUE]");
+                    println!("      available: batched, get (default), geteager, getslots, put, putslots, puteager");
+                    println!("  --batcher <variant>    active-message batcher for the launched job [env: LAMELLAR_BATCHER]");
+                    println!("      available: simple (default), direct, team_am, vec_simple (experimental), vec_team_am (experimental)");
                     #salloc_opts_help
                     println!("  --output-dir <dir>     redirect per-PE stdout/stderr into <dir>");
                     println!("  --time                 print world-build/application timing");
@@ -397,6 +402,8 @@ fn create_launch_block(
                         lamellae = extra.next();
                     } else if x == "--cmd-queue" {
                         cmd_queue = extra.next();
+                    } else if x == "--batcher" {
+                        batcher = extra.next();
                     } else if x == "--salloc-opts" {
                         // Everything up to the next "--" (or end of args) is passed
                         // through to `salloc` verbatim, e.g.
@@ -516,6 +523,9 @@ fn create_launch_block(
             }
             if let Some(ref cq) = cmd_queue {
                 launcher_cmd.env("LAMELLAR_CMD_QUEUE", cq);
+            }
+            if let Some(ref b) = batcher {
+                launcher_cmd.env("LAMELLAR_BATCHER", b);
             }
             #output_dir_block
             println!("Launching with {:?}: {:?} {:?}", #env_var, #launcher_path, prterun_args.join(" "));

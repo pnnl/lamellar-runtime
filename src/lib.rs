@@ -286,6 +286,7 @@ pub(crate) mod warnings;
 
 pub mod env_var;
 pub use env_var::config;
+pub use env_var::{available_backends, compiled_default_backend};
 
 pub use crate::lamellae::comm::collective::{
     BroadcastInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput,

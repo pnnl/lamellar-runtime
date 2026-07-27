@@ -87,6 +87,36 @@ fn default_backend() -> String {
     }
 }
 
+/// The lamellae backend that will be used if `LAMELLAR_BACKEND` is unset, based on which
+/// backend features this build was compiled with.
+pub fn compiled_default_backend() -> String {
+    default_backend()
+}
+
+/// The lamellae backends available in this build, based on which backend features were
+/// enabled at compile time. `local` and `shmem` are always available.
+pub fn available_backends() -> Vec<&'static str> {
+    let mut backends = Vec::new();
+    if cfg!(feature = "enable-rofi-c") {
+        backends.push("rofi_c");
+    }
+    if cfg!(feature = "enable-libfabric-sys") {
+        backends.push("libfabric-sys");
+    }
+    if cfg!(feature = "enable-libfabric") {
+        backends.push("libfabric");
+    }
+    if cfg!(feature = "enable-libfabric-async") {
+        backends.push("libfabric-async");
+    }
+    if cfg!(feature = "enable-ucx") {
+        backends.push("ucx");
+    }
+    backends.push("shmem");
+    backends.push("local");
+    backends
+}
+
 fn default_executor() -> String {
     #[cfg(feature = "tokio-executor")]
     return "tokio".to_owned();

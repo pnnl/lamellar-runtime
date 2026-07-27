@@ -54,6 +54,7 @@ fn main() {
             let lib_path = PathBuf::from(lamellar_ucc_root).join("lib");
             println!("cargo:rustc-link-search=native={}", lib_path.display());
             println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_path.display());
+            lib_paths.push(lib_path.display().to_string());
         }
     }
 
