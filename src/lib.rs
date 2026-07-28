@@ -187,11 +187,11 @@
 //! Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 //! For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 //!
-//!``` lamellar = "0.8.0-rc.1" ```
+//!``` lamellar = "0.8.0" ```
 //!
 //! If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
 //!
-//! ``` lamellar = { version = "0.8.0-rc.1", features = ["enable-rofi-c"]}```
+//! ``` lamellar = { version = "0.8.0", features = ["enable-rofi-c"]}```
 //!
 //! NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
 //! If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR environment variable.

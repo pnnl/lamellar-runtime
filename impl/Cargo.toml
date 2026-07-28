@@ -1,6 +1,6 @@
 [package]
 name = "lamellar-impl"
-version = "0.8.0-rc.1"
+version = "0.8.0"
 authors = [
     "Ryan D. Friese <ryan.friese@pnnl.gov>",
     "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>",

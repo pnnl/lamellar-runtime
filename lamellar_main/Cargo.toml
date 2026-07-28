@@ -1,6 +1,6 @@
 [package]
 name = "lamellar_main"
-version = "0.1.0-rc.1"
+version = "0.1.0"
 edition = "2021"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>"]
 description = "Proc-macro launcher for Lamellar applications (#[lamellar::main]), developed for use by the Lamellar runtime."
