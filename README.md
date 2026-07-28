@@ -107,6 +107,9 @@ lamellar = { version = "...", default-features = false, features = ["with-pmix-v
 ```
 HWLOC_DIR=$(brew --prefix hwloc) PKG_CONFIG_PATH=$(brew --prefix hwloc)/lib/pkgconfig cargo build
 ```
+Requires `brew install hwloc libevent pkgconf`. If PMIx/PRRTE's `autoreconf` step fails
+with `bad interpreter: /usr/bin/perl5.30: No such file or directory`, your Homebrew
+autotools are linked against a stale perl — fix with `brew reinstall autoconf automake libtool`.
 
 See each `-sys`/`-src` crate's README (`pmix-sys`, `prrte-sys`, `openpmix-src`, `prrte-src`, `lamellar-ucx-sys`, `lamellar-ucc-sys`, `rofi-sys`) for further detail on that crate's own vendoring sub-features.
 
