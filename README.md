@@ -67,41 +67,174 @@ Additional information on using each of the lamellae backends can be found below
 
 ## Vendored Dependencies
 
-The distributed backends above depend on native C libraries (PMIx, PRRTE, libfabric, UCX, hwloc, libevent). For each of these, lamellar can either build a bundled ("vendored") copy from source, or link against a system-installed version. Vendoring trades a longer first build for not requiring these libraries to be preinstalled on the target system — useful on clusters/containers where you don't control what's installed, or where the installed versions are outdated/incompatible.
+The distributed backends above depend on native C libraries (PMIx, PRRTE, libfabric, UCX, UCC, ROFI, hwloc, libevent). For each of these, lamellar can either build a bundled ("vendored") copy from source, or link against a system-installed version.
+
+**By default on Linux, lamellar is fully vendored** — every native dependency pulled in by the default feature set (`with-pmix-vendored`, `enable-lamellar-main`, `vendored-hwloc`, `enable-numa-detect`) is built from source, so nothing needs to be preinstalled. This is what you want on clusters/containers where you don't control what's installed, or where installed versions are outdated/incompatible. On macOS, hwloc's vendored autotools build is known to fail, so `vendored-hwloc` should be disabled there (see below).
 
 The relevant feature flags:
-- `with-pmix-vendored` (**enabled by default**) - builds PMIx from source (via `pmix-sys/vendored`) instead of requiring a system PMIx install.
+- `with-pmix-vendored` (**enabled by default**) - builds PMIx from source (via `pmix-sys/vendored`) instead of requiring a system PMIx install. This also vendors PMIx's own hwloc/libevent dependencies.
 - `vendored-pmi` - builds PMI/PMI2 from source (via `pmi/vendored`) instead of requiring a system PMI install.
-- `enable-lamellar-main` (**enabled by default**) - pulls in `prrte-sys/vendored`, building PRRTE from source for the `#[lamellar::main]` launcher.
+- `enable-lamellar-main` (**enabled by default**) - builds PRRTE and its PMIx/libevent dependencies from source (via `prrte-sys/prrte-src`, `prrte-sys/vendored-libevent`, `prrte-sys/vendored-pmix`) for the `#[lamellar::main]` launcher. hwloc is *not* included here — see `vendored-hwloc` below.
+- `vendored-hwloc` (**enabled by default**) - builds hwloc from source, both for PRRTE (via `prrte-sys/vendored-hwloc`) and for lamellar's own NUMA-domain detection (via `hwlocality/vendored`). Disable this and set `HWLOC_DIR` to link a system hwloc instead — **required on macOS**, where hwloc's vendored autotools build is known to fail.
+- `enable-numa-detect` (**enabled by default**) - enables NUMA-domain detection (via `hwlocality`) used by `#[lamellar::main]` to pick PE-per-node defaults.
 - `enable-rofi-c` / `enable-rofi-c-shared` - pull in `pmix-sys/vendored` (PMIx is required by ROFI's PMIx backend).
 
 To link against system libraries instead, disable default features and select only what you need, e.g.:
 ```toml
 lamellar = { version = "...", default-features = false, features = ["enable-rofi-c"] }
 ```
-Note that disabling vendoring still requires the corresponding `-sys` crate to find the system library/headers (see each `-sys` crate's README, e.g. `pmix-sys`, `prrte-sys`, for the relevant environment variables such as `PMIX_DIR`/`PRRTE_DIR`).
 
-# Environment Variables
+### Using a system install per dependency
 
-Please see [env_var.rs] for a description of available environment variables.
+Each native dependency has its own env-var override, checked by the corresponding `-sys`/`-src` crate's build script. Set the var and drop the matching vendoring feature; everything else about the feature set stays the same:
 
-Commonly used variables include:
- - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE, defaults to [std::thread::available_parallelism] if available or else 4
- - `LAMELLAR_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
-     - possible values
-         - `local` -- default
-         - `shmem`
-         - `rofi_c`  -- only available with the `enable-rofi-c` (or related `enable-rofi-*`) feature
-         - `libfabric-sys` / `libfabric` / `libfabric-async` -- only available with the corresponding `enable-libfabric*` feature
-         - `ucx` -- only available with the `enable-ucx` feature
- - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
-     - possible values
-         - `lamellar` -- default, work stealing backend
-         - `async_std` -- alternative backend from async_std
-         - `tokio` -- only available with the `tokio-executor` feature in which case it is the default executor
+| Dependency | Env var(s) | Notes |
+|---|---|---|
+| PMIx | `PMIX_LIB_DIR` + `PMIX_INCLUDE_DIR` | drop `with-pmix-vendored` |
+| PRRTE | `PRRTE_LIB_DIR` + `PRRTE_INCLUDE_DIR` + `PRRTE_BIN_DIR` | use `prrte-sys` with `prrte-src` omitted, see `prrte-sys`'s README |
+| hwloc | `HWLOC_DIR` (install prefix; also put it on `PKG_CONFIG_PATH` for `hwlocality`, e.g. `PKG_CONFIG_PATH=$HWLOC_DIR/lib/pkgconfig`) | drop `vendored-hwloc` — **use this on macOS** |
+| libevent | `LIBEVENT_DIR` (install prefix) | drop `prrte-sys/vendored-libevent` (depend on `prrte-sys` directly to omit just this one) |
+| PMI/PMI2 | `PMI_LIB_DIR` / `PMI2_LIB_DIR` | drop `vendored-pmi` |
+| libfabric | `OFI_DIR` (install prefix) | used automatically if set, no feature to disable |
+| UCX | `UCX_DIR` (install prefix) | used automatically if set, no feature to disable |
+| UCC | `UCC_DIR` (install prefix) | used automatically if set, no feature to disable |
+| ROFI | `ROFI_DIR` (install prefix) | used automatically if set, no feature to disable |
 
-See [env_var.rs] for additional feature-gated variables (e.g. `enable-stats`, `enable-prof`, `enable-on-node-shmem`, `with-pmi*`).
+Example, PRRTE/PMIx/libevent vendored but hwloc linked from a system install (the macOS case):
+```toml
+lamellar = { version = "...", default-features = false, features = ["with-pmix-vendored", "enable-lamellar-main", "enable-numa-detect"] }
+```
+```
+HWLOC_DIR=$(brew --prefix hwloc) PKG_CONFIG_PATH=$(brew --prefix hwloc)/lib/pkgconfig cargo build
+```
 
+See each `-sys`/`-src` crate's README (`pmix-sys`, `prrte-sys`, `openpmix-src`, `prrte-src`, `lamellar-ucx-sys`, `lamellar-ucc-sys`, `rofi-sys`) for further detail on that crate's own vendoring sub-features.
+
+# Using Lamellar 
+Lamellar is capable of running on single node workstations as well as distributed HPC systems.
+For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
+
+``` lamellar = "0.8.0" ```
+
+If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
+
+```lamellar = { version = "0.8.0", features = ["enable-libfabric"]}``` # you can also use "enable-ucx", "enable-rofi-c" instead/in addition too
+
+NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
+If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR envrionment variable.
+
+For both environments, build your application as normal
+
+```cargo build (--release)```
+
+## Release Profiles
+Lamellar's `Cargo.toml` defines three release profiles, tuned for different stages of development:
+
+- `release` — fully optimized (`opt-level = 3`, `lto = true`, `codegen-units = 1`). Slowest to compile, best runtime performance. Use this for benchmarking and production runs.
+  ```toml
+  [profile.release]
+  opt-level = 3
+  lto = true
+  codegen-units = 1
+  ```
+- `release-dev` — same optimization level as `release` but with LTO disabled and parallel codegen units, trading a bit of runtime performance for much faster incremental builds. We recommend copying this profile into your own application's `Cargo.toml` and using it during active development.
+  ```toml
+  [profile.release-dev]
+  inherits = "release"
+  opt-level = 3
+  lto = false
+  codegen-units = 256
+  ```
+- `release-debug` — `release-dev` plus debug symbols (including for dependencies), for when you need a debugger or backtraces on an otherwise optimized build.
+  ```toml
+  [profile.release-debug]
+  inherits = "release-dev"
+  debug = true
+  [profile.release-debug.package."*"]
+  debug = true
+  ```
+
+To build/run with a custom profile:
+```
+cargo build --profile release-dev --example <example-name>
+cargo run --profile release-dev --example <example-name> -- <app args>
+```
+
+We do **not** recommend using the default `debug` profile (i.e. building without `--release`/`--profile`) for anything beyond quick correctness checks — the performance impact of unoptimized builds can significantly affect Lamellar's runtime execution, especially for communication-heavy applications.
+
+# Running Lamellar Applications
+A Lamellar application's `main` function must be annotated with `#[lamellar::main]` (see examples above), which is responsible for launching the requested number of PEs. You still construct the world yourself (e.g. via `LamellarWorldBuilder`) inside `main`.
+
+The generated `main` detects whether it's already running as a launched PE (e.g. under PRRTE/srun); if not, it re-executes itself under a launcher (`prterun` by default, or `srun` with the `use-srun` feature) using the arguments given after the launcher-args separator described below. This means a single `cargo run`/binary invocation transparently becomes a multi-PE job — you no long need to invoke launcher commands manually
+
+Before launching, `#[lamellar::main]` also patches the binary's `RPATH`/`RUNPATH` (via `readelf`/`patchelf`) with the build-output library directories found on `LD_LIBRARY_PATH`, so launched PEs can find dependencies like libfabric/UCX/rofi without you having to export `LD_LIBRARY_PATH` yourself. If this patching fails for some reason (e.g. `patchelf`/`readelf` unavailable), fall back to sourcing the generated `lamellar_env.sh` (built by `build.rs`) before running:
+```
+source lamellar_env.sh
+```
+
+## local / shmem (single system, one or many processes)
+Launch directly, no separate launcher required:
+```cargo run --release-dev --example <example-name> -- <app args>```
+
+To run multiple PEs on a single system (shared-memory backend), add a second `--`-separated section with launcher args:
+```
+cargo run --profile release-dev --features '<feature-list>' --example <example-name> -- <app args> -- --pes 4 --lamellae shmem
+```
+- everything before the first `--` is `cargo`'s own arguments (profile, features, which binary/example to build)
+- everything between the two `--` is forwarded to your application unmodified
+- everything after the second `--` is forwarded to the launcher (`prterun`/`srun`) — `--np <N>` sets the number of PEs, `--map-by` controls process/thread placement, etc.
+
+Example (uses `enable-ucx`, `enable-libfabric`, `enable-rofi-c`, and `tokio-executor` features together, launching 2 PEs, 4 threads each):
+```
+cargo run --profile release --features 'enable-ucx,enable-libfabric,enable-rofi-c,tokio-executor' --example load_store_test -- AtomicArray Block f32 128 -- --pes 2 --threads-per-pe 4 --lamellae shmem
+```
+
+or for an example where the binary does not take arguments (note the `-- --` this is necessary due to how cargo parses args):
+```
+cargo run --profile release --features 'enable-ucx,enable-libfabric,enable-rofi-c,tokio-executor' --example am_no_return -- -- --pes 2 --threads-per-pe 4 --lamellae shmem
+```
+
+
+**NOTE** passing these feature flags via command line are relevant to running the examples in this repository, in your own crate you would pass these directly to the lamellar entry in your cargo.toml file.
+
+### Consistent PE flags (`--pes` / `--pes-per-node`)
+
+Instead of hand-writing launcher-native flags (`--map-by node:PE=<N> --np <N>` for prterun, `--ntasks-per-node=<N> --cpus-per-task=<N>` for srun), you can use launcher-agnostic flags after the second `--`, and `#[lamellar::main]` translates them to whichever launcher is active (`prterun` or `srun`):
+- `--pes <N>` — total number of PEs across all nodes
+- `--pes-per-node <N>` — PEs per node
+- `--threads-per-pe <N>` - Threads per pe
+
+Give any or all (`LAMELLAR_PES`/`LAMELLAR_PES_PER_NODE,LAMELLAR_THREADS` env vars work as fallbacks too). If neither `--pes` or `--pes-per-node` is given (and `--nodes` wasn't either): with the `local` backend (the default when no other backend feature is enabled, or set explicitly via `LAMELLAR_BACKEND=local` or `--lamellae shmem`), defaults to a single PE using all available threads; every other backend (e.g. `shmem`) defaults to one PE per NUMA domain on the host. Cores bound per PE come from `--threads-per-pe <N>` (or `LAMELLAR_THREADS` if the flag isn't given); if neither is set, it defaults to `available cores / --pes-per-node` (or just available cores, if `--pes-per-node` wasn't given). For prterun, this is injected as `--map-by node:PE=<N>` — PRRTE's `PE=<N>` already binds each rank to N cpus, so on a host with more than one NUMA domain (detected via the `hwlocality`/hwloc bindings) NUMA-awareness comes from sizing `<N>` correctly rather than an explicit `--bind-to` (PRRTE rejects combining `PE=` with any `--bind-to` other than `core`/`hwt`). If `--pes-per-node` is smaller than the NUMA domain count, a single PE's cores would have to span more than one domain/package, which PRRTE always refuses — in that case `PE=` is dropped entirely and `--map-by node` is used instead, letting the rank float across the whole node. For srun, `--cpu-bind=ldoms` is added when multiple NUMA domains are detected. If you already pass a native flag (`--np`, `--map-by`, `--ntasks[-per-node]`, `--cpus-per-task`, `--cpu-bind`) yourself, it's left alone and nothing is injected on top of it.
+
+```
+cargo run --profile release-dev --example load_store_test -- AtomicArray Block f32 128 -- --pes 8 --pes-per-node 4 --threads-per-pe 4 --lamellae shmem
+```
+
+### Other launch flags
+
+- `--lamellae <name>` — sets `LAMELLAR_BACKEND` for the launched job (same values as the `LAMELLAR_BACKEND` env var: `local`, `shmem`, `rofi_c`, `libfabric`, `libfabric-sys`, `libfabric-async`, `ucx`). `--help` lists which of these are actually available in the build (backend features that weren't enabled at compile time aren't offered) and which one is the compiled-in default.
+- `--cmd-queue <variant>` — sets `LAMELLAR_CMD_QUEUE` for the launched job (`batched`, `get` (default), `geteager`, `getslots`, `put`, `putslots`, `puteager`).
+- `--batcher <variant>` — sets `LAMELLAR_BATCHER` for the launched job (`simple` (default), `direct`, `team_am`, `vec_simple` (experimental), `vec_team_am` (experimental)).
+- `--help` / `-h` — print all launch flags recognized after the second `--` and exit, without launching anything.
+
+## distributed backends (multi-process, multi-system)
+1. Allocate compute nodes on the cluster (this allows us to reuse nodes for subsequent runs without paying an allocation overhead):
+    - ```salloc -N 2```
+2. run your application the same way as above (`cargo run ... -- <app args> -- <launcher args>`) — `#[lamellar::main]` handles invoking `prterun`/`srun` across the allocated nodes; select the distributed backend via `--lamellae <backend>` or setting `LAMELLAR_BACKEND` (e.g. `rofi_c`, `libfabric`, `ucx`).
+
+### Auto-allocation (`--nodes`, requires the `with-salloc` feature)
+
+Step 1 above can be skipped: pass `--nodes <N>` after the second `--` (or set `LAMELLAR_NODES`) and, if you're not already inside a SLURM allocation, `#[lamellar::main]` runs `salloc -N <N> <your original command>` for you and blocks until it's granted, then proceeds as normal inside the allocation. If `--pes`/`--pes-per-node` is given without `--nodes`, the node count is derived from it (`nodes = ceil(pes / pes_per_node)`); giving all three requires them to agree (`pes == nodes * pes_per_node`) or the run fails fast with an error instead of guessing. If `salloc` isn't found, or no node count can be resolved, this step is skipped and behavior is unchanged from before.
+
+This behavior is opt-in: build with `--features with-salloc` (in addition to `enable-lamellar-main`). Without it, `--nodes`/`LAMELLAR_NODES` is still parsed and still feeds PE-count defaults, but no `salloc` call is made — a warning is printed and the run proceeds as if `--nodes` weren't given.
+
+Extra `salloc` flags (partition, time limit, account, qos, ...) can be passed through with `--salloc-opts`: everything after it, up to the next `--` (or end of args), is forwarded to `salloc` verbatim.
+
+```
+cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --nodes 2 --pes-per-node 4
+
+cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --nodes 2 --salloc-opts --partition foo --time 01:00:00 --
+```
 
 Examples 
 --------
@@ -113,7 +246,13 @@ Additionally, we are compiling a set of benchmarks (some with multiple implement
 
 Below are a few small examples highlighting some of the features of lamellar, more in-depth examples can be found in the documentation for the various features.
 # Selecting a Lamellae and constructing a lamellar world instance
-You can select which backend to use at runtime as shown below:
+You can select which backend/lamellae to use by specifing the --lamellae <backend> arg to a binary (your binaries main function must be prepended with `#[lamellar::main]`)
+```cargo run --release -- <app args> -- --lamellae <backend>```
+
+or by setting the following envrionment variable:
+```LAMELLAR_BACKEND="backend"``` where backend is one of `local`, `shmem`, `rofi_c`, `libfabric-sys`, `libfabric`, `libfabric-async`, or `ucx`.
+
+or by setting the backend programmatically:
 ```
 use lamellar::Backend;
 #[lamellar::main]
@@ -126,8 +265,7 @@ fn main(){
         .build();
 }
 ```
-or by setting the following envrionment variable:
-```LAMELLAR_BACKEND="backend"``` where backend is one of `local`, `shmem`, `rofi_c`, `libfabric-sys`, `libfabric`, `libfabric-async`, or `ucx`.
+
 
 # Creating and executing a Registered Active Message
 Please refer to the [Active Messaging](https://docs.rs/lamellar/latest/lamellar/active_messaging) documentation for more details and examples
@@ -221,123 +359,25 @@ fn main(){
     assert_eq!(cnt.load(Ordering::SeqCst),num_pes*2 + 1);
 }
 ```
-# Using Lamellar 
-Lamellar is capable of running on single node workstations as well as distributed HPC systems.
-For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 
-``` lamellar = "0.8.0" ```
+# Environment Variables
 
-If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
+Please see [env_var.rs] for a description of available environment variables.
 
-```lamellar = { version = "0.8.0", features = ["enable-rofi-c"]}```
-
-NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
-If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR envrionment variable.
-
-For both environments, build your application as normal
-
-```cargo build (--release)```
-
-## Release Profiles
-Lamellar's `Cargo.toml` defines three release profiles, tuned for different stages of development:
-
-- `release` — fully optimized (`opt-level = 3`, `lto = true`, `codegen-units = 1`). Slowest to compile, best runtime performance. Use this for benchmarking and production runs.
-  ```toml
-  [profile.release]
-  opt-level = 3
-  lto = true
-  codegen-units = 1
-  ```
-- `release-dev` — same optimization level as `release` but with LTO disabled and parallel codegen units, trading a bit of runtime performance for much faster incremental builds. We recommend copying this profile into your own application's `Cargo.toml` and using it during active development.
-  ```toml
-  [profile.release-dev]
-  inherits = "release"
-  opt-level = 3
-  lto = false
-  codegen-units = 256
-  ```
-- `release-debug` — `release-dev` plus debug symbols (including for dependencies), for when you need a debugger or backtraces on an otherwise optimized build.
-  ```toml
-  [profile.release-debug]
-  inherits = "release-dev"
-  debug = true
-  [profile.release-debug.package."*"]
-  debug = true
-  ```
-
-To build/run with a custom profile:
-```
-cargo build --profile release-dev --example <example-name>
-cargo run --profile release-dev --example <example-name> -- <app args>
-```
-
-We do **not** recommend using the default `debug` profile (i.e. building without `--release`/`--profile`) for anything beyond quick correctness checks — the performance impact of unoptimized builds can significantly affect Lamellar's runtime execution, especially for communication-heavy applications.
-
-# Running Lamellar Applications
-A Lamellar application's `main` function must be annotated with `#[lamellar::main]` (see examples above), which is responsible for launching the requested number of PEs. You still construct the world yourself (e.g. via `LamellarWorldBuilder`) inside `main`.
-
-The generated `main` detects whether it's already running as a launched PE (e.g. under PRRTE/srun); if not, it re-executes itself under a launcher (`prterun` by default, or `srun` with the `use-srun` feature) using the arguments given after the launcher-args separator described below. This means a single `cargo run`/binary invocation transparently becomes a multi-PE job — you no longer need a separate `lamellar_run.sh` step.
-
-Before launching, `#[lamellar::main]` also patches the binary's `RPATH`/`RUNPATH` (via `readelf`/`patchelf`) with the build-output library directories found on `LD_LIBRARY_PATH`, so launched PEs can find dependencies like libfabric/UCX/rofi without you having to export `LD_LIBRARY_PATH` yourself. If this patching fails for some reason (e.g. `patchelf`/`readelf` unavailable), fall back to sourcing the generated `lamellar_env.sh` (built by `build.rs`) before running:
-```
-source lamellar_env.sh
-```
-
-## local / shmem (single system, one or many processes)
-Launch directly, no separate launcher required:
-```cargo run --release --example <example-name> -- <app args>```
-
-To run multiple PEs on a single system (shared-memory backend), add a second `--`-separated section with launcher args:
-```
-LAMELLAR_BACKEND=shmem cargo run --profile release --features '<feature-list>' --example <example-name> -- <app args> -- --map-by node:PE=4 --np <N>
-```
-- everything before the first `--` is `cargo`'s own arguments (profile, features, which binary/example to build)
-- everything between the two `--` is forwarded to your application unmodified
-- everything after the second `--` is forwarded to the launcher (`prterun`/`srun`) — `--np <N>` sets the number of PEs, `--map-by` controls process/thread placement, etc.
-
-Example (uses `enable-ucx`, `enable-libfabric*`, `enable-rofi-c`, and `tokio-executor` features together, launching 2 PEs, 4 threads each):
-```
-cargo run --profile release --features 'enable-ucx,enable-libfabric,enable-libfabric-sys,enable-libfabric-async,enable-rofi-c,tokio-executor' --example load_store_test -- AtomicArray Block f32 128 -- --map-by node:PE=4 --np 2
-```
-
-### Consistent PE flags (`--pes` / `--pes-per-node`)
-
-Instead of hand-writing launcher-native flags (`--map-by node:PE=<N> --np <N>` for prterun, `--ntasks-per-node=<N> --cpus-per-task=<N>` for srun), you can use two launcher-agnostic flags after the second `--`, and `#[lamellar::main]` translates them to whichever launcher is active (`prterun` or `srun`):
-- `--pes <N>` — total number of PEs across all nodes
-- `--pes-per-node <N>` — PEs per node
-
-Give either or both (`LAMELLAR_PES`/`LAMELLAR_PES_PER_NODE` env vars work as fallbacks too). If neither is given (and `--nodes` wasn't either): with the `local` backend (the default when no other backend feature is enabled, or set explicitly via `LAMELLAR_BACKEND=local`), defaults to a single PE using all available threads; every other backend (e.g. `shmem`) defaults to one PE per NUMA domain on the host. Cores bound per PE come from `--threads-per-pe <N>` (or `LAMELLAR_THREADS` if the flag isn't given); if neither is set, it defaults to `available cores / --pes-per-node` (or just available cores, if `--pes-per-node` wasn't given). For prterun, this is injected as `--map-by node:PE=<N>` — PRRTE's `PE=<N>` already binds each rank to N cpus, so on a host with more than one NUMA domain (detected via the `hwlocality`/hwloc bindings) NUMA-awareness comes from sizing `<N>` correctly rather than an explicit `--bind-to` (PRRTE rejects combining `PE=` with any `--bind-to` other than `core`/`hwt`). If `--pes-per-node` is smaller than the NUMA domain count, a single PE's cores would have to span more than one domain/package, which PRRTE always refuses — in that case `PE=` is dropped entirely and `--map-by node` is used instead, letting the rank float across the whole node. For srun, `--cpu-bind=ldoms` is added when multiple NUMA domains are detected. If you already pass a native flag (`--np`, `--map-by`, `--ntasks[-per-node]`, `--cpus-per-task`, `--cpu-bind`) yourself, it's left alone and nothing is injected on top of it.
-
-```
-cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --pes 8 --pes-per-node 4 --threads-per-pe 4
-```
-
-### Other launch flags
-
-- `--lamellae <name>` — sets `LAMELLAR_BACKEND` for the launched job (same values as the `LAMELLAR_BACKEND` env var: `local`, `shmem`, `rofi_c`, `libfabric`, `libfabric-sys`, `libfabric-async`, `ucx`). `--help` lists which of these are actually available in the build (backend features that weren't enabled at compile time aren't offered) and which one is the compiled-in default.
-- `--cmd-queue <variant>` — sets `LAMELLAR_CMD_QUEUE` for the launched job (`batched`, `get` (default), `geteager`, `getslots`, `put`, `putslots`, `puteager`).
-- `--batcher <variant>` — sets `LAMELLAR_BATCHER` for the launched job (`simple` (default), `direct`, `team_am`, `vec_simple` (experimental), `vec_team_am` (experimental)).
-- `--help` / `-h` — print all launch flags recognized after the second `--` and exit, without launching anything.
-
-## distributed backends (multi-process, multi-system)
-1. allocate compute nodes on the cluster:
-    - ```salloc -N 2```
-2. run your application the same way as above (`cargo run ... -- <app args> -- <launcher args>`) — `#[lamellar::main]` handles invoking `prterun`/`srun` across the allocated nodes; select the distributed backend via `LAMELLAR_BACKEND` (e.g. `rofi_c`, `libfabric`, `ucx`) or the corresponding `Backend::*` variant in the world builder.
-
-### Auto-allocation (`--nodes`, requires the `with-salloc` feature)
-
-Step 1 above can be skipped: pass `--nodes <N>` after the second `--` (or set `LAMELLAR_NODES`) and, if you're not already inside a SLURM allocation, `#[lamellar::main]` runs `salloc -N <N> <your original command>` for you and blocks until it's granted, then proceeds as normal inside the allocation. If `--pes`/`--pes-per-node` is given without `--nodes`, the node count is derived from it (`nodes = ceil(pes / pes_per_node)`); giving all three requires them to agree (`pes == nodes * pes_per_node`) or the run fails fast with an error instead of guessing. If `salloc` isn't found, or no node count can be resolved, this step is skipped and behavior is unchanged from before.
-
-This behavior is opt-in: build with `--features with-salloc` (in addition to `enable-lamellar-main`). Without it, `--nodes`/`LAMELLAR_NODES` is still parsed and still feeds PE-count defaults, but no `salloc` call is made — a warning is printed and the run proceeds as if `--nodes` weren't given.
-
-Extra `salloc` flags (partition, time limit, account, qos, ...) can be passed through with `--salloc-opts`: everything after it, up to the next `--` (or end of args), is forwarded to `salloc` verbatim.
-
-```
-cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --nodes 2 --pes-per-node 4
-
-cargo run --release --example load_store_test -- AtomicArray Block f32 128 -- --nodes 2 --salloc-opts --partition foo --time 01:00:00 --
-```
-
+Commonly used variables include:
+ - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE, defaults to [std::thread::available_parallelism] if available or else 4
+ - `LAMELLAR_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
+     - possible values
+         - `local` -- default
+         - `shmem`
+         - `rofi_c`  -- only available with the `enable-rofi-c` (or related `enable-rofi-*`) feature
+         - `libfabric-sys` / `libfabric` / `libfabric-async` -- only available with the corresponding `enable-libfabric*` feature
+         - `ucx` -- only available with the `enable-ucx` feature
+ - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
+     - possible values
+         - `lamellar` -- default, work stealing backend
+         - `async_std` -- alternative backend from async_std
+         - `tokio` -- only available with the `tokio-executor` feature in which case it is the default executor
 
 Repository Organization 
 -----------------------
