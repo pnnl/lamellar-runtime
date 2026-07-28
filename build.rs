@@ -10,13 +10,16 @@ fn main() {
     let mut lib_paths: Vec<String> = Vec::new();
 
     println!("cargo:rerun-if-env-changed=DEP_OFI_ROOT");
-    if let Ok(fabric_lib_dir) = env::var("DEP_OFI_ROOT") {
-        let lib_path = PathBuf::from(fabric_lib_dir).join("lib");
-        println!("cargo:rustc-link-search=native={}", lib_path.display());
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_path.display());
-        lib_paths.push(lib_path.display().to_string());
-    } else {
-        println!("cargo:warning=DEP_OFI_ROOT not set; skipping libfabric lib path");
+    #[cfg(any(feature = "libfabric", feature = "libfabric-sys"))]
+    {
+        if let Ok(fabric_lib_dir) = env::var("DEP_OFI_ROOT") {
+            let lib_path = PathBuf::from(fabric_lib_dir).join("lib");
+            println!("cargo:rustc-link-search=native={}", lib_path.display());
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_path.display());
+            lib_paths.push(lib_path.display().to_string());
+        } else {
+            println!("cargo:warning=DEP_OFI_ROOT not set; skipping libfabric lib path");
+        }
     }
 
     println!("cargo:rerun-if-env-changed=DEP_ROFI_ROOT");
