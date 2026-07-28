@@ -447,7 +447,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// // Every PE atomically reads the element owned by PE 0
@@ -476,7 +476,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let val = array.blocking_get(0);
@@ -509,7 +509,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let data = unsafe { array.get_buffer(0, 10).block() };
@@ -542,7 +542,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let data = unsafe { array.blocking_get_buffer(0, 10) };
@@ -578,12 +578,13 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
-    /// let buf = unsafe { array.get_into_buffer(0, buf).block() };
+    /// let mut buf = LamellarBuffer::from_vec(&world, dst);
+    /// let handle = buf.split_off(0);
+    /// unsafe { array.get_into_buffer(0, handle).block() };
     /// let result = buf.try_unwrap().expect("no other references exist");
     /// println!("PE{my_pe} first 10 elements: {:?}", result);
     ///```
@@ -620,11 +621,11 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// unsafe { array.blocking_get_into_buffer(0, buf); }
     ///```
     pub unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
@@ -659,11 +660,11 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// unsafe { array.get_into_buffer_unmanaged(0, buf); }
     /// world.wait_all();
     /// world.barrier();
@@ -699,7 +700,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// // Atomically read PE 0's first local element
@@ -732,7 +733,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let val = unsafe { array.blocking_get_pe(0, 0) };
@@ -759,7 +760,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// // Fetch 5 elements starting at PE 0's local offset 0
@@ -791,7 +792,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let data = array.blocking_get_buffer_pe(0, 0, 5);
@@ -831,7 +832,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let dst = world.alloc_one_sided_mem_region::<usize>(5);
@@ -873,7 +874,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let dst = world.alloc_one_sided_mem_region::<usize>(5);
@@ -915,11 +916,11 @@ impl<T: Dist> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
+    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 5];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// unsafe { array.get_into_buffer_unmanaged_pe(0, 0, buf); }
     /// world.wait_all();
     /// world.barrier();

@@ -1088,7 +1088,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1120,7 +1120,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1159,7 +1159,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1192,7 +1192,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1230,14 +1230,15 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
     /// // Use a Vec as the destination buffer
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
-    /// let buf = unsafe { array.get_into_buffer(0, buf).block() };
+    /// let mut buf = LamellarBuffer::from_vec(&world, dst);
+    /// let handle = buf.split_off(0);
+    /// unsafe { array.get_into_buffer(0, handle).block() };
     /// let result = buf.try_unwrap().expect("no other references exist");
     /// println!("PE{my_pe} first 10 elements: {:?}", result);
     ///```
@@ -1274,12 +1275,12 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// unsafe { array.blocking_get_into_buffer(0, buf); }
     ///```
     pub unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
@@ -1314,12 +1315,12 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// unsafe { array.get_into_buffer_unmanaged(0, buf); }
     /// world.wait_all();
     /// world.barrier();
@@ -1356,7 +1357,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1389,7 +1390,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1422,7 +1423,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1460,7 +1461,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1504,7 +1505,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1548,7 +1549,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
@@ -1592,12 +1593,12 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, num_pes * 10, Distribution::Block).block();
     /// unsafe {
-    ///     array.local_iter_mut().enumerate().for_each(|(i, elem)| *elem = my_pe).block();
+    ///     array.local_iter_mut().enumerate().for_each(move |(i, elem)| *elem = my_pe).block();
     /// }
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 5];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// unsafe { array.get_into_buffer_unmanaged_pe(0, 0, buf); }
     /// world.wait_all();
     /// world.barrier();

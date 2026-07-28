@@ -474,7 +474,7 @@ impl LamellarTeam {
     /// }
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let handle = world.exec_am_local_thread(MyLocalAm { val: 21 }, 0);
+    /// let handle = world.team().exec_am_local_thread(MyLocalAm { val: 21 }, 0);
     /// let result = handle.block();
     /// assert_eq!(result, 42);
     ///```

@@ -431,6 +431,7 @@ impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -489,6 +490,7 @@ impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -550,6 +552,7 @@ impl<T: ElementComparePartialEqOps + Default> GlobalLockCollectiveMutLocalData<T
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -608,6 +611,7 @@ impl<T: ElementComparePartialEqOps + Default> GlobalLockCollectiveMutLocalData<T
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -669,6 +673,7 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -727,6 +732,7 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -785,6 +791,7 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -846,6 +853,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -861,6 +869,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -876,6 +885,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -891,6 +901,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -906,6 +917,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -921,6 +933,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -936,6 +949,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -1347,10 +1361,12 @@ impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.sum_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// guard.sum_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(buf.into())).block();
     ///```
     pub fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1404,10 +1420,12 @@ impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.prod_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// guard.prod_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(buf.into())).block();
     ///```
     pub fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1464,10 +1482,12 @@ impl<T: ElementComparePartialEqOps + Default> GlobalLockCollectiveMutLocalData<T
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.max_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// guard.max_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(buf.into())).block();
     ///```
     pub fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1521,10 +1541,12 @@ impl<T: ElementComparePartialEqOps + Default> GlobalLockCollectiveMutLocalData<T
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.min_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// guard.min_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(buf.into())).block();
     ///```
     pub fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1581,10 +1603,12 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.bit_and_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// guard.bit_and_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(buf.into())).block();
     ///```
     pub fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1642,10 +1666,12 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.bit_or_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// guard.bit_or_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(buf.into())).block();
     ///```
     pub fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1703,10 +1729,12 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.bit_xor_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// guard.bit_xor_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(buf.into())).block();
     ///```
     pub fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1877,6 +1905,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -1994,10 +2023,12 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.gather_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(0)).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// guard.gather_at_pe_into_buffer(0, 1, RootOrLamellarBuffer::Root(buf.into())).block();
     ///```
     pub fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -2108,6 +2139,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -2243,10 +2275,11 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
-    /// guard.broadcast_from_pe_into_buffer(RootSrcOrLamellarBuffer::Root(0), 1).block();
+    /// guard.broadcast_from_pe_into_buffer(RootSrcOrLamellarBuffer::<usize, OneSidedMemoryRegion<usize>>::Root(0), 1).block();
     ///```
     pub fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -2379,6 +2412,7 @@ impl<T: Dist + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -2846,6 +2880,7 @@ impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -2892,6 +2927,7 @@ impl<T: ElementArithmeticOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -2945,6 +2981,7 @@ impl<T: ElementComparePartialEqOps + Default> GlobalLockCollectiveMutLocalData<T
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -2991,6 +3028,7 @@ impl<T: ElementComparePartialEqOps + Default> GlobalLockCollectiveMutLocalData<T
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -3040,6 +3078,7 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -3090,6 +3129,7 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();
@@ -3140,6 +3180,7 @@ impl<T: ElementBitWiseOps + Default> GlobalLockCollectiveMutLocalData<T> {
     /// # Examples
     ///```no_run
     /// use lamellar::array::prelude::*;
+/// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world, world.num_pes(), Distribution::Block).block();
     /// let guard = array.collective_write_local_data().block();

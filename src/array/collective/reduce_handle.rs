@@ -77,7 +77,7 @@ impl<T: Dist> ArrayCollectiveAllReduceHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.allreduce_init(lamellar::array::operations::Sum);
+    /// let handle = unsafe { array.sum_all(0, 100) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -101,7 +101,7 @@ impl<T: Dist> ArrayCollectiveAllReduceHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.allreduce_init(lamellar::array::operations::Sum);
+    /// let handle = unsafe { array.sum_all(0, 100) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> Vec<T> {
@@ -188,8 +188,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceIntoBufferHandle<T
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.allreduce_into_buffer_init(lamellar::array::operations::Sum, &buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.sum_all_into_buffer(0, 100, buf.into()) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -218,8 +218,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceIntoBufferHandle<T
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.allreduce_into_buffer_init(lamellar::array::operations::Sum, &buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.sum_all_into_buffer(0, 100, buf.into()) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) {
@@ -284,8 +284,9 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceInPlaceHandle<T, B
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = buf.allreduce_in_place_init(lamellar::array::operations::Sum);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// let handle = unsafe { array.sum_all_in_place(buf.into()) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -308,8 +309,9 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllReduceInPlaceHandle<T, B
     /// use lamellar::array::prelude::*;
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = buf.allreduce_in_place_init(lamellar::array::operations::Sum);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
+    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    /// let handle = unsafe { array.sum_all_in_place(buf.into()) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) {
@@ -394,7 +396,7 @@ impl<T: Dist> ArrayCollectiveReduceHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.reduce_init(0, lamellar::array::operations::Sum);
+    /// let handle = unsafe { array.sum_at_pe(0, 100, 0) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -418,7 +420,7 @@ impl<T: Dist> ArrayCollectiveReduceHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.reduce_init(0, lamellar::array::operations::Sum);
+    /// let handle = unsafe { array.sum_at_pe(0, 100, 0) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> Option<Vec<T>> {
@@ -504,8 +506,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceIntoBufferHandle<T, B
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.reduce_into_buffer_init(0, lamellar::array::operations::Sum, &buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.sum_at_pe_into_buffer(0, 100, RootOrLamellarBuffer::Root(buf.into())) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -532,8 +534,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceIntoBufferHandle<T, B
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.reduce_into_buffer_init(0, lamellar::array::operations::Sum, &buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.sum_at_pe_into_buffer(0, 100, RootOrLamellarBuffer::Root(buf.into())) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) {

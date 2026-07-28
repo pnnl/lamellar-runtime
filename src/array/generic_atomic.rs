@@ -48,9 +48,11 @@ impl<T: Dist> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let val = local_data.at(0).load();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let val = local_data.at(0).load();
+    /// }
     ///```
     pub fn load(&self) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -62,9 +64,11 @@ impl<T: Dist> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// local_data.at(0).store(42);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     local_data.at(0).store(42);
+    /// }
     ///```
     pub fn store(&self, val: T) {
         let _lock = self.array.lock_index(self.local_index);
@@ -78,9 +82,11 @@ impl<T: Dist> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).swap(42);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).swap(42);
+    /// }
     ///```
     pub fn swap(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -98,9 +104,11 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_add(1);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_add(1);
+    /// }
     ///```
     pub fn fetch_add(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -116,9 +124,11 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_sub(1);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_sub(1);
+    /// }
     ///```
     pub fn fetch_sub(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -134,9 +144,11 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_mul(2);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_mul(2);
+    /// }
     ///```
     pub fn fetch_mul(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -152,9 +164,11 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_div(2);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_div(2);
+    /// }
     ///```
     pub fn fetch_div(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -170,9 +184,11 @@ impl<T: ElementArithmeticOps> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_rem(3);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_rem(3);
+    /// }
     ///```
     pub fn fetch_rem(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -193,9 +209,11 @@ impl<T: Dist + std::cmp::Eq> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let result = local_data.at(0).compare_exchange(0, 42);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let result = local_data.at(0).compare_exchange(0, 42);
+    /// }
     ///```
     pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
         let _lock = self.array.lock_index(self.local_index);
@@ -221,9 +239,11 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<f32> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let result = local_data.at(0).compare_exchange_epsilon(0.0, 1.0, 0.01);
+    /// let array: AtomicArray<f32> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let result = local_data.at(0).compare_exchange_epsilon(0.0, 1.0, 0.01);
+    /// }
     ///```
     pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
         let _lock = self.array.lock_index(self.local_index);
@@ -251,9 +271,11 @@ impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_and(0b1010);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_and(0b1010);
+    /// }
     ///```
     pub fn fetch_and(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -269,9 +291,11 @@ impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_or(0b0101);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_or(0b0101);
+    /// }
     ///```
     pub fn fetch_or(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -287,9 +311,11 @@ impl<T: ElementBitWiseOps + 'static> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_xor(0b1111);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_xor(0b1111);
+    /// }
     ///```
     pub fn fetch_xor(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -308,9 +334,11 @@ impl<T: ElementComparePartialEqOps> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_max(10);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_max(10);
+    /// }
     ///```
     pub fn fetch_max(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -328,9 +356,11 @@ impl<T: ElementComparePartialEqOps> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_min(10);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_min(10);
+    /// }
     ///```
     pub fn fetch_min(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -351,9 +381,11 @@ impl<T: ElementShiftOps + 'static> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_shl(2);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_shl(2);
+    /// }
     ///```
     pub fn fetch_shl(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -369,9 +401,11 @@ impl<T: ElementShiftOps + 'static> GenericAtomicElement<T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_shr(2);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_shr(2);
+    /// }
     ///```
     pub fn fetch_shr(&self, val: T) -> T {
         let _lock = self.array.lock_index(self.local_index);
@@ -479,10 +513,12 @@ impl<'a, T: Dist> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let val = elem.load();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let val = elem.load();
+    ///     }
     /// }
     ///```
     pub fn load(&self) -> T {
@@ -495,10 +531,12 @@ impl<'a, T: Dist> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     elem.store(42);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         elem.store(42);
+    ///     }
     /// }
     ///```
     pub fn store(&self, val: T) {
@@ -513,10 +551,12 @@ impl<'a, T: Dist> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.swap(42);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.swap(42);
+    ///     }
     /// }
     ///```
     pub fn swap(&self, val: T) -> T {
@@ -536,10 +576,12 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_add(1);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_add(1);
+    ///     }
     /// }
     ///```
     pub fn fetch_add(&self, val: T) -> T {
@@ -556,10 +598,12 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_sub(1);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_sub(1);
+    ///     }
     /// }
     ///```
     pub fn fetch_sub(&self, val: T) -> T {
@@ -576,10 +620,12 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_mul(2);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_mul(2);
+    ///     }
     /// }
     ///```
     pub fn fetch_mul(&self, val: T) -> T {
@@ -596,10 +642,12 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_div(2);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_div(2);
+    ///     }
     /// }
     ///```
     pub fn fetch_div(&self, val: T) -> T {
@@ -616,10 +664,12 @@ impl<'a, T: ElementArithmeticOps> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_rem(3);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_rem(3);
+    ///     }
     /// }
     ///```
     pub fn fetch_rem(&self, val: T) -> T {
@@ -641,10 +691,12 @@ impl<'a, T: Dist + std::cmp::Eq> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let result = elem.compare_exchange(0, 42);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let result = elem.compare_exchange(0, 42);
+    ///     }
     /// }
     ///```
     pub fn compare_exchange(&self, current: T, new: T) -> Result<T, T> {
@@ -672,10 +724,12 @@ impl<'a, T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Ou
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<f32> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let result = elem.compare_exchange_epsilon(0.0, 1.0, 0.01);
+    /// let array: AtomicArray<f32> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let result = elem.compare_exchange_epsilon(0.0, 1.0, 0.01);
+    ///     }
     /// }
     ///```
     pub fn compare_exchange_epsilon(&self, current: T, new: T, eps: T) -> Result<T, T> {
@@ -704,10 +758,12 @@ impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_and(0b1010);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_and(0b1010);
+    ///     }
     /// }
     ///```
     pub fn fetch_and(&self, val: T) -> T {
@@ -724,10 +780,12 @@ impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_or(0b0101);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_or(0b0101);
+    ///     }
     /// }
     ///```
     pub fn fetch_or(&self, val: T) -> T {
@@ -744,10 +802,12 @@ impl<'a, T: ElementBitWiseOps + 'static> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_xor(0b1111);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_xor(0b1111);
+    ///     }
     /// }
     ///```
     pub fn fetch_xor(&self, val: T) -> T {
@@ -767,10 +827,12 @@ impl<'a, T: ElementComparePartialEqOps + 'static> GenericAtomicElementRef<'a, T>
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_max(10);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_max(10);
+    ///     }
     /// }
     ///```
     pub fn fetch_max(&self, val: T) -> T {
@@ -789,10 +851,12 @@ impl<'a, T: ElementComparePartialEqOps + 'static> GenericAtomicElementRef<'a, T>
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_min(10);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_min(10);
+    ///     }
     /// }
     ///```
     pub fn fetch_min(&self, val: T) -> T {
@@ -814,10 +878,12 @@ impl<'a, T: ElementShiftOps + 'static> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_shl(2);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_shl(2);
+    ///     }
     /// }
     ///```
     pub fn fetch_shl(&self, val: T) -> T {
@@ -834,10 +900,12 @@ impl<'a, T: ElementShiftOps + 'static> GenericAtomicElementRef<'a, T> {
     ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// for elem in &local_data {
-    ///     let old = elem.fetch_shr(2);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     for elem in &local_data {
+    ///         let old = elem.fetch_shr(2);
+    ///     }
     /// }
     ///```
     pub fn fetch_shr(&self, val: T) -> T {
@@ -1733,8 +1801,10 @@ impl<T: ElementArithmeticOps> LocalGenericAtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_rem(3);
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_rem(3);
+    /// }
     ///```
     pub fn fetch_rem(&self, val: T) -> T {
         let mut guard = self.val.lock();
@@ -1842,8 +1912,10 @@ impl<T: ElementBitWiseOps + 'static> LocalGenericAtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_xor(0b1111);
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_xor(0b1111);
+    /// }
     ///```
     pub fn fetch_xor(&self, val: T) -> T {
         let mut guard = self.val.lock();
@@ -1861,8 +1933,10 @@ impl<T: ElementComparePartialEqOps + 'static> LocalGenericAtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_max(10);
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_max(10);
+    /// }
     ///```
     pub fn fetch_max(&self, val: T) -> T {
         let mut guard = self.val.lock();
@@ -1879,8 +1953,10 @@ impl<T: ElementComparePartialEqOps + 'static> LocalGenericAtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world, 100, Distribution::Block).block();
-    /// let local_data = array.local_data();
-    /// let old = local_data.at(0).fetch_min(10);
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     let local_data = array.local_data();
+    ///     let old = local_data.at(0).fetch_min(10);
+    /// }
     ///```
     pub fn fetch_min(&self, val: T) -> T {
         let mut guard = self.val.lock();

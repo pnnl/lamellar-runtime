@@ -468,7 +468,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes);
     /// unsafe {
-    ///     for elem in mem_region.as_mut_slice().expect("PE just allocated the region") {
+    ///     for elem in mem_region.as_mut_slice() {
     ///         *elem = 0;
     ///     }
     ///     mem_region.put(my_pe, my_pe).block();
@@ -503,7 +503,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes);
     /// unsafe {
-    ///     for elem in mem_region.as_mut_slice().expect("PE just allocated the region") {
+    ///     for elem in mem_region.as_mut_slice() {
     ///         *elem = 0;
     ///     }
     ///     mem_region.put_blocking(my_pe, my_pe);
@@ -539,7 +539,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes);
     /// unsafe {
-    ///     for elem in mem_region.as_mut_slice().expect("PE just allocated the region") {
+    ///     for elem in mem_region.as_mut_slice() {
     ///         *elem = 0;
     ///     }
     ///     mem_region.put_unmanaged(my_pe, my_pe);
@@ -582,8 +582,8 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     /// impl LamellarAm for MemRegionAm{
     ///     async fn exec(self){
     ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(10);
-    ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.put(lamellar::current_pe*temp_buffer.len(),temp_buffer)};
+    ///         unsafe{ for elem in temp_buffer.as_mut_slice(){ *elem = lamellar::current_pe}}
+    ///         unsafe{ self.mem_region.put_buffer(lamellar::current_pe*temp_buffer.len(),temp_buffer) }.await;
     ///     }
     /// }
     ///
@@ -592,7 +592,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
-    /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
+    /// unsafe{ for elem in mem_region.as_mut_slice(){*elem = num_pes};}
     ///
     /// let _ = world.spawn_am_all(MemRegionAm{mem_region: mem_region.clone()});
     ///
@@ -646,7 +646,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     /// let dst: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
     ///
     /// unsafe {
-    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in src.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = my_pe * 10 + i;
     ///     }
     ///     dst.put_buffer_unmanaged(my_pe * 10, src);
@@ -691,7 +691,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     // /// impl LamellarAm for MemRegionAm{
     // ///     async fn exec(self){
     // ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
-    // ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
+    // ///         unsafe{ for elem in temp_buffer.as_mut_slice(){ *elem = lamellar::current_pe}}
     // ///         unsafe{ self.mem_region.get(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
     // ///         unsafe {
     // ///             for elem in temp_buffer.iter(){
@@ -710,7 +710,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     // /// let num_pes = world.num_pes();
     // ///
     // /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
-    // /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
+    // /// unsafe{ for elem in mem_region.as_mut_slice(){*elem = num_pes};}
     // ///
     // /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     // ///```
@@ -738,7 +738,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes);
     /// unsafe {
-    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
     ///     let val = mem_region.get(my_pe).block();
@@ -773,7 +773,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
     /// unsafe {
-    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
     ///     let data: Vec<usize> = mem_region.get_buffer(my_pe * 10, 10).block();
@@ -811,10 +811,10 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
     /// unsafe {
-    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
-    ///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+    ///     let buf = LamellarBuffer::from_vec(&world, vec![0usize; 10]);
     ///     mem_region.get_into_buffer(my_pe * 10, buf).block();
     /// }
     ///```
@@ -853,10 +853,10 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
     /// unsafe {
-    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
-    ///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+    ///     let buf = LamellarBuffer::from_vec(&world, vec![0usize; 10]);
     ///     mem_region.get_into_buffer_unmanaged(my_pe * 10, buf);
     /// }
     /// // caller is responsible for ensuring completion before reading the buffer
@@ -924,7 +924,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
-    /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
+    /// unsafe{ for elem in mem_region.as_mut_slice(){*elem = num_pes};}
     ///
     /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
@@ -957,8 +957,8 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
-    /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
+    /// let slice = unsafe{mem_region.as_slice()};
     ///```
     pub unsafe fn as_slice(&self) -> &[T] {
         RegisteredMemoryRegion::as_slice(self)
@@ -981,8 +981,8 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
-    /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
+    /// let slice =unsafe { mem_region.as_mut_slice()};
     ///```
     pub unsafe fn as_mut_slice(&self) -> &mut [T] {
         RegisteredMemoryRegion::as_mut_slice(self)
@@ -1010,7 +1010,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
     /// unsafe { mem_region.local_copy_from_slice(&[0usize; 1000]) };
     ///```
     pub unsafe fn local_copy_from_slice(&self, src: &[T]) {
@@ -1037,7 +1037,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
     /// let ptr = unsafe { mem_region.as_ptr().expect("PE is part of the world team")};
     ///```
     pub unsafe fn as_ptr(&self) -> MemResult<*const T> {
@@ -1061,7 +1061,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000);
     /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
     ///```
     pub unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
@@ -1084,7 +1084,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(100).block();
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(100);
     ///
     /// let sub_region = mem_region.sub_region(30..70);
     ///```

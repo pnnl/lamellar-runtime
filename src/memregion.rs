@@ -537,21 +537,21 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     ///
     /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
     /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
-    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
-    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// unsafe{ for elem in dst_mem_region.as_mut_slice() {*elem = num_pes;}}
+    /// unsafe{ for elem in src_mem_region.as_mut_slice() {*elem = my_pe;}}
     ///
     /// for pe in 0..num_pes{
-    ///    unsafe{dst_mem_region.put(pe,my_pe*src_mem_region.len(),&src_mem_region)};
+    ///    unsafe{dst_mem_region.put_buffer(pe,my_pe*src_mem_region.len(),&src_mem_region)}.block();
     /// }
     /// unsafe {
-    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    ///     let dst_slice = dst_mem_region.as_slice();
     ///     for (i,elem) in dst_slice.iter().enumerate(){
     ///         let pe = i / &src_mem_region.len();
     ///         while *elem == num_pes{
     ///             std::thread::yield_now();
     ///         }
     ///         assert_eq!(pe,*elem);
-    ///     }      
+    ///     }
     /// }
     ///```
     unsafe fn put_buffer(
@@ -584,8 +584,8 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     ///
     /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
     /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
-    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
-    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// unsafe{ for elem in dst_mem_region.as_mut_slice() {*elem = num_pes;}}
+    /// unsafe{ for elem in src_mem_region.as_mut_slice() {*elem = my_pe;}}
     ///
     /// for pe in 0..num_pes{
     ///    unsafe{dst_mem_region.put_buffer_unmanaged(pe,my_pe*src_mem_region.len(),&src_mem_region)};
@@ -622,20 +622,20 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     ///
     /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
     /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
-    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
-    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// unsafe{ for elem in dst_mem_region.as_mut_slice() {*elem = num_pes;}}
+    /// unsafe{ for elem in src_mem_region.as_mut_slice() {*elem = my_pe;}}
     ///
-    /// unsafe{dst_mem_region.put_all_buffer(my_pe*src_mem_region.len(),&src_mem_region)};
+    /// unsafe{dst_mem_region.put_all_buffer(my_pe*src_mem_region.len(),&src_mem_region)}.block();
     ///
     /// unsafe {
-    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    ///     let dst_slice = dst_mem_region.as_slice();
     ///     for (i,elem) in dst_slice.iter().enumerate(){
     ///         let pe = i / &src_mem_region.len();
     ///         while *elem == num_pes{
     ///             std::thread::yield_now();
     ///         }
     ///         assert_eq!(pe,*elem);
-    ///     }      
+    ///     }
     /// }
     ///```
     unsafe fn put_all_buffer(
@@ -671,9 +671,9 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     ///
     /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
     ///
-    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    /// unsafe{ for elem in src_mem_region.as_mut_slice() {*elem = my_pe;}}
     ///
-    /// let result = src_mem_region.get(1,5).block();
+    /// let result = unsafe { src_mem_region.get(1,5) }.block();
     ///```
     unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T>;
 
@@ -698,27 +698,10 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     /// let num_pes = world.num_pes();
     ///
     /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
-    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
     ///
-    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    /// unsafe{ for elem in src_mem_region.as_mut_slice() {*elem = my_pe;}}
     ///
-    /// for pe in 0..num_pes{
-    ///     let start_i = pe*src_mem_region.len();
-    ///     let end_i = start_i+src_mem_region.len();
-    ///     unsafe{src_mem_region.get_buffer(pe, 0, src_mem_region.len())};
-    /// }
-    ///
-    /// unsafe {
-    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
-    ///     for (i,elem) in dst_slice.iter().enumerate(){
-    ///         let pe = i / &src_mem_region.len();
-    ///         while *elem == num_pes{
-    ///             std::thread::yield_now();
-    ///         }
-    ///         assert_eq!(pe,*elem);
-    ///     }      
-    /// }
+    /// let result = unsafe { src_mem_region.get_buffer(0, 0, src_mem_region.len()) }.block();
     ///```
     unsafe fn get_buffer(&self, pe: usize, index: usize, len: usize) -> RdmaGetBufferHandle<T>;
 
@@ -757,8 +740,8 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     // /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
     // /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
     // ///
-    // /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    // /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    // /// unsafe{ for elem in src_mem_region.as_mut_slice() {*elem = my_pe;}}
+    // /// unsafe{ for elem in dst_mem_region.as_mut_slice() {*elem = num_pes;}}
     // ///
     // /// for pe in 0..num_pes{
     // ///     let start_i = pe*src_mem_region.len();

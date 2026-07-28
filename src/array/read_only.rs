@@ -485,6 +485,8 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// use rand::Rng;
     ///
+    /// register_reduction!(my_sum, |a,b| a+b, usize);
+    ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
@@ -495,7 +497,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     /// }).block();
     /// array.wait_all();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.registered_reduce("sum").block().expect("array len > 0"); // equivalent to calling array.sum()
+    /// let sum = array.registered_reduce("my_sum").block().expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

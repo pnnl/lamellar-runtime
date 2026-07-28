@@ -293,7 +293,7 @@ where
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.local_iter().collect::<UnsafeArray<usize>>(Distribution::Block);
+    /// let handle = unsafe { array.local_iter() }.map(|e| *e).collect::<UnsafeArray<usize>>(Distribution::Block);
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> A {
@@ -316,7 +316,7 @@ where
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.local_iter().collect::<UnsafeArray<usize>>(Distribution::Block);
+    /// let handle = unsafe { array.local_iter() }.map(|e| *e).collect::<UnsafeArray<usize>>(Distribution::Block);
     /// let task = handle.spawn();
     ///```
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]

@@ -1630,6 +1630,8 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// use rand::Rng;
     ///
+    /// register_reduction!(my_sum, |a,b| a+b, usize);
+    ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
@@ -1640,7 +1642,8 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     /// }).block();
     /// world.wait_all();
     /// world.barrier();
-    /// let sum = array.registered_reduce("sum").block().expect("array has length > 0"); // equivalent to calling array.sum()
+    /// let array = array.into_read_only().block();
+    /// let sum = array.registered_reduce("my_sum").block().expect("array has length > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1730,10 +1733,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
+    /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| {
     ///     elem.store(i+1);
-    /// });
-    /// array.wait_all();
+    /// }).block();
     /// array.barrier();
     /// let prod =  array.prod().block().expect("array has length > 0");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);

@@ -31,15 +31,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes, Distribution::Block).block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
     ///
-    /// if my_pe == 0 {
-    ///     for i in 0..array.len() {
-    ///         array.put(i, my_pe).block();
+    ///     if my_pe == 0 {
+    ///         for i in 0..array.len() {
+    ///             array.put(i, my_pe).block();
+    ///         }
     ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub fn put(&self, index: usize, data: T) -> ArrayRdmaPutHandle<T> {
         unsafe { <Self as LamellarRdmaPut<T>>::put(self, index, data, Sealed) }
@@ -62,15 +64,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes, Distribution::Block).block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
     ///
-    /// if my_pe == 0 {
-    ///     for i in 0..array.len() {
-    ///         array.put_unmanaged(i, my_pe);
+    ///     if my_pe == 0 {
+    ///         for i in 0..array.len() {
+    ///             array.put_unmanaged(i, my_pe);
+    ///         }
     ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub fn put_unmanaged(&self, index: usize, data: T) {
         unsafe { <Self as LamellarRdmaPut<T>>::put_unmanaged(self, index, data, Sealed) }
@@ -101,15 +105,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// let src = world.alloc_one_sided_mem_region::<usize>(10);
-    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     let src = world.alloc_one_sided_mem_region::<usize>(10);
+    ///     unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
     ///
-    /// if my_pe == 0 {
-    ///     unsafe { array.put_buffer(0, &src).block(); }
+    ///     if my_pe == 0 {
+    ///         unsafe { array.put_buffer(0, &src).block(); }
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
@@ -141,15 +147,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// let src = world.alloc_one_sided_mem_region::<usize>(10);
-    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     let src = world.alloc_one_sided_mem_region::<usize>(10);
+    ///     unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
     ///
-    /// if my_pe == 0 {
-    ///     unsafe { array.put_buffer_unmanaged(0, &src); }
+    ///     if my_pe == 0 {
+    ///         unsafe { array.put_buffer_unmanaged(0, &src); }
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
@@ -177,13 +185,15 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
     ///
-    /// if my_pe == 0 && num_pes > 1 {
-    ///     array.put_pe(1, 0, 42).block();
+    ///     if my_pe == 0 && num_pes > 1 {
+    ///         array.put_pe(1, 0, 42).block();
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub fn put_pe(&self, pe: usize, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
         unsafe { <Self as LamellarRdmaPut<T>>::put_pe(self, pe, offset, data, Sealed) }
@@ -203,13 +213,15 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
     ///
-    /// if my_pe == 0 && num_pes > 1 {
-    ///     array.put_pe_unmanaged(1, 0, 42);
+    ///     if my_pe == 0 && num_pes > 1 {
+    ///         array.put_pe_unmanaged(1, 0, 42);
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T) {
         unsafe { <Self as LamellarRdmaPut<T>>::put_pe_unmanaged(self, pe, offset, data, Sealed) }
@@ -239,15 +251,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// let src = world.alloc_one_sided_mem_region::<usize>(5);
-    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     let src = world.alloc_one_sided_mem_region::<usize>(5);
+    ///     unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
     ///
-    /// if my_pe == 0 && num_pes > 1 {
-    ///     unsafe { array.put_pe_buffer(1, 0, &src).block(); }
+    ///     if my_pe == 0 && num_pes > 1 {
+    ///         unsafe { array.put_pe_buffer(1, 0, &src).block(); }
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub unsafe fn put_pe_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
@@ -277,15 +291,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// let src = world.alloc_one_sided_mem_region::<usize>(5);
-    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     let src = world.alloc_one_sided_mem_region::<usize>(5);
+    ///     unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
     ///
-    /// if my_pe == 0 && num_pes > 1 {
-    ///     unsafe { array.put_pe_buffer_unmanaged(1, 0, &src); }
+    ///     if my_pe == 0 && num_pes > 1 {
+    ///         unsafe { array.put_pe_buffer_unmanaged(1, 0, &src); }
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub unsafe fn put_pe_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
@@ -313,13 +329,15 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
     ///
-    /// if my_pe == 0 {
-    ///     array.put_all(0, 42).block();
+    ///     if my_pe == 0 {
+    ///         array.put_all(0, 42).block();
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub fn put_all(&self, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
         unsafe { <Self as LamellarRdmaPut<T>>::put_all(self, offset, data, Sealed) }
@@ -339,13 +357,15 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
     ///
-    /// if my_pe == 0 {
-    ///     array.put_all_unmanaged(0, 42);
+    ///     if my_pe == 0 {
+    ///         array.put_all_unmanaged(0, 42);
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub fn put_all_unmanaged(&self, offset: usize, data: T) {
         unsafe { <Self as LamellarRdmaPut<T>>::put_all_unmanaged(self, offset, data, Sealed) }
@@ -374,15 +394,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// let src = world.alloc_one_sided_mem_region::<usize>(5);
-    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     let src = world.alloc_one_sided_mem_region::<usize>(5);
+    ///     unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
     ///
-    /// if my_pe == 0 {
-    ///     unsafe { array.put_all_buffer(0, &src).block(); }
+    ///     if my_pe == 0 {
+    ///         unsafe { array.put_all_buffer(0, &src).block(); }
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub unsafe fn put_all_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
@@ -411,15 +433,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// let src = world.alloc_one_sided_mem_region::<usize>(5);
-    /// unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     let src = world.alloc_one_sided_mem_region::<usize>(5);
+    ///     unsafe { for elem in src.as_mut_slice() { *elem = my_pe; } }
     ///
-    /// if my_pe == 0 {
-    ///     unsafe { array.put_all_buffer_unmanaged(0, &src); }
+    ///     if my_pe == 0 {
+    ///         unsafe { array.put_all_buffer_unmanaged(0, &src); }
+    ///     }
+    ///     array.wait_all();
+    ///     array.barrier();
     /// }
-    /// array.wait_all();
-    /// array.barrier();
     ///```
     pub unsafe fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
@@ -446,12 +470,14 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let val = array.get(0).block();
-    /// println!("PE{my_pe} got array[0] = {val}");
+    ///     let val = array.get(0).block();
+    ///     println!("PE{my_pe} got array[0] = {val}");
+    /// }
     ///```
     pub fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
         unsafe { <Self as LamellarRdmaGet<T>>::get(self, index, Sealed) }
@@ -474,12 +500,14 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let val = array.blocking_get(0);
-    /// println!("PE{my_pe} got array[0] = {val}");
+    ///     let val = array.blocking_get(0);
+    ///     println!("PE{my_pe} got array[0] = {val}");
+    /// }
     ///```
     pub fn blocking_get(&self, index: usize) -> T {
         unsafe { <Self as LamellarRdmaGet<T>>::blocking_get(self, index, Sealed) }
@@ -507,12 +535,14 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let data = unsafe { array.get_buffer(0, 10).block() };
-    /// println!("PE{my_pe} first 10 elements: {:?}", data);
+    ///     let data = unsafe { array.get_buffer(0, 10).block() };
+    ///     println!("PE{my_pe} first 10 elements: {:?}", data);
+    /// }
     ///```
     pub unsafe fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed)
@@ -540,12 +570,14 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let data = unsafe { array.blocking_get_buffer(0, 10) };
-    /// println!("PE{my_pe} first 10 elements: {:?}", data);
+    ///     let data = unsafe { array.blocking_get_buffer(0, 10) };
+    ///     println!("PE{my_pe} first 10 elements: {:?}", data);
+    /// }
     ///```
     pub unsafe fn blocking_get_buffer(&self, index: usize, num_elems: usize) -> Vec<T> {
         <Self as LamellarRdmaGet<T>>::blocking_get_buffer(self, index, num_elems, Sealed)
@@ -577,15 +609,18 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
-    /// let buf = unsafe { array.get_into_buffer(0, buf).block() };
-    /// let result = buf.try_unwrap().expect("no other references exist");
-    /// println!("PE{my_pe} first 10 elements: {:?}", result);
+    ///     let dst: Vec<usize> = vec![0usize; 10];
+    ///     let mut buf = LamellarBuffer::from_vec(&world, dst);
+    ///     let handle = buf.split_off(0);
+    ///     unsafe { array.get_into_buffer(0, handle).block() };
+    ///     let result = buf.try_unwrap().expect("no other references exist");
+    ///     println!("PE{my_pe} first 10 elements: {:?}", result);
+    /// }
     ///```
     pub unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -620,13 +655,15 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
-    /// unsafe { array.blocking_get_into_buffer(0, buf); }
+    ///     let dst: Vec<usize> = vec![0usize; 10];
+    ///     let buf = LamellarBuffer::from_vec(&world, dst);
+    ///     unsafe { array.blocking_get_into_buffer(0, buf); }
+    /// }
     ///```
     pub unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -659,15 +696,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
-    /// unsafe { array.get_into_buffer_unmanaged(0, buf); }
-    /// world.wait_all();
-    /// world.barrier();
+    ///     let dst: Vec<usize> = vec![0usize; 10];
+    ///     let buf = LamellarBuffer::from_vec(&world, dst);
+    ///     unsafe { array.get_into_buffer_unmanaged(0, buf); }
+    ///     world.wait_all();
+    ///     world.barrier();
+    /// }
     ///```
     pub unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
@@ -695,12 +734,14 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let val = array.get_pe(0, 0).block();
-    /// println!("PE{my_pe} read PE0[0] = {val}");
+    ///     let val = array.get_pe(0, 0).block();
+    ///     println!("PE{my_pe} read PE0[0] = {val}");
+    /// }
     ///```
     pub fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
         unsafe { <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed) }
@@ -723,12 +764,14 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let val = array.blocking_get_pe(0, 0);
-    /// println!("PE{my_pe} read PE0[0] = {val}");
+    ///     let val = array.blocking_get_pe(0, 0);
+    ///     println!("PE{my_pe} read PE0[0] = {val}");
+    /// }
     ///```
     pub fn blocking_get_pe(&self, pe: usize, offset: usize) -> T {
         unsafe { <Self as LamellarRdmaGet<T>>::blocking_get_pe(self, pe, offset, Sealed) }
@@ -755,12 +798,14 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let data = unsafe { array.get_buffer_pe(0, 0, 5).block() };
-    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", data);
+    ///     let data = unsafe { array.get_buffer_pe(0, 0, 5).block() };
+    ///     println!("PE{my_pe} PE0 data[0..5]: {:?}", data);
+    /// }
     ///```
     pub unsafe fn get_buffer_pe(
         &self,
@@ -792,12 +837,14 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let data = unsafe { array.blocking_get_buffer_pe(0, 0, 5) };
-    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", data);
+    ///     let data = unsafe { array.blocking_get_buffer_pe(0, 0, 5) };
+    ///     println!("PE{my_pe} PE0 data[0..5]: {:?}", data);
+    /// }
     ///```
     pub unsafe fn blocking_get_buffer_pe(
         &self,
@@ -833,14 +880,16 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let dst = world.alloc_one_sided_mem_region::<usize>(5);
-    /// let buf = unsafe { LamellarBuffer::from_one_sided_memory_region(dst.clone()) };
-    /// unsafe { array.get_into_buffer_pe(0, 0, buf).block(); }
-    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", unsafe { dst.as_slice() });
+    ///     let dst = world.alloc_one_sided_mem_region::<usize>(5);
+    ///     let buf = unsafe { LamellarBuffer::from_one_sided_memory_region(dst.clone()) };
+    ///     unsafe { array.get_into_buffer_pe(0, 0, buf).block(); }
+    ///     println!("PE{my_pe} PE0 data[0..5]: {:?}", unsafe { dst.as_slice() });
+    /// }
     ///```
     pub unsafe fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
         &self,
@@ -876,14 +925,16 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let dst = world.alloc_one_sided_mem_region::<usize>(5);
-    /// let buf = unsafe { LamellarBuffer::from_one_sided_memory_region(dst.clone()) };
-    /// unsafe { array.blocking_get_into_buffer_pe(0, 0, buf); }
-    /// println!("PE{my_pe} PE0 data[0..5]: {:?}", unsafe { dst.as_slice() });
+    ///     let dst = world.alloc_one_sided_mem_region::<usize>(5);
+    ///     let buf = unsafe { LamellarBuffer::from_one_sided_memory_region(dst.clone()) };
+    ///     unsafe { array.blocking_get_into_buffer_pe(0, 0, buf); }
+    ///     println!("PE{my_pe} PE0 data[0..5]: {:?}", unsafe { dst.as_slice() });
+    /// }
     ///```
     pub unsafe fn blocking_get_into_buffer_pe<B: AsLamellarBuffer<T>>(
         &self,
@@ -917,15 +968,17 @@ impl<T: Dist> NetworkAtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let array: NetworkAtomicArray<usize> = NetworkAtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
-    /// array.dist_iter_mut().enumerate().for_each(|(i, elem)| *elem = i).block();
-    /// array.barrier();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, num_pes * 10, Distribution::Block).block();
+    /// if let AtomicArray::NetworkAtomicArray(array) = array {
+    ///     array.dist_iter_mut().enumerate().for_each(|(i, elem)| elem.store(i)).block();
+    ///     array.barrier();
     ///
-    /// let dst: Vec<usize> = vec![0usize; 5];
-    /// let buf = LamellarBuffer::from_vec(dst);
-    /// unsafe { array.get_into_buffer_unmanaged_pe(0, 0, buf); }
-    /// world.wait_all();
-    /// world.barrier();
+    ///     let dst: Vec<usize> = vec![0usize; 5];
+    ///     let buf = LamellarBuffer::from_vec(&world, dst);
+    ///     unsafe { array.get_into_buffer_unmanaged_pe(0, 0, buf); }
+    ///     world.wait_all();
+    ///     world.barrier();
+    /// }
     ///```
     pub unsafe fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
         &self,

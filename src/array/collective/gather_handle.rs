@@ -98,7 +98,7 @@ impl<T: Dist> ArrayCollectiveAllGatherHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.allgather_init();
+    /// let handle = unsafe { array.gather_all(0, 100) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -122,7 +122,7 @@ impl<T: Dist> ArrayCollectiveAllGatherHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.allgather_init();
+    /// let handle = unsafe { array.gather_all(0, 100) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> Vec<T> {
@@ -181,8 +181,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllGatherIntoBufferHandle<T
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.allgather_into_buffer_init(&buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.gather_all_into_buffer(0, 100, buf.into()) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -211,8 +211,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllGatherIntoBufferHandle<T
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.allgather_into_buffer_init(&buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.gather_all_into_buffer(0, 100, buf.into()) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) {
@@ -332,7 +332,7 @@ impl<T: Dist> ArrayCollectiveGatherHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.gather_init(0);
+    /// let handle = unsafe { array.gather_at_pe(0, 100, 0) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -356,7 +356,7 @@ impl<T: Dist> ArrayCollectiveGatherHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.gather_init(0);
+    /// let handle = unsafe { array.gather_at_pe(0, 100, 0) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> Option<Vec<T>> {
@@ -415,8 +415,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveGatherIntoBufferHandle<T, B
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.gather_into_buffer_init(0, &buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.gather_at_pe_into_buffer(0, 100, RootOrLamellarBuffer::Root(buf.into())) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -443,8 +443,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveGatherIntoBufferHandle<T, B
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.gather_into_buffer_init(0, &buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.gather_at_pe_into_buffer(0, 100, RootOrLamellarBuffer::Root(buf.into())) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) {

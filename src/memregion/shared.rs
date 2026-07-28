@@ -198,7 +198,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let world = LamellarWorldBuilder::new().build();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
-    /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
+    /// let slice = unsafe{mem_region.as_slice()};
     ///```
     pub unsafe fn as_slice(&self) -> &[T] {
         RegisteredMemoryRegion::as_slice(self)
@@ -222,7 +222,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let world = LamellarWorldBuilder::new().build();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
-    /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
+    /// let slice =unsafe { mem_region.as_mut_slice()};
     ///```
     pub unsafe fn as_mut_slice(&self) -> &mut [T] {
         RegisteredMemoryRegion::as_mut_slice(self)
@@ -474,7 +474,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
     /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
     /// unsafe {
-    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in src.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = my_pe * 10 + i;
     ///     }
     ///     dst.put_buffer(my_pe, my_pe * 10, src).block();
@@ -518,7 +518,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
     /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
     /// unsafe {
-    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in src.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = my_pe * 10 + i;
     ///     }
     ///     dst.put_buffer_unmanaged(my_pe, my_pe * 10, src);
@@ -618,7 +618,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
     /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
     /// unsafe {
-    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in src.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
     ///     if my_pe == 0 {
@@ -661,7 +661,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
     /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
     /// unsafe {
-    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in src.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
     ///     if my_pe == 0 {
@@ -733,7 +733,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
     /// unsafe {
-    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
     ///     let data: Vec<usize> = mem_region.get_buffer(my_pe, my_pe * 10, 10).block();
@@ -771,10 +771,10 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
     /// unsafe {
-    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
-    ///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+    ///     let buf = LamellarBuffer::from_vec(&world, vec![0usize; 10]);
     ///     mem_region.get_into_buffer(my_pe, my_pe * 10, buf).block();
     /// }
     ///```
@@ -813,10 +813,10 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
     /// unsafe {
-    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
-    ///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+    ///     let buf = LamellarBuffer::from_vec(&world, vec![0usize; 10]);
     ///     mem_region.get_into_buffer_unmanaged(my_pe, my_pe * 10, buf);
     /// }
     /// // caller is responsible for ensuring completion before reading the buffer
@@ -993,7 +993,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.min_all(0, num_pes).block();
     /// }
     ///```
@@ -1020,7 +1020,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.max_all(0, num_pes).block();
     /// }
     ///```
@@ -1047,7 +1047,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.sum_all(0, num_pes).block();
     /// }
     ///```
@@ -1074,7 +1074,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.prod_all(0, num_pes).block();
     /// }
     ///```
@@ -1103,7 +1103,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = 1 << my_pe;
     ///     mem_region.bit_or_all(0, num_pes).block();
     /// }
     ///```
@@ -1132,7 +1132,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = 1 << my_pe;
     ///     mem_region.bit_xor_all(0, num_pes).block();
     /// }
     ///```
@@ -1161,7 +1161,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = usize::MAX;
+    ///     mem_region.as_mut_slice()[my_pe] = usize::MAX;
     ///     mem_region.bit_and_all(0, num_pes).block();
     /// }
     ///```
@@ -1189,9 +1189,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.min_all_into_buffer(0, num_pes, buf).block();
     /// }
     ///```
@@ -1224,9 +1224,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.max_all_into_buffer(0, num_pes, buf).block();
     /// }
     ///```
@@ -1259,9 +1259,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.sum_all_into_buffer(0, num_pes, buf).block();
     /// }
     ///```
@@ -1294,9 +1294,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.prod_all_into_buffer(0, num_pes, buf).block();
     /// }
     ///```
@@ -1329,9 +1329,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = 1 << my_pe;
     ///     mem_region.bit_or_all_into_buffer(0, num_pes, buf).block();
     /// }
     ///```
@@ -1364,9 +1364,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = 1 << my_pe;
     ///     mem_region.bit_xor_all_into_buffer(0, num_pes, buf).block();
     /// }
     ///```
@@ -1399,9 +1399,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = usize::MAX;
+    ///     mem_region.as_mut_slice()[my_pe] = usize::MAX;
     ///     mem_region.bit_and_all_into_buffer(0, num_pes, buf).block();
     /// }
     ///```
@@ -1434,7 +1434,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![my_pe + 1; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![my_pe + 1; num_pes]);
     /// unsafe {
     ///     mem_region.min_all_in_place(buf).block();
     /// }
@@ -1466,7 +1466,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![my_pe + 1; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![my_pe + 1; num_pes]);
     /// unsafe {
     ///     mem_region.max_all_in_place(buf).block();
     /// }
@@ -1498,7 +1498,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![my_pe + 1; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![my_pe + 1; num_pes]);
     /// unsafe {
     ///     mem_region.sum_all_in_place(buf).block();
     /// }
@@ -1530,7 +1530,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![my_pe + 1; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![my_pe + 1; num_pes]);
     /// unsafe {
     ///     mem_region.prod_all_in_place(buf).block();
     /// }
@@ -1562,7 +1562,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![1usize << my_pe; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![1usize << my_pe; num_pes]);
     /// unsafe {
     ///     mem_region.bit_or_all_in_place(buf).block();
     /// }
@@ -1594,7 +1594,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![1usize << my_pe; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![1usize << my_pe; num_pes]);
     /// unsafe {
     ///     mem_region.bit_xor_all_in_place(buf).block();
     /// }
@@ -1626,7 +1626,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![usize::MAX; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![usize::MAX; num_pes]);
     /// unsafe {
     ///     mem_region.bit_and_all_in_place(buf).block();
     /// }
@@ -1658,7 +1658,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.min_at_pe(0, num_pes, 0).block();
     /// }
     ///```
@@ -1691,7 +1691,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.max_at_pe(0, num_pes, 0).block();
     /// }
     ///```
@@ -1724,7 +1724,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.sum_at_pe(0, num_pes, 0).block();
     /// }
     ///```
@@ -1757,7 +1757,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     mem_region.prod_at_pe(0, num_pes, 0).block();
     /// }
     ///```
@@ -1790,7 +1790,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = 1 << my_pe;
     ///     mem_region.bit_or_at_pe(0, num_pes, 0).block();
     /// }
     ///```
@@ -1823,7 +1823,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = 1 << my_pe;
     ///     mem_region.bit_xor_at_pe(0, num_pes, 0).block();
     /// }
     ///```
@@ -1856,7 +1856,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = usize::MAX;
+    ///     mem_region.as_mut_slice()[my_pe] = usize::MAX;
     ///     mem_region.bit_and_at_pe(0, num_pes, 0).block();
     /// }
     ///```
@@ -1889,11 +1889,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     let target = if my_pe == 0 {
-    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///         lamellar::RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(&world, vec![0usize; num_pes]))
     ///     } else {
-    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///         lamellar::RootOrLamellarBuffer::NotRoot(0)
     ///     };
     ///     mem_region.min_at_pe_into_buffer(0, num_pes, target).block();
     /// }
@@ -1927,11 +1927,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     let target = if my_pe == 0 {
-    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///         lamellar::RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(&world, vec![0usize; num_pes]))
     ///     } else {
-    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///         lamellar::RootOrLamellarBuffer::NotRoot(0)
     ///     };
     ///     mem_region.max_at_pe_into_buffer(0, num_pes, target).block();
     /// }
@@ -1965,11 +1965,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     let target = if my_pe == 0 {
-    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///         lamellar::RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(&world, vec![0usize; num_pes]))
     ///     } else {
-    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///         lamellar::RootOrLamellarBuffer::NotRoot(0)
     ///     };
     ///     mem_region.sum_at_pe_into_buffer(0, num_pes, target).block();
     /// }
@@ -2003,11 +2003,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe + 1;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe + 1;
     ///     let target = if my_pe == 0 {
-    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///         lamellar::RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(&world, vec![0usize; num_pes]))
     ///     } else {
-    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///         lamellar::RootOrLamellarBuffer::NotRoot(0)
     ///     };
     ///     mem_region.prod_at_pe_into_buffer(0, num_pes, target).block();
     /// }
@@ -2041,11 +2041,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = 1 << my_pe;
     ///     let target = if my_pe == 0 {
-    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///         lamellar::RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(&world, vec![0usize; num_pes]))
     ///     } else {
-    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///         lamellar::RootOrLamellarBuffer::NotRoot(0)
     ///     };
     ///     mem_region.bit_or_at_pe_into_buffer(0, num_pes, target).block();
     /// }
@@ -2079,11 +2079,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = 1 << my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = 1 << my_pe;
     ///     let target = if my_pe == 0 {
-    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///         lamellar::RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(&world, vec![0usize; num_pes]))
     ///     } else {
-    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///         lamellar::RootOrLamellarBuffer::NotRoot(0)
     ///     };
     ///     mem_region.bit_xor_at_pe_into_buffer(0, num_pes, target).block();
     /// }
@@ -2117,11 +2117,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = usize::MAX;
+    ///     mem_region.as_mut_slice()[my_pe] = usize::MAX;
     ///     let target = if my_pe == 0 {
-    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///         lamellar::RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(&world, vec![0usize; num_pes]))
     ///     } else {
-    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///         lamellar::RootOrLamellarBuffer::NotRoot(0)
     ///     };
     ///     mem_region.bit_and_at_pe_into_buffer(0, num_pes, target).block();
     /// }
@@ -2197,7 +2197,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe;
     ///     let gathered: Vec<usize> = mem_region.gather_all(0, 1).block();
     ///     assert_eq!(gathered.len(), num_pes);
     /// }
@@ -2223,9 +2223,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe;
     ///     mem_region.gather_all_into_buffer(0, 1, buf).block();
     /// }
     ///```
@@ -2258,9 +2258,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe;
     ///     if my_pe == 0 {
-    ///         let gathered: Vec<usize> = mem_region.gather_at_pe(0, 1, 0).block();
+    ///         let gathered: Vec<usize> = mem_region.gather_at_pe(0, 1, 0).block().expect("PE is root");
     ///         assert_eq!(gathered.len(), num_pes);
     ///     } else {
     ///         mem_region.gather_at_pe(0, 1, 0).block();
@@ -2294,11 +2294,11 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe;
     ///     let root_or_buffer = if my_pe == 0 {
-    ///         RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(vec![0usize; num_pes]))
+    ///         lamellar::RootOrLamellarBuffer::Root(LamellarBuffer::from_vec(&world, vec![0usize; num_pes]))
     ///     } else {
-    ///         RootOrLamellarBuffer::NotRoot(0)
+    ///         lamellar::RootOrLamellarBuffer::NotRoot(0)
     ///     };
     ///     mem_region.gather_at_pe_into_buffer(0, 1, root_or_buffer).block();
     /// }
@@ -2333,7 +2333,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe;
     ///     mem_region.broadcast_all(0, 1).block();
     /// }
     ///```
@@ -2359,9 +2359,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     mem_region.as_mut_slice().expect("PE is part of team")[my_pe] = my_pe;
+    ///     mem_region.as_mut_slice()[my_pe] = my_pe;
     ///     mem_region.broadcast_all_into_buffer(0, 1, buf).block();
     /// }
     ///```
@@ -2395,9 +2395,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1).block();
     /// unsafe {
     ///     let input = if my_pe == 0 {
-    ///         BroadcastInput::root(0)
+    ///         lamellar::BroadcastInput::root(0)
     ///     } else {
-    ///         BroadcastInput::not_root(0)
+    ///         lamellar::BroadcastInput::not_root(0)
     ///     };
     ///     mem_region.broadcast_from_pe(input, 1).block();
     /// }
@@ -2429,9 +2429,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1).block();
     /// unsafe {
     ///     let root_or_buffer = if my_pe == 0 {
-    ///         RootSrcOrLamellarBuffer::Root(0)
+    ///         lamellar::RootSrcOrLamellarBuffer::Root(0)
     ///     } else {
-    ///         RootSrcOrLamellarBuffer::NotRoot(LamellarBuffer::from_vec(vec![0usize; 1]), 0)
+    ///         lamellar::RootSrcOrLamellarBuffer::NotRoot(LamellarBuffer::from_vec(&world, vec![0usize; 1]), 0)
     ///     };
     ///     mem_region.broadcast_from_pe_into_buffer(root_or_buffer, 1).block();
     /// }
@@ -2465,13 +2465,13 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
     ///     if my_pe == 0 {
-    ///         let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///         let slice = mem_region.as_mut_slice();
     ///         for i in 0..num_pes { slice[i] = i; }
     ///     }
     ///     let input = if my_pe == 0 {
-    ///         ScatterInput::root(0)
+    ///         lamellar::ScatterInput::root(0)
     ///     } else {
-    ///         ScatterInput::not_root(0)
+    ///         lamellar::ScatterInput::not_root(0)
     ///     };
     ///     mem_region.scatter_from_pe(input, 1).block();
     /// }
@@ -2501,16 +2501,16 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; 1]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; 1]);
     /// unsafe {
     ///     if my_pe == 0 {
-    ///         let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///         let slice = mem_region.as_mut_slice();
     ///         for i in 0..num_pes { slice[i] = i; }
     ///     }
     ///     let input = if my_pe == 0 {
-    ///         ScatterInput::root(0)
+    ///         lamellar::ScatterInput::root(0)
     ///     } else {
-    ///         ScatterInput::not_root(0)
+    ///         lamellar::ScatterInput::not_root(0)
     ///     };
     ///     mem_region.scatter_from_pe_into_buffer(buf, input, 1).block();
     /// }
@@ -2544,7 +2544,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
     ///     mem_region.min_scatter(0, num_pes).block();
     /// }
@@ -2577,7 +2577,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
     ///     mem_region.max_scatter(0, num_pes).block();
     /// }
@@ -2610,7 +2610,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
     ///     mem_region.sum_scatter(0, num_pes).block();
     /// }
@@ -2643,7 +2643,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
     ///     mem_region.prod_scatter(0, num_pes).block();
     /// }
@@ -2676,7 +2676,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = 1 << (my_pe + i); }
     ///     mem_region.bit_or_scatter(0, num_pes).block();
     /// }
@@ -2709,7 +2709,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = 1 << (my_pe + i); }
     ///     mem_region.bit_xor_scatter(0, num_pes).block();
     /// }
@@ -2742,7 +2742,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = usize::MAX; }
     ///     mem_region.bit_and_scatter(0, num_pes).block();
     /// }
@@ -2774,9 +2774,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
     ///     mem_region.min_scatter_into_buffer(0, num_pes, buf).block();
     /// }
@@ -2809,9 +2809,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
     ///     mem_region.max_scatter_into_buffer(0, num_pes, buf).block();
     /// }
@@ -2844,9 +2844,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
     ///     mem_region.sum_scatter_into_buffer(0, num_pes, buf).block();
     /// }
@@ -2879,9 +2879,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = my_pe + i + 1; }
     ///     mem_region.prod_scatter_into_buffer(0, num_pes, buf).block();
     /// }
@@ -2914,9 +2914,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = 1 << (my_pe + i); }
     ///     mem_region.bit_or_scatter_into_buffer(0, num_pes, buf).block();
     /// }
@@ -2949,9 +2949,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = 1 << (my_pe + i); }
     ///     mem_region.bit_xor_scatter_into_buffer(0, num_pes, buf).block();
     /// }
@@ -2984,9 +2984,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// let num_pes = world.num_pes();
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * num_pes).block();
-    /// let buf = LamellarBuffer::from_vec(vec![0usize; num_pes]);
+    /// let buf = LamellarBuffer::from_vec(&world, vec![0usize; num_pes]);
     /// unsafe {
-    ///     let slice = mem_region.as_mut_slice().expect("PE is part of team");
+    ///     let slice = mem_region.as_mut_slice();
     ///     for i in 0..num_pes * num_pes { slice[i] = usize::MAX; }
     ///     mem_region.bit_and_scatter_into_buffer(0, num_pes, buf).block();
     /// }
@@ -3016,7 +3016,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
     /// unsafe {
-    ///     mem_region.put(my_pe, my_pe, my_pe);
+    ///     let _ = mem_region.put(my_pe, my_pe, my_pe);
     /// }
     /// mem_region.wait_all();
     /// world.barrier();

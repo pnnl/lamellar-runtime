@@ -62,7 +62,7 @@ impl<T: Dist> ArrayOpHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let handle = unsafe { array.put(0, 42) }; // or other op like get, local_iter_mut, etc
     /// let task = handle.spawn();
     /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -86,7 +86,7 @@ impl<T: Dist> ArrayOpHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.put(0, 42);
+    /// let handle = unsafe { array.put(0, 42) };
     /// handle.block();
     /// ```
     pub fn block(mut self) -> () {
@@ -174,7 +174,7 @@ impl ArrayBatchOpHandle {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let handle = unsafe { array.put(0, 42) }; // or other op like get, local_iter_mut, etc
     /// let task = handle.spawn();
     /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -205,7 +205,7 @@ impl ArrayBatchOpHandle {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.put(0, 42);
+    /// let handle = unsafe { array.put(0, 42) };
     /// handle.block();
     /// ```
     pub fn block(mut self) -> () {
@@ -323,7 +323,7 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let handle = unsafe { array.put(0, 42) }; // or other op like get, local_iter_mut, etc
     /// let task = handle.spawn();
     /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -361,7 +361,7 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.get(0);
+    /// let handle = unsafe { array.get(0) };
     /// let result = handle.block();
     /// ```
     pub fn block(self) -> R {
@@ -510,7 +510,7 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let handle = unsafe { array.put(0, 42) }; // or other op like get, local_iter_mut, etc
     /// let task = handle.spawn();
     /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -559,7 +559,7 @@ impl<R: AmDist + Dist> ArrayFetchBatchOpHandle<R> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.get(0);
+    /// let handle = unsafe { array.get(0) };
     /// let result = handle.block();
     /// ```
     pub fn block(mut self) -> Vec<R> {
@@ -846,7 +846,7 @@ impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let handle = unsafe { array.put(0, 42) }; // or other op like get, local_iter_mut, etc
     /// let task = handle.spawn();
     /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -884,7 +884,7 @@ impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.compare_exchange(0, 42, 0);
+    /// let handle = unsafe { array.compare_exchange(0, 42, 0) };
     /// let result = handle.block();
     /// ```
     pub fn block(mut self) -> Result<R, R> {
@@ -1039,7 +1039,7 @@ impl<R: AmDist + Dist> ArrayResultBatchOpHandle<R> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.put(0, 42); // or other op like get, local_iter_mut, etc
+    /// let handle = unsafe { array.put(0, 42) }; // or other op like get, local_iter_mut, etc
     /// let task = handle.spawn();
     /// ```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -1088,7 +1088,7 @@ impl<R: AmDist + Dist> ArrayResultBatchOpHandle<R> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.compare_exchange(0, 42, 0);
+    /// let handle = unsafe { array.compare_exchange(0, 42, 0) };
     /// let result = handle.block();
     /// ```
     pub fn block(mut self) -> Vec<Result<R, R>> {
