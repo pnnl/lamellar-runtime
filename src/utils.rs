@@ -8,8 +8,10 @@ pub fn print_type_of<T>(_: &T) {
 
 /// Best-effort count of NUMA domains on the current host, used by the
 /// `#[lamellar::main]`-generated launch code to decide whether to bind PEs
-/// by NUMA domain. Returns `None` if hwloc can't build a topology.
-#[cfg(feature = "enable-lamellar-main")]
+/// by NUMA domain. Returns `None` if hwloc can't build a topology, or if
+/// the `enable-numa-detect` feature (which vendors and builds hwloc) is
+/// disabled.
+#[cfg(feature = "enable-numa-detect")]
 #[doc(hidden)]
 pub fn numa_domain_count() -> Option<u32> {
     use hwlocality::object::types::ObjectType;
@@ -17,6 +19,12 @@ pub fn numa_domain_count() -> Option<u32> {
 
     let topology = Topology::new().ok()?;
     Some(topology.objects_with_type(ObjectType::NUMANode).count() as u32)
+}
+
+#[cfg(not(feature = "enable-numa-detect"))]
+#[doc(hidden)]
+pub fn numa_domain_count() -> Option<u32> {
+    None
 }
 
 macro_rules! stats {

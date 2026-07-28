@@ -137,9 +137,13 @@ opt-level = 3
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
 # default = ["pmi/with-pmix-vendored", "pmix-sys/vendored"]
-default = ["with-pmix-vendored", "enable-lamellar-main"]
+default = ["with-pmix-vendored", "enable-lamellar-main", "enable-numa-detect"]
 
-enable-lamellar-main = ["lamellar_main/use-prterun", "prrte-sys/vendored", "hwlocality"]
+enable-lamellar-main = ["lamellar_main/use-prterun", "prrte-sys/vendored"]
+# NUMA-domain detection (via vendored hwloc) used by `#[lamellar::main]` to
+# pick PE-per-node defaults. Gated separately from enable-lamellar-main
+# because hwlocality's vendored build fails on macOS.
+enable-numa-detect = ["hwlocality"]
 with-salloc = ["lamellar_main/with-salloc"]
 enable-stats = []
 enable-rofi-c = [
@@ -205,7 +209,7 @@ debug = true
 
 
 [package.metadata.docs.rs]
-all-features = true
+no-default-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 
