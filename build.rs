@@ -146,7 +146,10 @@ fn main() {
         //     script_path.display()
         // );
     } else {
-        panic!("Failed to create lamellar_env.sh");
+        println!(
+            "cargo:warning=Failed to create lamellar_env.sh at {}; skipping (build environment may be read-only)",
+            script_path.display()
+        );
     }
 }
 
