@@ -2,6 +2,52 @@ use crate::array::*;
 use crate::OneSidedMemoryRegion;
 use crate::Remote;
 
+// crabtime expands these by running a scratch `cargo run` at macro-expansion time,
+// which needs network/registry access - unavailable in docs.rs's sandboxed build.
+// Both generated methods are pub(crate) and never invoked during doc generation, so
+// under `docsrs` we skip the crabtime expansion entirely and stub them out instead.
+macro_rules! bare_type_stub {
+    ($bytes_type:ty, false) => {
+        #[cfg(docsrs)]
+        async fn bare_type(&self, bytes: $bytes_type, array: LamellarByteArray) {
+            let _ = (bytes, array);
+            unimplemented!("stubbed out for docs.rs build")
+        }
+    };
+    ($bytes_type:ty, true) => {
+        #[cfg(docsrs)]
+        async fn bare_type(
+            &self,
+            bytes: $bytes_type,
+            array: LamellarByteArray,
+        ) -> OneSidedMemoryRegion<u8> {
+            let _ = (bytes, array);
+            unimplemented!("stubbed out for docs.rs build")
+        }
+    };
+}
+macro_rules! option_type_stub {
+    ($bytes_type:ty, false) => {
+        #[cfg(docsrs)]
+        async fn option_type(&self, bytes: $bytes_type, array: LamellarByteArray) {
+            let _ = (bytes, array);
+            unimplemented!("stubbed out for docs.rs build")
+        }
+    };
+    ($bytes_type:ty, true) => {
+        #[cfg(docsrs)]
+        async fn option_type(
+            &self,
+            bytes: $bytes_type,
+            array: LamellarByteArray,
+        ) -> OneSidedMemoryRegion<u8> {
+            let _ = (bytes, array);
+            unimplemented!("stubbed out for docs.rs build")
+        }
+    };
+}
+
+#[cfg(not(docsrs))]
 #[crabtime::function]
 fn impl_ops_scalar_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty,$result:expr): _) {
     let mut match_arms = Vec::new();
@@ -148,6 +194,7 @@ fn impl_ops_scalar_type_match(crabtime::pattern!($bytes:expr, $bytes_type:ty,$re
     }
 }
 
+#[cfg(not(docsrs))]
 #[crabtime::function]
 fn impl_ops_option_scalar_type_match(
     crabtime::pattern!($bytes:expr, $bytes_type:ty, $result:expr): _,
@@ -351,8 +398,12 @@ impl ScalarSingleIdxMultiValAm {
         });
         std::iter::repeat(self.index).zip(vals)
     }
+    #[cfg(not(docsrs))]
     impl_ops_option_scalar_type_match!(&bytes, Vec<u8>, false);
+    #[cfg(not(docsrs))]
     impl_ops_scalar_type_match!(&bytes, Vec<u8>, false);
+    option_type_stub!(Vec<u8>, false);
+    bare_type_stub!(Vec<u8>, false);
 }
 
 #[lamellar_impl::rt_am]
@@ -392,8 +443,12 @@ impl ScalarSingleIdxMultiValAmReturn {
         std::iter::repeat(self.index).zip(vals)
     }
     impl_vec_to_bytes!();
+    #[cfg(not(docsrs))]
     impl_ops_option_scalar_type_match!(&bytes, Vec<u8>, true);
+    #[cfg(not(docsrs))]
     impl_ops_scalar_type_match!(&bytes, Vec<u8>, true);
+    option_type_stub!(Vec<u8>, true);
+    bare_type_stub!(Vec<u8>, true);
 }
 
 #[lamellar_impl::rt_am]
@@ -430,8 +485,12 @@ impl ScalarMultiIdxSingleValAm {
         let val = unsafe { std::ptr::read_unaligned(self.val.as_ptr() as *const T) };
         indices.zip(std::iter::repeat(val))
     }
+    #[cfg(not(docsrs))]
     impl_ops_option_scalar_type_match!(bytes, impl Iterator<Item = usize>, false);
+    #[cfg(not(docsrs))]
     impl_ops_scalar_type_match!(bytes, impl Iterator<Item = usize>, false);
+    option_type_stub!(impl Iterator<Item = usize>, false);
+    bare_type_stub!(impl Iterator<Item = usize>, false);
 }
 
 #[lamellar_impl::rt_am]
@@ -508,8 +567,12 @@ impl ScalarMultiIdxSingleValAmReturn {
         indices.zip(std::iter::repeat(val))
     }
     impl_vec_to_bytes!();
+    #[cfg(not(docsrs))]
     impl_ops_option_scalar_type_match!(bytes, impl Iterator<Item = usize>, true);
+    #[cfg(not(docsrs))]
     impl_ops_scalar_type_match!(bytes, impl Iterator<Item = usize>, true);
+    option_type_stub!(impl Iterator<Item = usize>, true);
+    bare_type_stub!(impl Iterator<Item = usize>, true);
 }
 
 #[lamellar_impl::rt_am]
@@ -584,8 +647,12 @@ impl ScalarMultiIdxMultiValAm {
         PackedIdxVal::slice_as_iter::<T>(self.idx_size, bytes)
     }
 
+    #[cfg(not(docsrs))]
     impl_ops_option_scalar_type_match!(&bytes, Vec<u8>, false);
+    #[cfg(not(docsrs))]
     impl_ops_scalar_type_match!(&bytes, Vec<u8>, false);
+    option_type_stub!(Vec<u8>, false);
+    bare_type_stub!(Vec<u8>, false);
 }
 
 #[lamellar_impl::rt_am]
@@ -622,8 +689,12 @@ impl ScalarMultiIdxMultiValAmReturn {
     }
 
     impl_vec_to_bytes!();
+    #[cfg(not(docsrs))]
     impl_ops_option_scalar_type_match!(&bytes, Vec<u8>, true);
+    #[cfg(not(docsrs))]
     impl_ops_scalar_type_match!(&bytes, Vec<u8>, true);
+    option_type_stub!(Vec<u8>, true);
+    bare_type_stub!(Vec<u8>, true);
 }
 
 #[lamellar_impl::rt_am]
