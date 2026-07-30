@@ -1,7 +1,7 @@
 # cargo-features = ["codegen-backend"]
 [package]
 name = "lamellar"
-version = "0.8.0"
+version = "0.8.1"
 authors = [
     "Ryan D. Friese <ryan.friese@pnnl.gov>",
     "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>",
