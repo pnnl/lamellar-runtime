@@ -1,0 +1,25 @@
+[package]
+name = "hpc_launch_impl"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>"]
+description = "Proc-macro implementation for #[hpc_launch::main], not intended to be used directly (use hpc_launch instead)."
+readme = "README.md"
+repository = "https://github.com/pnnl/lamellar"
+homepage = "https://github.com/pnnl/lamellar"
+license-file = "LICENSE"
+keywords = ["hpc", "runtime", "launcher", "distributed", "prterun"]
+categories = ["asynchronous", "concurrency", "network-programming", "science"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full"] }
+quote = { version = "1.0" }
+proc-macro2 = { version = "1.0.101" }
+
+[features]
+use-srun = []
+use-prterun = []
+with-salloc = []

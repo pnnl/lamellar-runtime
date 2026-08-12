@@ -246,7 +246,6 @@ pub use parking_lot;
 //#[doc(hidden)]
 pub use ::tracing;
 pub use ::tracing::*;
-pub use ::tracing_subscriber;
 
 //#[doc(hidden)]
 pub use async_trait;
@@ -327,9 +326,15 @@ pub use lamellar_prof::prof_all;
 
 #[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::main;
-
 #[cfg(feature = "enable-lamellar-main")]
-pub extern crate prrte_sys;
+pub use lamellar_main::test;
+#[cfg(feature = "enable-lamellar-main")]
+pub use lamellar_main::{
+    generic_help_text, init_tracing_from_env, numa_domain_count, package_count, pe_id,
+    resolve_pe_defaults,
+};
+#[cfg(feature = "enable-lamellar-main")]
+pub use lamellar_main::prrte_sys;
 
 //#[doc(hidden)]
 pub use inventory;

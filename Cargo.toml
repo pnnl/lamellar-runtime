@@ -33,13 +33,14 @@ pmi = { version = "0.1.0-rc.1", optional = true }
 pmix-sys = { version = "0.1.0-rc.1", optional = true, features = [
     "vendored",
 ] }
-prrte-sys = { version = "0.1.0-rc.1", optional = true }
-lamellar-ucx-sys = { version = "0.1.0-rc.1", optional = true }
-lamellar-ucc-sys = { version = "0.1.0-rc.1", optional = true }
-rofisys = { version = "0.5.0-rc.1", optional = true }
+prrte-sys = { version = "0.1.0", optional = true }
+lamellar-ucx-sys = { version = "0.1.0", optional = true }
+lamellar-ucc-sys = { version = "0.1.0", optional = true }
+rofisys = { version = "0.5.0", optional = true }
 hwlocality = { version = "1.0.0-alpha.12", optional = true, features = [
     "vendored",
 ] }
+
 
 # libfabric = { path = "../lamellar-repo/communication_frameworks/libfabric", features = [
 #     # "use-async-std",
@@ -127,7 +128,13 @@ backtrace = "0.3"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
 [workspace]
-members = ["impl"]
+members = [
+    "impl",
+    "hpc_launch_impl",
+    "hpc_launch",
+    "lamellar_main_impl",
+    "lamellar_main",
+]
 
 # Set the settings for build scripts and proc-macros.
 [profile.dev.build-override]
@@ -139,7 +146,20 @@ opt-level = 3
 # default = ["pmi/with-pmix-vendored", "pmix-sys/vendored"]
 default = ["with-pmix-vendored", "enable-lamellar-main"]
 
-enable-lamellar-main = ["lamellar_main/use-prterun", "prrte-sys/vendored", "hwlocality"]
+enable-lamellar-main = [
+    "lamellar_main/use-prterun",
+    "prrte-sys/prrte-src",
+    "prrte-sys/vendored-libevent",
+    "prrte-sys/vendored-pmix",
+]
+# Builds PRRTE's (and hwlocality's) hwloc from source. Omit this and set
+# HWLOC_DIR to the install prefix (and, for hwlocality-sys, ensure it's on
+# PKG_CONFIG_PATH) to link a system hwloc instead. Use system hwloc on macOS, where
+# hwloc's vendored autotools build fails.
+vendored-hwloc = ["prrte-sys/vendored-hwloc", "lamellar_main/vendored-hwloc"]
+# NUMA/package/core/PU topology detection (via hwloc, through lamellar_main)
+# used by `#[lamellar::main]` to pick PE-per-node defaults.
+enable-numa-detect = ["lamellar_main/enable-numa-detect"]
 with-salloc = ["lamellar_main/with-salloc"]
 enable-stats = []
 enable-rofi-c = [
