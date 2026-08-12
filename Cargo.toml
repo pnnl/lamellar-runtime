@@ -20,26 +20,24 @@ categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 
 [dependencies]
-lamellar-impl = { version = "0.8.0-rc.1", path = "impl" }
-lamellar_main = { version = "0.1.0-rc.1", path = "./lamellar_main", optional = true }
-lamellar-prof = { version = "0.2.0-rc.1", path = "./lamellar-prof" }
+lamellar-impl = { version = "0.8.0", path = "impl" }
+lamellar_main = { version = "0.1.0", path = "./lamellar_main", optional = true }
+lamellar-prof = { version = "0.2.0", path = "./lamellar-prof" }
 
-libfabric = { package = "lamellar-libfabric", version = "0.1.0-rc.1", features = [
+libfabric = { package = "lamellar-libfabric", version = "0.1.0", features = [
     # "use-async-std",
     "threading-thread-safe",
 ], optional = true }
-libfabric-sys = { package = "lamellar-libfabric-sys", version = "0.1.0-rc.1", optional = true }
-pmi = { version = "0.1.0-rc.1", optional = true }
-pmix-sys = { version = "0.1.0-rc.1", optional = true, features = [
+libfabric-sys = { package = "lamellar-libfabric-sys", version = "0.1.0", optional = true }
+pmi = { version = "0.1.0", optional = true }
+pmix-sys = { version = "0.1.0", optional = true, features = [
     "vendored",
 ] }
 prrte-sys = { version = "0.1.0", optional = true }
 lamellar-ucx-sys = { version = "0.1.0", optional = true }
 lamellar-ucc-sys = { version = "0.1.0", optional = true }
 rofisys = { version = "0.5.0", optional = true }
-hwlocality = { version = "1.0.0-alpha.12", optional = true, features = [
-    "vendored",
-] }
+hwlocality = { version = "1.0.0-alpha.12", optional = true }
 
 
 # libfabric = { path = "../lamellar-repo/communication_frameworks/libfabric", features = [
@@ -144,7 +142,12 @@ opt-level = 3
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
 # default = ["pmi/with-pmix-vendored", "pmix-sys/vendored"]
-default = ["with-pmix-vendored", "enable-lamellar-main"]
+default = [
+    "with-pmix-vendored",
+    "enable-lamellar-main",
+    "vendored-hwloc",
+    "enable-numa-detect",
+]
 
 enable-lamellar-main = [
     "lamellar_main/use-prterun",
@@ -152,14 +155,14 @@ enable-lamellar-main = [
     "prrte-sys/vendored-libevent",
     "prrte-sys/vendored-pmix",
 ]
-# Builds PRRTE's (and hwlocality's) hwloc from source. Omit this and set
-# HWLOC_DIR to the install prefix (and, for hwlocality-sys, ensure it's on
+# Builds PRRTE's (and lamellar's own NUMA-detection) hwloc from source. Omit this
+# and set HWLOC_DIR to the install prefix (and, for hwlocality-sys, ensure it's on
 # PKG_CONFIG_PATH) to link a system hwloc instead. Use system hwloc on macOS, where
 # hwloc's vendored autotools build fails.
-vendored-hwloc = ["prrte-sys/vendored-hwloc", "lamellar_main/vendored-hwloc"]
-# NUMA/package/core/PU topology detection (via hwloc, through lamellar_main)
-# used by `#[lamellar::main]` to pick PE-per-node defaults.
-enable-numa-detect = ["lamellar_main/enable-numa-detect"]
+vendored-hwloc = ["prrte-sys/vendored-hwloc", "hwlocality/vendored"]
+# NUMA-domain detection (via hwloc) used by `#[lamellar::main]` to pick
+# PE-per-node defaults.
+enable-numa-detect = ["hwlocality"]
 with-salloc = ["lamellar_main/with-salloc"]
 enable-stats = []
 enable-rofi-c = [
@@ -225,7 +228,7 @@ debug = true
 
 
 [package.metadata.docs.rs]
-all-features = true
+no-default-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 

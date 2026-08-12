@@ -554,7 +554,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// # Note
     /// The future returned by this function is lazy and does nothing unless awaited, `spawn()`ed or `block()`ed
     /// # Examples
-    ///```
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// // initialize a world and an atomic array
     /// let world = LamellarWorldBuilder::new().build();

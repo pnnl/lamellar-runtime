@@ -118,10 +118,10 @@ impl<T> BufferInner<T> {
 ///
 /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
 /// unsafe {
-///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
 ///         *elem = i;
 ///     }
-///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+///     let buf = LamellarBuffer::from_vec(&world, vec![0usize; 10]);
 ///     mem_region.get_into_buffer(my_pe * 10, buf).block();
 /// }
 ///```
@@ -191,7 +191,7 @@ impl<T: Remote> LamellarBuffer<T, SharedMemoryRegion<T>> {
     /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
     /// let dst: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes * 10).block();
     /// unsafe {
-    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in src.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
     ///     let buf = LamellarBuffer::from_shared_memory_region(dst);
@@ -238,7 +238,7 @@ impl<T: Remote> LamellarBuffer<T, OneSidedMemoryRegion<T>> {
     /// let src: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
     /// let dst: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(10);
     /// unsafe {
-    ///     for (i, elem) in src.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in src.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
     ///     let buf = LamellarBuffer::from_one_sided_memory_region(dst);
@@ -308,10 +308,10 @@ impl<T: Remote> LamellarBuffer<T, Vec<T>> {
     ///
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes * 10);
     /// unsafe {
-    ///     for (i, elem) in mem_region.as_mut_slice().expect("PE just allocated").iter_mut().enumerate() {
+    ///     for (i, elem) in mem_region.as_mut_slice().iter_mut().enumerate() {
     ///         *elem = i;
     ///     }
-    ///     let buf = LamellarBuffer::from_vec(vec![0usize; 10]);
+    ///     let buf = LamellarBuffer::from_vec(&world, vec![0usize; 10]);
     ///     mem_region.get_into_buffer(my_pe * 10, buf).block();
     /// }
     ///```

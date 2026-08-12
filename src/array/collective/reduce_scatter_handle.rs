@@ -71,7 +71,7 @@ impl<T: Dist> ArrayCollectiveReduceScatterHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.reduce_scatter_init(lamellar::array::operations::Sum);
+    /// let handle = unsafe { array.sum_scatter(0, 100) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -95,7 +95,7 @@ impl<T: Dist> ArrayCollectiveReduceScatterHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.reduce_scatter_init(lamellar::array::operations::Sum);
+    /// let handle = unsafe { array.sum_scatter(0, 100) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> Vec<T> {
@@ -183,8 +183,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceScatterIntoBufferHand
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.reduce_scatter_into_buffer_init(lamellar::array::operations::Sum, &buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.sum_scatter_into_buffer(0, 100, buf.into()) };
     /// let task = handle.spawn();
     ///```
     ///
@@ -209,8 +209,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveReduceScatterIntoBufferHand
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.reduce_scatter_into_buffer_init(lamellar::array::operations::Sum, &buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.sum_scatter_into_buffer(0, 100, buf.into()) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) {

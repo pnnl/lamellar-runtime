@@ -240,7 +240,7 @@ impl DistIterForEachHandle {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.dist_iter().for_each(|e| println!("{:?}", e));
+    /// let handle = unsafe { array.dist_iter() }.for_each(|e| println!("{:?}", e));
     /// handle.block();
     ///```
     pub fn block(mut self) {
@@ -262,7 +262,7 @@ impl DistIterForEachHandle {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.dist_iter().for_each(|e| println!("{:?}", e));
+    /// let handle = unsafe { array.dist_iter() }.for_each(|e| println!("{:?}", e));
     /// let task = handle.spawn();
     ///```
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]

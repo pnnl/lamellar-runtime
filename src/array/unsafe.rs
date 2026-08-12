@@ -1560,6 +1560,9 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// ```
     /// use lamellar::array::prelude::*;
     /// use rand::Rng;
+    ///
+    /// register_reduction!(my_sum, |a,b| a+b, usize);
+    ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block).block();
@@ -1572,7 +1575,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// let sum = unsafe {array.registered_reduce("sum").block()}; // equivalent to calling array.sum()
+    /// let sum = unsafe {array.registered_reduce("my_sum").block()}; // equivalent to calling array.sum()
     /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

@@ -105,6 +105,169 @@ use std::sync::Arc;
 ///     - requires [ShlAssign][std::ops::ShlAssign], [ShrAssign][std::ops::ShrAssign] to be implemented on you data type
 ///
 /// Alternatively, if you plan to derive all the above traits you can simply supply `All` as the single argument to [ArrayOps]
+///
+/// # Examples
+///
+/// ```
+/// // this import includes everything we need
+/// use lamellar::array::prelude::*;
+///
+/// #[lamellar::AmData(
+///     // Lamellar traits
+///     ArrayOps(Arithmetic,CompExEps,Shift), // needed to derive various LamellarArray Op traits (provided as a list)
+///     Default,       // needed to be able to initialize a LamellarArray
+///     //  Notice we use `lamellar::AmData` instead of `derive`
+///     //  for common traits, e.g. Debug, Clone.
+///     PartialEq,     // needed for CompareExchangeEpsilonOps
+///     PartialOrd,    // needed for CompareExchangeEpsilonOps
+///     Debug,         // any addition traits you want derived
+///     Clone,
+/// )]
+/// struct Custom {
+///     int: usize,
+///     float: f32,
+/// }
+///
+/// // We need to impl various arithmetic ops if we want to be able to
+/// // perform remote arithmetic operations with this type
+/// impl std::ops::AddAssign for Custom {
+///     fn add_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int + other.int,
+///             float: self.float + other.float,
+///         }
+///     }
+/// }
+///
+/// impl std::ops::SubAssign for Custom {
+///     fn sub_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int - other.int,
+///             float: self.float - other.float,
+///         }
+///     }
+/// }
+///
+/// impl std::ops::Sub for Custom {
+///     type Output = Self;
+///     fn sub(self, other: Self) -> Self {
+///         Self {
+///             int: self.int - other.int,
+///             float: self.float - other.float,
+///         }
+///     }
+/// }
+///
+/// impl std::ops::MulAssign for Custom {
+///     fn mul_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int * other.int,
+///             float: self.float * other.float,
+///         }
+///     }
+/// }
+///
+/// impl std::ops::DivAssign for Custom {
+///     fn div_assign(&mut self, other: Self) {
+///         *self = Self {
+///             int: self.int / other.int,
+///             float: self.float / other.float,
+///         }
+///     }
+/// }
+/// impl std::ops::ShlAssign for Custom {
+///     fn shl_assign(&mut self, other: Self){
+///         self.int <<= other.int;
+///     }
+/// }
+///
+/// impl std::ops::ShrAssign for Custom {
+///     fn shr_assign(&mut self, other: Self){
+///         self.int >>= other.int;
+///     }
+/// }
+///
+/// impl std::ops::RemAssign for Custom {
+///     fn rem_assign(&mut self, other: Self) {
+///        self.int %= other.int;
+///    }
+/// }
+///
+/// fn main(){
+///
+///     // initialize
+///     // -----------
+///
+///     let world = LamellarWorldBuilder::new().build(); // the world
+///
+///     let array =  // the atomic distributed array
+///         AtomicArray::<Custom>::new(&world,3,Distribution::Block).block();
+///
+///     println!();
+///     println!("initialize a length-3 array:\n");  // print the entries
+///     let _ = array.dist_iter()
+///         .enumerate()
+///         .for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///     array.wait_all();
+///
+///     // call various operations on the array!
+///     // -------------------------------------
+///
+///     world.block_on( async move {  // we will just use the world as our future driver so we dont have to deal with cloning array
+///
+///         println!();
+///         println!("add (1, 0.01) to the first entry:\n");
+///         let val = Custom{int: 1, float: 0.01};
+///         array.add(0, val ).await;
+///         let _ = array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///         array.wait_all();
+///
+///         println!();
+///         println!("batch compare/exchange:");
+///         let indices = vec![0,1,2,];
+///         let current = val;
+///         let new = Custom{int: 1, float: 0.0};
+///         let epsilon = Custom{int: 0, float: 0.01};
+///         let _results = array.batch_compare_exchange_epsilon(indices,current,new,epsilon).await;
+///         println!();
+///         println!("(1) the updated array");
+///         let _ = array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
+///         array.wait_all();
+///         println!();
+///         println!("(2) the return values");
+///         for (i, entry) in _results.iter().enumerate() { println!("entry {:?}: {:?}", i, entry ) }
+///     });
+///
+///     // inspect the results
+///     // -------------------------------------
+///     // NB:  because we're working with multithreaded async
+///     //      environments, entries may be printed out of order
+///     //
+///     // initialize a length-3 array:
+///     //
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     // entry 0: Custom { int: 0, float: 0.0 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     //
+///     // add (1, 0.01) to the first entry:
+///     //
+///     // entry 0: Custom { int: 1, float: 0.01 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     //
+///     // batch compare/exchange:
+///     //
+///     // (1) the updatd array
+///     // entry 0: Custom { int: 1, float: 0.0 }
+///     // entry 1: Custom { int: 0, float: 0.0 }
+///     // entry 2: Custom { int: 0, float: 0.0 }
+///     //
+///     // (2) the return values
+///     // entry 0: Ok(Custom { int: 1, float: 0.01 })
+///     // entry 1: Err(Custom { int: 0, float: 0.0 })
+///     // entry 2: Err(Custom { int: 0, float: 0.0 })
+/// }
+/// ```
 pub use lamellar_impl::ArrayOps;
 
 // //#[doc(hidden)]
@@ -310,14 +473,14 @@ impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
 ///```
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
-/// let block_array = AtomicArray::<usize>::new(world,12,Distribution::Block).block();
+/// let block_array = AtomicArray::<usize>::new(&world,12,Distribution::Block).block();
 /// //block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
 ///```
 /// ## Cyclic
 ///```
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
-/// let cyclic_array = AtomicArray::<usize>::new(world,12,Distribution::Cyclic).block();
+/// let cyclic_array = AtomicArray::<usize>::new(&world,12,Distribution::Cyclic).block();
 /// //cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
 ///```
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
@@ -1523,8 +1686,9 @@ pub trait LamellarArray<T: Dist>:
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic).block();
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Cyclic).block();
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
+    /// let  Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// assert_eq!((pe,offset) ,(2,1));
     ///```
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
@@ -2086,6 +2250,8 @@ where
     /// use lamellar::array::prelude::*;
     /// use rand::Rng;
     ///
+    /// register_reduction!(my_sum, |a,b| a+b, usize);
+    ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
@@ -2095,7 +2261,7 @@ where
     ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.registered_reduce("sum").block().expect("array len > 0"); // equivalent to calling array.sum()
+    /// let sum = array.registered_reduce("my_sum").block().expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     fn registered_reduce(&self, reduction: &str) -> Self::Handle;

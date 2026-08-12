@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    hash::{Hash, Hasher},
     sync::{
         atomic::{AtomicIsize, AtomicUsize, Ordering},
         Arc,
@@ -550,8 +551,14 @@ fn attach_to_shmem(
     let padding = std::mem::size_of::<usize>() % align;
     let shmem_size = std::mem::size_of::<usize>() + padding + size;
 
-    let shmem_id =
-        "lamellar_".to_owned() + &(job_id.to_string()) + "_" + &(shmem_size.to_string()) + "_" + id;
+    // macOS caps shm_open() names at SHM_NAME_LEN (31 bytes incl. leading '/' and
+    // null), so the id must stay short there; Linux has no such limit but we hash
+    // on all platforms to keep the naming scheme uniform.
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    job_id.hash(&mut hasher);
+    shmem_size.hash(&mut hasher);
+    id.hash(&mut hasher);
+    let shmem_id = format!("lamellar_{:x}", hasher.finish());
     // let  m = if create {
     let mut retry = 0;
     let m = loop {

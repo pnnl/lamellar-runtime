@@ -78,7 +78,7 @@ impl<T: Dist> ArrayCollectiveAllToAllHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.alltoall_init::<usize>();
+    /// let handle = unsafe { array.alltoall(0, 100) };
     /// let task = handle.spawn();
     ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -97,7 +97,7 @@ impl<T: Dist> ArrayCollectiveAllToAllHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.alltoall_init::<usize>();
+    /// let handle = unsafe { array.alltoall(0, 100) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> Vec<T> {
@@ -183,8 +183,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllToAllIntoBufferHandle<T,
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.alltoall_init_into_buffer::<usize>(&buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.alltoall_into_buffer(0, 100, buf.into()) };
     /// let task = handle.spawn();
     ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -208,8 +208,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveAllToAllIntoBufferHandle<T,
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.alltoall_init_into_buffer::<usize>(&buf);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.alltoall_into_buffer(0, 100, buf.into()) };
     /// handle.block();
     ///```
     pub fn block(mut self) {
@@ -303,7 +303,7 @@ impl<T: Dist> ArrayCollectiveBroadcastHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.broadcast_init::<usize>(0);
+    /// let handle = unsafe { array.broadcast_from_pe(BroadcastInput::Root(0), 100) };
     /// let task = handle.spawn();
     ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -324,7 +324,7 @@ impl<T: Dist> ArrayCollectiveBroadcastHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.broadcast_init::<usize>(0);
+    /// let handle = unsafe { array.broadcast_from_pe(BroadcastInput::Root(0), 100) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> Option<Vec<T>> {
@@ -410,8 +410,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveBroadcastIntoBufferHandle<T
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.broadcast_init_into_buffer::<usize>(&buf, 0);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.broadcast_from_pe_into_buffer(RootSrcOrLamellarBuffer::<usize, OneSidedMemoryRegion<usize>>::Root(0), 1) };
     /// let task = handle.spawn();
     ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -435,8 +435,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveBroadcastIntoBufferHandle<T
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.broadcast_init_into_buffer::<usize>(&buf, 0);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.broadcast_from_pe_into_buffer(RootSrcOrLamellarBuffer::<usize, OneSidedMemoryRegion<usize>>::Root(0), 1) };
     /// handle.block();
     ///```
     pub fn block(mut self) {
@@ -556,7 +556,7 @@ impl<T: Dist> ArrayCollectiveScatterHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.scatter_init::<usize>(0);
+    /// let handle = unsafe { array.scatter_from_pe(ScatterInput::Root(0), 100) };
     /// let task = handle.spawn();
     ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -575,7 +575,7 @@ impl<T: Dist> ArrayCollectiveScatterHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let handle = array.scatter_init::<usize>(0);
+    /// let handle = unsafe { array.scatter_from_pe(ScatterInput::Root(0), 100) };
     /// let result = handle.block();
     ///```
     pub fn block(mut self) -> Vec<T> {
@@ -634,8 +634,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveScatterIntoBufferHandle<T, 
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.scatter_init_into_buffer::<usize>(&buf, 0);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.scatter_from_pe_into_buffer(buf.into(), ScatterInput::Root(0), 100) };
     /// let task = handle.spawn();
     ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
@@ -657,8 +657,8 @@ impl<T: Dist, B: AsLamellarBuffer<T>> ArrayCollectiveScatterIntoBufferHandle<T, 
     /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world, 100, Distribution::Block).block();
-    /// let buf = world.alloc_shared_mem::<usize>(100).block();
-    /// let handle = array.scatter_init_into_buffer::<usize>(&buf, 0);
+    /// let buf = world.alloc_shared_mem_region::<usize>(100).block();
+    /// let handle = unsafe { array.scatter_from_pe_into_buffer(buf.into(), ScatterInput::Root(0), 100) };
     /// handle.block();
     ///```
     pub fn block(mut self) {

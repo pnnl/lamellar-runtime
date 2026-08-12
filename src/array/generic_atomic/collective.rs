@@ -74,9 +74,11 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.sum_all(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.sum_all(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn sum_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         if !self.array.collective_support.all_sum {
@@ -132,9 +134,11 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_all(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.prod_all(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn prod_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         if !self.array.collective_support.all_prod {
@@ -192,9 +196,11 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.max_all(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.max_all(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn max_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         if !self.array.collective_support.all_max {
@@ -250,9 +256,11 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.min_all(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.min_all(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn min_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         if !self.array.collective_support.all_min {
@@ -310,9 +318,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_and_all(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_and_all(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_and_all(
         &self,
@@ -372,9 +382,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_xor_all(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_xor_all(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_xor_all(
         &self,
@@ -434,9 +446,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_or_all(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_or_all(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_or_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         if !self.array.collective_support.all_bit_or {
@@ -494,11 +508,14 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.sum_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.sum_all_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn sum_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -560,11 +577,14 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.prod_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.prod_all_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -628,11 +648,14 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.max_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.max_all_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn max_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -694,11 +717,14 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.min_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.min_all_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn min_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -762,11 +788,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.bit_and_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.bit_and_all_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_and_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -828,11 +857,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.bit_xor_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.bit_xor_all_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_xor_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -894,11 +926,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.bit_or_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.bit_or_all_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_or_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1002,9 +1037,11 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.sum_at_pe(0, array.local_len(), 0) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.sum_at_pe(0, array.num_elems_local(), 0) }.block();
+    /// }
     ///```
     pub unsafe fn sum_at_pe(
         &self,
@@ -1067,9 +1104,11 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_at_pe(0, array.local_len(), 0) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.prod_at_pe(0, array.num_elems_local(), 0) }.block();
+    /// }
     ///```
     pub unsafe fn prod_at_pe(
         &self,
@@ -1134,9 +1173,11 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.max_at_pe(0, array.local_len(), 0) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.max_at_pe(0, array.num_elems_local(), 0) }.block();
+    /// }
     ///```
     pub unsafe fn max_at_pe(
         &self,
@@ -1199,9 +1240,11 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.min_at_pe(0, array.local_len(), 0) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.min_at_pe(0, array.num_elems_local(), 0) }.block();
+    /// }
     ///```
     pub unsafe fn min_at_pe(
         &self,
@@ -1266,9 +1309,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_and_at_pe(0, array.local_len(), 0) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_and_at_pe(0, array.num_elems_local(), 0) }.block();
+    /// }
     ///```
     pub unsafe fn bit_and_at_pe(
         &self,
@@ -1331,9 +1376,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_xor_at_pe(0, array.local_len(), 0) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_xor_at_pe(0, array.num_elems_local(), 0) }.block();
+    /// }
     ///```
     pub unsafe fn bit_xor_at_pe(
         &self,
@@ -1396,9 +1443,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_or_at_pe(0, array.local_len(), 0) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_or_at_pe(0, array.num_elems_local(), 0) }.block();
+    /// }
     ///```
     pub unsafe fn bit_or_at_pe(
         &self,
@@ -1463,11 +1512,14 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.sum_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.sum_at_pe_into_buffer(0, array.num_elems_local(), RootOrLamellarBuffer::Root(buf.into())) }.block();
+    /// }
     ///```
     pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1530,11 +1582,14 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.prod_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.prod_at_pe_into_buffer(0, array.num_elems_local(), RootOrLamellarBuffer::Root(buf.into())) }.block();
+    /// }
     ///```
     pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1599,11 +1654,14 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.max_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.max_at_pe_into_buffer(0, array.num_elems_local(), RootOrLamellarBuffer::Root(buf.into())) }.block();
+    /// }
     ///```
     pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1666,11 +1724,14 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.min_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.min_at_pe_into_buffer(0, array.num_elems_local(), RootOrLamellarBuffer::Root(buf.into())) }.block();
+    /// }
     ///```
     pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1735,11 +1796,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.bit_and_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.bit_and_at_pe_into_buffer(0, array.num_elems_local(), RootOrLamellarBuffer::Root(buf.into())) }.block();
+    /// }
     ///```
     pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1802,11 +1866,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.bit_xor_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.bit_xor_at_pe_into_buffer(0, array.num_elems_local(), RootOrLamellarBuffer::Root(buf.into())) }.block();
+    /// }
     ///```
     pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1869,11 +1936,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.bit_or_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(1);
+    ///     let _result = unsafe { array.bit_or_at_pe_into_buffer(0, array.num_elems_local(), RootOrLamellarBuffer::Root(buf.into())) }.block();
+    /// }
     ///```
     pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -2016,9 +2086,11 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.gather_all(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.gather_all(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn gather_all(&self, index: usize, len: usize) -> ArrayCollectiveAllGatherHandle<T> {
         if !self.array.collective_support.allgather {
@@ -2073,11 +2145,14 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(world.num_pes());
-    /// let _result = unsafe { array.gather_all_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(world.num_pes());
+    ///     let _result = unsafe { array.gather_all_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -2141,9 +2216,11 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.gather_at_pe(0, array.local_len(), 0) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.gather_at_pe(0, array.num_elems_local(), 0) }.block();
+    /// }
     ///```
     pub unsafe fn gather_at_pe(
         &self,
@@ -2204,11 +2281,14 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(world.num_pes());
-    /// let _result = unsafe { array.gather_at_pe_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(world.num_pes());
+    ///     let _result = unsafe { array.gather_at_pe_into_buffer(0, array.num_elems_local(), RootOrLamellarBuffer::Root(buf.into())) }.block();
+    /// }
     ///```
     pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -2272,9 +2352,11 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.alltoall(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.alltoall(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn alltoall(&self, index: usize, len: usize) -> ArrayCollectiveAllToAllHandle<T> {
         if !self.array.collective_support.alltoall {
@@ -2329,11 +2411,14 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(world.num_pes());
-    /// let _result = unsafe { array.alltoall_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(world.num_pes());
+    ///     let _result = unsafe { array.alltoall_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn alltoall_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -2395,11 +2480,12 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// use lamellar::lamellae::collective::BroadcastInput;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.broadcast_from_pe(BroadcastInput::Root(0), array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.broadcast_from_pe(BroadcastInput::Root(0), array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn broadcast_from_pe(
         &self,
@@ -2483,12 +2569,13 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// use lamellar::lamellae::collective::RootSrcOrLamellarBuffer;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(1);
-    /// let _result = unsafe { array.broadcast_from_pe_into_buffer(buf.into(), 1) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.broadcast_from_pe_into_buffer(RootSrcOrLamellarBuffer::<usize, OneSidedMemoryRegion<usize>>::Root(0), 1) }.block();
+    /// }
     ///```
     pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -2548,11 +2635,12 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// use lamellar::lamellae::collective::ScatterInput;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.scatter_from_pe(ScatterInput::Root(0), array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.scatter_from_pe(ScatterInput::Root(0), array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn scatter_from_pe(
         &self,
@@ -2636,12 +2724,14 @@ impl<T: Dist + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
-    /// use lamellar::lamellae::collective::ScatterInput;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.scatter_from_pe_into_buffer(buf.into(), ScatterInput::Root(0), array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(array.num_elems_local());
+    ///     let _result = unsafe { array.scatter_from_pe_into_buffer(buf.into(), ScatterInput::Root(0), array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -2731,9 +2821,11 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.sum_scatter(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.sum_scatter(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn sum_scatter(
         &self,
@@ -2795,9 +2887,11 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.prod_scatter(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.prod_scatter(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn prod_scatter(
         &self,
@@ -2860,9 +2954,11 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.max_scatter(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.max_scatter(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn max_scatter(
         &self,
@@ -2923,9 +3019,11 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.min_scatter(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.min_scatter(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn min_scatter(
         &self,
@@ -2988,9 +3086,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_and_scatter(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_and_scatter(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_and_scatter(
         &self,
@@ -3051,9 +3151,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_xor_scatter(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_xor_scatter(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_xor_scatter(
         &self,
@@ -3114,9 +3216,11 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let _result = unsafe { array.bit_or_scatter(0, array.local_len()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let _result = unsafe { array.bit_or_scatter(0, array.num_elems_local()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_or_scatter(
         &self,
@@ -3178,11 +3282,14 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.sum_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(array.num_elems_local());
+    ///     let _result = unsafe { array.sum_scatter_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -3232,11 +3339,14 @@ impl<T: ElementArithmeticOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.prod_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(array.num_elems_local());
+    ///     let _result = unsafe { array.prod_scatter_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -3288,11 +3398,14 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.max_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(array.num_elems_local());
+    ///     let _result = unsafe { array.max_scatter_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -3342,11 +3455,14 @@ impl<T: ElementComparePartialEqOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.min_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(array.num_elems_local());
+    ///     let _result = unsafe { array.min_scatter_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -3398,11 +3514,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.bit_and_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(array.num_elems_local());
+    ///     let _result = unsafe { array.bit_and_scatter_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -3452,11 +3571,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.bit_xor_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(array.num_elems_local());
+    ///     let _result = unsafe { array.bit_xor_scatter_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -3506,11 +3628,14 @@ impl<T: ElementBitWiseOps + Default> GenericAtomicArray<T> {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use lamellar::memregion::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GenericAtomicArray<usize> = GenericAtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
-    /// world.barrier();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(array.local_len());
-    /// let _result = unsafe { array.bit_or_scatter_into_buffer(0, array.local_len(), buf.into()) }.block();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world, world.num_pes(), Distribution::Block).block();
+    /// if let AtomicArray::GenericAtomicArray(array) = array {
+    ///     world.barrier();
+    ///     let buf = world.alloc_one_sided_mem_region::<usize>(array.num_elems_local());
+    ///     let _result = unsafe { array.bit_or_scatter_into_buffer(0, array.num_elems_local(), buf.into()) }.block();
+    /// }
     ///```
     pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>>(
         &self,

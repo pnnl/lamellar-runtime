@@ -181,7 +181,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// Output on a 4 PE execution
     ///```text
     /// PE: 0 elem: 0
-    /// PE: 0 elem: 2
+    /// PE: 0 elem: 1
     /// PE: 0 elem: 3
     ///```
     fn step_by(self, step_size: usize) -> StepBy<Self>
@@ -250,7 +250,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// let my_pe = world.my_pe();
     /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
-    ///     let sum = array.onesided_iter().into_iter().take(4).map(|elem| *elem as f64).sum::<f64>();
+    ///     let sum = array.onesided_iter().into_iter().take(4).map(|elem| elem as f64).sum::<f64>();
     ///     println!("Sum: {sum}")
     /// }
     /// ```
@@ -285,7 +285,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     ///
     /// world.block_on (async move {
     ///      if my_pe == 0 {
-    ///          let result = array.onesided_iter().into_stream().take(4).map(|elem|*elem as f64).all(|elem|async move{ elem < num_pes as f64});
+    ///          let result = array.onesided_iter().into_stream().take(4).map(|elem|elem as f64).all(|elem|async move{ elem < num_pes as f64});
     ///          assert_eq!(result.await, true);
     ///      }
     ///  });
@@ -604,11 +604,18 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
         // let this = self.as_mut().project();
         self.index += count;
         if self.buf_size == 1 {
-            let req = unsafe { self.array.get(self.index, Sealed).spawn() };
-            self.state = State::SinglePending(req);
+            if self.index < self.array.len() {
+                let req = unsafe { self.array.get(self.index, Sealed).spawn() };
+                self.state = State::SinglePending(req);
+            } else {
+                self.state = State::Finished;
+            }
         } else {
             self.buf_index += count;
-            if self.buf_index == self.buf_size {
+            if self.index >= self.array.len() {
+                self.buf_index = 0;
+                self.state = State::Finished;
+            } else if self.buf_index == self.buf_size {
                 self.buf_index = 0;
                 // self.fill_buffer(0);
                 if self.index + self.buf_size < self.array.len() {

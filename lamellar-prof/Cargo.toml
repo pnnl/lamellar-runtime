@@ -1,6 +1,6 @@
 [package]
 name = "lamellar-prof"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>"]
 edition = "2024"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."

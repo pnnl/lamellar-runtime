@@ -1,6 +1,6 @@
 [package]
 name = "lamellar_main"
-version = "0.1.0-rc.1"
+version = "0.1.0"
 edition = "2021"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>"]
 description = "Lamellar-specific launcher wrapper (#[lamellar_main::main]) around hpc_launch, used by lamellar's #[lamellar::main]/#[lamellar::test]."

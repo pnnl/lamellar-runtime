@@ -13,6 +13,11 @@ pub enum BuiltinOp {
     Xor,
 }
 
+// crabtime expands this by running a scratch `cargo run` at macro-expansion time,
+// which needs network/registry access - unavailable in docs.rs's sandboxed build.
+// Both generated methods are pub(crate) and never invoked during doc generation, so
+// under `docsrs` we skip the crabtime expansion entirely and stub them out instead.
+#[cfg(not(docsrs))]
 #[crabtime::function]
 fn impl_reduce_scalar_type_match() {
     let mut reduce_match_arms = Vec::new();
@@ -119,7 +124,19 @@ pub(crate) struct ScalarBuiltinReductionAm {
 }
 
 impl ScalarBuiltinReductionAm {
+    #[cfg(not(docsrs))]
     impl_reduce_scalar_type_match!();
+
+    #[cfg(docsrs)]
+    async fn reduce_scalar_local(&self) -> Vec<u8> {
+        unimplemented!("stubbed out for docs.rs build")
+    }
+
+    #[cfg(docsrs)]
+    async fn merge_scalar(&self, left: Vec<u8>, right: Vec<u8>) -> Vec<u8> {
+        let _ = (left, right);
+        unimplemented!("stubbed out for docs.rs build")
+    }
 }
 
 #[lamellar_impl::rt_am]

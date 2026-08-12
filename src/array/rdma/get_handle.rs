@@ -410,12 +410,12 @@ impl<T: Dist, B: AsLamellarBuffer<T> + 'static> ArrayRdmaGetIntoBufferHandle<T, 
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world, num_pes * 10, Distribution::Block).block();
     ///
     /// let dst: Vec<usize> = vec![0usize; 5];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// let handle = array.get_into_buffer(0, buf);
     /// let task = handle.spawn();
     /// // do other work …
-    /// let buf = task.block();
-    /// // buf is the LamellarBuffer returned from the inner task — use try_unwrap to recover the Vec
+    /// task.block();
+    /// // buf now contains the results — use try_unwrap to recover the Vec
     ///```
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
@@ -482,8 +482,9 @@ impl<T: Dist, B: AsLamellarBuffer<T> + 'static> ArrayRdmaGetIntoBufferHandle<T, 
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world, num_pes * 10, Distribution::Block).block();
     ///
     /// let dst: Vec<usize> = vec![0usize; 5];
-    /// let buf = LamellarBuffer::from_vec(dst);
-    /// let buf = array.get_into_buffer(0, buf).block();
+    /// let mut buf = LamellarBuffer::from_vec(&world, dst);
+    /// let handle = buf.split_off(0);
+    /// array.get_into_buffer(0, handle).block();
     /// let result = buf.try_unwrap().expect("no other references exist");
     /// println!("PE{my_pe} elements[0..5]: {:?}", result);
     ///```

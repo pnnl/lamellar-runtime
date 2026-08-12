@@ -548,8 +548,9 @@ impl<T: Dist> GlobalLockArray<T> {
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
-    /// let buf = array.get_into_buffer(0, buf).block();
+    /// let mut buf = LamellarBuffer::from_vec(&world, dst);
+    /// let handle = buf.split_off(0);
+    /// array.get_into_buffer(0, handle).block();
     /// let result = buf.try_unwrap().expect("no other references exist");
     /// println!("PE{my_pe} first 10 elements: {:?}", result);
     ///```
@@ -585,7 +586,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// array.blocking_get_into_buffer(0, buf);
     ///```
     pub fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
@@ -619,7 +620,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 10];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// array.get_into_buffer_unmanaged(0, buf);
     /// world.wait_all();
     /// world.barrier();
@@ -861,7 +862,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// array.barrier();
     ///
     /// let dst: Vec<usize> = vec![0usize; 5];
-    /// let buf = LamellarBuffer::from_vec(dst);
+    /// let buf = LamellarBuffer::from_vec(&world, dst);
     /// array.get_into_buffer_unmanaged_pe(0, 0, buf);
     /// world.wait_all();
     /// world.barrier();
