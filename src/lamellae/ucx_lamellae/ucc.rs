@@ -782,7 +782,9 @@ unsafe extern "C" fn oob_collective(
         for (i, pe) in params.pes.iter().skip(1).enumerate() {
             alloc.as_mut_slice::<u8>()[i + 1] = u8::MAX;
             // println!("PE[{}]: Putting data to PE: {}", params.my_pe, pe);
-            alloc.put_inner(*pe, 1, &dst_addr, false, false);
+            // must complete before the "done" flag put below, else remote may
+            // read the flag and consume stale data (races at high PE counts)
+            alloc.put_inner(*pe, 1, &dst_addr, true, false);
             // println!("PE[{}]: Done data Putting  to PE: {}", params.my_pe, pe);
         }
         // alloc.wait_all();

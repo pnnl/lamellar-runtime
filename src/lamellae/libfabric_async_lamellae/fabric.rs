@@ -3394,6 +3394,7 @@ impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
     }
 }
 
+#[cfg(not(feature = "enable-libfabric"))]
 impl From<LamellarReduceOp> for ReduceOp {
     fn from(op: LamellarReduceOp) -> Self {
         match op {
@@ -3408,6 +3409,7 @@ impl From<LamellarReduceOp> for ReduceOp {
     }
 }
 
+#[cfg(not(feature = "enable-libfabric"))]
 impl From<&LamellarReduceOp> for ReduceOp {
     fn from(op: &LamellarReduceOp) -> Self {
         match op {
@@ -3422,6 +3424,7 @@ impl From<&LamellarReduceOp> for ReduceOp {
     }
 }
 
+#[cfg(not(feature = "enable-libfabric"))]
 impl From<&LamellarReduceOp> for &ReduceOp {
     fn from(op: &LamellarReduceOp) -> Self {
         match op {
