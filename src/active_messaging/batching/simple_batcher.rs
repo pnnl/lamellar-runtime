@@ -866,7 +866,10 @@ impl SimpleBatcher {
         };
         let mut darcs = vec![];
         am.ser(darc_ser_cnt, &mut darcs);
-        am.serialize_into(&mut data_buf[i..i + am_size]);
+        {
+            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(darc_ser_cnt);
+            am.serialize_into(&mut data_buf[i..i + am_size]);
+        }
         i + am_size
     }
 
@@ -894,7 +897,10 @@ impl SimpleBatcher {
         crate::serialize_into(&mut data_buf[i..(i + darc_list_size)], &darcs, false).unwrap();
         i += darc_list_size;
 
-        data.serialize_into(&mut data_buf[i..i + data_size]);
+        {
+            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(1);
+            data.serialize_into(&mut data_buf[i..i + data_size]);
+        }
         i + data_size
     }
 

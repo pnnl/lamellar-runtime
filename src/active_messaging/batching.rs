@@ -503,7 +503,17 @@ pub(crate) async fn send_am_zerocopy(
         },
     });
     let mut bytes = crate::serialize(&header, false).expect("failed to serialize am header");
-    let am_bytes = am.serialize();
+    let darc_ser_cnt = match req_data.dst {
+        Some(_) => 1,
+        None => match req_data.team.team_pe_id() {
+            Ok(_) => req_data.team.num_pes() - 1,
+            Err(_) => req_data.team.num_pes(),
+        },
+    };
+    let am_bytes = {
+        let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(darc_ser_cnt);
+        am.serialize()
+    };
     let am_header = MyAmHeader {
         am_id: I32::new(am_id),
         req_id: U64::new(req_data.id.id as u64),
@@ -520,10 +530,6 @@ pub(crate) async fn send_am_zerocopy(
             req_data.lamellae.send_vec_to_pe_async(pe, bytes).await;
         }
         None => {
-            let darc_ser_cnt = match req_data.team.team_pe_id() {
-                Ok(_) => req_data.team.num_pes() - 1,
-                Err(_) => req_data.team.num_pes(),
-            };
             am.ser(darc_ser_cnt, &mut darcs);
             for pe in req_data
                 .team
@@ -558,7 +564,10 @@ pub(crate) async fn send_data_am_zerocopy(
     let mut darcs = vec![];
     data.ser(1, &mut darcs);
     let serialized_darcs = crate::serialize(&darcs, false).expect("failed to serialize darcs");
-    let data_bytes = data.serialize();
+    let data_bytes = {
+        let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(1);
+        data.serialize()
+    };
     let data_header = MyDataHeader {
         req_id: U64::new(req_data.id.id as u64),
         req_sub_id: U64::new(req_data.id.sub_id as u64),
@@ -882,7 +891,10 @@ pub(crate) async fn send_am_serde(req_data: ReqMetaData, am: LamellarArcAm, am_i
     };
     let mut darcs = vec![];
     am.ser(darc_ser_cnt, &mut darcs);
-    am.serialize_into(&mut data_slice[header_len..]);
+    {
+        let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(darc_ser_cnt);
+        am.serialize_into(&mut data_slice[header_len..]);
+    }
     req_data
         .lamellae
         .send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf)
@@ -923,7 +935,10 @@ pub(crate) async fn send_data_am_serde(
     let mut i = *DATA_HEADER_LEN;
     crate::serialize_into(&mut data_slice[i..i + darc_list_size], &darcs, false).unwrap();
     i += darc_list_size;
-    data.serialize_into(&mut data_slice[i..]);
+    {
+        let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(1);
+        data.serialize_into(&mut data_slice[i..]);
+    }
     req_data
         .lamellae
         .send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf)

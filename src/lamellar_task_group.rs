@@ -1197,7 +1197,7 @@ impl LamellarTaskGroup {
         // println!("task group exec am all");
         self.team.team_counters.inc_send_req(self.team.num_pes);
         self.team.world_counters.inc_send_req(self.team.num_pes);
-        self.counters.inc_send_req(1);
+        self.counters.inc_send_req(self.team.num_pes);
         // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
 
         self.cnt.fetch_add(1, Ordering::SeqCst);
@@ -1338,7 +1338,7 @@ impl LamellarTaskGroup {
     {
         self.team.team_counters.inc_send_req(self.team.num_pes);
         self.team.world_counters.inc_send_req(self.team.num_pes);
-        self.counters.inc_send_req(1);
+        self.counters.inc_send_req(self.team.num_pes);
 
         self.cnt.fetch_add(1, Ordering::SeqCst);
         let func: LamellarArcAm = Arc::new(am);

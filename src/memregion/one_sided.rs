@@ -21,6 +21,51 @@ lazy_static! {
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+thread_local! {
+    static MEMREGION_SEND_CTX: std::cell::RefCell<Vec<SendFrame>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+struct SendFrame {
+    recipients: usize,
+    seen: HashMap<(usize, usize), ()>,
+}
+
+/// RAII guard that tells [`memregion_handle_serde::serialize`] how many remote
+/// recipients the enclosing wire encode is going to (see the `send_am_*`/
+/// `send_data_am_*` dispatchers in `active_messaging/batching.rs`). Push
+/// immediately before the single real byte-producing `.serialize()`/
+/// `.serialize_into()` call, never around a `.serialized_size()` probe call --
+/// with no guard active, `memregion_handle_serde::serialize` just encodes with
+/// no accounting side effect, which is exactly what a size-only pass needs.
+///
+/// Stack-based (not a single set/reset cell) so nested serialization -- e.g.
+/// `AmGroupAm` re-serializing each grouped sub-am -- can't clobber an outer
+/// frame. Each frame also tracks which handle ids it has already accounted for,
+/// since some dispatch paths (e.g. `AmGroupAm::serialize_into`) re-invoke
+/// `.serialized_size()` on an already-encoded sub-am to compute a buffer
+/// offset, which would otherwise double-count that sub-am's handles.
+pub(crate) struct MemRegionSendGuard;
+
+impl MemRegionSendGuard {
+    pub(crate) fn new(recipients: usize) -> Self {
+        MEMREGION_SEND_CTX.with(|ctx| {
+            ctx.borrow_mut().push(SendFrame {
+                recipients,
+                seen: HashMap::new(),
+            })
+        });
+        Self
+    }
+}
+
+impl Drop for MemRegionSendGuard {
+    fn drop(&mut self) {
+        MEMREGION_SEND_CTX.with(|ctx| {
+            ctx.borrow_mut().pop();
+        });
+    }
+}
+
 //#[doc(hidden)]
 /// Internal serialization handle used to transfer a [`OneSidedMemoryRegion`] across PEs via active messages.
 ///
@@ -105,6 +150,15 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
         };
         mrh.remote_recv.fetch_add(1, Ordering::SeqCst);
         mrh.local_ref.fetch_add(1, Ordering::SeqCst);
+        trace!(
+            target: "mem_region_lifetime",
+            my_id = ?mrh.my_id,
+            parent_id = ?mrh.parent_id,
+            grand_parent_id = ?mrh.grand_parent_id,
+            remote_recv = mrh.remote_recv.load(Ordering::SeqCst),
+            local_ref = mrh.local_ref.load(Ordering::SeqCst),
+            "received one-sided handle",
+        );
         trace!("recived mrh: {:?}", mrh);
         mrh
     }
@@ -152,6 +206,7 @@ struct MemRegionHandle {
 
 pub(crate) mod memregion_handle_serde {
     use serde::Serialize;
+    use std::sync::atomic::Ordering;
     use std::sync::Arc;
     use tracing::trace;
 
@@ -170,6 +225,23 @@ pub(crate) mod memregion_handle_serde {
             inner.orig_pe,
             inner.orig_addr,
         );
+        super::MEMREGION_SEND_CTX.with(|ctx| {
+            if let Some(frame) = ctx.borrow_mut().last_mut() {
+                if frame.seen.insert(inner.my_id, ()).is_none() {
+                    let old = inner.remote_sent.fetch_add(frame.recipients, Ordering::SeqCst);
+                    trace!(
+                        target: "mem_region_lifetime",
+                        my_id = ?inner.my_id,
+                        parent_id = ?inner.parent_id,
+                        recipients = frame.recipients,
+                        old,
+                        new = old + frame.recipients,
+                        "sent one-sided handle",
+                    );
+                    inner.team.serialize_update_cnts(frame.recipients);
+                }
+            }
+        });
         let nethandle = super::NetMemRegionHandle::from(inner.clone());
         nethandle.serialize(serializer)
     }
@@ -187,29 +259,14 @@ pub(crate) mod memregion_handle_serde {
 }
 
 impl crate::active_messaging::DarcSerde for MemRegionHandle {
-    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
-        trace!(
-            "in ser id {:?} pid {:?} gpid {:?}",
-            self.inner.my_id,
-            self.inner.parent_id,
-            self.inner.grand_parent_id
-        );
-        self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
-        // The team Darc is serialized exactly once, inside the payload bytes (via the
-        // memregion_handle_serde::serialize -> NetMemRegionHandle::serialize path). On the receiver
-        // that single copy is deserialized through From<NetMemRegionHandle> -> team.into(), which
-        // calls inc_pe_ref_count(orig_pe, 1) and ultimately drives one FinishedAm back per receiver.
-        // So increment dist_cnt by num_pes to match.
-        //
-        // We intentionally do NOT push a RemotePtr::NetMemRegionHandle into the darcs vec: its
-        // process_result arm is a no-op, but serializing it onto the wire would serialize the team
-        // Darc a SECOND time, producing an extra inc_pe_ref_count (and FinishedAm) on the receiver.
-        // That second copy only appears on AM paths that serialize the darcs vec (e.g. the return AM
-        // but not the request AM), which made the dist_cnt bookkeeping asymmetric between the two PEs
-        // and deadlocked the world-drop barrier.
-        self.inner.team.serialize_update_cnts(num_pes);
-        let _ = darcs;
-    }
+    // Ref-counting for the wrapped one-sided region now happens in
+    // `memregion_handle_serde::serialize`, gated by `MEMREGION_SEND_CTX`. That
+    // serde fn is invoked by plain serde recursion for every `MemRegionHandle`
+    // in a payload regardless of macro-side `DarcSerde` dispatch (e.g. it's
+    // reached even from inside a `Vec<(u32, OneSidedMemoryRegion<u32>)>` field,
+    // which the derive-macro codegen otherwise never iterates into), so this
+    // impl has nothing left to do.
+    fn ser(&self, _num_pes: usize, _darcs: &mut Vec<RemotePtr>) {}
 }
 
 impl Clone for MemRegionHandle {
@@ -286,6 +343,16 @@ impl LamellarAM for MemRegionFinishedAm {
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let _mrh = match mrh_map.get(&self.parent_id) {
             Some(mrh) => {
+                let sent = mrh.remote_sent.load(Ordering::SeqCst);
+                trace!(
+                    target: "mem_region_lifetime",
+                    parent_id = ?self.parent_id,
+                    release_cnt = self.cnt,
+                    remote_sent = sent,
+                    my_id = ?mrh.my_id,
+                    "received one-sided handle release",
+                );
+                // assert!(sent >= self.cnt);
                 mrh.remote_sent.fetch_sub(self.cnt, Ordering::SeqCst);
                 trace!("in finished am {:?} mrh {:?}", self, mrh);
             }
@@ -306,6 +373,7 @@ struct MemRegionDropWaitAm {
 #[lamellar_impl::rt_am_local]
 impl LamellarAM for MemRegionDropWaitAm {
     async fn exec(self) {
+        // println!("in MemRegionDropWaitAm {:?}", self.inner);
         loop {
             while self.inner.remote_sent.load(Ordering::SeqCst) != 0
                 || self.inner.local_ref.load(Ordering::SeqCst) != 0
@@ -339,6 +407,7 @@ impl LamellarAM for MemRegionDropWaitAm {
             }
             async_std::task::yield_now().await;
         }
+        // println!("leaving MemRegionDropWaitAm {:?}", self.inner);
     }
 }
 

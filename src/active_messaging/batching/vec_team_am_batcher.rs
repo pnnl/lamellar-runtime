@@ -362,7 +362,17 @@ impl Batcher for VecTeamAmBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let am_bytes = am.serialize();
+        let recipients = match req_data.dst {
+            Some(_) => 1,
+            None => match req_data.team.team_pe_id() {
+                Ok(_) => req_data.team.num_pes() - 1,
+                Err(_) => req_data.team.num_pes(),
+            },
+        };
+        let am_bytes = {
+            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(recipients);
+            am.serialize()
+        };
         let team_addr = req_data.team.darc_addr();
         let req_id = req_data.id.id as u64;
         let req_sub_id = req_data.id.sub_id as u64;
@@ -414,7 +424,17 @@ impl Batcher for VecTeamAmBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let am_bytes = am.serialize();
+        let recipients = match req_data.dst {
+            Some(_) => 1,
+            None => match req_data.team.team_pe_id() {
+                Ok(_) => req_data.team.num_pes() - 1,
+                Err(_) => req_data.team.num_pes(),
+            },
+        };
+        let am_bytes = {
+            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(recipients);
+            am.serialize()
+        };
         let team_addr = req_data.team.darc_addr();
         let req_id = req_data.id.id as u64;
         let req_sub_id = req_data.id.sub_id as u64;
@@ -462,7 +482,10 @@ impl Batcher for VecTeamAmBatcher {
         let mut darcs = vec![];
         data.ser(1, &mut darcs);
         let serialized_darcs = crate::serialize(&darcs, false).unwrap();
-        let data_bytes = data.serialize();
+        let data_bytes = {
+            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(1);
+            data.serialize()
+        };
         let data_header = MyDataHeader {
             req_id: U64::new(req_data.id.id as u64),
             req_sub_id: U64::new(req_data.id.sub_id as u64),

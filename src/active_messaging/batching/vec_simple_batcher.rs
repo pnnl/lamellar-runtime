@@ -207,7 +207,17 @@ impl Batcher for VecSimpleBatcher {
         if stall_mark == 0 {
             self.inner.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let am_bytes = am.serialize();
+        let recipients = match req_data.dst {
+            Some(_) => 1,
+            None => match req_data.team.team_pe_id() {
+                Ok(_) => req_data.team.num_pes() - 1,
+                Err(_) => req_data.team.num_pes(),
+            },
+        };
+        let am_bytes = {
+            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(recipients);
+            am.serialize()
+        };
         let cmd_bytes = Cmd::Am.as_bytes();
         let am_header = MyAmHeader {
             am_id: I32::new(am_id),
@@ -283,7 +293,17 @@ impl Batcher for VecSimpleBatcher {
         if stall_mark == 0 {
             self.inner.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let am_bytes = am.serialize();
+        let recipients = match req_data.dst {
+            Some(_) => 1,
+            None => match req_data.team.team_pe_id() {
+                Ok(_) => req_data.team.num_pes() - 1,
+                Err(_) => req_data.team.num_pes(),
+            },
+        };
+        let am_bytes = {
+            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(recipients);
+            am.serialize()
+        };
         let cmd_bytes = Cmd::ReturnAm.as_bytes();
         let am_header = MyAmHeader {
             am_id: I32::new(am_id),
@@ -361,7 +381,10 @@ impl Batcher for VecSimpleBatcher {
         let mut darcs = vec![];
         data.ser(1, &mut darcs);
         let serialized_darcs = crate::serialize(&darcs, false).unwrap();
-        let data_bytes = data.serialize();
+        let data_bytes = {
+            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(1);
+            data.serialize()
+        };
         let cmd_bytes = Cmd::Data.as_bytes();
         let data_header = MyDataHeader {
             req_id: U64::new(req_data.id.id as u64),
