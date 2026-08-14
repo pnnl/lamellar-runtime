@@ -50,11 +50,9 @@ use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 use tracing::trace;
+use zerocopy::TryFromBytes;
 
-lazy_static! {
-    static ref SERIALIZE_HEADER_LEN: usize =
-        crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()), false);
-}
+pub(crate) const SERIALIZE_HEADER_LEN: usize = std::mem::size_of::<SerializeHeader>();
 
 /// The list of available lamellae backends, used to specify how data is transferred between PEs
 #[derive(
@@ -142,7 +140,22 @@ impl Default for Backend {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+// Fixed-size wire header: zerocopy raw-byte layout, not (de)serialized via
+// crate::serialize/deserialize -- its length must be a true compile-time
+// constant, independent of field values (see SERIALIZE_HEADER_LEN above).
+#[repr(C)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    zerocopy_derive::IntoBytes,
+    zerocopy_derive::TryFromBytes,
+    zerocopy_derive::KnownLayout,
+    zerocopy_derive::Immutable,
+)]
 pub(crate) struct SerializeHeader {
     pub(crate) msg: Msg,
 }
@@ -180,8 +193,8 @@ impl SerializedData {
         let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
 
         let ser_data_bytes = alloc.comm_slice_at_byte_offset(0, size);
-        let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
-        let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
+        let header_bytes = ser_data_bytes.sub_slice(0..SERIALIZE_HEADER_LEN);
+        let payload_bytes = ser_data_bytes.sub_slice(SERIALIZE_HEADER_LEN..size);
 
         // println!(
         //     "[{:?}, {:?}] creating new serialized data {:?} {:?} {:?} {:?}",
@@ -264,8 +277,9 @@ impl std::fmt::Debug for SerializedData {
 #[lamellar_prof::prof]
 impl Des for SerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(&self.header_as_bytes(), false).unwrap()
+    fn deserialize_header(&self) -> SerializeHeader {
+        SerializeHeader::try_read_from_bytes(&self.header_as_bytes())
+            .expect("SERIALIZE_HEADER_LEN-sized slice must parse as SerializeHeader")
     }
     //#[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
@@ -327,8 +341,9 @@ impl std::fmt::Debug for SubSerializedData {
 #[lamellar_prof::prof]
 impl Des for SubSerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(&self.header_as_bytes(), false).unwrap()
+    fn deserialize_header(&self) -> SerializeHeader {
+        SerializeHeader::try_read_from_bytes(&self.header_as_bytes())
+            .expect("SERIALIZE_HEADER_LEN-sized slice must parse as SerializeHeader")
     }
     //#[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
@@ -337,7 +352,7 @@ impl Des for SubSerializedData {
 }
 #[enum_dispatch]
 pub(crate) trait Des {
-    fn deserialize_header(&self) -> Option<SerializeHeader>;
+    fn deserialize_header(&self) -> SerializeHeader;
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error>;
 }
 
@@ -376,7 +391,7 @@ pub(crate) trait LamellaeShutdown {
 pub(crate) trait Ser {
     fn serialize_header(
         &self,
-        header: Option<SerializeHeader>,
+        header: SerializeHeader,
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error>;
 }

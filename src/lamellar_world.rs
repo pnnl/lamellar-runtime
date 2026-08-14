@@ -1,7 +1,4 @@
-use crate::active_messaging::batching::team_am_batcher::{TeamHeader, TEAM_HEADER_LEN};
-use crate::active_messaging::registered_active_message::{AmHeader, AM_HEADER_LEN};
 use crate::darc::{Darc, DarcInner};
-use crate::scheduler::ReqId;
 use crate::{
     active_messaging::*,
     barrier::BarrierHandle,
@@ -726,25 +723,6 @@ impl LamellarWorldBuilder {
             // teams.clone(),
         );
         trace!(target:"lamellae_debug", "team_rt created lamellae cnt {:?}", Arc::strong_count(&lamellae));
-
-        let _ = AM_HEADER_LEN.set(crate::serialized_size::<AmHeader>(
-            &AmHeader {
-                am_id: 0,
-                // team: team_rt.clone(),
-                team_addr: team_rt.darc_addr(),
-                req_id: ReqId::default(),
-            },
-            false,
-        ));
-        let _ = TEAM_HEADER_LEN
-            .set(crate::serialized_size::<TeamHeader>(
-                &TeamHeader {
-                    team: team_rt.darc_addr(),
-                    am_batch_cnts: 0,
-                },
-                false,
-            ))
-            .ok();
         // println!("{:?}: init_team_rt", timer.elapsed());
 
         // timer = std::time::Instant::now();

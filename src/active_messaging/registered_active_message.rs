@@ -14,7 +14,7 @@ use crate::{
 use async_recursion::async_recursion;
 // use log::trace;
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 pub(crate) const AM_ID_START: AmId = 1;
 
@@ -73,31 +73,63 @@ pub(crate) struct RegisteredActiveMessages {
     pub(crate) executor: Arc<Executor>,
 }
 
-pub(crate) static AM_HEADER_LEN: OnceLock<usize> = OnceLock::new();
-lazy_static! {
-    pub(crate) static ref DATA_HEADER_LEN: usize =
-        crate::serialized_size::<DataHeader>(&DataHeader::default(), false);
-    pub(crate) static ref UNIT_HEADER_LEN: usize =
-        crate::serialized_size::<UnitHeader>(&UnitHeader::default(), false);
-    pub(crate) static ref CMD_LEN: usize = crate::serialized_size::<Cmd>(&Cmd::Am, false);
-}
+pub(crate) const AM_HEADER_LEN: usize = std::mem::size_of::<AmHeader>();
+pub(crate) const DATA_HEADER_LEN: usize = std::mem::size_of::<DataHeader>();
+pub(crate) const UNIT_HEADER_LEN: usize = std::mem::size_of::<UnitHeader>();
+pub(crate) const CMD_LEN: usize = std::mem::size_of::<Cmd>();
 
+// Fixed-size wire header: zerocopy raw-byte layout, not (de)serialized via
+// crate::serialize/deserialize -- its length must be a true compile-time
+// constant, independent of field values (see AM_HEADER_LEN above).
 #[repr(C)]
-#[derive(serde::Serialize, serde::Deserialize, Debug, Copy, Clone)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Debug,
+    Copy,
+    Clone,
+    Default,
+    zerocopy_derive::IntoBytes,
+    zerocopy_derive::TryFromBytes,
+    zerocopy_derive::KnownLayout,
+    zerocopy_derive::Immutable,
+)]
 pub(crate) struct AmHeader {
     pub(crate) req_id: ReqId,
     pub(crate) team_addr: usize,
+    pub(crate) data_len: usize,
     pub(crate) am_id: AmId,
+    pub(crate) _pad: [u8; 4], // explicit -- zerocopy rejects implicit trailing padding
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
+#[repr(C)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    zerocopy_derive::IntoBytes,
+    zerocopy_derive::TryFromBytes,
+    zerocopy_derive::KnownLayout,
+    zerocopy_derive::Immutable,
+)]
 pub(crate) struct DataHeader {
     pub(crate) size: usize,
     pub(crate) req_id: ReqId,
     pub(crate) darc_list_size: usize,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
+#[repr(C)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    zerocopy_derive::IntoBytes,
+    zerocopy_derive::TryFromBytes,
+    zerocopy_derive::KnownLayout,
+    zerocopy_derive::Immutable,
+)]
 pub(crate) struct UnitHeader {
     pub(crate) req_id: ReqId,
 }
@@ -113,7 +145,6 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             Am::All(req_data, am) => {
                 // println!("{:?}",am.get_id());
                 let am_id = *(AMS_IDS.get(am.get_id()).unwrap());
-                let am_size = am.serialized_size();
 
                 if req_data.team.lamellae.comm().backend() != Backend::Local
                     && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err())
@@ -124,6 +155,19 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     self.executor.submit_io_task(async move {
                         //spawn a task so that we can the execute the local am immediately
                         // println!(" {} {} {}, {}, {}",req_data.team.lamellae.comm().backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.comm().backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
+                        let darc_ser_cnt = match req_data_clone.dst {
+                            Some(_) => 1,
+                            None => match req_data_clone.team.team_pe_id() {
+                                Ok(_) => req_data_clone.team.num_pes() - 1,
+                                Err(_) => req_data_clone.team.num_pes(),
+                            },
+                        };
+                        let am_bytes = {
+                            let _mrg =
+                                crate::memregion::one_sided::MemRegionSendGuard::new(darc_ser_cnt);
+                            am_clone.serialize()
+                        };
+                        let am_size = am_bytes.len();
                         if am_size < config().am_size_threshold && !immediate
                             || req_data_clone.team.arch.team_iter().any(|pe| {
                                 pe != req_data_clone.src
@@ -135,7 +179,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                                     req_data_clone.clone(),
                                     am_clone.clone(),
                                     am_id,
-                                    am_size,
+                                    am_bytes,
                                     stall_mark,
                                 )
                                 .await;
@@ -156,7 +200,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                             //     am_id,
                             //     am_size
                             // );
-                            ame.send_am(req_data_clone, am_clone, am_id, am_size, Cmd::Am)
+                            ame.send_am(req_data_clone, am_clone, am_id, am_bytes, Cmd::Am)
                                 .await;
                         }
                     });
@@ -176,12 +220,24 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         .await;
                 } else {
                     let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
-                    let am_size = am.serialized_size();
+                    let darc_ser_cnt = match req_data.dst {
+                        Some(_) => 1,
+                        None => match req_data.team.team_pe_id() {
+                            Ok(_) => req_data.team.num_pes() - 1,
+                            Err(_) => req_data.team.num_pes(),
+                        },
+                    };
+                    let am_bytes = {
+                        let _mrg =
+                            crate::memregion::one_sided::MemRegionSendGuard::new(darc_ser_cnt);
+                        am.serialize()
+                    };
+                    let am_size = am_bytes.len();
                     if am_size < config().am_size_threshold && !immediate
                         || !req_data.lamellae.available_to_send(req_data.dst.unwrap())
                     {
                         self.batcher
-                            .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
+                            .add_remote_am_to_batch(req_data, am, am_id, am_bytes, stall_mark)
                             .await;
                     } else {
                         stats!(
@@ -200,7 +256,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         //     am_id,
                         //     am_size
                         // );
-                        self.send_am(req_data, am, am_id, am_size, Cmd::Am).await;
+                        self.send_am(req_data, am, am_id, am_bytes, Cmd::Am).await;
                     }
                 }
             }
@@ -212,12 +268,23 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             Am::Return(req_data, am) => {
                 // println!("Am::Return");
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
-                let am_size = am.serialized_size();
+                let darc_ser_cnt = match req_data.dst {
+                    Some(_) => 1,
+                    None => match req_data.team.team_pe_id() {
+                        Ok(_) => req_data.team.num_pes() - 1,
+                        Err(_) => req_data.team.num_pes(),
+                    },
+                };
+                let am_bytes = {
+                    let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(darc_ser_cnt);
+                    am.serialize()
+                };
+                let am_size = am_bytes.len();
                 if am_size < config().am_size_threshold && !immediate
                     || !req_data.lamellae.available_to_send(req_data.dst.unwrap())
                 {
                     self.batcher
-                        .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
+                        .add_return_am_to_batch(req_data, am, am_id, am_bytes, stall_mark)
                         .await;
                 } else {
                     stats!(
@@ -236,18 +303,26 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     //     am_id,
                     //     am_size
                     // );
-                    self.send_am(req_data, am, am_id, am_size, Cmd::ReturnAm)
+                    self.send_am(req_data, am, am_id, am_bytes, Cmd::ReturnAm)
                         .await;
                 }
             }
             Am::Data(req_data, data) => {
                 // println!("Am::Data");
-                let data_size = data.serialized_size();
+                let mut darcs = vec![];
+                data.ser(1, &mut darcs);
+                let darc_bytes =
+                    crate::serialize(&darcs, false).expect("failed to serialize darcs");
+                let data_bytes = {
+                    let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(1);
+                    data.serialize()
+                };
+                let data_size = data_bytes.len();
                 if data_size < config().am_size_threshold && !immediate
                     || !req_data.lamellae.available_to_send(req_data.dst.unwrap())
                 {
                     self.batcher
-                        .add_data_am_to_batch(req_data, data, data_size, stall_mark)
+                        .add_data_am_to_batch(req_data, darc_bytes, data_bytes, stall_mark)
                         .await;
                 } else {
                     stats!(
@@ -261,11 +336,11 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                             .fetch_add(1, Ordering::Relaxed)
                     );
                     // println!("[{:?}] data {:?}", std::thread::current().id(), data_size);
-                    self.send_data_am(req_data, data, data_size).await;
+                    self.send_data_am(req_data, darc_bytes, data_bytes).await;
                 }
             }
             Am::Unit(req_data) => {
-                if *UNIT_HEADER_LEN < config().am_size_threshold && !immediate
+                if UNIT_HEADER_LEN < config().am_size_threshold && !immediate
                     || !req_data.lamellae.available_to_send(req_data.dst.unwrap())
                 {
                     self.batcher
@@ -397,16 +472,18 @@ impl RegisteredActiveMessages {
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
-        am_size: usize,
+        am_bytes: Vec<u8>,
         cmd: Cmd,
     ) {
         self.batcher
-            .send_am(req_data, am, am_id, am_size, cmd)
+            .send_am(req_data, am, am_id, am_bytes, cmd)
             .await;
     }
 
-    async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
-        self.batcher.send_data_am(req_data, data, data_size).await;
+    async fn send_data_am(&self, req_data: ReqMetaData, darc_bytes: Vec<u8>, data_bytes: Vec<u8>) {
+        self.batcher
+            .send_data_am(req_data, darc_bytes, data_bytes)
+            .await;
     }
 
     async fn send_unit_am(&self, req_data: ReqMetaData) {

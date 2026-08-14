@@ -421,13 +421,8 @@ impl Scheduler {
 
         let am_future = async move {
             trace!(target: "tasks", "[AM_ID {am_id}] execing remote");
-            if let Some(header) = data.deserialize_header() {
-                let msg = header.msg;
-                ame.exec_msg(msg, data, &lamellae_clone).await;
-            } else {
-                data.print();
-                panic!("should i be here?");
-            }
+            let msg = data.deserialize_header().msg;
+            ame.exec_msg(msg, data, &lamellae_clone).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
             stats!(TASKS_FINISHED
                 .get(&TaskType::AmRemote)

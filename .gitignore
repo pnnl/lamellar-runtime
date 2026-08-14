@@ -1,4 +1,6 @@
 /target
+/*.rs
+/*_lamellae*
 Cargo.lock
 **/*.rs.bk
 /.vscode
@@ -29,3 +31,14 @@ TODO
 /test_out*
 /test_results*
 /doc*
+/archived_results
+*_CHANGELOG.md
+*.txt
+.graphifyignore
+AGENTS.md
+ASAN_BUILD.md
+*asan*
+batch_runner*
+*run*.sh
+/scripts
+

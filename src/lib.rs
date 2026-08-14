@@ -226,7 +226,6 @@ extern crate memoffset;
 //#[doc(hidden)]
 pub extern crate serde;
 
-use std::io::Cursor;
 //#[doc(hidden)]
 pub use serde::*;
 
@@ -339,9 +338,6 @@ pub use lamellar_main::prrte_sys;
 //#[doc(hidden)]
 pub use inventory;
 
-//#[doc(hidden)]
-pub use bincode;
-
 // #[macro_use]
 // pub extern crate custom_derive;
 //#[doc(hidden)]
@@ -351,14 +347,6 @@ pub use custom_derive;
 // pub extern crate newtype_derive;
 //#[doc(hidden)]
 pub use newtype_derive;
-
-lazy_static! {
-    pub(crate) static ref BINCODE: bincode::config::Configuration<
-        bincode::config::LittleEndian,
-        bincode::config::Fixint,
-        bincode::config::NoLimit,
-    > = bincode::config::legacy();
-}
 
 // use std::sync::atomic::AtomicUsize;
 // use std::sync::atomic::Ordering::SeqCst;
@@ -380,26 +368,18 @@ lazy_static! {
 /// let serialized = lamellar::serialize(&data, false).expect("serialize");
 /// assert!(!serialized.is_empty());
 ///```
-pub fn serialize<T>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
+pub fn serialize<T>(obj: &T, _var: bool) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
 {
-    // let start = std::time::Instant::now();
-    let res = if var {
-        // Ok(BINCODE.serialize(obj)?)
-        Ok(bincode::serde::encode_to_vec(obj, *BINCODE)?)
-    } else {
-        Ok(bincode::serde::encode_to_vec(obj, *BINCODE)?)
-    };
-    // unsafe {
-    //     SERIALIZE_TIMER
-    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
-    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
-    // }
-    res
+    postcard::to_allocvec(obj).map_err(|e| anyhow::anyhow!("{}", e))
 }
 
-/// Returns the size of serialized data without allocating.
+/// Returns the size of an object once serialized.
+///
+/// Note this allocates and fully encodes `obj`, then discards the bytes -- prefer
+/// serializing once via [`serialize`] and using the resulting `Vec`'s length when a
+/// real encode is needed anyway, rather than calling this and then serializing again.
 ///
 /// # Examples
 ///```
@@ -407,23 +387,11 @@ where
 /// let size = lamellar::serialized_size(&data, false);
 /// assert!(size > 0);
 ///```
-pub fn serialized_size<T>(obj: &T, var: bool) -> usize
+pub fn serialized_size<T>(obj: &T, _var: bool) -> usize
 where
     T: serde::Serialize,
 {
-    // let start = std::time::Instant::now();
-    let res = if var {
-        // BINCODE.serialized_size(obj).unwrap() as usize
-        bincode::serde::encode_to_vec(obj, *BINCODE).unwrap().len()
-    } else {
-        bincode::serde::encode_to_vec(obj, *BINCODE).unwrap().len()
-    };
-    // unsafe {
-    //     SERIALIZE_SIZE_TIMER
-    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
-    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
-    // }
-    res
+    postcard::to_allocvec(obj).unwrap().len()
 }
 
 /// Wrapper function for serializing an object into a buffer.
@@ -435,23 +403,11 @@ where
 /// lamellar::serialize_into(&mut buf, &data, false)?;
 ///# Ok::<(), anyhow::Error>(())
 ///```
-pub fn serialize_into<T>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
+pub fn serialize_into<T>(buf: &mut [u8], obj: &T, _var: bool) -> Result<(), anyhow::Error>
 where
     T: serde::Serialize,
 {
-    // let start = std::time::Instant::now();
-    let mut cursor = Cursor::new(buf);
-    if var {
-        // BINCODE.serialize_into(buf, obj)?;
-        bincode::serde::encode_into_std_write(obj, &mut cursor, *BINCODE)?;
-    } else {
-        bincode::serde::encode_into_std_write(obj, &mut cursor, *BINCODE)?;
-    }
-    // unsafe {
-    //     SERIALIZE_TIMER
-    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
-    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
-    // }
+    postcard::to_slice(obj, buf).map_err(|e| anyhow::anyhow!("{}", e))?;
     Ok(())
 }
 
@@ -465,23 +421,11 @@ where
 /// assert_eq!(data, deserialized);
 ///# Ok::<(), anyhow::Error>(())
 ///```
-pub fn deserialize<'a, T>(bytes: &'a [u8], var: bool) -> Result<T, anyhow::Error>
+pub fn deserialize<'a, T>(bytes: &'a [u8], _var: bool) -> Result<T, anyhow::Error>
 where
     T: serde::Deserialize<'a>,
 {
-    // let start = std::time::Instant::now();
-    let res = if var {
-        // Ok(BINCODE.deserialize(bytes)?)
-        Ok(bincode::serde::borrow_decode_from_slice(bytes, *BINCODE)?.0)
-    } else {
-        Ok(bincode::serde::borrow_decode_from_slice(bytes, *BINCODE)?.0)
-    };
-    // unsafe {
-    //     DESERIALIZE_TIMER
-    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
-    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
-    // }
-    res
+    postcard::from_bytes(bytes).map_err(|e| anyhow::anyhow!("{}", e))
 }
 //#[doc(hidden)]
 pub use async_std;

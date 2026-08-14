@@ -1,5 +1,5 @@
 use crate::{
-    active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START},
+    active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS},
     active_messaging::*,
     barrier::BarrierHandle,
     env_var::config,
@@ -28,6 +28,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
 use tracing::{trace, warn};
+use zerocopy::{IntoBytes, TryFromBytes};
 
 #[derive(Debug)]
 
@@ -1657,13 +1658,22 @@ impl LamellarAM for AmGroupAm {
     }
 }
 
+const AM_GROUP_NUM_LEN: usize = std::mem::size_of::<usize>();
+const AM_GROUP_ID_LEN: usize = std::mem::size_of::<AmId>();
+// Explicit per-AM length prefix -- recovering the length by re-serializing the
+// just-decoded AM (via serialized_size()) is unsound under a variable-width
+// body codec (postcard): a field whose value legitimately changes across the
+// wire (e.g. an address translated on receipt) can re-encode to a different
+// byte width than what the sender wrote.
+const AM_GROUP_LEN_LEN: usize = std::mem::size_of::<usize>();
+
 impl LamellarSerde for AmGroupAm {
     fn serialized_size(&self) -> usize {
         let mut size = 0;
-        size += crate::serialized_size(&0usize, true);
-        let id_size = crate::serialized_size(&AM_ID_START, true);
+        size += AM_GROUP_NUM_LEN;
         for am in &self.ams[self.si..self.ei] {
-            size += id_size;
+            size += AM_GROUP_ID_LEN;
+            size += AM_GROUP_LEN_LEN;
             size += am.serialized_size();
         }
         size
@@ -1672,14 +1682,17 @@ impl LamellarSerde for AmGroupAm {
         let mut i = 0;
         // let timer = std::time::Instant::now();
         let num = self.ei - self.si;
-        crate::serialize_into(&mut buf[i..], &num, true).unwrap();
-        i += crate::serialized_size(&num, true);
+        buf[i..i + AM_GROUP_NUM_LEN].copy_from_slice(num.as_bytes());
+        i += AM_GROUP_NUM_LEN;
         for am in &self.ams[self.si..self.ei] {
             let id = *(AMS_IDS.get(am.get_id()).unwrap());
-            crate::serialize_into(&mut buf[i..], &id, true).unwrap();
-            i += crate::serialized_size(&id, true);
-            am.serialize_into(&mut buf[i..]);
-            i += am.serialized_size();
+            buf[i..i + AM_GROUP_ID_LEN].copy_from_slice(id.as_bytes());
+            i += AM_GROUP_ID_LEN;
+            let bytes = am.serialize();
+            buf[i..i + AM_GROUP_LEN_LEN].copy_from_slice(bytes.len().as_bytes());
+            i += AM_GROUP_LEN_LEN;
+            buf[i..i + bytes.len()].copy_from_slice(&bytes);
+            i += bytes.len();
         }
         // println!("serialize time: {:?} elem cnt {:?} ({}-{})", timer.elapsed().as_secs_f64(),self.ei-self.si,self.ei,self.si);
     }
@@ -1758,17 +1771,21 @@ fn am_group_am_unpack(
 ) -> std::sync::Arc<dyn RemoteActiveMessage + Sync + Send> {
     let mut i = 0;
 
-    let id_size = crate::serialized_size(&AM_ID_START, true);
     let mut ams = Vec::new();
-    let mut num: usize = crate::deserialize(&bytes[i..], true).unwrap();
-    i += crate::serialized_size(&num, true);
+    let mut num = usize::try_read_from_bytes(&bytes[i..i + AM_GROUP_NUM_LEN])
+        .expect("failed to parse AmGroupAm num");
+    i += AM_GROUP_NUM_LEN;
     // println!("task group unpack");
     while num > 0 {
-        let id: AmId = crate::deserialize(&bytes[i..], true).unwrap();
-        i += id_size;
+        let id = AmId::try_read_from_bytes(&bytes[i..i + AM_GROUP_ID_LEN])
+            .expect("failed to parse AmGroupAm id");
+        i += AM_GROUP_ID_LEN;
+        let am_len = usize::try_read_from_bytes(&bytes[i..i + AM_GROUP_LEN_LEN])
+            .expect("failed to parse AmGroupAm len");
+        i += AM_GROUP_LEN_LEN;
         // println!("task group unpack am");
-        let am = AMS_EXECS.get(&id).unwrap()(&bytes[i..], cur_pe);
-        i += am.serialized_size();
+        let am = AMS_EXECS.get(&id).unwrap()(&bytes[i..i + am_len], cur_pe);
+        i += am_len;
         ams.push(am);
         num -= 1;
     }
@@ -1871,7 +1888,7 @@ impl LamellarResultDarcSerde for AmGroupAmReturn {}
 pub struct AmGroup {
     team: Darc<LamellarTeamRT>,
     cnt: usize,
-    reqs: BTreeMap<usize, (Vec<usize>, Vec<LamellarArcAm>, usize)>,
+    reqs: BTreeMap<usize, (Vec<usize>, Vec<LamellarArcAm>, usize, Vec<usize>)>,
 }
 
 impl AmGroup {
@@ -1942,8 +1959,10 @@ impl AmGroup {
         let req_queue = self
             .reqs
             .entry(self.team.num_pes)
-            .or_insert((Vec::new(), Vec::new(), 0));
-        req_queue.2 += am.serialized_size();
+            .or_insert((Vec::new(), Vec::new(), 0, Vec::new()));
+        let am_size = am.serialized_size();
+        req_queue.2 += am_size;
+        req_queue.3.push(am_size);
         req_queue.0.push(self.cnt);
         req_queue.1.push(Arc::new(am));
 
@@ -1995,8 +2014,13 @@ impl AmGroup {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
-        let req_queue = self.reqs.entry(pe).or_insert((Vec::new(), Vec::new(), 0));
-        req_queue.2 += am.serialized_size();
+        let req_queue = self
+            .reqs
+            .entry(pe)
+            .or_insert((Vec::new(), Vec::new(), 0, Vec::new()));
+        let am_size = am.serialized_size();
+        req_queue.2 += am_size;
+        req_queue.3.push(am_size);
         req_queue.0.push(self.cnt);
         req_queue.1.push(Arc::new(am));
         self.cnt += 1;
@@ -2057,6 +2081,8 @@ impl AmGroup {
             let mut ams = vec![];
             std::mem::swap(&mut ams, &mut the_ams.1);
             let ams = Arc::new(ams);
+            let mut am_sizes = vec![];
+            std::mem::swap(&mut am_sizes, &mut the_ams.3);
 
             if the_ams.2 > 1_000_000 {
                 let num_reqs = (the_ams.2 / 1_000_000) + 1;
@@ -2066,7 +2092,7 @@ impl AmGroup {
                 let mut start_i = 0;
                 let mut send = false;
                 while i < ams.len() {
-                    let am_size = ams[i].serialized_size();
+                    let am_size = am_sizes[i];
                     if temp_size + am_size < 100_000_000 {
                         //hard size limit
                         temp_size += am_size;

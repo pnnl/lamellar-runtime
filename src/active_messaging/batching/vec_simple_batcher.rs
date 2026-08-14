@@ -10,11 +10,12 @@ use batching::*;
 
 use async_trait::async_trait;
 use tracing::debug;
+use zerocopy::{FromBytes, IntoBytes};
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
 
 // Per-PE batch slot: (buffer, data_byte_count, batch_id).
-// The buffer is always pre-seeded with the serialized Option<SerializeHeader>
+// The buffer is always pre-seeded with the zerocopy-encoded SerializeHeader
 // so send_vec_to_pe_async can parse the framing without extra allocation.
 type BatchSlot = Arc<parking_lot::Mutex<(Vec<u8>, usize, usize)>>;
 
@@ -38,14 +39,14 @@ impl VecSimpleBatcher {
         stall_mark: Arc<AtomicUsize>,
         executor: Arc<Executor>,
     ) -> Self {
-        let header = Some(SerializeHeader {
+        let header = SerializeHeader {
             msg: Msg {
                 src: my_pe as u16,
                 cmd: Cmd::BatchedMsg,
                 padding: [0; 1],
             },
-        });
-        let header_bytes = Arc::new(crate::serialize(&header, false).unwrap());
+        };
+        let header_bytes = Arc::new(header.as_bytes().to_vec());
         let mut pe_batch = Vec::with_capacity(num_pes);
         for _ in 0..num_pes {
             pe_batch.push(Arc::new(parking_lot::Mutex::new((
@@ -201,23 +202,12 @@ impl Batcher for VecSimpleBatcher {
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
-        _am_size: usize,
+        am_bytes: Vec<u8>,
         stall_mark: usize,
     ) {
         if stall_mark == 0 {
             self.inner.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let recipients = match req_data.dst {
-            Some(_) => 1,
-            None => match req_data.team.team_pe_id() {
-                Ok(_) => req_data.team.num_pes() - 1,
-                Err(_) => req_data.team.num_pes(),
-            },
-        };
-        let am_bytes = {
-            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(recipients);
-            am.serialize()
-        };
         let cmd_bytes = Cmd::Am.as_bytes();
         let am_header = MyAmHeader {
             am_id: I32::new(am_id),
@@ -287,23 +277,12 @@ impl Batcher for VecSimpleBatcher {
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
-        _am_size: usize,
+        am_bytes: Vec<u8>,
         stall_mark: usize,
     ) {
         if stall_mark == 0 {
             self.inner.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let recipients = match req_data.dst {
-            Some(_) => 1,
-            None => match req_data.team.team_pe_id() {
-                Ok(_) => req_data.team.num_pes() - 1,
-                Err(_) => req_data.team.num_pes(),
-            },
-        };
-        let am_bytes = {
-            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(recipients);
-            am.serialize()
-        };
         let cmd_bytes = Cmd::ReturnAm.as_bytes();
         let am_header = MyAmHeader {
             am_id: I32::new(am_id),
@@ -371,20 +350,14 @@ impl Batcher for VecSimpleBatcher {
     async fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
-        data: LamellarResultArc,
-        _data_size: usize,
+        darc_bytes: Vec<u8>,
+        data_bytes: Vec<u8>,
         stall_mark: usize,
     ) {
         if stall_mark == 0 {
             self.inner.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let mut darcs = vec![];
-        data.ser(1, &mut darcs);
-        let serialized_darcs = crate::serialize(&darcs, false).unwrap();
-        let data_bytes = {
-            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(1);
-            data.serialize()
-        };
+        let serialized_darcs = darc_bytes;
         let cmd_bytes = Cmd::Data.as_bytes();
         let data_header = MyDataHeader {
             req_id: U64::new(req_data.id.id as u64),

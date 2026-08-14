@@ -19,6 +19,8 @@ keywords = ["hpc", "runtime", "pgas", "distributed", "asynchronous"]
 categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 
+
+
 [dependencies]
 lamellar-impl = { version = "0.8.0", path = "impl" }
 lamellar_main = { version = "0.1.0", path = "./lamellar_main", optional = true }
@@ -61,7 +63,6 @@ inventory = "0.3.21"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_bytes = "0.11.17"
 serde_with = "3.14.0"
-bincode = { version = "2.0.1", features = ["serde"] }
 anyhow = "1.0.99"
 futures-util = "0.3.31"
 pin-project = "1.1.10"
@@ -106,8 +107,9 @@ tracing-futures = "0.2.5"
 match_cfg = "0.1.0"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 thiserror = { version = "2.0.16", optional = true }
-zerocopy = "0.8.48"
+zerocopy = { version = "0.8.48", features = ["derive"] }
 zerocopy-derive = "0.8.48"
+postcard = { version = "1", features = ["alloc"] }
 
 # hotpath = "0.16"
 backtrace = { version = "0.3", optional = true }
@@ -123,7 +125,14 @@ nix = "0.23"
 assert_cmd = "2.0.4"
 serial_test = "3.2.0"
 backtrace = "0.3"
+criterion = "0.5"
+bincode = { version = "2.0.1", features = ["serde"] }
+rkyv = "0.8"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
+
+[[bench]]
+name = "serialization"
+harness = false
 
 [workspace]
 members = [

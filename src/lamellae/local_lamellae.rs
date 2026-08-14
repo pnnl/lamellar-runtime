@@ -69,7 +69,7 @@ impl Local {
 impl Ser for Local {
     fn serialize_header(
         &self,
-        _header: Option<SerializeHeader>,
+        _header: SerializeHeader,
         _serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         panic!("should not be serializing in local")

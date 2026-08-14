@@ -17,6 +17,7 @@ use crate::{
 };
 
 use async_trait::async_trait;
+use zerocopy::IntoBytes;
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -204,15 +205,15 @@ impl LamellaeUtil for LibfabricSys {
 impl Ser for LibfabricSys {
     fn serialize_header(
         &self,
-        header: Option<SerializeHeader>,
+        header: SerializeHeader,
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
-        let header_size = *SERIALIZE_HEADER_LEN;
+        let header_size = SERIALIZE_HEADER_LEN;
         let mut ser_data = SerializedData::new(
             self.libfabric_sys_comm.clone(),
             header_size + serialized_size,
         )?;
-        crate::serialize_into(&mut ser_data.header_as_bytes_mut(), &header, false)?; //we want header to be a fixed size
+        ser_data.header_as_bytes_mut().copy_from_slice(header.as_bytes()); //fixed-size zerocopy header
         Ok(ser_data)
     }
 }

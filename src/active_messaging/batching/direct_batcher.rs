@@ -5,7 +5,7 @@ use crate::{
 };
 use batching::*;
 
-use zerocopy_derive::*;
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use parking_lot::Mutex;
 
@@ -65,14 +65,14 @@ impl DirectBatcher {
         executor: Arc<Executor>,
     ) -> Self {
         let mut batch = Vec::with_capacity(num_pes + 1);
-        let header = Some(SerializeHeader {
+        let header = SerializeHeader {
             msg: Msg {
                 src: my_pe as u16,
                 cmd: Cmd::BatchedMsg,
                 padding: [0; 1],
             },
-        });
-        let header_bytes = crate::serialize(&header, false).unwrap();
+        };
+        let header_bytes = header.as_bytes().to_vec();
         for _ in 0..num_pes {
             batch.push(Mutex::new(header_bytes.clone()));
         }
@@ -173,7 +173,7 @@ impl Batcher for DirectBatcher {
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
-        _am_size: usize,
+        am_bytes: Vec<u8>,
         _stall_mark: usize,
     ) {
         trace!(
@@ -183,17 +183,7 @@ impl Batcher for DirectBatcher {
             req_data.dst,
             req_data.team.darc_addr()
         );
-        let recipients = match req_data.dst {
-            Some(_) => 1,
-            None => match req_data.team.team_pe_id() {
-                Ok(_) => req_data.team.num_pes() - 1,
-                Err(_) => req_data.team.num_pes(),
-            },
-        };
-        let bytes = {
-            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(recipients);
-            am.serialize()
-        };
+        let bytes = am_bytes;
         let cmd_bytes = Cmd::Am.as_bytes();
         let am_header = MyAmHeader {
             am_id: I32::new(am_id),
@@ -253,7 +243,7 @@ impl Batcher for DirectBatcher {
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
-        _am_size: usize,
+        am_bytes: Vec<u8>,
         _stall_mark: usize,
     ) {
         trace!(
@@ -263,17 +253,7 @@ impl Batcher for DirectBatcher {
             req_data.dst,
             req_data.team.darc_addr()
         );
-        let recipients = match req_data.dst {
-            Some(_) => 1,
-            None => match req_data.team.team_pe_id() {
-                Ok(_) => req_data.team.num_pes() - 1,
-                Err(_) => req_data.team.num_pes(),
-            },
-        };
-        let bytes = {
-            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(recipients);
-            am.serialize()
-        };
+        let bytes = am_bytes;
         let cmd_bytes = Cmd::ReturnAm.as_bytes();
         let am_header = MyAmHeader {
             am_id: I32::new(am_id),
@@ -330,8 +310,8 @@ impl Batcher for DirectBatcher {
     async fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
-        data: LamellarResultArc,
-        _data_size: usize,
+        darc_bytes: Vec<u8>,
+        data_bytes: Vec<u8>,
         _stall_mark: usize,
     ) {
         trace!(
@@ -341,13 +321,8 @@ impl Batcher for DirectBatcher {
             req_data.dst,
             req_data.team.darc_addr()
         );
-        let mut darcs = Vec::new();
-        data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
-        let serialized_darcs = crate::serialize(&darcs, false).unwrap();
-        let bytes = {
-            let _mrg = crate::memregion::one_sided::MemRegionSendGuard::new(1);
-            data.serialize()
-        };
+        let serialized_darcs = darc_bytes;
+        let bytes = data_bytes;
         let cmd_bytes = Cmd::Data.as_bytes();
 
         let data_header = MyDataHeader {
