@@ -12,8 +12,8 @@ pub use lamellar_main_impl::main;
 pub use hpc_launch::test;
 
 pub use hpc_launch::{
-    core_count, generic_help_text, init_tracing_from_env, numa_domain_count, package_count,
-    pe_id, pu_count, resolve_pe_defaults,
+    core_count, cores_per_package, generic_help_text, init_tracing_from_env, numa_domain_count,
+    package_count, pe_id, pu_count, resolve_pe_defaults,
 };
 
 #[cfg(feature = "use-prterun")]

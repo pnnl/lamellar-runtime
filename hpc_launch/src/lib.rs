@@ -408,6 +408,18 @@ fn core_count_fs() -> Option<u32> {
     if ids.is_empty() { None } else { Some(ids.len() as u32) }
 }
 
+/// Best-effort core count within a single physical package (socket) on the
+/// current host, assuming packages have a uniform core count. Returns `None`
+/// if either `core_count` or `package_count` can't be determined.
+pub fn cores_per_package() -> Option<u32> {
+    let cores = core_count()?;
+    let packages = package_count()?;
+    if packages == 0 {
+        return None;
+    }
+    Some((cores / packages).max(1))
+}
+
 /// Best-effort count of processing units (logical CPUs, including SMT
 /// siblings) on the current host. Uses `hwlocality` when the
 /// `enable-numa-detect` feature is enabled, falling back to a `/sys` scan.

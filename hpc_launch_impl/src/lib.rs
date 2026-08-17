@@ -250,8 +250,16 @@ fn create_launch_block(
                     // whole node. This is a package boundary, not a NUMA domain one --
                     // a package can contain multiple NUMA domains, so pes_per_node can
                     // be well below numa_domains while still fitting in one package.
+                    // pes_per_node < packages is only a necessary precondition for that,
+                    // not sufficient -- only actually span if threads_per_pe wouldn't
+                    // fit within a single package's cores.
                     let spans_multiple_domains = match packages {
-                        Some(p) if p > 1 => pes_per_node.unwrap_or(1) < p,
+                        Some(p) if p > 1 && pes_per_node.unwrap_or(1) < p => {
+                            match ::hpc_launch::cores_per_package() {
+                                Some(cores_per_pkg) => threads_per_pe > cores_per_pkg,
+                                None => true,
+                            }
+                        }
                         _ => false,
                     };
                     prterun_args.push("--map-by".to_string());

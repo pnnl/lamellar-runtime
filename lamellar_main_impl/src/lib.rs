@@ -72,8 +72,18 @@ fn create_launch_block(
                     }
                 }
                 if pes_per_node.is_some() && !has_flag(&prterun_args, &["--map-by"]) {
+                    // pes_per_node < packages alone doesn't mean a PE must span
+                    // packages -- it only might, if threads_per_pe needs more cores
+                    // than one package has. Prefer PE=<threads_per_pe> binding
+                    // whenever it still fits in a single package; only give up
+                    // binding entirely when it can't.
                     let spans_multiple_domains = match packages {
-                        Some(p) if p > 1 => pes_per_node.unwrap_or(1) < p,
+                        Some(p) if p > 1 && pes_per_node.unwrap_or(1) < p => {
+                            match ::lamellar::cores_per_package() {
+                                Some(cores_per_pkg) => threads_per_pe > cores_per_pkg,
+                                None => true,
+                            }
+                        }
                         _ => false,
                     };
                     prterun_args.push("--map-by".to_string());
