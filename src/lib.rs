@@ -238,6 +238,11 @@ pub extern crate serde_bytes;
 pub extern crate serde_with;
 // pub use serde_with::*;
 
+#[doc(hidden)]
+pub extern crate zerocopy;
+#[doc(hidden)]
+pub use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes};
+
 //#[doc(hidden)]
 // pub extern crate tracing;
 //#[doc(hidden)]
@@ -329,8 +334,8 @@ pub use lamellar_main::main;
 pub use lamellar_main::test;
 #[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::{
-    generic_help_text, init_tracing_from_env, numa_domain_count, package_count, pe_id,
-    resolve_pe_defaults,
+    cores_per_package, generic_help_text, init_tracing_from_env, numa_domain_count,
+    package_count, pe_id, resolve_pe_defaults,
 };
 #[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::prrte_sys;
