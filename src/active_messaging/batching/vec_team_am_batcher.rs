@@ -234,7 +234,7 @@ impl VecTeamAmBatcher {
                     );
                     return;
                 }
-                if cur != stall_mark || size >= MAX_BATCH_SIZE {
+                if cur == stall_mark || size >= MAX_BATCH_SIZE {
                     break;
                 }
                 stall_mark = cur;

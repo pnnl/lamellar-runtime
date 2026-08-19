@@ -126,7 +126,7 @@ impl VecSimpleBatcher {
                     }
                     *data_bytes
                 };
-                if cur != stall_mark || batch_size >= MAX_BATCH_SIZE {
+                if cur == stall_mark || batch_size >= MAX_BATCH_SIZE {
                     break;
                 }
                 stall_mark = cur;
