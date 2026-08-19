@@ -29,7 +29,7 @@ fn create_binary_update_block() -> impl ToTokens {
                     match readelf_out {
                         Ok(readelf_out) if readelf_out.status.success() => {
                             let readelf_stdout = String::from_utf8_lossy(&readelf_out.stdout);
-                            let mut has_shared_libs_dir = false;
+                            let mut missing_lib_dirs: Vec<String> = Vec::new();
                             let mut existing_rpath = String::new();
 
                             for line in readelf_stdout.lines() {
@@ -38,16 +38,24 @@ fn create_binary_update_block() -> impl ToTokens {
                                         let cur = line[start + 1..end].trim();
                                         if !cur.is_empty() {
                                             existing_rpath = cur.to_string();
-                                            // Check if all required libs are already in RPATH
-                                            has_shared_libs_dir = shared_libs_dir
+                                            // Track which required lib dirs are still missing from RPATH
+                                            missing_lib_dirs = shared_libs_dir
                                                 .split(':')
-                                                .all(|lib_dir| existing_rpath.contains(lib_dir));
+                                                .filter(|lib_dir| !existing_rpath.contains(lib_dir))
+                                                .map(|lib_dir| lib_dir.to_string())
+                                                .collect();
                                         }
                                     }
                                 }
                             }
+                            if existing_rpath.is_empty() {
+                                missing_lib_dirs = shared_libs_dir
+                                    .split(':')
+                                    .map(|lib_dir| lib_dir.to_string())
+                                    .collect();
+                            }
 
-                            if !has_shared_libs_dir {
+                            if !missing_lib_dirs.is_empty() {
                                 let new_rpath = if existing_rpath.is_empty() {
                                     shared_libs_dir.to_string()
                                 } else {
@@ -67,6 +75,10 @@ fn create_binary_update_block() -> impl ToTokens {
                                         exe_path,
                                         temp_exe_str,
                                         err
+                                    );
+                                    eprintln!(
+                                        "hpc_launch: unable to add missing RPATH entries {:?}; manually setting LD_LIBRARY_PATH may be needed.",
+                                        missing_lib_dirs
                                     );
                                 } else {
 
@@ -112,6 +124,10 @@ fn create_binary_update_block() -> impl ToTokens {
                                                     exe_path,
                                                     err
                                                 );
+                                                eprintln!(
+                                                    "hpc_launch: unable to add missing RPATH entries {:?}; manually setting LD_LIBRARY_PATH may be needed.",
+                                                    missing_lib_dirs
+                                                );
                                                 // Clean up temp file on failure
                                                 let _ = std::fs::remove_file(&temp_exe);
                                             } else {
@@ -126,6 +142,10 @@ fn create_binary_update_block() -> impl ToTokens {
                                                 status,
                                                 temp_exe_str
                                             );
+                                            eprintln!(
+                                                "hpc_launch: unable to add missing RPATH entries {:?}; manually setting LD_LIBRARY_PATH may be needed.",
+                                                missing_lib_dirs
+                                            );
                                             // Clean up temp file on failure
                                             let _ = std::fs::remove_file(&temp_exe);
                                         }
@@ -134,6 +154,10 @@ fn create_binary_update_block() -> impl ToTokens {
                                                 "hpc_launch: failed to run patchelf for {:?}: {}",
                                                 temp_exe_str,
                                                 err
+                                            );
+                                            eprintln!(
+                                                "hpc_launch: unable to add missing RPATH entries {:?}; manually setting LD_LIBRARY_PATH may be needed.",
+                                                missing_lib_dirs
                                             );
                                             // Clean up temp file on error
                                             let _ = std::fs::remove_file(&temp_exe);
@@ -148,6 +172,10 @@ fn create_binary_update_block() -> impl ToTokens {
                                 exe_path,
                                 status_out.status
                             );
+                            eprintln!(
+                                "hpc_launch: unable to check/update RPATH; candidate library dirs {:?} may need to be added manually via LD_LIBRARY_PATH.",
+                                shared_libs_dir
+                            );
                         }
                         Err(err) => {
                             eprintln!(
@@ -155,8 +183,17 @@ fn create_binary_update_block() -> impl ToTokens {
                                 exe_path,
                                 err
                             );
+                            eprintln!(
+                                "hpc_launch: unable to check/update RPATH; candidate library dirs {:?} may need to be added manually via LD_LIBRARY_PATH.",
+                                shared_libs_dir
+                            );
                         }
                     }
+                } else {
+                    eprintln!(
+                        "hpc_launch: unable to determine current executable path; unable to update RPATH. Candidate library dirs {:?} may need to be added manually via LD_LIBRARY_PATH.",
+                        shared_libs_dir
+                    );
                 }
             }
         }
@@ -351,11 +388,28 @@ fn create_launch_block(
             let mut threads_per_pe_flag: Option<u32> = None;
             let mut log_filter: Option<String> = None;
 
-            // Collect any additional arguments after "--" to pass to prterun
-            let pos = args.iter().position(|x| x == "--");
+            // Collect any additional arguments after "--" to pass to prterun.
+            // `cargo run --example X -- <args>` only lets one literal "--" through
+            // to the binary (cargo consumes its own args/binary-args separator), so
+            // requiring a second "--" to mark the launch-options section is easy to
+            // forget. Fall back to splitting at the first recognized launch flag
+            // when no literal "--" is present at all.
+            const RESERVED_LAUNCH_FLAGS: &[&str] = &[
+                "--time", "--output-dir", "--gdb", "--nodes", "--pes", "--pes-per-node",
+                "--threads-per-pe", "--log", "--salloc-opts", "--help", "-h",
+            ];
+            let pos = args
+                .iter()
+                .position(|x| x == "--")
+                .or_else(|| args.iter().position(|x| RESERVED_LAUNCH_FLAGS.contains(&x.as_str())));
             // println!("-- position: {:?}", pos);
             if let Some(pos) = pos {
-                let extra_args: Vec<String> = args.split_off(pos).into_iter().skip(1).collect();
+                let has_explicit_sep = args.get(pos).map(|x| x == "--").unwrap_or(false);
+                let extra_args: Vec<String> = if has_explicit_sep {
+                    args.split_off(pos).into_iter().skip(1).collect()
+                } else {
+                    args.split_off(pos)
+                };
                 if extra_args.iter().any(|a| a == "--help" || a == "-h") {
                     println!("hpc_launch launch options (pass after `--`):");
                     print!("{}", ::hpc_launch::generic_help_text());

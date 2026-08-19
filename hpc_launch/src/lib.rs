@@ -101,7 +101,7 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                     match readelf_out {
                         Ok(readelf_out) if readelf_out.status.success() => {
                             let readelf_stdout = String::from_utf8_lossy(&readelf_out.stdout);
-                            let mut has_shared_libs_dir = false;
+                            let mut missing_lib_dirs: Vec<String> = Vec::new();
                             let mut existing_rpath = String::new();
 
                             for line in readelf_stdout.lines() {
@@ -110,15 +110,23 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                                         let cur = line[start + 1..end].trim();
                                         if !cur.is_empty() {
                                             existing_rpath = cur.to_string();
-                                            has_shared_libs_dir = shared_libs_dir
+                                            missing_lib_dirs = shared_libs_dir
                                                 .split(':')
-                                                .all(|lib_dir| existing_rpath.contains(lib_dir));
+                                                .filter(|lib_dir| !existing_rpath.contains(lib_dir))
+                                                .map(|lib_dir| lib_dir.to_string())
+                                                .collect();
                                         }
                                     }
                                 }
                             }
+                            if existing_rpath.is_empty() {
+                                missing_lib_dirs = shared_libs_dir
+                                    .split(':')
+                                    .map(|lib_dir| lib_dir.to_string())
+                                    .collect();
+                            }
 
-                            if !has_shared_libs_dir {
+                            if !missing_lib_dirs.is_empty() {
                                 let new_rpath = if existing_rpath.is_empty() {
                                     shared_libs_dir.to_string()
                                 } else {
@@ -135,6 +143,10 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                                         exe_path,
                                         temp_exe_str,
                                         err
+                                    );
+                                    eprintln!(
+                                        "hpc_launch: unable to add missing RPATH entries {:?}; manually setting LD_LIBRARY_PATH may be needed.",
+                                        missing_lib_dirs
                                     );
                                 } else {
                                     let timer = std::time::Instant::now();
@@ -170,6 +182,10 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                                                     exe_path,
                                                     err
                                                 );
+                                                eprintln!(
+                                                    "hpc_launch: unable to add missing RPATH entries {:?}; manually setting LD_LIBRARY_PATH may be needed.",
+                                                    missing_lib_dirs
+                                                );
                                                 let _ = std::fs::remove_file(&temp_exe);
                                             }
                                         }
@@ -179,6 +195,10 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                                                 status,
                                                 temp_exe_str
                                             );
+                                            eprintln!(
+                                                "hpc_launch: unable to add missing RPATH entries {:?}; manually setting LD_LIBRARY_PATH may be needed.",
+                                                missing_lib_dirs
+                                            );
                                             let _ = std::fs::remove_file(&temp_exe);
                                         }
                                         Err(err) => {
@@ -186,6 +206,10 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                                                 "hpc_launch: failed to run patchelf for {:?}: {}",
                                                 temp_exe_str,
                                                 err
+                                            );
+                                            eprintln!(
+                                                "hpc_launch: unable to add missing RPATH entries {:?}; manually setting LD_LIBRARY_PATH may be needed.",
+                                                missing_lib_dirs
                                             );
                                             let _ = std::fs::remove_file(&temp_exe);
                                         }
@@ -199,6 +223,10 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                                 exe_path,
                                 status_out.status
                             );
+                            eprintln!(
+                                "hpc_launch: unable to check/update RPATH; candidate library dirs {:?} may need to be added manually via LD_LIBRARY_PATH.",
+                                shared_libs_dir
+                            );
                         }
                         Err(err) => {
                             eprintln!(
@@ -206,8 +234,17 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                                 exe_path,
                                 err
                             );
+                            eprintln!(
+                                "hpc_launch: unable to check/update RPATH; candidate library dirs {:?} may need to be added manually via LD_LIBRARY_PATH.",
+                                shared_libs_dir
+                            );
                         }
                     }
+                } else {
+                    eprintln!(
+                        "hpc_launch: unable to determine current executable path; unable to update RPATH. Candidate library dirs {:?} may need to be added manually via LD_LIBRARY_PATH.",
+                        shared_libs_dir
+                    );
                 }
             }
         }
