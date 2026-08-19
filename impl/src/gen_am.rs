@@ -70,19 +70,38 @@ pub(crate) fn impl_lamellar_serde_trait(
     generics: &syn::Generics,
     am_name: &syn::Ident,
     lamellar: &proc_macro2::TokenStream,
+    pod: bool,
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    quote! {
-        #[#lamellar::lamellar_prof::prof_all]
-        impl #impl_generics #lamellar::active_messaging::LamellarSerde for #am_name #ty_generics #where_clause {
-            fn serialized_size(&self)->usize{
-                #lamellar::serialized_size(self,true)
+    if pod {
+        quote! {
+            #[#lamellar::lamellar_prof::prof_all]
+            impl #impl_generics #lamellar::active_messaging::LamellarSerde for #am_name #ty_generics #where_clause {
+                fn serialized_size(&self)->usize{
+                    ::std::mem::size_of::<Self>()
+                }
+                fn serialize_into(&self,buf: &mut [u8]){
+                    let bytes = <Self as #lamellar::IntoBytes>::as_bytes(self);
+                    buf[..bytes.len()].copy_from_slice(bytes);
+                }
+                fn serialize(&self)->Vec<u8>{
+                    <Self as #lamellar::IntoBytes>::as_bytes(self).to_vec()
+                }
             }
-            fn serialize_into(&self,buf: &mut [u8]){
-                #lamellar::serialize_into(buf,self,true).expect("can serialize and enough space in buf");
-            }
-            fn serialize(&self)->Vec<u8>{
-                #lamellar::serialize(self,true).expect("can serialize")
+        }
+    } else {
+        quote! {
+            #[#lamellar::lamellar_prof::prof_all]
+            impl #impl_generics #lamellar::active_messaging::LamellarSerde for #am_name #ty_generics #where_clause {
+                fn serialized_size(&self)->usize{
+                    #lamellar::serialized_size(self,true)
+                }
+                fn serialize_into(&self,buf: &mut [u8]){
+                    #lamellar::serialize_into(buf,self,true).expect("can serialize and enough space in buf");
+                }
+                fn serialize(&self)->Vec<u8>{
+                    #lamellar::serialize(self,true).expect("can serialize")
+                }
             }
         }
     }
@@ -163,13 +182,27 @@ fn impl_unpack_and_register_function(
     generics: &syn::Generics,
     am_name: &syn::Ident,
     lamellar: &proc_macro2::TokenStream,
+    pod: bool,
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, _where_clause) = generics.split_for_impl();
     let am_name_unpack = quote::format_ident!("{}_unpack", am_name.clone());
+    let decode = if pod {
+        quote! {
+            std::sync::Arc::new(
+                <#am_name #ty_generics as #lamellar::TryFromBytes>::try_read_from_bytes(bytes)
+                    .ok()
+                    .expect("can deserialize into remote active message (Pod)"),
+            )
+        }
+    } else {
+        quote! {
+            std::sync::Arc::new(#lamellar::deserialize(&bytes,true).expect("can deserialize into remote active message"))
+        }
+    };
     quote! {
         #[#lamellar::lamellar_prof::prof]
         fn #am_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::active_messaging::RemoteActiveMessage + Sync + Send>  {
-            let __lamellar_data: std::sync::Arc<#am_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).expect("can deserialize into remote active message"));
+            let __lamellar_data: std::sync::Arc<#am_name #ty_generics> = #decode;
             // <#am_name #ty_generics as #lamellar::active_messaging::DarcSerde>::des(&__lamellar_data,cur_pe);
             __lamellar_data
         }
@@ -225,18 +258,20 @@ pub(crate) fn impl_remote_traits(
     ret_type: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
     local: bool,
+    pod: bool,
 ) -> proc_macro2::TokenStream {
     if local {
         quote! {}
     } else {
         let lamellaram = impl_lamellar_am_trait(generics, am_name, ret_type, lamellar);
         let serde = impl_serde_trait(generics, am_name, lamellar);
-        let lamellar_serde = impl_lamellar_serde_trait(generics, am_name, lamellar);
+        let lamellar_serde = impl_lamellar_serde_trait(generics, am_name, lamellar, pod);
         let lamellar_result_serde =
             impl_lamellar_result_serde_trait(generics, am_name, ret_type, lamellar);
         let impl_remote_active_message =
             impl_remote_active_message_trait(generics, am_name, lamellar);
-        let unpack_reg_fn = impl_unpack_and_register_function(generics, am_name, lamellar);
+        let unpack_reg_fn =
+            impl_unpack_and_register_function(generics, am_name, lamellar, pod);
 
         quote! {
             #lamellaram
@@ -413,6 +448,7 @@ pub(crate) fn generate_am(
     am_type: AmType,
     lamellar: &proc_macro2::TokenStream,
     am_data_header: &proc_macro2::TokenStream,
+    pod: bool,
 ) -> proc_macro::TokenStream {
     let name = type_name(&input.self_ty).expect("unable to find name");
     let orig_name = syn::Ident::new(&name, Span::call_site());
@@ -446,7 +482,7 @@ pub(crate) fn generate_am(
         impl_lamellar_active_message_trait(&generics, &orig_name, &am_body, lamellar);
     let local_am = impl_local_am_trait(&generics, &orig_name, &return_type, lamellar);
     let remote_trait_impls =
-        impl_remote_traits(&generics, &orig_name, &return_type, lamellar, local);
+        impl_remote_traits(&generics, &orig_name, &return_type, lamellar, local, pod);
 
     let expanded = quote_spanned! {am_body.span()=>
         #lamellar_active_message

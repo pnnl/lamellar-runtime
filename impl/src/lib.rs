@@ -144,6 +144,10 @@ fn get_return_am_return_type(
     None
 }
 
+fn check_for_pod(args: &Punctuated<syn::Meta, Token![,]>) -> bool {
+    args.iter().any(|arg| arg.to_token_stream().to_string().trim() == "Pod")
+}
+
 fn check_for_am_group(args: &Punctuated<syn::Meta, Token![,]>) -> bool {
     for arg in args.iter() {
         let t = arg.to_token_stream().to_string();
@@ -249,6 +253,7 @@ fn parse_am(
 
     let am_group_data_header = quote! {#[#lamellar::AmGroupData]};
     let create_am_group = check_for_am_group(&args);
+    let pod = check_for_pod(&args);
 
     let output = match input.clone() {
         syn::Item::Impl(input) => {
@@ -276,6 +281,7 @@ fn parse_am(
                             AmType::ReturnAm(output.clone(), return_output.clone()),
                             &lamellar,
                             &am_data_header,
+                            pod,
                         );
                         if !rt && !local && create_am_group {
                             impls.extend(gen_am_group::generate_am_group(
@@ -294,6 +300,7 @@ fn parse_am(
                             AmType::ReturnData(output.clone()),
                             &lamellar,
                             &am_data_header,
+                            pod,
                         );
                         if !rt && !local && create_am_group {
                             impls.extend(gen_am_group::generate_am_group(
@@ -315,6 +322,7 @@ fn parse_am(
                         AmType::NoReturn,
                         &lamellar,
                         &am_data_header,
+                        pod,
                     );
                     if !rt && !local && create_am_group {
                         impls.extend(gen_am_group::generate_am_group(

@@ -149,14 +149,14 @@ impl From<u64> for DarcMode {
     }
 }
 
-#[lamellar_impl::AmDataRT(Debug)]
+#[lamellar_impl::AmDataRT(Pod, Debug)]
 struct FinishedAm {
     cnt: usize,
     src_pe: usize,
     inner_addr: CommAllocAddr, //cant pass the darc itself cause we cant handle generics yet in lamellarAM...
 }
 
-#[lamellar_impl::rt_am]
+#[lamellar_impl::rt_am(Pod)]
 impl LamellarAM for FinishedAm {
     async fn exec() {
         trace!(target: "drop", "in finished! {:?}", self);

@@ -3143,7 +3143,23 @@ impl CommAllocRdma for CommAlloc {
 // unsafe impl Send for CommAllocType {}
 // unsafe impl Sync for CommAllocType {}
 
-#[derive(Copy, Clone, Add, Sub, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[repr(C)]
+#[derive(
+    Copy,
+    Clone,
+    Add,
+    Sub,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    zerocopy_derive::IntoBytes,
+    zerocopy_derive::TryFromBytes,
+    zerocopy_derive::KnownLayout,
+    zerocopy_derive::Immutable,
+)]
 pub(crate) struct CommAllocAddr(pub(crate) usize);
 
 impl Into<usize> for &CommAllocAddr {

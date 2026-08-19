@@ -26,6 +26,12 @@ impl FieldInfo {
                 syn::Type::Tuple(ty) => {
                     ser.extend(self.ser_tuple(field, ty, false));
                 }
+                syn::Type::Array(_) => {
+                    ser.extend(self.ser_array(field, false));
+                }
+                syn::Type::Paren(_) => {
+                    ser.extend(self.ser_path(field, *darc_iter, false));
+                }
                 _ => {
                     abort!(
                         field.span(),
@@ -47,6 +53,12 @@ impl FieldInfo {
                 }
                 syn::Type::Tuple(ty) => {
                     ser.extend(self.ser_tuple(field, ty, true));
+                }
+                syn::Type::Array(_) => {
+                    ser.extend(self.ser_array(field, true));
+                }
+                syn::Type::Paren(_) => {
+                    ser.extend(self.ser_path(field, *darc_iter, true));
                 }
                 _ => {
                     abort!(
@@ -121,6 +133,27 @@ impl FieldInfo {
             }
         }
         ser
+    }
+
+    fn ser_array(&self, field: &syn::Field, as_vecs: bool) -> proc_macro2::TokenStream {
+        let field_name = field.ident.as_ref().unwrap();
+        // arrays have no top-level DarcSerde impl (unlike Path/Tuple), so always
+        // loop over elements regardless of darc_iter.
+        if as_vecs {
+            quote_spanned! {field.span()=>
+                for e in (&(self.#field_name)).iter(){
+                    for d in e.iter(){
+                        d.ser(num_pes,darcs);
+                    }
+                }
+            }
+        } else {
+            quote_spanned! {field.span()=>
+                for e in (&(self.#field_name)).iter(){
+                    e.ser(num_pes,darcs);
+                }
+            }
+        }
     }
 
     // pub(crate) fn des(&self) -> proc_macro2::TokenStream {

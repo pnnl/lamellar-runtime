@@ -54,6 +54,7 @@ fn process_fields(
     FieldInfo,
     FieldInfo,
     bool,
+    bool,
 ) {
     let mut fields = FieldInfo::new();
     let mut static_fields = FieldInfo::new();
@@ -73,7 +74,10 @@ fn process_fields(
                     }
                 }
             }
-        } else if let syn::Type::Tuple(ref _ty) = field.ty {
+        } else if matches!(
+            field.ty,
+            syn::Type::Tuple(_) | syn::Type::Array(_) | syn::Type::Paren(_)
+        ) {
             let (static_field, darc_iter, attrs) = check_attrs(&field.attrs);
             field.attrs = attrs;
             if static_field {
@@ -119,6 +123,7 @@ fn process_fields(
     let mut attr_strs = HashMap::new();
 
     let mut create_am_group = true;
+    let mut pod = false;
 
     for a in args {
         let t = a.to_token_stream().to_string();
@@ -164,6 +169,28 @@ fn process_fields(
                 if attrs.contains("false") {
                     create_am_group = false;
                 }
+            }
+        } else if t.contains("Pod") {
+            // opt-in zerocopy fast path for plain-old-data AM structs: skip
+            // serde/postcard entirely and read/write raw bytes. Local AMs
+            // never go through `LamellarSerde` so this is a no-op there.
+            if !local {
+                pod = true;
+                trait_strs
+                    .entry(String::from("IntoBytes"))
+                    .or_insert(quote! {#lamellar::IntoBytes});
+                trait_strs
+                    .entry(String::from("TryFromBytes"))
+                    .or_insert(quote! {#lamellar::TryFromBytes});
+                trait_strs
+                    .entry(String::from("KnownLayout"))
+                    .or_insert(quote! {#lamellar::KnownLayout});
+                trait_strs
+                    .entry(String::from("Immutable"))
+                    .or_insert(quote! {#lamellar::Immutable});
+                attr_strs
+                    .entry(String::from("repr_c"))
+                    .or_insert(quote! {#[repr(C)]});
             }
         } else if !t.contains("serde::Serialize")
             && !t.contains("serde::Deserialize")
@@ -214,6 +241,7 @@ fn process_fields(
         fields,
         static_fields,
         create_am_group,
+        pod,
     )
 }
 
@@ -232,7 +260,7 @@ pub(crate) fn derive_am_data(
         let name = &data.ident;
         let generics = data.generics.clone();
 
-        let (traits, group_traits, attrs, group_attrs, fields, static_fields, create_am_group) =
+        let (traits, group_traits, attrs, group_attrs, fields, static_fields, create_am_group, _pod) =
             process_fields(args, &mut data.fields, &lamellar, local);
 
         let vis = data.vis.to_token_stream();

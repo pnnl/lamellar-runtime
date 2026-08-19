@@ -208,7 +208,7 @@ fn impl_am_group_remote(
     );
     let local_am = impl_local_am_trait(generics, am_group_am_name, ret_type, lamellar);
     let remote_trait_impls =
-        impl_remote_traits(generics, am_group_am_name, ret_type, lamellar, false);
+        impl_remote_traits(generics, am_group_am_name, ret_type, lamellar, false, false);
 
     quote! {
         #lamellar_active_message

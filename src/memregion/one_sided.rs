@@ -302,7 +302,7 @@ impl Drop for MemRegionHandle {
                     if cnt > 0 {
                         let temp = MemRegionFinishedAm {
                             cnt,
-                            parent_id: self.inner.grand_parent_id,
+                            parent_id: self.inner.grand_parent_id.into(),
                         };
                         trace!(
                             "sending finished am {:?} pe: {:?}",
@@ -330,23 +330,55 @@ impl Drop for MemRegionHandle {
     }
 }
 
-#[lamellar_impl::AmDataRT(Debug)]
-struct MemRegionFinishedAm {
-    cnt: usize,
-    parent_id: (usize, usize),
+#[repr(C)]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    zerocopy_derive::IntoBytes,
+    zerocopy_derive::TryFromBytes,
+    zerocopy_derive::KnownLayout,
+    zerocopy_derive::Immutable,
+)]
+struct MemRegionIdPair {
+    id: usize,
+    pe: usize,
 }
 
-#[lamellar_impl::rt_am]
+impl From<(usize, usize)> for MemRegionIdPair {
+    fn from((id, pe): (usize, usize)) -> Self {
+        Self { id, pe }
+    }
+}
+
+impl From<MemRegionIdPair> for (usize, usize) {
+    fn from(mem_region_id: MemRegionIdPair) -> Self {
+        (mem_region_id.id, mem_region_id.pe)
+    }
+}
+
+#[lamellar_impl::AmDataRT(Pod, Debug)]
+struct MemRegionFinishedAm {
+    cnt: usize,
+    parent_id: MemRegionIdPair,
+}
+
+#[lamellar_impl::rt_am(Pod)]
 impl LamellarAM for MemRegionFinishedAm {
     async fn exec(self) {
         trace!("in finished am {:?}", self);
+        let parent_id: (usize, usize) = self.parent_id.into();
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
-        let _mrh = match mrh_map.get(&self.parent_id) {
+        let _mrh = match mrh_map.get(&parent_id) {
             Some(mrh) => {
                 let sent = mrh.remote_sent.load(Ordering::SeqCst);
                 trace!(
                     target: "mem_region_lifetime",
-                    parent_id = ?self.parent_id,
+                    parent_id = ?parent_id,
                     release_cnt = self.cnt,
                     remote_sent = sent,
                     my_id = ?mrh.my_id,
@@ -394,7 +426,7 @@ impl LamellarAM for MemRegionDropWaitAm {
                         if cnt > 0 {
                             let temp = MemRegionFinishedAm {
                                 cnt,
-                                parent_id: self.inner.grand_parent_id,
+                                parent_id: self.inner.grand_parent_id.into(),
                             };
                             let _ =
                                 self.inner
