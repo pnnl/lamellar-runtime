@@ -168,7 +168,7 @@ enable-lamellar-main = [
 # and set HWLOC_DIR to the install prefix (and, for hwlocality-sys, ensure it's on
 # PKG_CONFIG_PATH) to link a system hwloc instead. Use system hwloc on macOS, where
 # hwloc's vendored autotools build fails.
-vendored-hwloc = ["prrte-sys/vendored-hwloc", "hwlocality/vendored"]
+vendored-hwloc = ["prrte-sys?/vendored-hwloc", "hwlocality?/vendored"]
 # NUMA-domain detection (via hwloc) used by `#[lamellar::main]` to pick
 # PE-per-node defaults.
 enable-numa-detect = ["hwlocality"]
@@ -676,6 +676,10 @@ name = "am_bw_get"
 path = "examples/bandwidths/am_bw_get.rs"
 
 [[example]]
+name = "serde_rdma_pingpong"
+path = "examples/bandwidths/serde_rdma_pingpong.rs"
+
+[[example]]
 name = "am_group_bw_get"
 path = "examples/bandwidths/am_group_bw_get.rs"
 
@@ -980,3 +984,11 @@ path = "examples/hello_world/hello_world_array.rs"
 [[example]]
 name = "hello_world_array_iteration"
 path = "examples/hello_world/hello_world_array_iteration.rs"
+
+# ring's build.rs unconditionally emits `rerun-if-env-changed=CARGO_MANIFEST_DIR`,
+# which spuriously invalidates its fingerprint and forces a full rebuild of the
+# ring/rustls/ureq chain whenever a nested cargo invocation (e.g. our own tests
+# shelling out to `cargo build --example`) computes that env var differently
+# than the outer `cargo test` run. Fix is unreleased; pin to the commit with it.
+[patch.crates-io]
+ring = { git = "https://github.com/briansmith/ring", rev = "840167e18e4fa837eb48de46500454a616a15a6e" }
