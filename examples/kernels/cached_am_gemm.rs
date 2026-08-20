@@ -14,14 +14,11 @@
 ///---------------------------------------------------------------------------------
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
-use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-lazy_static! {
-    static ref LOCK: Mutex<()> = Mutex::new(());
-}
+static LOCK: Mutex<()> = Mutex::new(());
 
 static DATA_CNT: AtomicUsize = AtomicUsize::new(0);
 
@@ -283,8 +280,8 @@ fn main() {
                 world.MB_sent() - tot_mb,
                 world.MB_sent(),
                 tot_mb,
-                (DATA_CNT.load(Ordering::SeqCst) - data_cnt)/1000000,
-                DATA_CNT.load(Ordering::SeqCst)/1000000,
+                (DATA_CNT.load(Ordering::SeqCst) - data_cnt) / 1000000,
+                DATA_CNT.load(Ordering::SeqCst) / 1000000,
                 tasks
             );
         }

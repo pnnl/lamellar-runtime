@@ -219,10 +219,6 @@
 //!
 
 extern crate self as lamellar;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate memoffset;
 //#[doc(hidden)]
 pub extern crate serde;
 
@@ -233,10 +229,6 @@ pub use serde::*;
 pub extern crate serde_bytes;
 // #[doc(hidden)]
 // pub use serde_bytes::*;
-
-// //#[doc(hidden)]
-pub extern crate serde_with;
-// pub use serde_with::*;
 
 #[doc(hidden)]
 pub extern crate zerocopy;
@@ -331,27 +323,17 @@ pub use lamellar_prof::prof_all;
 #[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::main;
 #[cfg(feature = "enable-lamellar-main")]
+pub use lamellar_main::prrte_sys;
+#[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::test;
 #[cfg(feature = "enable-lamellar-main")]
 pub use lamellar_main::{
-    cores_per_package, generic_help_text, init_tracing_from_env, numa_domain_count,
-    package_count, pe_id, resolve_pe_defaults,
+    cores_per_package, generic_help_text, init_tracing_from_env, numa_domain_count, package_count,
+    pe_id, resolve_pe_defaults,
 };
-#[cfg(feature = "enable-lamellar-main")]
-pub use lamellar_main::prrte_sys;
 
 //#[doc(hidden)]
 pub use inventory;
-
-// #[macro_use]
-// pub extern crate custom_derive;
-//#[doc(hidden)]
-pub use custom_derive;
-
-// #[macro_use]
-// pub extern crate newtype_derive;
-//#[doc(hidden)]
-pub use newtype_derive;
 
 // use std::sync::atomic::AtomicUsize;
 // use std::sync::atomic::Ordering::SeqCst;

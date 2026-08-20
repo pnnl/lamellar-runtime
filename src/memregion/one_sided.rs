@@ -4,20 +4,20 @@ use crate::darc::Darc;
 use crate::lamellae::{AllocationType, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
 // use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::LamellarTeamRT;
-use crate::{memregion::*, LamellarEnv, LamellarTeam};
+use crate::{LamellarEnv, LamellarTeam, memregion::*};
 
 use core::marker::PhantomData;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::ops::Bound;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tracing::trace;
 
-lazy_static! {
-    pub(crate) static ref ONE_SIDED_MEM_REGIONS: Mutex<HashMap<(usize, usize), Arc<MemRegionHandleInner>>> =
-        Mutex::new(HashMap::new());
-}
+pub(crate) static ONE_SIDED_MEM_REGIONS: LazyLock<
+    Mutex<HashMap<(usize, usize), Arc<MemRegionHandleInner>>>,
+> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -140,10 +140,7 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                 mrh_map.insert(parent_id, mrh.clone());
                 trace!(
                     "inserting onesided mem region {:?} {:?} 0x{:x} {:?}",
-                    parent_id,
-                    net_handle.mr_pe,
-                    net_handle.mr_addr,
-                    mrh
+                    parent_id, net_handle.mr_pe, net_handle.mr_addr, mrh
                 );
                 mrh
             }
@@ -168,9 +165,7 @@ impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
     fn from(mem_reg: Arc<MemRegionHandleInner>) -> Self {
         trace!(
             "creating net handle {:?} addr 0x{:x} orig_pe: {:?}",
-            mem_reg,
-            mem_reg.orig_addr,
-            mem_reg.orig_pe
+            mem_reg, mem_reg.orig_addr, mem_reg.orig_pe
         );
         NetMemRegionHandle {
             mr_addr: mem_reg.orig_addr,
@@ -206,8 +201,8 @@ struct MemRegionHandle {
 
 pub(crate) mod memregion_handle_serde {
     use serde::Serialize;
-    use std::sync::atomic::Ordering;
     use std::sync::Arc;
+    use std::sync::atomic::Ordering;
     use tracing::trace;
 
     pub(crate) fn serialize<S>(
@@ -219,16 +214,14 @@ pub(crate) mod memregion_handle_serde {
     {
         trace!(
             "serializing memregion handle id {:?} pid {:?} gpid {:?} orig_pe {:?} mr_addr 0x{:x}",
-            inner.my_id,
-            inner.parent_id,
-            inner.grand_parent_id,
-            inner.orig_pe,
-            inner.orig_addr,
+            inner.my_id, inner.parent_id, inner.grand_parent_id, inner.orig_pe, inner.orig_addr,
         );
         super::MEMREGION_SEND_CTX.with(|ctx| {
             if let Some(frame) = ctx.borrow_mut().last_mut() {
                 if frame.seen.insert(inner.my_id, ()).is_none() {
-                    let old = inner.remote_sent.fetch_add(frame.recipients, Ordering::SeqCst);
+                    let old = inner
+                        .remote_sent
+                        .fetch_add(frame.recipients, Ordering::SeqCst);
                     trace!(
                         target: "mem_region_lifetime",
                         my_id = ?inner.my_id,
@@ -306,8 +299,7 @@ impl Drop for MemRegionHandle {
                         };
                         trace!(
                             "sending finished am {:?} pe: {:?}",
-                            temp,
-                            self.inner.parent_id.1
+                            temp, self.inner.parent_id.1
                         );
                         let _ = self
                             .inner

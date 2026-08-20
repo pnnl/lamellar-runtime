@@ -16,7 +16,7 @@ use crate::array::iterator::distributed_iterator::DistIteratorLauncher;
 use crate::array::iterator::local_iterator::LocalIteratorLauncher;
 use crate::array::native_atomic::{NativeAtomicElement, NativeAtomicElementRef};
 use crate::array::network_atomic::{NetworkAtomicElement, NetworkAtomicElementRef};
-use crate::{array::*, Darc};
+use crate::{Darc, array::*};
 // use crate::darc::{Darc, DarcMode};
 use crate::barrier::BarrierHandle;
 use crate::lamellae::comm::CommInfo;
@@ -24,27 +24,26 @@ use crate::lamellar_team::IntoLamellarTeam;
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 
-use std::any::{type_name, TypeId};
+use std::any::{TypeId, type_name};
 use std::collections::HashSet;
 // use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
-lazy_static! {
-    pub(crate) static ref NATIVE_ATOMICS: HashSet<TypeId> = {
-        let mut map = HashSet::new();
-        map.insert(TypeId::of::<u8>());
-        map.insert(TypeId::of::<u16>());
-        map.insert(TypeId::of::<u32>());
-        map.insert(TypeId::of::<u64>());
-        map.insert(TypeId::of::<usize>());
-        map.insert(TypeId::of::<i8>());
-        map.insert(TypeId::of::<i16>());
-        map.insert(TypeId::of::<i32>());
-        map.insert(TypeId::of::<i64>());
-        map.insert(TypeId::of::<isize>());
-        map
-    };
-}
+pub(crate) static NATIVE_ATOMICS: LazyLock<HashSet<TypeId>> = LazyLock::new(|| {
+    let mut map = HashSet::new();
+    map.insert(TypeId::of::<u8>());
+    map.insert(TypeId::of::<u16>());
+    map.insert(TypeId::of::<u32>());
+    map.insert(TypeId::of::<u64>());
+    map.insert(TypeId::of::<usize>());
+    map.insert(TypeId::of::<i8>());
+    map.insert(TypeId::of::<i16>());
+    map.insert(TypeId::of::<i32>());
+    map.insert(TypeId::of::<i64>());
+    map.insert(TypeId::of::<isize>());
+    map
+});
 
 use std::ops::{
     AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,

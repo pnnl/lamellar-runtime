@@ -13,13 +13,10 @@
 use futures_util::future;
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
-use lazy_static::lazy_static;
 use matrixmultiply::sgemm;
 use parking_lot::Mutex;
 
-lazy_static! {
-    static ref LOCK: Mutex<()> = Mutex::new(());
-}
+static LOCK: Mutex<()> = Mutex::new(());
 
 #[lamellar::AmData(Clone, Debug)]
 struct SubMatrix {

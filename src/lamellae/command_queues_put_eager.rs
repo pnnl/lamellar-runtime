@@ -17,16 +17,17 @@
 // For larger messages, falls through to the base rendezvous protocol.
 
 use super::{
-    comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
     Comm, Lamellae, SerializedData,
+    comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
 };
 use crate::{env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats};
 use async_lock::Mutex;
 use core::panic;
 use parking_lot::RwLock;
 use std::num::Wrapping;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use tracing::{debug, info, trace, warn};
 
 // ── Eager protocol constants ────────────────────────────────────────────────
@@ -36,30 +37,20 @@ const EAGER_SLOT_SIZE: usize = EAGER_DATA_SIZE + std::mem::size_of::<u64>();
 
 static MSG_ID: AtomicUsize = AtomicUsize::new(1);
 
-lazy_static! {
-    static ref PE_SENDS: Vec<Vec<AtomicUsize>> = {
-        let mut v = Vec::with_capacity(2);
-        for _ in 0..2 {
-            let mut t = Vec::with_capacity(32);
-            for _ in 0..32 {
-                t.push(AtomicUsize::new(0));
-            }
-            v.push(t);
+fn new_pe_counters() -> Vec<Vec<AtomicUsize>> {
+    let mut v = Vec::with_capacity(2);
+    for _ in 0..2 {
+        let mut t = Vec::with_capacity(32);
+        for _ in 0..32 {
+            t.push(AtomicUsize::new(0));
         }
-        v
-    };
-    static ref PE_RECVS: Vec<Vec<AtomicUsize>> = {
-        let mut v = Vec::with_capacity(2);
-        for _ in 0..2 {
-            let mut t = Vec::with_capacity(32);
-            for _ in 0..32 {
-                t.push(AtomicUsize::new(0));
-            }
-            v.push(t);
-        }
-        v
-    };
+        v.push(t);
+    }
+    v
 }
+
+static PE_SENDS: LazyLock<Vec<Vec<AtomicUsize>>> = LazyLock::new(new_pe_counters);
+static PE_RECVS: LazyLock<Vec<Vec<AtomicUsize>>> = LazyLock::new(new_pe_counters);
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -413,8 +404,7 @@ impl InnerCQ {
                 if panic_buf[pe].cmd != Cmd::Clear {
                     trace!(
                         "pe {} panic_buf not clear {:?}",
-                        pe,
-                        &panic_buf[pe] as *const CmdMsg
+                        pe, &panic_buf[pe] as *const CmdMsg
                     );
                     trace!("panic_buf {:?}", panic_buf[pe]);
                 }
@@ -1073,23 +1063,27 @@ impl CQPutEager {
         println!("command queue");
         println!(
             "sends {:?}",
-            print_stats!(PE_SENDS
-                .iter()
-                .map(|x| x
+            print_stats!(
+                PE_SENDS
                     .iter()
-                    .map(|y| y.load(Ordering::SeqCst))
-                    .collect::<Vec<_>>())
-                .collect::<Vec<_>>())
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.load(Ordering::SeqCst))
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            )
         );
         println!(
             "recvs {:?}",
-            print_stats!(PE_RECVS
-                .iter()
-                .map(|x| x
+            print_stats!(
+                PE_RECVS
                     .iter()
-                    .map(|y| y.load(Ordering::SeqCst))
-                    .collect::<Vec<_>>())
-                .collect::<Vec<_>>())
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.load(Ordering::SeqCst))
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            )
         );
         for pe in 0..self.cq.num_pes {
             let mut sends = Vec::new();
@@ -1182,7 +1176,9 @@ impl CQPutEager {
                         Cmd::Alloc => panic!("should not encounter alloc here"),
                         Cmd::Panic => panic!("should not encounter panic here"),
                         Cmd::Clear | Cmd::Release | Cmd::Free | Cmd::Ready => {
-                            panic!("should not be possible to see cmd clear, release, free, or ready here")
+                            panic!(
+                                "should not be possible to see cmd clear, release, free, or ready here"
+                            )
                         }
                         Cmd::Tx => {
                             let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
@@ -1199,7 +1195,9 @@ impl CQPutEager {
                                 {
                                     Ok(sd) => break sd,
                                     Err(_) => {
-                                        debug!("recv_data: waiting for alloc size={size} src={src} msg_id={msg_id}");
+                                        debug!(
+                                            "recv_data: waiting for alloc size={size} src={src} msg_id={msg_id}"
+                                        );
                                         self.cq.send_alloc(size + std::mem::size_of::<u64>());
                                         self.cq.comm.thread_flush();
                                         async_std::task::yield_now().await;
@@ -1335,23 +1333,27 @@ impl Drop for CQPutEager {
         trace!(target: "drop", "begin drop CQPutEager");
         debug!(
             "sends {:?}",
-            print_stats!(PE_SENDS
-                .iter()
-                .map(|x| x
+            print_stats!(
+                PE_SENDS
                     .iter()
-                    .map(|y| y.load(Ordering::SeqCst))
-                    .collect::<Vec<_>>())
-                .collect::<Vec<_>>())
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.load(Ordering::SeqCst))
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            )
         );
         debug!(
             "recvs {:?}",
-            print_stats!(PE_RECVS
-                .iter()
-                .map(|x| x
+            print_stats!(
+                PE_RECVS
                     .iter()
-                    .map(|y| y.load(Ordering::SeqCst))
-                    .collect::<Vec<_>>())
-                .collect::<Vec<_>>())
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.load(Ordering::SeqCst))
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            )
         );
         trace!(target: "drop", "end drop CQPutEager");
     }

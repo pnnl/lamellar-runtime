@@ -1,11 +1,12 @@
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use std::sync::atomic::AtomicUsize;
 
-use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS};
+use crate::active_messaging::registered_active_message::{AMS_EXECS, AmId};
 use crate::active_messaging::*;
 use crate::lamellae::{
-    comm::{error::AllocError, CommInfo},
     Lamellae, LamellaeUtil, Ser, SerializeHeader, SerializedData,
+    comm::{CommInfo, error::AllocError},
 };
 use direct_batcher::{MyAmHeader, MyDataHeader, MyUnitHeader};
 use zerocopy::*;
@@ -48,56 +49,54 @@ pub(crate) struct BatcherStatMap(
     pub(crate) HashMap<StatType, HashMap<usize, HashMap<StatCmd, AtomicUsize>>>,
 );
 
-lazy_static! {
-    pub(crate) static ref BATCHER_AM_PE_SEND_CNTS: BatcherStatMap = {
-        let mut m = HashMap::new();
-        for stat_type in &[StatType::Orig, StatType::Remote] {
-            let mut pe_map = HashMap::new();
-            for i in 0..32 {
-                let mut t = HashMap::new();
-                for cmd in &[
-                    StatCmd::Am,
-                    StatCmd::Return,
-                    StatCmd::Data,
-                    StatCmd::Unit,
-                    StatCmd::Batched,
-                    StatCmd::Single,
-                    StatCmd::Multi,
-                    StatCmd::MultiBatched,
-                ] {
-                    t.insert(*cmd, AtomicUsize::new(0));
-                }
-                pe_map.insert(i, t);
+pub(crate) static BATCHER_AM_PE_SEND_CNTS: LazyLock<BatcherStatMap> = LazyLock::new(|| {
+    let mut m = HashMap::new();
+    for stat_type in &[StatType::Orig, StatType::Remote] {
+        let mut pe_map = HashMap::new();
+        for i in 0..32 {
+            let mut t = HashMap::new();
+            for cmd in &[
+                StatCmd::Am,
+                StatCmd::Return,
+                StatCmd::Data,
+                StatCmd::Unit,
+                StatCmd::Batched,
+                StatCmd::Single,
+                StatCmd::Multi,
+                StatCmd::MultiBatched,
+            ] {
+                t.insert(*cmd, AtomicUsize::new(0));
             }
-            m.insert(stat_type.clone(), pe_map);
+            pe_map.insert(i, t);
         }
-        BatcherStatMap(m)
-    };
-    pub(crate) static ref BATCHER_AM_PE_RECV_CNTS: BatcherStatMap = {
-        let mut m = HashMap::new();
-        for stat_type in &[StatType::Orig, StatType::Remote] {
-            let mut pe_map = HashMap::new();
-            for i in 0..32 {
-                let mut t = HashMap::new();
-                for cmd in &[
-                    StatCmd::Am,
-                    StatCmd::Return,
-                    StatCmd::Data,
-                    StatCmd::Unit,
-                    StatCmd::Batched,
-                    StatCmd::Single,
-                    StatCmd::Multi,
-                    StatCmd::MultiBatched,
-                ] {
-                    t.insert(*cmd, AtomicUsize::new(0));
-                }
-                pe_map.insert(i, t);
+        m.insert(stat_type.clone(), pe_map);
+    }
+    BatcherStatMap(m)
+});
+pub(crate) static BATCHER_AM_PE_RECV_CNTS: LazyLock<BatcherStatMap> = LazyLock::new(|| {
+    let mut m = HashMap::new();
+    for stat_type in &[StatType::Orig, StatType::Remote] {
+        let mut pe_map = HashMap::new();
+        for i in 0..32 {
+            let mut t = HashMap::new();
+            for cmd in &[
+                StatCmd::Am,
+                StatCmd::Return,
+                StatCmd::Data,
+                StatCmd::Unit,
+                StatCmd::Batched,
+                StatCmd::Single,
+                StatCmd::Multi,
+                StatCmd::MultiBatched,
+            ] {
+                t.insert(*cmd, AtomicUsize::new(0));
             }
-            m.insert(stat_type.clone(), pe_map);
+            pe_map.insert(i, t);
         }
-        BatcherStatMap(m)
-    };
-}
+        m.insert(stat_type.clone(), pe_map);
+    }
+    BatcherStatMap(m)
+});
 
 impl std::fmt::Debug for BatcherStatMap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -750,7 +749,7 @@ pub(crate) fn exec_am_serde(
     ame: &RegisteredActiveMessages,
     executor: &Arc<Executor>,
 ) {
-    use crate::active_messaging::registered_active_message::{AmHeader, AM_HEADER_LEN};
+    use crate::active_messaging::registered_active_message::{AM_HEADER_LEN, AmHeader};
     let am_header = AmHeader::try_read_from_bytes(&data[*i..*i + AM_HEADER_LEN])
         .expect("failed to parse AmHeader");
     let (team, world) = ame.get_team_and_world(src, am_header.team_addr, lamellae);
@@ -803,7 +802,7 @@ pub(crate) async fn exec_return_am_serde(
     lamellae: &Arc<Lamellae>,
     ame: &RegisteredActiveMessages,
 ) {
-    use crate::active_messaging::registered_active_message::{AmHeader, AM_HEADER_LEN};
+    use crate::active_messaging::registered_active_message::{AM_HEADER_LEN, AmHeader};
     let am_header = AmHeader::try_read_from_bytes(&data[*i..*i + AM_HEADER_LEN])
         .expect("failed to parse AmHeader");
     let (team, world) = ame.get_team_and_world(src, am_header.team_addr, lamellae);
@@ -858,7 +857,7 @@ pub(crate) async fn send_am_serde(
     am_bytes: Vec<u8>,
     cmd: Cmd,
 ) {
-    use crate::active_messaging::registered_active_message::{AmHeader, AM_HEADER_LEN};
+    use crate::active_messaging::registered_active_message::{AM_HEADER_LEN, AmHeader};
     let my_pe = req_data.team.world_pe;
     let am_size = am_bytes.len();
     let header = SerializeHeader {
@@ -901,7 +900,7 @@ pub(crate) async fn send_data_am_serde(
     darc_bytes: Vec<u8>,
     data_bytes: Vec<u8>,
 ) {
-    use crate::active_messaging::registered_active_message::{DataHeader, DATA_HEADER_LEN};
+    use crate::active_messaging::registered_active_message::{DATA_HEADER_LEN, DataHeader};
     let my_pe = req_data.team.world_pe;
     let header = SerializeHeader {
         msg: Msg {
@@ -937,7 +936,7 @@ pub(crate) async fn send_data_am_serde(
 }
 
 pub(crate) async fn send_unit_am_serde(req_data: ReqMetaData) {
-    use crate::active_messaging::registered_active_message::{UnitHeader, UNIT_HEADER_LEN};
+    use crate::active_messaging::registered_active_message::{UNIT_HEADER_LEN, UnitHeader};
     let my_pe = req_data.team.world_pe;
     let header = SerializeHeader {
         msg: Msg {
@@ -965,7 +964,7 @@ pub(crate) fn exec_data_am_serde(
     i: &mut usize,
     ame: &RegisteredActiveMessages,
 ) {
-    use crate::active_messaging::registered_active_message::{DataHeader, DATA_HEADER_LEN};
+    use crate::active_messaging::registered_active_message::{DATA_HEADER_LEN, DataHeader};
     let data_header = DataHeader::try_read_from_bytes(&data[*i..*i + DATA_HEADER_LEN])
         .expect("failed to parse DataHeader");
     *i += DATA_HEADER_LEN;
@@ -987,7 +986,7 @@ pub(crate) fn exec_unit_am_serde(
     i: &mut usize,
     ame: &RegisteredActiveMessages,
 ) {
-    use crate::active_messaging::registered_active_message::{UnitHeader, UNIT_HEADER_LEN};
+    use crate::active_messaging::registered_active_message::{UNIT_HEADER_LEN, UnitHeader};
     let unit_header = UnitHeader::try_read_from_bytes(&data[*i..*i + UNIT_HEADER_LEN])
         .expect("failed to parse UnitHeader");
     *i += UNIT_HEADER_LEN;

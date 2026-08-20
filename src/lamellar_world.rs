@@ -4,15 +4,15 @@ use crate::{
     barrier::BarrierHandle,
     config,
     lamellae::{
-        create_lamellae, Backend, CommInfo, CommMem, CommProgress, Lamellae, LamellaeInit, Remote,
+        Backend, CommInfo, CommMem, CommProgress, Lamellae, LamellaeInit, Remote, create_lamellae,
     },
     lamellar_arch::LamellarArch,
     lamellar_env::LamellarEnv,
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     memregion::{
+        RemoteMemoryRegion,
         handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle},
         one_sided::OneSidedMemoryRegion,
-        RemoteMemoryRegion,
     },
     scheduler::{ExecutorType, LamellarTask, Scheduler},
 };
@@ -20,21 +20,21 @@ use crate::{
 
 use tracing::{debug, error, trace};
 
-use futures_util::future::join_all;
 use futures_util::Future;
+use futures_util::future::join_all;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
-lazy_static! {
-    pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
-        RwLock::new(HashMap::new());
-    pub(crate) static ref INIT: AtomicBool = AtomicBool::new(false);
-    pub(crate) static ref MAIN_THREAD: std::thread::ThreadId = std::thread::current().id();
-}
+pub(crate) static LAMELLAES: LazyLock<RwLock<HashMap<Backend, Arc<Lamellae>>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+pub(crate) static INIT: AtomicBool = AtomicBool::new(false);
+pub(crate) static MAIN_THREAD: LazyLock<std::thread::ThreadId> =
+    LazyLock::new(|| std::thread::current().id());
 
 /// An abstraction representing all the PE's (processing elements) within a given distributed execution.
 ///
@@ -547,11 +547,13 @@ impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
-        let executor = match config().executor.as_str(){
+        let executor = match config().executor.as_str() {
             "tokio" => {
                 #[cfg(not(feature = "tokio-executor"))]
                 {
-                    panic!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled, either recompile lamellar with --features tokio-executor, or set LAMELLAR_EXECUTOR to one of 'lamellar' or 'async_std'");
+                    panic!(
+                        "[LAMELLAR WARNING]: tokio-executor selected but it is not enabled, either recompile lamellar with --features tokio-executor, or set LAMELLAR_EXECUTOR to one of 'lamellar' or 'async_std'"
+                    );
                 }
                 #[cfg(feature = "tokio-executor")]
                 ExecutorType::Tokio
@@ -561,7 +563,9 @@ impl LamellarWorldBuilder {
             "lamellar2" => ExecutorType::LamellarWorkStealing2,
             "lamellar3" => ExecutorType::LamellarWorkStealing3,
             "single_thread" => ExecutorType::SingleThread,
-            _ => panic!("[LAMELLAR WARNING]: unexpected executor type, please set LAMELLAR_EXECUTOR to one of the following 'lamellar', 'single_thread', 'async_std', or (if tokio-executor feature is enabled) 'tokio'.")
+            _ => panic!(
+                "[LAMELLAR WARNING]: unexpected executor type, please set LAMELLAR_EXECUTOR to one of the following 'lamellar', 'single_thread', 'async_std', or (if tokio-executor feature is enabled) 'tokio'."
+            ),
         };
 
         let num_threads = config().threads;
@@ -662,7 +666,11 @@ impl LamellarWorldBuilder {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub fn build(self) -> LamellarWorld {
         // let mut timer = std::time::Instant::now();
-        assert_eq!(INIT.fetch_or(true, Ordering::SeqCst), false, "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
+        assert_eq!(
+            INIT.fetch_or(true, Ordering::SeqCst),
+            false,
+            "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance"
+        );
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         // println!("{:?}: INIT", timer.elapsed());
 
@@ -753,8 +761,12 @@ impl LamellarWorldBuilder {
 
         // timer = std::time::Instant::now();
         std::panic::set_hook(Box::new(move |panic_info| {
-            println!("!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-! Lamellar Runtime Panic !-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!");
-            error!("!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-! Lamellar Runtime Panic !-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!");
+            println!(
+                "!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-! Lamellar Runtime Panic !-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!"
+            );
+            error!(
+                "!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-! Lamellar Runtime Panic !-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!"
+            );
             let backtrace = std::backtrace::Backtrace::capture();
             // panics.lock().push(format!("{panic_info}"));
             // for p in panics.lock().iter(){

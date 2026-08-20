@@ -1,8 +1,8 @@
 use crate::{
     active_messaging::{registered_active_message::*, *},
     lamellae::{
-        comm::{error::AllocError, CommInfo},
         CommSlice, Lamellae, LamellaeUtil, Ser, SerializeHeader,
+        comm::{CommInfo, error::AllocError},
     },
     utils::stats,
 };
@@ -11,48 +11,26 @@ use batching::*;
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use tracing::debug;
 use zerocopy::{IntoBytes, TryFromBytes};
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
 
-lazy_static! {
-    pub(crate) static ref IO_TASK_SPAWN: Vec<AtomicUsize> = {
-        let mut v = Vec::new();
-        for _ in 0..4 {
-            v.push(AtomicUsize::new(0));
-        }
-        v
-    };
-    pub(crate) static ref IO_TASK_START: Vec<AtomicUsize> = {
-        let mut v = Vec::new();
-        for _ in 0..4 {
-            v.push(AtomicUsize::new(0));
-        }
-        v
-    };
-    pub(crate) static ref IO_TASK_FINISH: Vec<AtomicUsize> = {
-        let mut v = Vec::new();
-        for _ in 0..4 {
-            v.push(AtomicUsize::new(0));
-        }
-        v
-    };
-    pub(crate) static ref IO_TASK_TOO_BIG: Vec<AtomicUsize> = {
-        let mut v = Vec::new();
-        for _ in 0..4 {
-            v.push(AtomicUsize::new(0));
-        }
-        v
-    };
-    pub(crate) static ref IO_TASK_TOO_BIG_FINISH: Vec<AtomicUsize> = {
-        let mut v = Vec::new();
-        for _ in 0..4 {
-            v.push(AtomicUsize::new(0));
-        }
-        v
-    };
+fn new_io_task_counters() -> Vec<AtomicUsize> {
+    let mut v = Vec::new();
+    for _ in 0..4 {
+        v.push(AtomicUsize::new(0));
+    }
+    v
 }
+
+pub(crate) static IO_TASK_SPAWN: LazyLock<Vec<AtomicUsize>> = LazyLock::new(new_io_task_counters);
+pub(crate) static IO_TASK_START: LazyLock<Vec<AtomicUsize>> = LazyLock::new(new_io_task_counters);
+pub(crate) static IO_TASK_FINISH: LazyLock<Vec<AtomicUsize>> = LazyLock::new(new_io_task_counters);
+pub(crate) static IO_TASK_TOO_BIG: LazyLock<Vec<AtomicUsize>> = LazyLock::new(new_io_task_counters);
+pub(crate) static IO_TASK_TOO_BIG_FINISH: LazyLock<Vec<AtomicUsize>> =
+    LazyLock::new(new_io_task_counters);
 
 pub(crate) fn io_task_stats() -> String {
     let mut stats = String::new();
@@ -132,32 +110,33 @@ impl Batcher for SimpleBatcher {
         // println!("add_remote_am_to_batch");
         let am_size = am_bytes.len();
         //let dst =req_data.dst;
-        let batch = match req_data.dst {
-            Some(dst) => {
-                stats!(
-                    BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&dst][&StatCmd::Am]
-                        .fetch_add(1, Ordering::Relaxed)
-                );
-                stats!(
-                    BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&dst][&StatCmd::Multi]
-                        .fetch_add(1, Ordering::Relaxed)
-                );
-                self.batched_ams[dst].clone()
-            }
-            None => {
-                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig]
-                    .iter()
-                    .for_each(|(pe, c)| {
-                        if pe < &req_data.team.lamellae.comm().num_pes()
-                            && pe != &req_data.team.lamellae.comm().my_pe()
-                        {
-                            c[&StatCmd::Am].fetch_add(1, Ordering::Relaxed);
-                            c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+        let batch =
+            match req_data.dst {
+                Some(dst) => {
+                    stats!(
+                        BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&dst][&StatCmd::Am]
+                            .fetch_add(1, Ordering::Relaxed)
+                    );
+                    stats!(
+                        BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&dst][&StatCmd::Multi]
+                            .fetch_add(1, Ordering::Relaxed)
+                    );
+                    self.batched_ams[dst].clone()
+                }
+                None => {
+                    stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig].iter().for_each(
+                        |(pe, c)| {
+                            if pe < &req_data.team.lamellae.comm().num_pes()
+                                && pe != &req_data.team.lamellae.comm().my_pe()
+                            {
+                                c[&StatCmd::Am].fetch_add(1, Ordering::Relaxed);
+                                c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+                            }
                         }
-                    }));
-                self.batched_ams.last().unwrap().clone()
-            }
-        };
+                    ));
+                    self.batched_ams.last().unwrap().clone()
+                }
+            };
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
@@ -253,16 +232,18 @@ impl Batcher for SimpleBatcher {
                 self.batched_ams[dst].clone()
             }
             None => {
-                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
-                    .iter()
-                    .for_each(|(pe, c)| {
-                        if pe < &req_data.team.lamellae.comm().num_pes()
-                            && pe != &req_data.team.lamellae.comm().my_pe()
-                        {
-                            c[&StatCmd::Return].fetch_add(1, Ordering::Relaxed);
-                            c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
-                        }
-                    }));
+                stats!(
+                    BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
+                        .iter()
+                        .for_each(|(pe, c)| {
+                            if pe < &req_data.team.lamellae.comm().num_pes()
+                                && pe != &req_data.team.lamellae.comm().my_pe()
+                            {
+                                c[&StatCmd::Return].fetch_add(1, Ordering::Relaxed);
+                                c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                );
                 self.batched_ams.last().unwrap().clone()
             }
         };
@@ -358,16 +339,18 @@ impl Batcher for SimpleBatcher {
                 self.batched_ams[dst].clone()
             }
             None => {
-                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
-                    .iter()
-                    .for_each(|(pe, c)| {
-                        if pe < &req_data.team.lamellae.comm().num_pes()
-                            && pe != &req_data.team.lamellae.comm().my_pe()
-                        {
-                            c[&StatCmd::Data].fetch_add(1, Ordering::Relaxed);
-                            c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
-                        }
-                    }));
+                stats!(
+                    BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
+                        .iter()
+                        .for_each(|(pe, c)| {
+                            if pe < &req_data.team.lamellae.comm().num_pes()
+                                && pe != &req_data.team.lamellae.comm().my_pe()
+                            {
+                                c[&StatCmd::Data].fetch_add(1, Ordering::Relaxed);
+                                c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                );
                 self.batched_ams.last().unwrap().clone()
             }
         };
@@ -458,16 +441,18 @@ impl Batcher for SimpleBatcher {
                 self.batched_ams[dst].clone()
             }
             None => {
-                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
-                    .iter()
-                    .for_each(|(pe, c)| {
-                        if pe < &req_data.team.lamellae.comm().num_pes()
-                            && pe != &req_data.team.lamellae.comm().my_pe()
-                        {
-                            c[&StatCmd::Unit].fetch_add(1, Ordering::Relaxed);
-                            c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
-                        }
-                    }));
+                stats!(
+                    BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
+                        .iter()
+                        .for_each(|(pe, c)| {
+                            if pe < &req_data.team.lamellae.comm().num_pes()
+                                && pe != &req_data.team.lamellae.comm().my_pe()
+                            {
+                                c[&StatCmd::Unit].fetch_add(1, Ordering::Relaxed);
+                                c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+                            }
+                        })
+                );
                 self.batched_ams.last().unwrap().clone()
             }
         };
@@ -844,8 +829,7 @@ impl SimpleBatcher {
         };
         trace!(
             "serializing am header for {:?} ,req: {:?}",
-            am_header,
-            req_data
+            am_header, req_data
         );
         data_buf[i..i + AM_HEADER_LEN].copy_from_slice(am_header.as_bytes());
         i += AM_HEADER_LEN;

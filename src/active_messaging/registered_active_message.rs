@@ -1,13 +1,13 @@
 use crate::{
     active_messaging::{
         batching::{
-            Batcher, BatcherType, StatCmd, StatType, BATCHER_AM_PE_RECV_CNTS,
-            BATCHER_AM_PE_SEND_CNTS,
+            BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS, Batcher, BatcherType, StatCmd,
+            StatType,
         },
         *,
     },
     config,
-    lamellae::{comm::CommInfo, Backend, Lamellae, LamellaeUtil, SerializedData},
+    lamellae::{Backend, Lamellae, LamellaeUtil, SerializedData, comm::CommInfo},
     utils::stats,
 };
 
@@ -15,50 +15,47 @@ use async_recursion::async_recursion;
 // use log::trace;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 pub(crate) const AM_ID_START: AmId = 1;
 
 pub(crate) type UnpackFn = fn(&[u8], Result<usize, IdError>) -> LamellarArcAm;
 pub(crate) type AmId = i32;
-lazy_static! {
-    pub(crate) static ref AMS_IDS: HashMap<&'static str, AmId> = {
-        let mut ams = vec![];
-        for am in crate::inventory::iter::<RegisteredAm> {
-            ams.push(am.name);
+pub(crate) static AMS_IDS: LazyLock<HashMap<&'static str, AmId>> = LazyLock::new(|| {
+    let mut ams = vec![];
+    for am in crate::inventory::iter::<RegisteredAm> {
+        ams.push(am.name);
+    }
+    ams.sort();
+    let mut cnt = AM_ID_START;
+    let mut temp = HashMap::new();
+    let mut duplicates = vec![];
+    for am in ams {
+        if !temp.contains_key(&am) {
+            // println!("{:?}", am);
+            temp.insert(am, cnt);
+            cnt += 1;
+        } else {
+            duplicates.push(am);
         }
-        ams.sort();
-        let mut cnt = AM_ID_START;
-        let mut temp = HashMap::new();
-        let mut duplicates = vec![];
-        for am in ams {
-            if !temp.contains_key(&am) {
-                // println!("{:?}", am);
-                temp.insert(am, cnt);
-                cnt += 1;
-            } else {
-                duplicates.push(am);
-            }
-        }
-        if !duplicates.is_empty() {
-            panic!(
-                "duplicate registered active message {:?}, AMs must have unique names",
-                duplicates
-            );
-        }
-        temp
-    };
-}
-lazy_static! {
-    pub(crate) static ref AMS_EXECS: HashMap<AmId, UnpackFn> = {
-        let mut temp = HashMap::new();
-        for exec in crate::inventory::iter::<RegisteredAm> {
-            // trace!("{:#?}", exec.name);
-            let id = AMS_IDS.get(&exec.name).unwrap();
-            temp.insert(*id, exec.exec);
-        }
-        temp
-    };
-}
+    }
+    if !duplicates.is_empty() {
+        panic!(
+            "duplicate registered active message {:?}, AMs must have unique names",
+            duplicates
+        );
+    }
+    temp
+});
+pub(crate) static AMS_EXECS: LazyLock<HashMap<AmId, UnpackFn>> = LazyLock::new(|| {
+    let mut temp = HashMap::new();
+    for exec in crate::inventory::iter::<RegisteredAm> {
+        // trace!("{:#?}", exec.name);
+        let id = AMS_IDS.get(&exec.name).unwrap();
+        temp.insert(*id, exec.exec);
+    }
+    temp
+});
 
 #[doc(hidden)]
 pub struct RegisteredAm {

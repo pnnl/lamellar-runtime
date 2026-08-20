@@ -1,46 +1,38 @@
 use super::{
-    comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
     Comm, Lamellae, SerializedData,
+    comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
 };
 use crate::{
-    env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
-    LamellarBuffer,
+    LamellarBuffer, env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler,
+    stats,
 };
 use async_lock::Mutex; //, RwLock};
 use core::panic;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::mem::offset_of;
 use std::num::Wrapping;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use tracing::{debug, info, trace, warn};
 
 static MSG_ID: AtomicUsize = AtomicUsize::new(1);
 
-lazy_static! {
-    static ref PE_SENDS: Vec<Vec<AtomicUsize>> = {
-        let mut v = Vec::with_capacity(2);
-        for _ in 0..2 {
-            let mut t = Vec::with_capacity(32);
-            for _ in 0..32 {
-                t.push(AtomicUsize::new(0));
-            }
-            v.push(t);
+fn new_pe_counters() -> Vec<Vec<AtomicUsize>> {
+    let mut v = Vec::with_capacity(2);
+    for _ in 0..2 {
+        let mut t = Vec::with_capacity(32);
+        for _ in 0..32 {
+            t.push(AtomicUsize::new(0));
         }
-        v
-    };
-    static ref PE_RECVS: Vec<Vec<AtomicUsize>> = {
-        let mut v = Vec::with_capacity(2);
-        for _ in 0..2 {
-            let mut t = Vec::with_capacity(32);
-            for _ in 0..32 {
-                t.push(AtomicUsize::new(0));
-            }
-            v.push(t);
-        }
-        v
-    };
+        v.push(t);
+    }
+    v
 }
+
+static PE_SENDS: LazyLock<Vec<Vec<AtomicUsize>>> = LazyLock::new(new_pe_counters);
+static PE_RECVS: LazyLock<Vec<Vec<AtomicUsize>>> = LazyLock::new(new_pe_counters);
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -1039,7 +1031,7 @@ impl InnerCQ {
                 }
             }
             self.comm.thread_wait(); //only need to wait on puts issued by this thread
-                                     // join_all(txs).await;
+            // join_all(txs).await;
         }
     }
 
@@ -1080,8 +1072,7 @@ impl InnerCQ {
     fn send_free(&self, dst: usize, cmd: CmdMsg) {
         trace!(
             "sending free to dst[{dst}]: {:?} cmd: {:?} ",
-            self.free_cmd,
-            cmd,
+            self.free_cmd, cmd,
         );
         let (local_daddr_alloc, offset) = self
             .comm
@@ -1094,7 +1085,7 @@ impl InnerCQ {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn check_transfers(&self, src: usize) {
         let mut cmd_buffer = self.cmd_buffers[src].lock_blocking(); //.await;
-                                                                    // trace!("checking transfers for {src}");
+        // trace!("checking transfers for {src}");
         self.progress_transfers(src, &mut cmd_buffer); //.await;
     }
 
@@ -1116,18 +1107,17 @@ impl InnerCQ {
             local_daddr_alloc.comm_slice_at_byte_offset::<CmdMsg>(offset, num_cmds);
         trace!(
             "msg_id: {msg_id} command queue getting data from {src}, {:x} local_alloc: {:?} offset ({:?}, {:x}) {:?}",
-            cmd.daddr,
-            local_daddr_alloc,
-            offset,
-            offset,
-            remote_cmd_buffer,
+            cmd.daddr, local_daddr_alloc, offset, offset, remote_cmd_buffer,
         );
 
         if let Ok(data) = self
             .comm
             .rt_alloc(cmd.dsize, std::mem::align_of::<CmdMsg>())
         {
-            trace!("msg_id: {msg_id} allocated local buffer for get_data at addr: {:?} for cmd from {src}", data);
+            trace!(
+                "msg_id: {msg_id} allocated local buffer for get_data at addr: {:?} for cmd from {src}",
+                data
+            );
             let mut buffer = unsafe {
                 LamellarBuffer::<CmdMsg, CommSlice<CmdMsg>>::from_comm_slice(
                     data.as_comm_slice(),
@@ -1272,7 +1262,6 @@ impl InnerCQ {
                     data_slice.len(),
                     calc_hash(data_slice.as_ptr() as usize, len),
                     cmd.msg_hash,
-
                     &data_slice.as_slice()[0..32],
                     &data_slice.as_slice()[len.saturating_sub(32)..len],
                     std::thread::current().id(),
@@ -1594,23 +1583,27 @@ impl CQBatched {
         println!("command queue");
         println!(
             "sends {:?}",
-            print_stats!(PE_SENDS
-                .iter()
-                .map(|x| x
+            print_stats!(
+                PE_SENDS
                     .iter()
-                    .map(|y| y.load(Ordering::SeqCst))
-                    .collect::<Vec<_>>())
-                .collect::<Vec<_>>())
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.load(Ordering::SeqCst))
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            )
         );
         println!(
             "recvs {:?}",
-            print_stats!(PE_RECVS
-                .iter()
-                .map(|x| x
+            print_stats!(
+                PE_RECVS
                     .iter()
-                    .map(|y| y.load(Ordering::SeqCst))
-                    .collect::<Vec<_>>())
-                .collect::<Vec<_>>())
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.load(Ordering::SeqCst))
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            )
         );
         for pe in 0..self.cq.num_pes {
             let mut sends = Vec::new();
@@ -1789,7 +1782,10 @@ impl CQBatched {
                                             let task = async move {
                                                 let work_data =
                                                     cq.get_cmd(src, cmd, msg_id, &lamellae_c).await;
-                                                debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
+                                                debug!(
+                                                    "msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}",
+                                                    cmd, i, len
+                                                );
                                                 scheduler2.submit_remote_am(work_data, &lamellae_c);
                                                 trace!(target: "lamellae_debug", "submitted_remote_am lamellae cnt: {:?}", Arc::strong_count(&lamellae_c));
                                                 if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
@@ -1867,23 +1863,27 @@ impl Drop for CQBatched {
         trace!(target: "drop", "begin drop CQBatched");
         debug!(
             "sends {:?}",
-            print_stats!(PE_SENDS
-                .iter()
-                .map(|x| x
+            print_stats!(
+                PE_SENDS
                     .iter()
-                    .map(|y| y.load(Ordering::SeqCst))
-                    .collect::<Vec<_>>())
-                .collect::<Vec<_>>())
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.load(Ordering::SeqCst))
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            )
         );
         debug!(
             "recvs {:?}",
-            print_stats!(PE_RECVS
-                .iter()
-                .map(|x| x
+            print_stats!(
+                PE_RECVS
                     .iter()
-                    .map(|y| y.load(Ordering::SeqCst))
-                    .collect::<Vec<_>>())
-                .collect::<Vec<_>>())
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.load(Ordering::SeqCst))
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            )
         );
         trace!(target: "drop", "end drop CQBatched");
     }

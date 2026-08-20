@@ -1,23 +1,24 @@
+use crate::AmHandle;
 use crate::active_messaging::LamellarArcAm;
 use crate::array::operations::handle::*;
 use crate::array::operations::*;
-use crate::array::r#unsafe::UnsafeArray;
 use crate::array::scalar_impls::{
     PackedIdxVal, PackedIndicies, ScalarMultiIdxMultiValAm, ScalarMultiIdxMultiValAmReturn,
     ScalarMultiIdxSingleValAm, ScalarMultiIdxSingleValAmReturn, ScalarSingleIdxMultiValAm,
     ScalarSingleIdxMultiValAmReturn,
 };
+use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv, ScalarType};
-use crate::env_var::{config, IndexType};
+use crate::env_var::{IndexType, config};
 use crate::lamellae::AtomicOp;
 use crate::memregion::OneSidedMemoryRegion;
-use crate::AmHandle;
 use core::panic;
 use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 type MultiValMultiIdxFnNew =
     fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, u8, BatchReturnType) -> LamellarArcAm;
@@ -43,56 +44,62 @@ type SingleValMultiIdxFn =
 type MultiValSingleIdxFn =
     fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, usize) -> LamellarArcAm;
 
-lazy_static! {
-
-    pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS_NEW: HashMap<TypeId, MultiValMultiIdxFnNew> = {
+pub(crate) static MULTI_VAL_MULTI_IDX_OPS_NEW: LazyLock<HashMap<TypeId, MultiValMultiIdxFnNew>> =
+    LazyLock::new(|| {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<multi_val_multi_idx_ops_new> {
             map.insert((op.id)(), op.op);
         }
         map
-    };
+    });
 
-    pub(crate) static ref SINGLE_VAL_MULTI_IDX_OPS_NEW: HashMap<TypeId, SingleValMultiIdxFnNew> = {
+pub(crate) static SINGLE_VAL_MULTI_IDX_OPS_NEW: LazyLock<HashMap<TypeId, SingleValMultiIdxFnNew>> =
+    LazyLock::new(|| {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<single_val_multi_idx_ops_new> {
             map.insert((op.id)(), op.op);
         }
         map
-    };
-    pub(crate) static ref MULTI_VAL_SINGLE_IDX_OPS_NEW: HashMap<TypeId, MultiValSingleIdxFnNew> = {
+    });
+pub(crate) static MULTI_VAL_SINGLE_IDX_OPS_NEW: LazyLock<HashMap<TypeId, MultiValSingleIdxFnNew>> =
+    LazyLock::new(|| {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<multi_val_single_idx_ops_new> {
             map.insert((op.id)(), op.op);
         }
         map
-    };
+    });
 
-    pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), MultiValMultiIdxFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<multi_val_multi_idx_ops> {
-            // println!("{:?} {:?} {:?} -- {:?} ",op.id, op.batch_type, op.op,(op.id)(op.batch_type));
-            // println!("{:?}",);
-            map.insert((op.id)(op.batch_type), op.op);
-        }
-        map
-    };
-    pub(crate) static ref SINGLE_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), SingleValMultiIdxFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<single_val_multi_idx_ops> {
-            // println!("{:?}",op.id.clone());
-            map.insert((op.id)(op.batch_type), op.op);
-        }
-        map
-    };
-    pub(crate) static ref MULTI_VAL_SINGLE_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), MultiValSingleIdxFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<multi_val_single_idx_ops> {
-            map.insert((op.id)(op.batch_type), op.op);
-        }
-        map
-    };
-}
+pub(crate) static MULTI_VAL_MULTI_IDX_OPS: LazyLock<
+    HashMap<(TypeId, TypeId, BatchReturnType), MultiValMultiIdxFn>,
+> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for op in crate::inventory::iter::<multi_val_multi_idx_ops> {
+        // println!("{:?} {:?} {:?} -- {:?} ",op.id, op.batch_type, op.op,(op.id)(op.batch_type));
+        // println!("{:?}",);
+        map.insert((op.id)(op.batch_type), op.op);
+    }
+    map
+});
+pub(crate) static SINGLE_VAL_MULTI_IDX_OPS: LazyLock<
+    HashMap<(TypeId, TypeId, BatchReturnType), SingleValMultiIdxFn>,
+> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for op in crate::inventory::iter::<single_val_multi_idx_ops> {
+        // println!("{:?}",op.id.clone());
+        map.insert((op.id)(op.batch_type), op.op);
+    }
+    map
+});
+pub(crate) static MULTI_VAL_SINGLE_IDX_OPS: LazyLock<
+    HashMap<(TypeId, TypeId, BatchReturnType), MultiValSingleIdxFn>,
+> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for op in crate::inventory::iter::<multi_val_single_idx_ops> {
+        map.insert((op.id)(op.batch_type), op.op);
+    }
+    map
+});
 
 // #[derive(Debug, Copy, Clone)]
 // enum IndexSize {

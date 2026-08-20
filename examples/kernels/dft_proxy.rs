@@ -15,14 +15,10 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 use std::time::Instant;
-#[macro_use]
-extern crate lazy_static;
 
 const MAGIC: f64 = std::f64::MAX;
 
-lazy_static! {
-    static ref LOCK: Mutex<()> = Mutex::new(());
-}
+static LOCK: Mutex<()> = Mutex::new(());
 
 #[lamellar::AmData(Clone, Debug)]
 struct ReduceAM {

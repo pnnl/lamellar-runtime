@@ -1,8 +1,8 @@
+use crate::MAIN_THREAD;
 use crate::env_var::config;
 use crate::scheduler::{
     Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus,
 };
-use crate::MAIN_THREAD;
 
 //use tracing::*;
 use tracing::trace;
@@ -14,8 +14,9 @@ use rand::prelude::*;
 use std::panic;
 use std::pin::Pin;
 use std::process;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::task::Context;
 use std::task::Poll;
 //, Weak};
@@ -24,9 +25,7 @@ use std::thread;
 use crossbeam::deque::{Injector, Stealer, Worker};
 use thread_local::ThreadLocal;
 
-lazy_static! {
-    static ref WORK_Q: ThreadLocal<Worker<Runnable<usize>>> = ThreadLocal::new();
-}
+static WORK_Q: LazyLock<ThreadLocal<Worker<Runnable<usize>>>> = LazyLock::new(ThreadLocal::new);
 
 #[derive(Debug)]
 pub(crate) struct WorkStealingThread {

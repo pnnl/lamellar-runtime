@@ -83,6 +83,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 // use serde::de::DeserializeOwned;
 
@@ -341,8 +342,8 @@ pub(crate) mod collective;
 
 pub(crate) type ReduceGen = fn(LamellarByteArray, usize) -> LamellarArcAm;
 
-lazy_static! {
-    pub(crate) static ref REDUCE_OPS: HashMap<(std::any::TypeId, &'static str), ReduceGen> = {
+pub(crate) static REDUCE_OPS: LazyLock<HashMap<(std::any::TypeId, &'static str), ReduceGen>> =
+    LazyLock::new(|| {
         let mut temp = HashMap::new();
         for reduction_type in crate::inventory::iter::<ReduceKey> {
             temp.insert(
@@ -351,8 +352,7 @@ lazy_static! {
             );
         }
         temp
-    };
-}
+    });
 
 type ReduceIdGen = fn() -> std::any::TypeId;
 #[doc(hidden)]
