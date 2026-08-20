@@ -1,4 +1,6 @@
 use crate::{
+    AsLamellarBuffer, AtomicArray, Dist, ElementArithmeticOps, ElementBitWiseOps,
+    ElementComparePartialEqOps, LamellarBuffer,
     array::collective::{
         broadcast_handle::{
             ArrayCollectiveAllToAllHandle, ArrayCollectiveAllToAllIntoBufferHandle,
@@ -21,8 +23,6 @@ use crate::{
     lamellae::collective::{
         BroadcastInput, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput,
     },
-    AsLamellarBuffer, AtomicArray, Dist, ElementArithmeticOps, ElementBitWiseOps,
-    ElementComparePartialEqOps, LamellarBuffer,
 };
 
 impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
@@ -531,7 +531,9 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => array.sum_all_in_place(src_and_dst),
             _ => {
-                todo!("collective reduce operations currently only supported on network atomic arrays")
+                todo!(
+                    "collective reduce operations currently only supported on network atomic arrays"
+                )
             } // AtomicArray::NativeAtomicArray(array) => {
               //     array
               //         .sum_all_in_place(src_and_dst)
@@ -572,7 +574,9 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => array.max_all_in_place(src_and_dst),
             _ => {
-                todo!("collective reduce operations currently only supported on network atomic arrays")
+                todo!(
+                    "collective reduce operations currently only supported on network atomic arrays"
+                )
             } // AtomicArray::NativeAtomicArray(array) => {
               //     array
               //         .max_all_in_place(src_and_dst)
@@ -613,7 +617,9 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => array.min_all_in_place(src_and_dst),
             _ => {
-                todo!("collective reduce operations currently only supported on network atomic arrays")
+                todo!(
+                    "collective reduce operations currently only supported on network atomic arrays"
+                )
             } // AtomicArray::NativeAtomicArray(array) => {
               //     array
               //         .min_all_in_place(src_and_dst)
@@ -654,7 +660,9 @@ impl<T: ElementArithmeticOps + Default> AtomicArray<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => array.prod_all_in_place(src_and_dst),
             _ => {
-                todo!("collective reduce operations currently only supported on network atomic arrays")
+                todo!(
+                    "collective reduce operations currently only supported on network atomic arrays"
+                )
             } // AtomicArray::NativeAtomicArray(array) => {
               //     array
               //         .prod_all_in_place(src_and_dst)
@@ -697,7 +705,9 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => array.bit_and_all_in_place(src_and_dst),
             _ => {
-                todo!("collective reduce operations currently only supported on network atomic arrays")
+                todo!(
+                    "collective reduce operations currently only supported on network atomic arrays"
+                )
             }
         }
     }
@@ -731,7 +741,9 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => array.bit_xor_all_in_place(src_and_dst),
             _ => {
-                todo!("collective reduce operations currently only supported on network atomic arrays")
+                todo!(
+                    "collective reduce operations currently only supported on network atomic arrays"
+                )
             }
         }
     }
@@ -765,7 +777,9 @@ impl<T: ElementBitWiseOps + Default> AtomicArray<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => array.bit_or_all_in_place(src_and_dst),
             _ => {
-                todo!("collective reduce operations currently only supported on network atomic arrays")
+                todo!(
+                    "collective reduce operations currently only supported on network atomic arrays"
+                )
             }
         }
     }

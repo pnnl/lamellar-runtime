@@ -5,14 +5,14 @@ use std::ops::{
 
 use crate::array::atomic::*;
 use crate::array::generic_atomic::iteration::{
-    element_at_local_index as generic_element_at, GenericAtomicDistIterElement,
+    GenericAtomicDistIterElement, element_at_local_index as generic_element_at,
 };
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::iterator::{
-    private::{InnerIter, Sealed},
     LamellarArrayIterators, LamellarArrayMutIterators,
+    private::{InnerIter, Sealed},
 };
 use crate::array::native_atomic::iteration::NativeAtomicDistIterElement;
 use crate::array::network_atomic::iteration::NetworkAtomicDistIterElement;

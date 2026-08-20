@@ -1956,10 +1956,10 @@ impl AmGroup {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
-        let req_queue = self
-            .reqs
-            .entry(self.team.num_pes)
-            .or_insert((Vec::new(), Vec::new(), 0, Vec::new()));
+        let req_queue =
+            self.reqs
+                .entry(self.team.num_pes)
+                .or_insert((Vec::new(), Vec::new(), 0, Vec::new()));
         let am_size = am.serialized_size();
         req_queue.2 += am_size;
         req_queue.3.push(am_size);

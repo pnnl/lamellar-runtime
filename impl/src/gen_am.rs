@@ -270,8 +270,7 @@ pub(crate) fn impl_remote_traits(
             impl_lamellar_result_serde_trait(generics, am_name, ret_type, lamellar);
         let impl_remote_active_message =
             impl_remote_active_message_trait(generics, am_name, lamellar);
-        let unpack_reg_fn =
-            impl_unpack_and_register_function(generics, am_name, lamellar, pod);
+        let unpack_reg_fn = impl_unpack_and_register_function(generics, am_name, lamellar, pod);
 
         quote! {
             #lamellaram

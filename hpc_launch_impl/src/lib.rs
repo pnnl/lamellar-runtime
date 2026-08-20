@@ -579,7 +579,9 @@ fn create_launch_block(
 #[proc_macro_attribute]
 pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(not(any(feature = "use-prterun", feature = "use-srun")))]
-    compile_error!("Either feature \"use-prterun\" or \"use-srun\" must be enabled for hpc_launch proc macro.");
+    compile_error!(
+        "Either feature \"use-prterun\" or \"use-srun\" must be enabled for hpc_launch proc macro."
+    );
     #[cfg(all(feature = "use-prterun", feature = "use-srun"))]
     compile_error!("Only one of features \"use-prterun\" or \"use-srun\" can be enabled for hpc_launch proc macro.");
 
@@ -634,7 +636,10 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     #[cfg(feature = "use-prterun")]
     let launch_block = create_launch_block(
-        (quote! {"PRTE_LAUNCHED"}, quote! {::hpc_launch::prrte_sys::prterun_path()}),
+        (
+            quote! {"PRTE_LAUNCHED"},
+            quote! {::hpc_launch::prrte_sys::prterun_path()},
+        ),
         ret,
         "prterun",
     );
@@ -762,7 +767,10 @@ pub fn test(_args: TokenStream, item: TokenStream) -> TokenStream {
     // let name = format!("{}_launched", name.to_string());
     #[cfg(feature = "use-prterun")]
     let res = create_launch_test_block(
-        (quote! {"PRTE_LAUNCHED"}, quote! {::hpc_launch::prrte_sys::prterun_path()}),
+        (
+            quote! {"PRTE_LAUNCHED"},
+            quote! {::hpc_launch::prrte_sys::prterun_path()},
+        ),
         test_attr,
         vis,
         sig,

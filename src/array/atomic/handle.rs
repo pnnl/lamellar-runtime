@@ -1,18 +1,18 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use super::{ArrayOps, AtomicArray};
 use super::{
     generic_atomic::GenericAtomicArrayHandle,
     native_atomic::{NativeAtomicArray, NativeAtomicArrayHandle, NativeAtomicType},
     network_atomic::{NetworkAtomicArray, NetworkAtomicArrayHandle, NetworkAtomicType},
 };
-use super::{ArrayOps, AtomicArray};
 
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Darc, Dist, LamellarTeamRT};
 
-use futures_util::{ready, Future};
+use futures_util::{Future, ready};
 use pin_project::{pin_project, pinned_drop};
 
 #[must_use = " AtomicArray 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]

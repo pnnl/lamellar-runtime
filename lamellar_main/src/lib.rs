@@ -8,8 +8,8 @@
 //! feature, which reexports [`main`]/[`test`] as `#[lamellar::main]`/
 //! `#[lamellar::test]`.
 
-pub use lamellar_main_impl::main;
 pub use hpc_launch::test;
+pub use lamellar_main_impl::main;
 
 pub use hpc_launch::{
     core_count, cores_per_package, generic_help_text, init_tracing_from_env, numa_domain_count,

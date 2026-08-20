@@ -17,12 +17,12 @@ use crate::{
 };
 
 use async_trait::async_trait;
-use zerocopy::IntoBytes;
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use tracing::trace;
+use zerocopy::IntoBytes;
 
 pub(crate) struct LibfabricSysBuilder {
     my_pe: usize,
@@ -213,7 +213,9 @@ impl Ser for LibfabricSys {
             self.libfabric_sys_comm.clone(),
             header_size + serialized_size,
         )?;
-        ser_data.header_as_bytes_mut().copy_from_slice(header.as_bytes()); //fixed-size zerocopy header
+        ser_data
+            .header_as_bytes_mut()
+            .copy_from_slice(header.as_bytes()); //fixed-size zerocopy header
         Ok(ser_data)
     }
 }

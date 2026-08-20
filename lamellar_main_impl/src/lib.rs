@@ -462,7 +462,10 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     #[cfg(feature = "use-prterun")]
     let launch_block = create_launch_block(
-        (quote! {"PRTE_LAUNCHED"}, quote! {::lamellar::prrte_sys::prterun_path()}),
+        (
+            quote! {"PRTE_LAUNCHED"},
+            quote! {::lamellar::prrte_sys::prterun_path()},
+        ),
         ret,
         "prterun",
     );

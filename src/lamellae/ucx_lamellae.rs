@@ -16,12 +16,12 @@ use crate::{config, env_var::HeapMode, lamellar_arch::LamellarArchRT, scheduler:
 use comm::UcxComm;
 
 use async_trait::async_trait;
-use zerocopy::IntoBytes;
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use tracing::trace;
+use zerocopy::IntoBytes;
 
 pub(crate) struct UcxBuilder {
     my_pe: usize,
@@ -195,7 +195,9 @@ impl Ser for Ucx {
         let header_size = SERIALIZE_HEADER_LEN;
         let mut ser_data =
             SerializedData::new(self.ucx_comm.clone(), header_size + serialized_size)?;
-        ser_data.header_as_bytes_mut().copy_from_slice(header.as_bytes()); //fixed-size zerocopy header
+        ser_data
+            .header_as_bytes_mut()
+            .copy_from_slice(header.as_bytes()); //fixed-size zerocopy header
         Ok(ser_data)
     }
 }

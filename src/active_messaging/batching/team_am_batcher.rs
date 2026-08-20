@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    active_messaging::{registered_active_message::*, *},
-    lamellae::{
-        comm::error::AllocError, CommSlice, Lamellae, LamellaeUtil, Ser, SerializeHeader,
-    },
-    lamellar_arch::LamellarArchRT,
     LamellarTeam,
+    active_messaging::{registered_active_message::*, *},
+    lamellae::{CommSlice, Lamellae, LamellaeUtil, Ser, SerializeHeader, comm::error::AllocError},
+    lamellar_arch::LamellarArchRT,
 };
 use batching::*;
 
@@ -916,11 +914,11 @@ impl TeamAmBatcher {
         team: Arc<LamellarTeam>,
     ) {
         let data = ser_data.data_as_bytes();
-        let req_id = ReqId::try_read_from_bytes(&data[*i..*i + REQ_ID_LEN])
-            .expect("failed to parse ReqId");
+        let req_id =
+            ReqId::try_read_from_bytes(&data[*i..*i + REQ_ID_LEN]).expect("failed to parse ReqId");
         *i += REQ_ID_LEN;
-        let am_len = usize::try_read_from_bytes(&data[*i..*i + AM_LEN_LEN])
-            .expect("failed to parse am len");
+        let am_len =
+            usize::try_read_from_bytes(&data[*i..*i + AM_LEN_LEN]).expect("failed to parse am len");
         *i += AM_LEN_LEN;
         let am = AMS_EXECS.get(&am_id).unwrap()(&data[*i..*i + am_len], team.team.team_pe);
         *i += am_len;
@@ -978,11 +976,11 @@ impl TeamAmBatcher {
     ) {
         let data = ser_data.data_as_bytes();
         // println!("[{:?}] exec_return_am", std::thread::current().id());
-        let req_id = ReqId::try_read_from_bytes(&data[*i..*i + REQ_ID_LEN])
-            .expect("failed to parse ReqId");
+        let req_id =
+            ReqId::try_read_from_bytes(&data[*i..*i + REQ_ID_LEN]).expect("failed to parse ReqId");
         *i += REQ_ID_LEN;
-        let am_len = usize::try_read_from_bytes(&data[*i..*i + AM_LEN_LEN])
-            .expect("failed to parse am len");
+        let am_len =
+            usize::try_read_from_bytes(&data[*i..*i + AM_LEN_LEN]).expect("failed to parse am len");
         *i += AM_LEN_LEN;
         let am = AMS_EXECS.get(&am_id).unwrap()(&data[*i..*i + am_len], team.team.team_pe);
         *i += am_len;

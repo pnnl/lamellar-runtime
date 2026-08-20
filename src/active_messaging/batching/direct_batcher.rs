@@ -199,7 +199,12 @@ impl Batcher for DirectBatcher {
                             am_header_bytes: &[u8],
                             mut bytes: Vec<u8>,
                             batch: &mut Vec<u8>| {
-            debug!("Adding remote AM to batch: cmd_bytes len: {:?}, am_header_bytes len: {:?}, bytes len: {:?}", cmd_bytes.len(), am_header_bytes.len(), bytes.len());
+            debug!(
+                "Adding remote AM to batch: cmd_bytes len: {:?}, am_header_bytes len: {:?}, bytes len: {:?}",
+                cmd_bytes.len(),
+                am_header_bytes.len(),
+                bytes.len()
+            );
             batch.extend_from_slice(cmd_bytes);
             batch.extend_from_slice(am_header_bytes);
             batch.append(&mut bytes);
@@ -268,7 +273,12 @@ impl Batcher for DirectBatcher {
                             am_header_bytes: &[u8],
                             mut bytes: Vec<u8>,
                             batch: &mut Vec<u8>| {
-            debug!("Adding return AM to batch: cmd_bytes len: {:?}, am_header_bytes len: {:?}, bytes len: {:?}", cmd_bytes.len(), am_header_bytes.len(), bytes.len());
+            debug!(
+                "Adding return AM to batch: cmd_bytes len: {:?}, am_header_bytes len: {:?}, bytes len: {:?}",
+                cmd_bytes.len(),
+                am_header_bytes.len(),
+                bytes.len()
+            );
             batch.extend_from_slice(cmd_bytes);
             batch.extend_from_slice(am_header_bytes);
             batch.append(&mut bytes);
@@ -339,7 +349,13 @@ impl Batcher for DirectBatcher {
                             mut serialized_darcs: Vec<u8>,
                             mut bytes: Vec<u8>,
                             batch: &mut Vec<u8>| {
-            debug!("Adding data am to batch: cmd_bytes len: {:?}, data_header_bytes len: {:?}, serialized_darcs len: {:?}, bytes len: {:?}", cmd_bytes.len(), data_header_bytes.len(), serialized_darcs.len(), bytes.len());
+            debug!(
+                "Adding data am to batch: cmd_bytes len: {:?}, data_header_bytes len: {:?}, serialized_darcs len: {:?}, bytes len: {:?}",
+                cmd_bytes.len(),
+                data_header_bytes.len(),
+                serialized_darcs.len(),
+                bytes.len()
+            );
             batch.extend_from_slice(cmd_bytes);
             batch.extend_from_slice(data_header_bytes);
             batch.append(&mut serialized_darcs);
@@ -401,7 +417,12 @@ impl Batcher for DirectBatcher {
         let unit_header_bytes = unit_header.as_bytes();
 
         let add_to_batch = |cmd_bytes: &[u8], unit_header_bytes: &[u8], batch: &mut Vec<u8>| {
-            debug!("Adding unit am to batch: cmd_bytes len: {:?}, unit_header_bytes len: {:?}, batch_len_before: {:?}", cmd_bytes.len(), unit_header_bytes.len(), batch.len());
+            debug!(
+                "Adding unit am to batch: cmd_bytes len: {:?}, unit_header_bytes len: {:?}, batch_len_before: {:?}",
+                cmd_bytes.len(),
+                unit_header_bytes.len(),
+                batch.len()
+            );
             batch.extend_from_slice(cmd_bytes);
             batch.extend_from_slice(unit_header_bytes);
         };

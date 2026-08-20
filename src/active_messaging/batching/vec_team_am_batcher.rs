@@ -4,7 +4,7 @@ use crate::{
         registered_active_message::*,
         *,
     },
-    lamellae::{comm::CommInfo, Lamellae, LamellaeUtil, SerializeHeader, SerializedData},
+    lamellae::{Lamellae, LamellaeUtil, SerializeHeader, SerializedData, comm::CommInfo},
 };
 use batching::*;
 

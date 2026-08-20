@@ -34,7 +34,17 @@ const ITERS: usize = 500;
 const SENTINEL_LEN: usize = 8;
 const LEN_PREFIX_LEN: usize = 4;
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 struct SmallPod {
     a: usize,
     b: u64,
@@ -42,12 +52,30 @@ struct SmallPod {
     d: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 struct VecPayload {
     items: Vec<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 struct Compound {
     id: u64,
     name: String,
@@ -56,7 +84,16 @@ struct Compound {
     pod: SmallPod,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 struct VecOfStructs {
     items: Vec<SmallPod>,
 }
@@ -123,10 +160,8 @@ fn decode_vecpayload(codec: Codec, bytes: &[u8]) -> VecPayload {
         Codec::Postcard => postcard::from_bytes(bytes).unwrap(),
         Codec::Rkyv => {
             let archived =
-                rkyv::access::<<VecPayload as rkyv::Archive>::Archived, rkyv::rancor::Error>(
-                    bytes,
-                )
-                .unwrap();
+                rkyv::access::<<VecPayload as rkyv::Archive>::Archived, rkyv::rancor::Error>(bytes)
+                    .unwrap();
             rkyv::deserialize::<VecPayload, rkyv::rancor::Error>(archived).unwrap()
         }
     }
@@ -222,7 +257,13 @@ fn print_row(latencies: &mut Vec<u64>, bytes_per_xfer: f64) {
 /// from a possibly-miscalibrated size (see `project_postcard_varint_length_bug`:
 /// never assume a re-encode/sample stays the same width -- carry an explicit
 /// length field instead).
-fn send(region: &SharedMemoryRegion<u8>, pe: usize, payload: &[u8], max_payload_len: usize, seq: u64) {
+fn send(
+    region: &SharedMemoryRegion<u8>,
+    pe: usize,
+    payload: &[u8],
+    max_payload_len: usize,
+    seq: u64,
+) {
     assert!(
         payload.len() <= max_payload_len,
         "payload {} exceeds calibrated slot capacity {}",
@@ -298,9 +339,13 @@ fn run_shape<T, F, M, E, D>(
     let my_pe = world.my_pe();
     let slot_len = LEN_PREFIX_LEN + max_payload_len + SENTINEL_LEN;
     let a_to_b: SharedMemoryRegion<u8> = world.alloc_shared_mem_region(slot_len).block();
-    unsafe { a_to_b.as_mut_slice() }.iter_mut().for_each(|b| *b = 0);
+    unsafe { a_to_b.as_mut_slice() }
+        .iter_mut()
+        .for_each(|b| *b = 0);
     let b_to_a: SharedMemoryRegion<u8> = world.alloc_shared_mem_region(slot_len).block();
-    unsafe { b_to_a.as_mut_slice() }.iter_mut().for_each(|b| *b = 0);
+    unsafe { b_to_a.as_mut_slice() }
+        .iter_mut()
+        .for_each(|b| *b = 0);
     world.barrier();
 
     if my_pe == 0 {

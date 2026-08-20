@@ -260,8 +260,16 @@ pub(crate) fn derive_am_data(
         let name = &data.ident;
         let generics = data.generics.clone();
 
-        let (traits, group_traits, attrs, group_attrs, fields, static_fields, create_am_group, _pod) =
-            process_fields(args, &mut data.fields, &lamellar, local);
+        let (
+            traits,
+            group_traits,
+            attrs,
+            group_attrs,
+            fields,
+            static_fields,
+            create_am_group,
+            _pod,
+        ) = process_fields(args, &mut data.fields, &lamellar, local);
 
         let vis = data.vis.to_token_stream();
         let mut attributes = quote!();

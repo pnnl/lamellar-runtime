@@ -145,7 +145,8 @@ fn get_return_am_return_type(
 }
 
 fn check_for_pod(args: &Punctuated<syn::Meta, Token![,]>) -> bool {
-    args.iter().any(|arg| arg.to_token_stream().to_string().trim() == "Pod")
+    args.iter()
+        .any(|arg| arg.to_token_stream().to_string().trim() == "Pod")
 }
 
 fn check_for_am_group(args: &Punctuated<syn::Meta, Token![,]>) -> bool {

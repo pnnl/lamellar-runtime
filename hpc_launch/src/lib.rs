@@ -345,7 +345,10 @@ pub fn numa_domain_count() -> Option<u32> {
 
 fn numa_domain_count_fs() -> Option<u32> {
     let mut count = 0u32;
-    for entry in std::fs::read_dir("/sys/devices/system/node").ok()?.flatten() {
+    for entry in std::fs::read_dir("/sys/devices/system/node")
+        .ok()?
+        .flatten()
+    {
         let name = entry.file_name();
         let name = name.to_string_lossy();
         let rest = match name.strip_prefix("node") {
@@ -356,7 +359,11 @@ fn numa_domain_count_fs() -> Option<u32> {
             count += 1;
         }
     }
-    if count == 0 { None } else { Some(count) }
+    if count == 0 {
+        None
+    } else {
+        Some(count)
+    }
 }
 
 /// Best-effort count of physical packages (sockets) on the current host.
@@ -397,7 +404,11 @@ fn package_count_fs() -> Option<u32> {
             }
         }
     }
-    if ids.is_empty() { None } else { Some(ids.len() as u32) }
+    if ids.is_empty() {
+        None
+    } else {
+        Some(ids.len() as u32)
+    }
 }
 
 /// Best-effort count of physical cores on the current host (i.e. excluding
@@ -442,7 +453,11 @@ fn core_count_fs() -> Option<u32> {
             ids.insert((pkg, core));
         }
     }
-    if ids.is_empty() { None } else { Some(ids.len() as u32) }
+    if ids.is_empty() {
+        None
+    } else {
+        Some(ids.len() as u32)
+    }
 }
 
 /// Best-effort core count within a single physical package (socket) on the
@@ -488,5 +503,9 @@ fn pu_count_fs() -> Option<u32> {
             count += 1;
         }
     }
-    if count == 0 { None } else { Some(count) }
+    if count == 0 {
+        None
+    } else {
+        Some(count)
+    }
 }
