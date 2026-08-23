@@ -1607,81 +1607,90 @@ impl LamellarTeamRT {
             launched_req_cnt_addr = ?(&self.team_counters.launched_req_cnt as *const _),
             "team wait_all: entering poll loop"
         );
-        let mut done = false;
-        while !done {
-            while self.panic.load(Ordering::SeqCst) == 0
-                && ((self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
-                    || orig_reqs != self.team_counters.send_req_cnt.load(Ordering::SeqCst)
-                    || orig_launched != self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
-                    || (self.parent.is_none()
-                        && (self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
-                            || world_orig_reqs
-                                != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
-                            || world_orig_launched
-                                != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))))
-            {
-                orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
-                orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
-                world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
-                world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
-                // std::thread::yield_now();
-                // self.flush();
-                if std::thread::current().id() == *crate::MAIN_THREAD {
-                    self.scheduler.exec_task()
-                }; //mmight as well do useful work while we wait }
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                    debug!(
-                        target: "counters",
-                        mype = ?self.world_pe,
-                        send_req_cnt = self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-                        send_req_cnt_addr = ?(&self.team_counters.send_req_cnt as *const _),
-                        outstanding_reqs = self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-                        outstanding_reqs_addr = ?Arc::as_ptr(&self.team_counters.outstanding_reqs),
-                        launched_req_cnt = self.team_counters.launched_req_cnt.load(Ordering::SeqCst),
-                        launched_req_cnt_addr = ?(&self.team_counters.launched_req_cnt as *const _),
-                        send_cnts = ?print_stats!(&*BATCHER_AM_PE_SEND_CNTS),
-                        recv_cnts = ?print_stats!(&*BATCHER_AM_PE_RECV_CNTS),
-                        launched_tasks = ?task_launched_to_string(),
-                        finished_tasks = ?task_finished_to_string(),
-                        io_task_stats = ?io_task_stats(),
-                        "in team wait_all"
-                    );
-                    self.lamellae.wait_all_print();
-                    temp_now = Instant::now();
-                }
-            }
-            if self.team_counters.send_req_cnt.load(Ordering::SeqCst)
-                != self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
-                || (self.parent.is_none()
-                    && self.world_counters.send_req_cnt.load(Ordering::SeqCst)
-                        != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))
-            {
-                if (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
-                    || orig_reqs != self.team_counters.send_req_cnt.load(Ordering::SeqCst)
-                    || orig_launched != self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
-                    || (self.parent.is_none()
-                        && (self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
-                            || world_orig_reqs
-                                != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
-                            || world_orig_launched
-                                != self.world_counters.launched_req_cnt.load(Ordering::SeqCst)))
+        // Wrapped in block_in_place so that on the tokio executor, a worker thread
+        // blocking here (e.g. nested inside an async AM handler) doesn't exhaust the
+        // whole worker pool - tokio spins up/reuses a replacement worker so other
+        // tasks keep making progress while this thread spins.
+        self.scheduler.block_in_place(|| {
+            let mut done = false;
+            while !done {
+                while self.panic.load(Ordering::SeqCst) == 0
+                    && ((self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                        || orig_reqs != self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+                        || orig_launched
+                            != self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
+                        || (self.parent.is_none()
+                            && (self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                                || world_orig_reqs
+                                    != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                                || world_orig_launched
+                                    != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))))
                 {
-                    continue;
+                    orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
+                    orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
+                    world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
+                    world_orig_launched =
+                        self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
+                    // std::thread::yield_now();
+                    // self.flush();
+                    if std::thread::current().id() == *crate::MAIN_THREAD {
+                        self.scheduler.exec_task()
+                    }; //mmight as well do useful work while we wait }
+                    if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+                        debug!(
+                            target: "counters",
+                            mype = ?self.world_pe,
+                            send_req_cnt = self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+                            send_req_cnt_addr = ?(&self.team_counters.send_req_cnt as *const _),
+                            outstanding_reqs = self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+                            outstanding_reqs_addr = ?Arc::as_ptr(&self.team_counters.outstanding_reqs),
+                            launched_req_cnt = self.team_counters.launched_req_cnt.load(Ordering::SeqCst),
+                            launched_req_cnt_addr = ?(&self.team_counters.launched_req_cnt as *const _),
+                            send_cnts = ?print_stats!(&*BATCHER_AM_PE_SEND_CNTS),
+                            recv_cnts = ?print_stats!(&*BATCHER_AM_PE_RECV_CNTS),
+                            launched_tasks = ?task_launched_to_string(),
+                            finished_tasks = ?task_finished_to_string(),
+                            io_task_stats = ?io_task_stats(),
+                            "in team wait_all"
+                        );
+                        self.lamellae.wait_all_print();
+                        temp_now = Instant::now();
+                    }
                 }
-                println!(
-                    "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
-                    self.world_pe,
-                    self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-                    self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-                    self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
-                );
-                RuntimeWarning::UnspawnedTask(
-                    "`wait_all` before all tasks/active messages have been spawned",
-                )
-                .print();
+                if self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+                    != self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
+                    || (self.parent.is_none()
+                        && self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                            != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))
+                {
+                    if (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                        || orig_reqs != self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+                        || orig_launched
+                            != self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
+                        || (self.parent.is_none()
+                            && (self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                                || world_orig_reqs
+                                    != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                                || world_orig_launched
+                                    != self.world_counters.launched_req_cnt.load(Ordering::SeqCst)))
+                    {
+                        continue;
+                    }
+                    println!(
+                        "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                        self.world_pe,
+                        self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+                        self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+                        self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
+                    );
+                    RuntimeWarning::UnspawnedTask(
+                        "`wait_all` before all tasks/active messages have been spawned",
+                    )
+                    .print();
+                }
+                done = true;
             }
-            done = true;
-        }
+        });
         debug!(
             target: "barrier",
             my_pe = self.world_pe,
@@ -2239,6 +2248,7 @@ impl Darc<LamellarTeamRT> {
             id: req_ptr as usize,
             sub_id: 0,
         };
+        debug!(target: "counters", ptr = Arc::as_ptr(&req) as usize, pe, "am_group_exec_am_pe_tg constructed (inc_send_req)");
         self.world_counters.inc_send_req(1);
         self.team_counters.inc_send_req(1);
         // println!(

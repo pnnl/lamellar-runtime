@@ -86,6 +86,21 @@ impl LamellarExecutor for TokioRt {
         // I dont think tokio has a way to do this
     }
 
+    // block_in_place tells tokio's multi-thread runtime this worker thread is about
+    // to block, so it spins up/reuses a replacement worker to keep polling other
+    // tasks. Only valid inside a runtime worker thread (panics otherwise), so we
+    // fall back to calling `f` directly when not on one (e.g. lamellar's MAIN_THREAD).
+    fn block_in_place<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::task::block_in_place(f)
+        } else {
+            f()
+        }
+    }
+
     // fn set_max_workers(&mut self, num_workers: usize) {
     //     self.max_num_threads = num_workers;
     // }

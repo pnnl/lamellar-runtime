@@ -56,8 +56,11 @@ impl<T: Send + 'static> LibfabricAtomicFuture<T> {
         self.spawned = true;
     }
     pub(crate) fn block(mut self) {
-        self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.exec_op();
+            self.alloc.ofi.wait_all().unwrap();
+        })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
@@ -132,9 +135,12 @@ impl<T: Remote> LibfabricAtomicFetchFuture<T> {
         self.spawned = true;
     }
     pub(crate) fn block(mut self) -> T {
-        self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
-        *self.result
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.exec_op();
+            self.alloc.ofi.wait_all().unwrap();
+            *self.result
+        })
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
@@ -202,9 +208,12 @@ impl<T: Remote + PartialEq> LibfabricAtomicCompareExchangeFuture<T> {
     }
 
     pub(crate) fn block(mut self) -> Result<T, T> {
-        self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
-        compare_exchange_result(*self.result, *self.current)
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.exec_op();
+            self.alloc.ofi.wait_all().unwrap();
+            compare_exchange_result(*self.result, *self.current)
+        })
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {

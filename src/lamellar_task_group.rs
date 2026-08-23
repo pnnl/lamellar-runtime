@@ -238,10 +238,13 @@ impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
         let mut res = self.inner.data.lock().remove(&self.sub_id);
-        while res.is_none() {
-            self.inner.scheduler.exec_task();
-            res = self.inner.data.lock().remove(&self.sub_id);
-        }
+        let scheduler = self.inner.scheduler.clone();
+        scheduler.block_in_place(|| {
+            while res.is_none() {
+                self.inner.scheduler.exec_task();
+                res = self.inner.data.lock().remove(&self.sub_id);
+            }
+        });
         self.process_result(res.expect("result should exist"))
     }
 
@@ -534,20 +537,23 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
     }
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
-        while !self.inner.data.lock().contains_key(&self.sub_id) {
-            self.inner.scheduler.exec_task();
-        }
-        while self
-            .inner
-            .data
-            .lock()
-            .get(&self.sub_id)
-            .expect("req sub id should exist")
-            .len()
-            < self.inner.arch.num_pes()
-        {
-            self.inner.scheduler.exec_task();
-        }
+        let scheduler = self.inner.scheduler.clone();
+        scheduler.block_in_place(|| {
+            while !self.inner.data.lock().contains_key(&self.sub_id) {
+                self.inner.scheduler.exec_task();
+            }
+            while self
+                .inner
+                .data
+                .lock()
+                .get(&self.sub_id)
+                .expect("req sub id should exist")
+                .len()
+                < self.inner.arch.num_pes()
+            {
+                self.inner.scheduler.exec_task();
+            }
+        });
         let mut sub_id_map = self
             .inner
             .data
@@ -783,10 +789,13 @@ impl<T: 'static> LamellarRequest for TaskGroupLocalAmHandle<T> {
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
         let mut res = self.inner.data.lock().remove(&self.sub_id);
-        while res.is_none() {
-            self.inner.scheduler.exec_task();
-            res = self.inner.data.lock().remove(&self.sub_id);
-        }
+        let scheduler = self.inner.scheduler.clone();
+        scheduler.block_in_place(|| {
+            while res.is_none() {
+                self.inner.scheduler.exec_task();
+                res = self.inner.data.lock().remove(&self.sub_id);
+            }
+        });
         self.process_result(res.expect("result should exist"))
     }
 
@@ -1078,59 +1087,64 @@ impl LamellarTaskGroup {
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.counters.send_req_cnt.load(Ordering::SeqCst);
         let mut orig_launched = self.counters.launched_req_cnt.load(Ordering::SeqCst);
-        let mut done = false;
-        while !done {
-            while self.team.panic.load(Ordering::SeqCst) == 0
-                && ((self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0)
-                    || orig_reqs != self.counters.send_req_cnt.load(Ordering::SeqCst)
-                    || orig_launched != self.counters.launched_req_cnt.load(Ordering::SeqCst))
-            {
-                orig_reqs = self.counters.send_req_cnt.load(Ordering::SeqCst);
-                orig_launched = self.counters.launched_req_cnt.load(Ordering::SeqCst);
-                // self.team.flush();
-                if std::thread::current().id() == *crate::MAIN_THREAD {
-                    self.team.scheduler.exec_task();
-                }
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                    println!(
-                    "in task group wait_all mype: {:?} cnt: team {:?} team {:?} tg {:?} tg {:?}",
-                    self.team.world_pe,
-                    self.team.team_counters.send_req_cnt.load(Ordering::SeqCst),
-                    self.team
-                        .team_counters
-                        .outstanding_reqs
-                        .load(Ordering::SeqCst),
-                    self.counters.send_req_cnt.load(Ordering::SeqCst),
-                    self.counters.outstanding_reqs.load(Ordering::SeqCst),
-                    // self.pending_reqs.lock()
-                );
-                    self.team.scheduler.print_status();
-                    temp_now = Instant::now();
-                }
-            }
-            if self.counters.send_req_cnt.load(Ordering::SeqCst)
-                != self.counters.launched_req_cnt.load(Ordering::SeqCst)
-            {
-                if self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0
-                    || orig_reqs != self.counters.send_req_cnt.load(Ordering::SeqCst)
-                    || orig_launched != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+        // Wrapped in block_in_place so that on the tokio executor, a worker thread
+        // blocking here doesn't exhaust the whole worker pool - tokio spins up/reuses
+        // a replacement worker so other tasks keep making progress while this thread spins.
+        self.team.scheduler.clone().block_in_place(|| {
+            let mut done = false;
+            while !done {
+                while self.team.panic.load(Ordering::SeqCst) == 0
+                    && ((self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0)
+                        || orig_reqs != self.counters.send_req_cnt.load(Ordering::SeqCst)
+                        || orig_launched != self.counters.launched_req_cnt.load(Ordering::SeqCst))
                 {
-                    continue;
+                    orig_reqs = self.counters.send_req_cnt.load(Ordering::SeqCst);
+                    orig_launched = self.counters.launched_req_cnt.load(Ordering::SeqCst);
+                    // self.team.flush();
+                    if std::thread::current().id() == *crate::MAIN_THREAD {
+                        self.team.scheduler.exec_task();
+                    }
+                    if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+                        println!(
+                        "in task group wait_all mype: {:?} cnt: team {:?} team {:?} tg {:?} tg {:?}",
+                        self.team.world_pe,
+                        self.team.team_counters.send_req_cnt.load(Ordering::SeqCst),
+                        self.team
+                            .team_counters
+                            .outstanding_reqs
+                            .load(Ordering::SeqCst),
+                        self.counters.send_req_cnt.load(Ordering::SeqCst),
+                        self.counters.outstanding_reqs.load(Ordering::SeqCst),
+                        // self.pending_reqs.lock()
+                    );
+                        self.team.scheduler.print_status();
+                        temp_now = Instant::now();
+                    }
                 }
-                println!(
-                    "in task group wait_all mype: {:?} cnt: {:?} {:?} {:?}",
-                    self.team.world_pe,
-                    self.counters.send_req_cnt.load(Ordering::SeqCst),
-                    self.counters.outstanding_reqs.load(Ordering::SeqCst),
-                    self.counters.launched_req_cnt.load(Ordering::SeqCst)
-                );
-                RuntimeWarning::UnspawnedTask(
-                            "`wait_all` on an active message group before all tasks/active messages created by the group have been spawned",
-                        )
-                        .print();
+                if self.counters.send_req_cnt.load(Ordering::SeqCst)
+                    != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+                {
+                    if self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                        || orig_reqs != self.counters.send_req_cnt.load(Ordering::SeqCst)
+                        || orig_launched != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+                    {
+                        continue;
+                    }
+                    println!(
+                        "in task group wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                        self.team.world_pe,
+                        self.counters.send_req_cnt.load(Ordering::SeqCst),
+                        self.counters.outstanding_reqs.load(Ordering::SeqCst),
+                        self.counters.launched_req_cnt.load(Ordering::SeqCst)
+                    );
+                    RuntimeWarning::UnspawnedTask(
+                                "`wait_all` on an active message group before all tasks/active messages created by the group have been spawned",
+                            )
+                            .print();
+                }
+                done = true;
             }
-            done = true;
-        }
+        });
     }
 
     async fn await_all(&self) {

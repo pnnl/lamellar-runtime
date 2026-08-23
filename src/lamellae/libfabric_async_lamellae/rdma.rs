@@ -104,9 +104,12 @@ impl<T: Remote> PutFutureData<T> {
     }
 
     pub(crate) fn block(self) {
-        self.scheduler.clone().block_on(async move {
-            self.exec_op().await;
-        });
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler.clone().block_on(async move {
+                self.exec_op().await;
+            });
+        })
     }
     pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
@@ -165,9 +168,12 @@ impl<T: Remote> GetFutureData<T> {
     }
 
     pub(crate) fn block(self) -> T {
-        self.scheduler
-            .clone()
-            .block_on(async { self.exec_at().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async { self.exec_at().await })
+        })
     }
     pub(crate) fn spawn(self) -> LamellarTask<T> {
         let counters = self.counters.clone();
@@ -242,9 +248,12 @@ impl<T: Remote> GetBufferFutureData<T> {
     }
 
     pub(crate) fn block(self) -> Vec<T> {
-        self.scheduler
-            .clone()
-            .block_on(async { self.exec_at().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async { self.exec_at().await })
+        })
     }
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();

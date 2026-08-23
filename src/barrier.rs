@@ -308,9 +308,14 @@ impl Barrier {
 
     pub(crate) fn barrier(&self) {
         if std::thread::current().id() == *crate::MAIN_THREAD {
-            self.barrier_internal(|| {
-                // std::thread::yield_now();
-                self.scheduler.exec_task();
+            // Wrapped once around the whole barrier_internal call (not per spin
+            // iteration) so a tokio worker thread blocking here doesn't exhaust the
+            // whole worker pool, without repeatedly entering/exiting block_in_place.
+            self.scheduler.block_in_place(|| {
+                self.barrier_internal(|| {
+                    // std::thread::yield_now();
+                    self.scheduler.exec_task();
+                });
             });
         } else {
             RuntimeWarning::BlockingCall("barrier", "async_barrier().await").print();
@@ -323,8 +328,10 @@ impl Barrier {
     // we actually want to be able to process other tasks while the barrier is active
     pub(crate) fn tasking_barrier(&self) {
         // println!("calling tasking barrier");
-        self.barrier_internal(|| {
-            self.scheduler.exec_task();
+        self.scheduler.block_in_place(|| {
+            self.barrier_internal(|| {
+                self.scheduler.exec_task();
+            });
         });
     }
 

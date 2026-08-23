@@ -86,6 +86,19 @@ impl LamellarExecutor for AsyncStdRt {
         // I dont think tokio has a way to do this
     }
 
+    // async-global-executor's pool is a fixed size unless given headroom (see
+    // `with_max_threads` in `new` below). Grow it by one thread while we block here
+    // so other tasks keep making progress, then ask to shrink back down afterward.
+    fn block_in_place<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let _ = task::block_on(async_global_executor::spawn_more_threads(1));
+        let result = f();
+        async_global_executor::stop_thread().detach();
+        result
+    }
+
     // fn set_max_workers(&mut self, num_workers: usize) {
     //     self.max_num_threads = num_workers;
     // }
@@ -105,7 +118,7 @@ impl AsyncStdRt {
         async_global_executor::init_with_config(
             async_global_executor::GlobalExecutorConfig::default()
                 .with_min_threads(num_workers)
-                .with_max_threads(num_workers)
+                .with_max_threads(num_workers + 1) // headroom for block_in_place
                 .with_thread_name_fn(Box::new(|| "lamellar_worker".to_string())),
         );
         Self {

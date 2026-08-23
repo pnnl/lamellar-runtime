@@ -1251,35 +1251,40 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
     fn wait_all(&self) {
         self.inner.data.team.lamellae.comm().wait_all(); //wait on operations from all threads
         let mut temp_now = Instant::now();
-        while self
-            .inner
-            .data
-            .array_counters
-            .outstanding_reqs
-            .load(Ordering::SeqCst)
-            > 0
-            || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
-        {
-            self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                println!(
-                    "in array wait_all mype: {:?} cnt: {:?} {:?} {:?}",
-                    self.inner.data.team.world_pe,
-                    self.inner
-                        .data
-                        .array_counters
-                        .send_req_cnt
-                        .load(Ordering::SeqCst),
-                    self.inner
-                        .data
-                        .array_counters
-                        .outstanding_reqs
-                        .load(Ordering::SeqCst),
-                    self.inner.data.req_cnt.load(Ordering::SeqCst)
-                );
-                temp_now = Instant::now();
+        // Wrapped once around the whole spin loop so a tokio worker thread blocking
+        // here doesn't exhaust the whole worker pool.
+        let scheduler = self.inner.data.team.scheduler.clone();
+        scheduler.block_in_place(|| {
+            while self
+                .inner
+                .data
+                .array_counters
+                .outstanding_reqs
+                .load(Ordering::SeqCst)
+                > 0
+                || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
+            {
+                self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+                    println!(
+                        "in array wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                        self.inner.data.team.world_pe,
+                        self.inner
+                            .data
+                            .array_counters
+                            .send_req_cnt
+                            .load(Ordering::SeqCst),
+                        self.inner
+                            .data
+                            .array_counters
+                            .outstanding_reqs
+                            .load(Ordering::SeqCst),
+                        self.inner.data.req_cnt.load(Ordering::SeqCst)
+                    );
+                    temp_now = Instant::now();
+                }
             }
-        }
+        });
         if self
             .inner
             .data

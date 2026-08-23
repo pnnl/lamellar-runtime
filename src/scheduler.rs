@@ -252,6 +252,13 @@ pub(crate) trait LamellarExecutor {
         std::thread::yield_now();
     }
 
+    fn block_in_place<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        f()
+    }
+
     fn block_on<F: Future>(&self, future: F) -> F::Output;
 
     // fn set_max_workers(&mut self, num_workers: usize);
@@ -583,6 +590,16 @@ impl Scheduler {
             .get(&TaskType::TaskExec)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed));
+    }
+
+    // Runs `f` while telling the underlying executor (if it needs telling, e.g. tokio)
+    // that this thread is about to block, so it can free up a worker to keep polling
+    // other tasks instead of exhausting the whole pool.
+    pub(crate) fn block_in_place<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        self.executor.block_in_place(f)
     }
 
     pub(crate) fn block_on<F: Future>(&self, task: F) -> F::Output {

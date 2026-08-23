@@ -69,9 +69,12 @@ impl<T: Remote> CollectiveReduceData<T> {
     }
 
     pub(crate) fn block(self) -> Vec<T> {
-        self.scheduler
-            .clone()
-            .block_on(async move { self.exec_op().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async move { self.exec_op().await })
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -2076,9 +2079,12 @@ impl<T: Remote> CollectiveReduceDataToRoot<T> {
     }
 
     fn block(self) -> Option<Vec<T>> {
-        self.scheduler
-            .clone()
-            .block_on(async move { self.exec_op().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async move { self.exec_op().await })
+        })
     }
 
     fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
@@ -2288,9 +2294,12 @@ impl<T: Remote> CollectiveAllGatherData<T> {
     }
 
     fn block(self) -> Vec<T> {
-        self.scheduler
-            .clone()
-            .block_on(async move { self.exec_op().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async move { self.exec_op().await })
+        })
     }
 
     fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -2471,9 +2480,12 @@ impl<T: Remote> CollectiveGatherData<T> {
     }
 
     fn block(self) -> Option<Vec<T>> {
-        self.scheduler
-            .clone()
-            .block_on(async move { self.exec_op().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async move { self.exec_op().await })
+        })
     }
 
     fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
@@ -2642,9 +2654,12 @@ impl<T: Remote> CollectiveAllToAllData<T> {
     }
 
     fn block(self) -> Vec<T> {
-        self.scheduler
-            .clone()
-            .block_on(async move { self.exec_op().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async move { self.exec_op().await })
+        })
     }
 
     fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -2824,9 +2839,12 @@ impl<T: Remote> CollectiveBroadcastData<T> {
     }
 
     fn block(self) -> Option<Vec<T>> {
-        self.scheduler
-            .clone()
-            .block_on(async move { self.exec_op().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async move { self.exec_op().await })
+        })
     }
 
     fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
@@ -3006,9 +3024,12 @@ impl<T: Remote> CollectiveScatterData<T> {
     }
 
     fn block(self) -> Vec<T> {
-        self.scheduler
-            .clone()
-            .block_on(async move { self.exec_op().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async move { self.exec_op().await })
+        })
     }
 
     fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -3183,9 +3204,12 @@ impl<T: Remote> CollectiveReduceScatterData<T> {
     }
 
     fn block(self) -> Vec<T> {
-        self.scheduler
-            .clone()
-            .block_on(async move { self.exec_op().await })
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.scheduler
+                .clone()
+                .block_on(async move { self.exec_op().await })
+        })
     }
 
     fn spawn(self) -> LamellarTask<Vec<T>> {

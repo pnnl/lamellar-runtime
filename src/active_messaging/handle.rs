@@ -12,7 +12,7 @@ use std::{
 use futures_util::Future;
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
-use tracing::{trace, warn};
+use tracing::{debug, trace, warn};
 
 use crate::{
     lamellar_request::{InternalResult, LamellarRequest, LamellarRequestAddResult},
@@ -61,6 +61,7 @@ impl LamellarRequestAddResult for AmHandleInner {
         trace!("request complete");
     }
     fn update_counters(&self, _sub_id: usize) {
+        debug!(target: "counters", ptr = self as *const Self as usize, "AmHandleInner update_counters (dec_outstanding)");
         self.team_counters.dec_outstanding(1);
         self.world_counters.dec_outstanding(1);
         if let Some(tg_counters) = self.tg_counters.clone() {
@@ -81,6 +82,7 @@ pub struct AmHandle<T> {
 #[pinned_drop]
 impl<T> PinnedDrop for AmHandle<T> {
     fn drop(self: Pin<&mut Self>) {
+        debug!(target: "counters", ptr = Arc::as_ptr(&self.inner) as usize, never_launched = self.am.is_some(), "AmHandle dropped");
         if self.am.is_some() {
             RuntimeWarning::DroppedHandle("an AmHandle").print();
         }
@@ -154,6 +156,7 @@ impl<T: AmDist> AmHandle<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn launch_am_if_needed(&mut self) {
         if let Some((am, num_pes)) = self.am.take() {
+            debug!(target: "counters", ptr = Arc::as_ptr(&self.inner) as usize, num_pes, "AmHandle launch_am_if_needed (inc_outstanding)");
             self.inner.team_counters.inc_outstanding(num_pes);
             self.inner.team_counters.inc_launched(num_pes);
             self.inner.world_counters.inc_outstanding(num_pes);
@@ -230,9 +233,12 @@ impl<T: AmDist> LamellarRequest for AmHandle<T> {
     }
     fn blocking_wait(mut self) -> T {
         self.launch_am_if_needed();
-        while !self.inner.ready.load(Ordering::SeqCst) {
-            self.inner.scheduler.exec_task();
-        }
+        let scheduler = self.inner.scheduler.clone();
+        scheduler.block_in_place(|| {
+            while !self.inner.ready.load(Ordering::SeqCst) {
+                self.inner.scheduler.exec_task();
+            }
+        });
         self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
 
@@ -420,9 +426,12 @@ impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
     }
     fn blocking_wait(mut self) -> T {
         self.launch_am_if_needed();
-        while !self.inner.ready.load(Ordering::SeqCst) {
-            self.inner.scheduler.exec_task();
-        }
+        let scheduler = self.inner.scheduler.clone();
+        scheduler.block_in_place(|| {
+            while !self.inner.ready.load(Ordering::SeqCst) {
+                self.inner.scheduler.exec_task();
+            }
+        });
         let data = self.inner.data.replace(None).expect("result should exist");
         self.process_result(data)
     }
@@ -667,9 +676,12 @@ impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
     }
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
-        while self.inner.cnt.load(Ordering::SeqCst) > 0 {
-            self.inner.scheduler.exec_task();
-        }
+        let scheduler = self.inner.scheduler.clone();
+        scheduler.block_in_place(|| {
+            while self.inner.cnt.load(Ordering::SeqCst) > 0 {
+                self.inner.scheduler.exec_task();
+            }
+        });
         let mut res = vec![];
         let mut data = self.inner.data.lock();
         // println!("data len{:?}", data.len());

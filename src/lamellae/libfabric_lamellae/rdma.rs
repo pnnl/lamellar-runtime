@@ -106,10 +106,13 @@ impl<T: Remote> LibfabricPutFuture<T> {
         self.spawned = true;
     }
     pub(crate) fn block(mut self) {
-        self.exec_op();
-        if !self.local_op {
-            self.alloc.ofi.wait_all().unwrap();
-        }
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.exec_op();
+            if !self.local_op {
+                self.alloc.ofi.wait_all().unwrap();
+            }
+        })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
@@ -186,11 +189,14 @@ impl<T: Remote> LibfabricGetFuture<T> {
     }
 
     pub(crate) fn block(mut self) -> T {
-        self.exec_at();
-        if !self.local_op {
-            self.alloc.ofi.wait_all().unwrap();
-        }
-        *self.result
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.exec_at();
+            if !self.local_op {
+                self.alloc.ofi.wait_all().unwrap();
+            }
+            *self.result
+        })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
@@ -267,12 +273,15 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
-        self.exec_at();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.exec_at();
 
-        if !self.local_op {
-            self.alloc.ofi.wait_all().unwrap();
-        }
-        std::mem::take(&mut self.result)
+            if !self.local_op {
+                self.alloc.ofi.wait_all().unwrap();
+            }
+            std::mem::take(&mut self.result)
+        })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
@@ -349,10 +358,13 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricGetIntoBufferFuture<T, B> {
     }
 
     pub(crate) fn block(mut self) {
-        self.exec_op();
-        if !self.local_op {
-            self.alloc.ofi.wait_all().unwrap();
-        }
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.exec_op();
+            if !self.local_op {
+                self.alloc.ofi.wait_all().unwrap();
+            }
+        })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();

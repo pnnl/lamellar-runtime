@@ -327,10 +327,11 @@ impl<T: Remote> Future for UcxGetBufferFuture<T> {
         }
         let this = self.project();
         *this.spawned = true;
+        let scheduler = this.scheduler.clone();
         if let Some(request) = this.request.take() {
-            request.wait().expect("ucx get buffer failed");
+            scheduler.block_in_place(|| request.wait().expect("ucx get buffer failed"));
         } else if !*this.local_op {
-            this.alloc.wait_all();
+            scheduler.block_in_place(|| this.alloc.wait_all());
         }
 
         Poll::Ready(std::mem::take(this.result))
