@@ -49,7 +49,6 @@ use ucx_lamellae::{Ucx, UcxBuilder};
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
-use tracing::trace;
 use zerocopy::TryFromBytes;
 
 pub(crate) const SERIALIZE_HEADER_LEN: usize = std::mem::size_of::<SerializeHeader>();
@@ -169,21 +168,10 @@ pub(crate) struct SerializedData {
     pub(crate) payload_bytes: CommSlice<u8>,
 }
 
-// #[derive(Debug)]
-pub(crate) struct SubSerializedData {
-    pub(crate) alloc: CommAlloc,
-    pub(crate) _ser_data_bytes: CommSlice<u8>,
-    pub(crate) header_bytes: CommSlice<u8>,
-    pub(crate) payload_bytes: CommSlice<u8>,
-}
-
 // we have allocated this memory out of fabric memory and thus are responsible for managing it,
 // we will not move the underlying data, reallocate it, nor free it until all references are dropped
 unsafe impl Send for SerializedData {}
 unsafe impl Sync for SerializedData {}
-
-unsafe impl Send for SubSerializedData {}
-unsafe impl Sync for SubSerializedData {}
 
 #[lamellar_prof::prof]
 impl SerializedData {
@@ -250,11 +238,6 @@ impl SerializedData {
         self.ser_data_bytes.len()
     }
 
-    //#[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn print(&self) {
-        println!("{:?}", self);
-    }
-
     pub(crate) fn leak_alloc(self) -> CommAlloc {
         // println!("Leaking allocation");
         self.alloc
@@ -281,26 +264,10 @@ impl Des for SerializedData {
         SerializeHeader::try_read_from_bytes(&self.header_as_bytes())
             .expect("SERIALIZE_HEADER_LEN-sized slice must parse as SerializeHeader")
     }
-    //#[tracing::instrument(skip_all, level = "debug")]
-    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(&self.data_as_bytes(), true)?)
-    }
 }
 
 #[lamellar_prof::prof]
 impl SerializedData {
-    // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
-    //#[tracing::instrument(level = "debug")]
-    pub(crate) fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
-        trace!("sub_data start: {} end: {}", start, end);
-        SubSerializedData {
-            alloc: self.alloc.clone(),
-            _ser_data_bytes: self.ser_data_bytes.clone(),
-            header_bytes: self.header_bytes.clone(),
-            payload_bytes: self.payload_bytes.sub_slice(start..end),
-        }
-    }
-
     pub(crate) fn drop_payload_bytes(&mut self, num_bytes: usize) -> SerializedData {
         SerializedData {
             alloc: self.alloc.clone(),
@@ -313,47 +280,9 @@ impl SerializedData {
     }
 }
 
-#[lamellar_prof::prof]
-impl SubSerializedData {
-    //#[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
-        self.header_bytes.clone()
-    }
-    //#[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
-        self.payload_bytes.clone()
-    }
-}
-
-impl std::fmt::Debug for SubSerializedData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SubSeralizedData addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
-
-            self.alloc.comm_addr(),
-            self._ser_data_bytes.as_ptr(),
-            self._ser_data_bytes.len(),
-            self.payload_bytes.as_ptr(),
-            self.payload_bytes.len(),
-            self.alloc.num_bytes())
-    }
-}
-
-#[lamellar_prof::prof]
-impl Des for SubSerializedData {
-    //#[tracing::instrument(skip_all, level = "debug")]
-    fn deserialize_header(&self) -> SerializeHeader {
-        SerializeHeader::try_read_from_bytes(&self.header_as_bytes())
-            .expect("SERIALIZE_HEADER_LEN-sized slice must parse as SerializeHeader")
-    }
-    //#[tracing::instrument(skip_all, level = "debug")]
-    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(&self.data_as_bytes(), true)?)
-    }
-}
 #[enum_dispatch]
 pub(crate) trait Des {
     fn deserialize_header(&self) -> SerializeHeader;
-    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error>;
 }
 
 #[enum_dispatch(LamellaeInit)]
