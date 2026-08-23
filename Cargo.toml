@@ -34,9 +34,7 @@ libfabric = { package = "lamellar-libfabric", version = "0.1.0", features = [
 ], optional = true }
 libfabric-sys = { package = "lamellar-libfabric-sys", version = "0.1.0", optional = true }
 pmi = { version = "0.1.0", optional = true }
-pmix-sys = { version = "0.1.0", optional = true, features = [
-    "vendored",
-] }
+pmix-sys = { version = "0.1.0", optional = true, features = ["vendored"] }
 prrte-sys = { version = "0.1.0", optional = true }
 rofisys = { version = "0.5.0", optional = true }
 
@@ -74,7 +72,7 @@ anyhow = "1.0.99"
 derive_more = { version = "1.0.0", features = ["add", "from", "into"] }
 enum_dispatch = "0.3.8"
 envy = "0.4.2"
-indexmap = "2.11.1" #lamellar_alloc
+indexmap = "2.11.1"                                                     #lamellar_alloc
 memmap = "0.7.0"
 page_size = "0.6.0"
 paste = "1.0.15"
@@ -695,6 +693,10 @@ path = "examples/bandwidths/unsafe_array_get_bw.rs"
 [[example]]
 name = "unsafe_array_store_bw"
 path = "examples/bandwidths/unsafe_array_store_bw.rs"
+
+[[example]]
+name = "unsafe_array_store_bw_customtype"
+path = "examples/bandwidths/unsafe_array_store_bw_customtype.rs"
 
 [[example]]
 name = "unsafe_array_get_unchecked_bw"
