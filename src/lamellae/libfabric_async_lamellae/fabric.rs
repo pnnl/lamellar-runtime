@@ -49,6 +49,7 @@ use libfabric::comm::atomic::AtomicFetchEp;
 use libfabric::comm::atomic::AtomicValidEp;
 use libfabric::comm::atomic::AtomicWriteEp;
 use libfabric::comm::collective::CollectiveAttr;
+use libfabric::comm::rma::ReadEp;
 use libfabric::comm::rma::WriteEp;
 use libfabric::domain::Domain;
 use libfabric::domain::DomainBuilder;
@@ -65,6 +66,7 @@ use libfabric::enums::JoinOptions;
 use libfabric::enums::Mode;
 use libfabric::enums::MrMode;
 use libfabric::enums::Progress;
+#[cfg(not(feature = "enable-libfabric"))]
 use libfabric::enums::ReduceOp;
 use libfabric::enums::ResourceMgmt;
 use libfabric::enums::TrafficClass;
@@ -843,7 +845,6 @@ impl OfiAsync {
         Ok(self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1)
     }
 
-    #[allow(dead_code)] // WIP: get path not yet implemented in libfabric-async
     fn post_get(
         &self,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
@@ -2093,8 +2094,6 @@ impl LibfabricAsyncAlloc {
                 dst_addr.len() - curr_idx,
                 self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
             );
-            // self.ofi
-            //     .post_get(|| unsafe {
             trace!(
                 "GET: from PE {} at addr {:?} to local addr {:?} len {}",
                 pe,
@@ -2113,7 +2112,6 @@ impl LibfabricAsyncAlloc {
                     &mut ctx,
                 )
                 .await
-                // })
                 .expect("Error posting get");
             remote_src_addr = remote_src_addr.add(msg_len * std::mem::size_of::<T>());
             curr_idx += msg_len;
