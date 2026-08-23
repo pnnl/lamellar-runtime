@@ -407,11 +407,16 @@ impl std::fmt::Debug for CmdMsgBuffer {
 impl Drop for CmdMsgBuffer {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        trace!(target: "drop", "begin drop CmdMsgBuffer");
+        trace!(target: "drop", "begin drop CmdMsgBuffer pe={:?} {:?}", self.pe, self);
+        let mut start = std::time::Instant::now();
         while !self.empty() {
-            std::thread::yield_now()
+            std::thread::yield_now();
+            if start.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+                trace!(target: "drop", "stuck in drop CmdMsgBuffer pe={:?} {:?}", self.pe, self);
+                start = std::time::Instant::now();
+            }
         }
-        trace!(target: "drop", "end drop CmdMsgBuffer");
+        trace!(target: "drop", "end drop CmdMsgBuffer pe={:?}", self.pe);
     }
 }
 
@@ -635,7 +640,7 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn check_alloc(&self, print: bool) {
+    async fn check_alloc(&self, print: bool) {
         if let Ok(_) =
             self.pending_alloc
                 .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -660,7 +665,7 @@ impl InnerCQ {
                     "need to alloc new pool {:?}",
                     std::backtrace::Backtrace::capture()
                 );
-                self.send_alloc_inner(min_size); //.await;
+                self.send_alloc_inner(min_size).await;
             }
             self.pending_alloc.store(false, Ordering::SeqCst);
         }
@@ -875,7 +880,7 @@ impl InnerCQ {
     //TODO make this async, and have an atomic variable to check if an alloc is already in progress
     // because we are probably deadlocking on this lock...
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn send_alloc(&self, min_size: usize) {
+    async fn send_alloc(&self, min_size: usize) {
         if let Ok(_) = self.pending_alloc.compare_exchange_weak(
             false,
             true,
@@ -894,7 +899,7 @@ impl InnerCQ {
                         "im responsible for the new alloc of at least {:?}",
                         min_size
                     );
-                    self.send_alloc_inner(min_size);
+                    self.send_alloc_inner(min_size).await;
                 }
             }
             self.pending_alloc.store(false, Ordering::SeqCst);
@@ -902,8 +907,7 @@ impl InnerCQ {
             // someone else is already doing an alloc...
             // wait for them to finish and then we will return so we can use the new pool
             while self.pending_alloc.load(Ordering::Relaxed) {
-                // async_std::task::yield_now().await;
-                std::thread::yield_now();
+                async_std::task::yield_now().await;
             }
         }
     }
@@ -916,7 +920,7 @@ impl InnerCQ {
 
     // need to include  a "barrier" count...
     //#[tracing::instrument(skip_all, level = "debug")]
-    fn send_alloc_inner(&self, min_size: usize) {
+    async fn send_alloc_inner(&self, min_size: usize) {
         debug!("in send_alloc_inner");
         let mut new_alloc = true;
         while new_alloc {
@@ -948,7 +952,7 @@ impl InnerCQ {
                     let alloc_buf = self.alloc_buffer[pe].lock_blocking();
                     while !alloc_buf[0].check_hash() || alloc_buf[0].cmd != Cmd::Alloc {
                         self.comm.thread_flush();
-                        std::thread::yield_now();
+                        async_std::task::yield_now().await;
                         if start.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                             info!(
                                 "waiting to alloc from[{pe}]: {:?} {:?} {:?}",
@@ -991,6 +995,7 @@ impl InnerCQ {
                                 break;
                             }
                         }
+                        async_std::task::yield_now().await;
                     }
                 } else {
                     let alloc_buf = self.alloc_buffer[pe].lock_blocking();
@@ -1001,9 +1006,9 @@ impl InnerCQ {
                                 break;
                             }
                         }
+                        async_std::task::yield_now().await;
                     }
                 }
-                std::thread::yield_now();
             }
             info!("created new alloc pool");
         }
@@ -1312,7 +1317,7 @@ impl InnerCQ {
                 print = false;
             }
             async_std::task::yield_now().await;
-            self.send_alloc(cmd.dsize);
+            self.send_alloc(cmd.dsize).await;
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         }
         let mut ser_data = ser_data.unwrap();
@@ -1522,7 +1527,7 @@ impl CQBatched {
 
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn send_alloc(&self, min_size: usize) {
-        self.cq.send_alloc(min_size); //.await;
+        self.cq.send_alloc(min_size).await;
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
@@ -1699,7 +1704,7 @@ impl CQBatched {
             //     timer = std::time::Instant::now();
             //     print = true;
             // }
-            self.cq.check_alloc(print);
+            self.cq.check_alloc(print).await;
             // print = false;
             // async_std::task::yield_now().await;
             async_std::task::sleep(std::time::Duration::from_millis(10)).await;
