@@ -280,9 +280,8 @@ pub(crate) mod r#unsafe;
 pub use r#unsafe::{
     local_chunks::{UnsafeLocalChunks, UnsafeLocalChunksMut},
     operations::{
-        multi_val_multi_idx_ops, multi_val_multi_idx_ops_new, multi_val_single_idx_ops,
-        multi_val_single_idx_ops_new, single_val_multi_idx_ops, single_val_multi_idx_ops_new,
-        BatchReturnType,
+        BatchReturnType, multi_val_multi_idx_ops, multi_val_single_idx_ops,
+        single_val_multi_idx_ops,
     },
     UnsafeArray, __UnsafeByteArray,
 };

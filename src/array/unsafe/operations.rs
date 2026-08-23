@@ -13,62 +13,16 @@ use crate::env_var::{IndexType, config};
 use crate::lamellae::AtomicOp;
 use crate::memregion::OneSidedMemoryRegion;
 use core::panic;
-use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::LazyLock;
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-type MultiValMultiIdxFnNew =
-    fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, u8, BatchReturnType) -> LamellarArcAm;
-type SingleValMultiIdxFnNew = fn(
-    LamellarByteArray,
-    ArrayOpCmd<Vec<u8>>,
-    Vec<u8>,
-    Vec<u8>,
-    u8,
-    BatchReturnType,
-) -> LamellarArcAm;
-type MultiValSingleIdxFnNew = fn(
-    LamellarByteArray,
-    ArrayOpCmd<Vec<u8>>,
-    (*const u8, usize, usize),
-    usize,
-    BatchReturnType,
-) -> LamellarArcAm;
 
 type MultiValMultiIdxFn = fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, u8) -> LamellarArcAm;
 type SingleValMultiIdxFn =
     fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, Vec<u8>, u8) -> LamellarArcAm;
 type MultiValSingleIdxFn =
     fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, usize) -> LamellarArcAm;
-
-pub(crate) static MULTI_VAL_MULTI_IDX_OPS_NEW: LazyLock<HashMap<TypeId, MultiValMultiIdxFnNew>> =
-    LazyLock::new(|| {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<multi_val_multi_idx_ops_new> {
-            map.insert((op.id)(), op.op);
-        }
-        map
-    });
-
-pub(crate) static SINGLE_VAL_MULTI_IDX_OPS_NEW: LazyLock<HashMap<TypeId, SingleValMultiIdxFnNew>> =
-    LazyLock::new(|| {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<single_val_multi_idx_ops_new> {
-            map.insert((op.id)(), op.op);
-        }
-        map
-    });
-pub(crate) static MULTI_VAL_SINGLE_IDX_OPS_NEW: LazyLock<HashMap<TypeId, MultiValSingleIdxFnNew>> =
-    LazyLock::new(|| {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<multi_val_single_idx_ops_new> {
-            map.insert((op.id)(), op.op);
-        }
-        map
-    });
 
 pub(crate) static MULTI_VAL_MULTI_IDX_OPS: LazyLock<
     HashMap<(TypeId, TypeId, BatchReturnType), MultiValMultiIdxFn>,
@@ -298,26 +252,6 @@ pub(crate) static MULTI_VAL_SINGLE_IDX_OPS: LazyLock<
 //     }
 // }
 
-type IdGenNew = fn() -> TypeId;
-#[doc(hidden)]
-#[allow(non_camel_case_types)]
-pub struct multi_val_multi_idx_ops_new {
-    pub id: IdGenNew,
-    pub op: MultiValMultiIdxFnNew,
-}
-#[doc(hidden)]
-#[allow(non_camel_case_types)]
-pub struct single_val_multi_idx_ops_new {
-    pub id: IdGenNew,
-    pub op: SingleValMultiIdxFnNew,
-}
-#[doc(hidden)]
-#[allow(non_camel_case_types)]
-pub struct multi_val_single_idx_ops_new {
-    pub id: IdGenNew,
-    pub op: MultiValSingleIdxFnNew,
-}
-
 type IdGen = fn(BatchReturnType) -> (TypeId, TypeId, BatchReturnType);
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
@@ -343,9 +277,6 @@ pub struct multi_val_single_idx_ops {
     pub op: MultiValSingleIdxFn,
 }
 
-crate::inventory::collect!(multi_val_multi_idx_ops_new);
-crate::inventory::collect!(single_val_multi_idx_ops_new);
-crate::inventory::collect!(multi_val_single_idx_ops_new);
 crate::inventory::collect!(multi_val_multi_idx_ops);
 crate::inventory::collect!(single_val_multi_idx_ops);
 crate::inventory::collect!(multi_val_single_idx_ops);
@@ -624,9 +555,6 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 
         let num_pes = self.inner.data.team.num_pes();
         // let my_pe = self.inner.data.team.my_pe();
-        let cnt = Arc::new(AtomicUsize::new(0));
-        let futures = Arc::new(Mutex::new(VecDeque::new()));
-        let num_reqs = indices.len();
         let mut start_i = 0;
 
         let val_bytes_slice = unsafe {
@@ -635,20 +563,15 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 
         // println!("single_val_multi_index");
 
+        let mut task_futures = Vec::with_capacity(indices.len());
         for (_i, index) in indices.drain(..).enumerate() {
-            let cnt2 = cnt.clone();
-            let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
             self.inner.data.array_counters.inc_outstanding(1);
             self.inner.data.team.inc_outstanding(1);
             let index_vec = index.to_vec();
             let the_array: UnsafeArray<T> = self.clone();
-            self.inner
-                .data
-                .team
-                .scheduler
-                .submit_immediate_task(async move {
+            task_futures.push(async move {
                     // let mut buffs = vec![index_size.create_buf(num_per_batch); num_pes];
                     let mut buffs =
                         vec![PackedIndicies::new_with_capacity(index_size, num_per_batch); num_pes];
@@ -713,18 +636,22 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             reqs.push((req, res_buff));
                         }
                     }
-                    futures2.lock().extend(reqs);
-                    cnt2.fetch_add(1, Ordering::SeqCst);
                     the_array.inner.data.array_counters.dec_outstanding(1);
                     the_array.inner.data.team.dec_outstanding(1);
+                    reqs
                 });
             start_i += len;
         }
-        // We need this loop so that we ensure all the internal AMs have launched so calls like wait_all work properly
-        while cnt.load(Ordering::SeqCst) < num_reqs {
-            self.inner.data.team.scheduler.exec_task();
+        // Run all the per-index-batch sub-tasks concurrently inline, rather
+        // than spawning them onto the scheduler and busy-waiting on
+        // exec_task() for them to finish -- see single_val_single_index for
+        // why. This also ensures all the internal AMs have launched before
+        // returning, so calls like wait_all work properly.
+        let all_reqs = futures_executor::block_on(futures_util::future::join_all(task_futures));
+        let mut res = VecDeque::new();
+        for reqs in all_reqs {
+            res.extend(reqs);
         }
-        let res = std::mem::take(&mut *futures.lock());
         res
     }
 
@@ -743,8 +670,6 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             (config().am_size_threshold as f32 / std::mem::size_of::<T>() as f32).ceil() as usize;
 
         // println!("multi_val_one_index");
-        let cnt = Arc::new(AtomicUsize::new(0));
-        let futures = Arc::new(Mutex::new(VecDeque::new()));
         let (pe, local_index) = match self.pe_and_offset_for_global_index(index) {
             Some((pe, local_index)) => (pe, local_index),
             None => panic!(
@@ -752,23 +677,19 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 self.inner.size
             ),
         };
-        let num_reqs = vals.len();
         let mut start_i = 0;
-        let scheduler = self.inner.data.team.scheduler.clone();
+        let mut task_futures = Vec::with_capacity(vals.len());
         for val in vals.drain(..) {
-            let cnt2 = cnt.clone();
-            let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = val.len();
             self.inner.data.array_counters.inc_outstanding(1);
             self.inner.data.team.inc_outstanding(1);
             let the_array: UnsafeArray<T> = self.clone();
             let val_chunks = val.into_vec_chunks(num_per_batch);
-            scheduler.submit_immediate_task(async move {
+            task_futures.push(async move {
                 let mut inner_start_i = start_i;
                 let mut reqs: Vec<(AmHandle<R>, Vec<usize>)> = Vec::new();
                 for val_chunk in val_chunks.into_iter() {
-                    // val_chunks.into_iter().for_each(|val| {
                     let val_len = val_chunk.len();
                     let am =
                         MultiValSingleIndex::new(byte_array2.clone(), op, local_index, val_chunk)
@@ -784,19 +705,21 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     reqs.push((req, res_buffer));
                     inner_start_i += val_len;
                 }
-                futures2.lock().extend(reqs);
-                cnt2.fetch_add(1, Ordering::SeqCst);
                 the_array.inner.data.array_counters.dec_outstanding(1);
                 the_array.inner.data.team.dec_outstanding(1);
+                reqs
             });
             start_i += len;
         }
 
-        // We need this loop so that we ensure all the internal AMs have launched so calls like wait_all work properly
-        while cnt.load(Ordering::SeqCst) < num_reqs {
-            self.inner.data.team.scheduler.exec_task();
+        // Run all the per-value sub-tasks concurrently inline, rather than
+        // spawning them onto the scheduler and busy-waiting on exec_task()
+        // for them to finish -- see single_val_single_index for why.
+        let all_reqs = futures_executor::block_on(futures_util::future::join_all(task_futures));
+        let mut res = VecDeque::new();
+        for reqs in all_reqs {
+            res.extend(reqs);
         }
-        let res = std::mem::take(&mut *futures.lock());
         res
     }
 
@@ -815,16 +738,12 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let bytes_per_batch = num_per_batch * idx_val_bytes;
 
         let num_pes = self.inner.data.team.num_pes();
-        let cnt = Arc::new(AtomicUsize::new(0));
-        let futures = Arc::new(Mutex::new(VecDeque::new()));
-        let num_reqs = vals.len();
 
-        // println!("num_reqs {:?}", num_reqs);
+        // println!("num_reqs {:?}", vals.len());
         let mut start_i = 0;
 
+        let mut task_futures = Vec::with_capacity(vals.len());
         for (_i, (index, val)) in indices.drain(..).zip(vals.drain(..)).enumerate() {
-            let cnt2 = cnt.clone();
-            let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
             self.inner.data.array_counters.inc_outstanding(1);
@@ -832,11 +751,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let index_vec = index.to_vec();
             let vals_vec = val.to_vec();
             let the_array: UnsafeArray<T> = self.clone();
-            self.inner
-                .data
-                .team
-                .scheduler
-                .submit_immediate_task(async move {
+            task_futures.push(async move {
                     let mut buffs =
                         vec![
                             PackedIdxVal::new_with_capacity::<T>(index_size, num_per_batch);
@@ -899,18 +814,22 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             reqs.push((req, res_buff));
                         }
                     }
-                    futures2.lock().extend(reqs);
-                    cnt2.fetch_add(1, Ordering::SeqCst);
                     the_array.inner.data.array_counters.dec_outstanding(1);
                     the_array.inner.data.team.dec_outstanding(1);
+                    reqs
                 });
             start_i += len;
         }
-        // We need this loop so that we ensure all the internal AMs have launched so calls like wait_all work properly
-        while cnt.load(Ordering::SeqCst) < num_reqs {
-            self.inner.data.team.scheduler.exec_task();
+        // Run all the per-index-batch sub-tasks concurrently inline, rather
+        // than spawning them onto the scheduler and busy-waiting on
+        // exec_task() for them to finish -- see single_val_single_index for
+        // why. This also ensures all the internal AMs have launched before
+        // returning, so calls like wait_all work properly.
+        let all_reqs = futures_executor::block_on(futures_util::future::join_all(task_futures));
+        let mut res = VecDeque::new();
+        for reqs in all_reqs {
+            res.extend(reqs);
         }
-        let res = std::mem::take(&mut *futures.lock());
         res
     }
 
@@ -934,36 +853,30 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         idx_val.push(local_index, val);
         let res_buff = vec![0];
 
-        let cnt = Arc::new(AtomicUsize::new(0));
-        let futures = Arc::new(Mutex::new(VecDeque::new()));
-        let cnt2 = cnt.clone();
-        let futures2 = futures.clone();
         self.inner.data.array_counters.inc_outstanding(1);
         self.inner.data.team.inc_outstanding(1);
         let the_array: UnsafeArray<T> = self.clone();
-        self.inner
-            .data
-            .team
-            .scheduler
-            .submit_immediate_task(async move {
-                let am = MultiValMultiIndex::new(byte_array.clone(), op, &mut idx_val, index_size)
-                    .await
-                    .into_am::<T>(ret);
-                let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
-                    pe,
-                    am,
-                    Some(the_array.inner.data.array_counters.clone()),
-                );
-                futures2.lock().push_back((req, res_buff));
-                cnt2.fetch_add(1, Ordering::SeqCst);
-                the_array.inner.data.array_counters.dec_outstanding(1);
-                the_array.inner.data.team.dec_outstanding(1);
-            });
-
-        while cnt.load(Ordering::SeqCst) < 1 {
-            self.inner.data.team.scheduler.exec_task();
-        }
-        let res = std::mem::take(&mut *futures.lock());
+        // Run this inline instead of spawning it onto the scheduler and
+        // busy-waiting on exec_task() for it to finish: exec_task() is a
+        // no-op on the tokio/async_std executors, so spinning on it here
+        // (inside a task already running on that same fixed-size worker
+        // pool, e.g. via for_each_async) can wedge every worker thread at
+        // once with nothing left to run the task they're all waiting on.
+        let (req, res_buff) = futures_executor::block_on(async move {
+            let am = MultiValMultiIndex::new(byte_array.clone(), op, &mut idx_val, index_size)
+                .await
+                .into_am::<T>(ret);
+            let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
+                pe,
+                am,
+                Some(the_array.inner.data.array_counters.clone()),
+            );
+            the_array.inner.data.array_counters.dec_outstanding(1);
+            the_array.inner.data.team.dec_outstanding(1);
+            (req, res_buff)
+        });
+        let mut res = VecDeque::new();
+        res.push_back((req, res_buff));
         res
     }
 }
@@ -1102,13 +1015,13 @@ impl MultiValSingleIndex {
             };
             (Some(mem_region), None)
         } else {
-            let val_u8 = unsafe {
-                std::slice::from_raw_parts(
-                    val.as_ptr() as *const u8,
-                    val.len() * std::mem::size_of::<T>(),
-                )
-                .to_vec()
-            };
+        let val_u8 = unsafe {
+            std::slice::from_raw_parts(
+                val.as_ptr() as *const u8,
+                val.len() * std::mem::size_of::<T>(),
+            )
+            .to_vec()
+        };
             (None, Some(val_u8))
         };
 
