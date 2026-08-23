@@ -403,42 +403,70 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     // Find the LamellarWorldBuilder::new()...build() statement and split the
     // block around it so we can emit a separate timer for world construction
-    // and one for the application code that follows.
-    let world_build_idx = func
-        .block
-        .stmts
-        .iter()
-        .position(|stmt| quote!(#stmt).to_string().contains("LamellarWorldBuilder"));
-
-    let timed_body = if let Some(idx) = world_build_idx {
-        let pre = &func.block.stmts[..idx];
-        let world_stmt = &func.block.stmts[idx];
-        let post = &func.block.stmts[idx + 1..];
-        quote! {
-            #(#pre)*
-            let __lamellar_world_build_start = std::time::Instant::now();
-            let mut __lamellar_app_start;
-            {
-                #world_stmt
-                if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
-                    println!("[LAMELLAR_MAIN] world build time: {:?}", __lamellar_world_build_start.elapsed());
-                }
-                __lamellar_app_start = std::time::Instant::now();
-                #(#post)*
-
-            } // this should enforce that world is dropped across all PEs before we print the application time, which is important for accurate timing of the application code.
-            if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
-                println!("[LAMELLAR_MAIN] application time: {:?}", __lamellar_app_start.elapsed());
-            }
+    // and one for the application code that follows. If the whole fn body is
+    // wrapped in a single bare/unsafe block (as many examples do), that
+    // wrapper is itself the only top-level statement and would otherwise be
+    // misidentified as "the world build statement" (its stringified tokens
+    // contain "LamellarWorldBuilder" too, since it contains everything) —
+    // leaving nothing after it to time. So unwrap lone wrapper blocks first
+    // and split on the statements actually inside them, then rebuild the
+    // same wrapper around the timed result.
+    fn unwrap_single_block(stmts: &[syn::Stmt]) -> Option<(bool, &syn::Block)> {
+        if stmts.len() != 1 {
+            return None;
         }
-    } else {
-        let stmts = &func.block.stmts;
-        quote! {
-            {
+        match &stmts[0] {
+            syn::Stmt::Expr(syn::Expr::Unsafe(e), _) => Some((true, &e.block)),
+            syn::Stmt::Expr(syn::Expr::Block(e), _) if e.label.is_none() => {
+                Some((false, &e.block))
+            }
+            _ => None,
+        }
+    }
+
+    fn build_timed_body(stmts: &[syn::Stmt]) -> proc_macro2::TokenStream {
+        if let Some((is_unsafe, inner_block)) = unwrap_single_block(stmts) {
+            let inner = build_timed_body(&inner_block.stmts);
+            return if is_unsafe {
+                quote! { unsafe { #inner } }
+            } else {
+                quote! { { #inner } }
+            };
+        }
+
+        let world_build_idx = stmts
+            .iter()
+            .position(|stmt| quote!(#stmt).to_string().contains("LamellarWorldBuilder"));
+
+        if let Some(idx) = world_build_idx {
+            let pre = &stmts[..idx];
+            let world_stmt = &stmts[idx];
+            let post = &stmts[idx + 1..];
+            quote! {
+                #(#pre)*
+                let __lamellar_world_build_start = std::time::Instant::now();
+                let mut __lamellar_app_start;
+                {
+                    #world_stmt
+                    if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
+                        println!("[LAMELLAR_MAIN] world build time: {:?}", __lamellar_world_build_start.elapsed());
+                    }
+                    __lamellar_app_start = std::time::Instant::now();
+                    #(#post)*
+
+                } // this should enforce that world is dropped across all PEs before we print the application time, which is important for accurate timing of the application code.
+                if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
+                    println!("[LAMELLAR_MAIN] application time: {:?}", __lamellar_app_start.elapsed());
+                }
+            }
+        } else {
+            quote! {
                 #(#stmts)*
             }
         }
-    };
+    }
+
+    let timed_body = build_timed_body(&func.block.stmts);
 
     let (init_prof, fini_prof) = if cfg!(feature = "enable-prof") {
         (
