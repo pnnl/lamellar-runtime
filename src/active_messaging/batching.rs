@@ -621,7 +621,10 @@ pub(crate) async fn exec_am_zerocopy(
     let am_data_bytes = &data[*i..*i + data_len];
     *i += data_len;
     let (team, world) = ame.get_team_and_world(src, am_header.team_addr.get() as usize, lamellae);
-    let am = AMS_EXECS.get(&am_header.am_id.get()).unwrap()(am_data_bytes, team.team.team_pe);
+    let am = {
+        let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+        AMS_EXECS.get(&am_header.am_id.get()).unwrap()(am_data_bytes, team.team.team_pe)
+    };
     let req_data = ReqMetaData {
         src: team.team.world_pe,
         dst: Some(src),
@@ -675,7 +678,10 @@ pub(crate) async fn exec_return_am_zerocopy(
     let am_data_bytes = &data[*i..*i + data_len];
     *i += data_len;
     let (team, world) = ame.get_team_and_world(src, am_header.team_addr.get() as usize, lamellae);
-    let am = AMS_EXECS.get(&am_header.am_id.get()).unwrap()(am_data_bytes, team.team.team_pe);
+    let am = {
+        let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+        AMS_EXECS.get(&am_header.am_id.get()).unwrap()(am_data_bytes, team.team.team_pe)
+    };
     let req_data = ReqMetaData {
         src,
         dst: Some(team.team.world_pe),
@@ -754,10 +760,13 @@ pub(crate) fn exec_am_serde(
         .expect("failed to parse AmHeader");
     let (team, world) = ame.get_team_and_world(src, am_header.team_addr, lamellae);
     *i += AM_HEADER_LEN;
-    let am = AMS_EXECS.get(&am_header.am_id).unwrap()(
-        &data[*i..*i + am_header.data_len],
-        team.team.team_pe,
-    );
+    let am = {
+        let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+        AMS_EXECS.get(&am_header.am_id).unwrap()(
+            &data[*i..*i + am_header.data_len],
+            team.team.team_pe,
+        )
+    };
     *i += am_header.data_len;
     let req_data = ReqMetaData {
         src: team.team.world_pe,
@@ -807,10 +816,13 @@ pub(crate) async fn exec_return_am_serde(
         .expect("failed to parse AmHeader");
     let (team, world) = ame.get_team_and_world(src, am_header.team_addr, lamellae);
     *i += AM_HEADER_LEN;
-    let am = AMS_EXECS.get(&am_header.am_id).unwrap()(
-        &data[*i..*i + am_header.data_len],
-        team.team.team_pe,
-    );
+    let am = {
+        let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+        AMS_EXECS.get(&am_header.am_id).unwrap()(
+            &data[*i..*i + am_header.data_len],
+            team.team.team_pe,
+        )
+    };
     *i += am_header.data_len;
     let req_data = ReqMetaData {
         src,

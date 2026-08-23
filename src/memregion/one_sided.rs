@@ -66,6 +66,54 @@ impl Drop for MemRegionSendGuard {
     }
 }
 
+thread_local! {
+    static MEMREGION_RECV_CTX: std::cell::RefCell<Vec<RecvFrame>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+struct RecvFrame {
+    seen: HashMap<(usize, usize), ()>,
+}
+
+/// RAII guard, symmetric to [`MemRegionSendGuard`], scoped around decoding one
+/// wire payload (see the `exec_am`/`exec_return_am`/`exec_data_am` dispatchers
+/// in `active_messaging/batching.rs`).
+///
+/// A batched `AmGroup` payload can contain several sub-items that all embed
+/// clones of the *same* `OneSidedMemoryRegion` (same sender-side `my_id`) --
+/// the `seen`-map in [`memregion_handle_serde::serialize`] only credits
+/// `remote_sent` once for all of them per recipient. Without a matching
+/// dedup here, every deserialized copy would still bump `remote_recv`,
+/// permanently outrunning what the sender credited and underflowing
+/// `remote_sent` on the eventual release message -- which leaves the
+/// sender's `MemRegionDropWaitAm` spinning forever waiting for a count that
+/// can never reach zero. Deduping by the same key (the sender's `my_id`,
+/// i.e. this handle's `parent_id`) keeps the two sides symmetric regardless
+/// of whether the field was declared `#[AmGroup(static)]`.
+///
+/// `local_ref` is *not* deduped here: each deserialized copy is still a
+/// distinct local value that will independently `Drop`, and needs its own
+/// share of the local reference count to make last-drop detection correct.
+pub(crate) struct MemRegionRecvGuard;
+
+impl MemRegionRecvGuard {
+    pub(crate) fn new() -> Self {
+        MEMREGION_RECV_CTX.with(|ctx| {
+            ctx.borrow_mut().push(RecvFrame {
+                seen: HashMap::new(),
+            })
+        });
+        Self
+    }
+}
+
+impl Drop for MemRegionRecvGuard {
+    fn drop(&mut self) {
+        MEMREGION_RECV_CTX.with(|ctx| {
+            ctx.borrow_mut().pop();
+        });
+    }
+}
+
 //#[doc(hidden)]
 /// Internal serialization handle used to transfer a [`OneSidedMemoryRegion`] across PEs via active messages.
 ///
@@ -145,13 +193,20 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                 mrh
             }
         };
-        mrh.remote_recv.fetch_add(1, Ordering::SeqCst);
+        let first_in_batch = MEMREGION_RECV_CTX.with(|ctx| match ctx.borrow_mut().last_mut() {
+            Some(frame) => frame.seen.insert(parent_id, ()).is_none(),
+            None => true,
+        });
         mrh.local_ref.fetch_add(1, Ordering::SeqCst);
+        if first_in_batch {
+            mrh.remote_recv.fetch_add(1, Ordering::SeqCst);
+        }
         trace!(
             target: "mem_region_lifetime",
             my_id = ?mrh.my_id,
             parent_id = ?mrh.parent_id,
             grand_parent_id = ?mrh.grand_parent_id,
+            first_in_batch,
             remote_recv = mrh.remote_recv.load(Ordering::SeqCst),
             local_ref = mrh.local_ref.load(Ordering::SeqCst),
             "received one-sided handle",
