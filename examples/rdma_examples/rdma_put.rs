@@ -50,9 +50,11 @@ fn main() {
         } else if my_pe == num_pes - 1 {
             println!("[{:?}] Before {:?}", my_pe, array_slice);
             world.barrier();
-            while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
-                std::thread::yield_now();
-            } // wait for put to show up
+            world.block_on(async {
+                while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
+                    async_std::task::yield_now().await;
+                }
+            }); // wait for put to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
             unsafe { array.put_buffer(my_pe, 0, data.clone()).block() };
             println!(
@@ -75,9 +77,11 @@ fn main() {
         } else if my_pe == num_pes - 1 {
             println!("[{:?}] Before {:?}", my_pe, array_slice);
             world.barrier();
-            while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
-                std::thread::yield_now();
-            } // wait for put to show up
+            world.block_on(async {
+                while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
+                    async_std::task::yield_now().await;
+                }
+            }); // wait for put to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
             unsafe { array.put_buffer(my_pe, 0, data.clone()).block() };
             println!(
@@ -108,11 +112,13 @@ fn main() {
             index += num_pes;
         }
 
-        for i in 0..ARRAY_LEN {
-            while (i % num_pes) as u8 != array_slice[i] {
-                std::thread::yield_now();
+        world.block_on(async {
+            for i in 0..ARRAY_LEN {
+                while (i % num_pes) as u8 != array_slice[i] {
+                    async_std::task::yield_now().await;
+                }
             }
-        }
+        });
 
         world.barrier();
         if my_pe == 0 {
