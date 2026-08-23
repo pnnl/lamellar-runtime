@@ -46,6 +46,13 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
+    if num_pes < 2 {
+        eprintln!(
+            "stress_test requires at least 2 PEs (got {}) -- it builds an odd-PE subteam, skipping",
+            num_pes
+        );
+        std::process::exit(0);
+    }
 
     let mut rng = rand::rng();
     let pes = Uniform::try_from(0..num_pes).unwrap();

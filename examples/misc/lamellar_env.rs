@@ -21,9 +21,16 @@ fn main() {
     let lrw_darc = LocalRwDarc::new(&world, 0).block().unwrap();
     let grw_darc = GlobalRwDarc::new(&world, 0).block().unwrap();
     let array = UnsafeArray::<u8>::new(world.clone(), 10, Distribution::Block).block();
-    let team = world
-        .create_team_from_arch(StridedArch::new(0, 2, world.num_pes() / 2))
-        .unwrap();
+    // StridedArch needs >=1 PE; world.num_pes() / 2 hits 0 when run with a single PE.
+    let team = if world.num_pes() >= 2 {
+        Some(
+            world
+                .create_team_from_arch(StridedArch::new(0, 2, world.num_pes() / 2))
+                .unwrap(),
+        )
+    } else {
+        None
+    };
     println!("environment from darc");
     print_env(&darc);
     println!("environment from lrw_darc");
@@ -41,8 +48,10 @@ fn main() {
     let array = array.into_global_lock().block();
     println!("environment from GlobalLockArray");
     print_env(&array);
-    if world.my_pe() % 2 == 0 {
-        println!("environment from team");
-        print_env(&team);
+    if let Some(team) = &team {
+        if world.my_pe() % 2 == 0 {
+            println!("environment from team");
+            print_env(team);
+        }
     }
 }
