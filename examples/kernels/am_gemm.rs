@@ -84,7 +84,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
     // }
 }
 
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct NaiveMM {
     a: SubMatrix, // will always be local
     b: SubMatrix, // can possibly be remote
@@ -92,7 +92,7 @@ struct NaiveMM {
     block_size: usize,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for NaiveMM {
     async fn exec() {
         let a = lamellar::world.alloc_one_sided_mem_region(self.a.block_size * self.a.block_size); //the tile for the A matrix

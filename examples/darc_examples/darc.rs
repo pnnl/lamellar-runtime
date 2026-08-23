@@ -5,19 +5,27 @@ use std::sync::Arc;
 
 use tracing_subscriber::prelude::*;
 
-#[lamellar::AmData(Clone)]
+
+// Each member has a darc so we use AmGroup(static) to only update its reference count once per AmGroup rather than once per instance (in the AmGroup)
+#[lamellar::AmData(Clone, AmGroup)]
 struct DarcAm {
+    #[AmGroup(static)]
     darc: Darc<AtomicUsize>, //each pe has a local atomicusize
+    #[AmGroup(static)]
     global_darc: GlobalRwDarc<usize>,
+    #[AmGroup(static)]
     lrw_darc: LocalRwDarc<usize>,
+    #[AmGroup(static)]
     wrapped: WrappedWrappedWrappedDarc,
+    #[AmGroup(static)]
     wrapped_tuple: (WrappedWrappedWrappedDarc, WrappedWrappedWrappedDarc),
-    darc_tuple: (Darc<usize>, Darc<usize>), // not supported, but the macro catches it and forces compiler to fail
-    // #[serde(serialize_with="lamellar::darc_serialize")]
+    #[AmGroup(static)]
+    darc_tuple: (Darc<usize>, Darc<usize>), 
+    #[AmGroup(static)]
     my_arc: Darc<Arc<usize>>,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAm for DarcAm {
     async fn exec(self) {
         println!("in darc am!!");

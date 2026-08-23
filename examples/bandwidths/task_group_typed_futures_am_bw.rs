@@ -6,12 +6,12 @@
 use lamellar::active_messaging::prelude::*;
 use std::time::Instant;
 
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct DataAM {
     data: Vec<u8>,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for DataAM {
     async fn exec() {}
 }

@@ -12,14 +12,14 @@ use lamellar::active_messaging::prelude::*;
 // use tracing_flame::FlameLayer;
 
 //----------------- Active message returning nothing-----------------//
-#[lamellar::AmData(Debug, Clone)]
+#[lamellar::AmData(Debug, Clone, AmGroup)]
 struct AmNoReturn {
     my_pe: usize,
     // #[AmGroup(static)]
     test_var: u32,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for AmNoReturn {
     async fn exec(self) {
         println!(

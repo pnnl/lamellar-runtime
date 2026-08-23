@@ -13,13 +13,13 @@ use tracing;
 use tracing_subscriber::fmt;
 
 //--the returned active message that will execute automically upon arrival at the originating node --//
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct ReturnUsizeAM {
     val1: usize,
     val2: String,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for ReturnUsizeAM {
     async fn exec(&self) -> usize {
         println!(
@@ -34,13 +34,13 @@ impl LamellarAM for ReturnUsizeAM {
 //-------------------------------------------------------------------//
 
 //--Active message returning an active message that returns nothing--//
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct InitialAM {
     val1: usize,
     val2: String,
 }
 
-#[lamellar::am(return_am = "ReturnUsizeAM -> usize")] //we specify as a proc_macro argument the type of AM we are returning
+#[lamellar::am(return_am = "ReturnUsizeAM -> usize", AmGroup)] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAM {
     async fn exec(&self) -> ReturnUsizeAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();

@@ -275,7 +275,7 @@ macro_rules! impl_vec_to_bytes {
     };
 }
 
-#[lamellar_impl::AmDataRT(Clone, AmGroup(false))]
+#[lamellar_impl::AmDataRT(Clone)]
 pub(crate) struct PackedIndicies {
     pub(crate) data: Vec<u8>,
     byte_width: usize,
@@ -318,7 +318,7 @@ impl PackedIndicies {
     // }
 }
 
-#[lamellar_impl::AmDataRT(Clone, AmGroup(false))]
+#[lamellar_impl::AmDataRT(Clone)]
 pub(crate) struct PackedIdxVal {
     data: Vec<u8>,
     idx_byte_width: usize,
@@ -377,7 +377,7 @@ impl PackedIdxVal {
     }
 }
 
-#[lamellar_impl::AmDataRT(AmGroup(false))]
+#[lamellar_impl::AmDataRT]
 pub(crate) struct ScalarSingleIdxMultiValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) index: usize,
@@ -392,10 +392,9 @@ impl ScalarSingleIdxMultiValAm {
         &self,
         bytes: &'a [u8],
     ) -> impl Iterator<Item = (usize, T)> + 'a {
-        let vals = bytes.chunks_exact(std::mem::size_of::<T>()).map(|chunk| {
-            let data = chunk.to_vec();
-            unsafe { std::ptr::read_unaligned(data.as_ptr() as *const T) }
-        });
+        let vals = bytes
+            .chunks_exact(std::mem::size_of::<T>())
+            .map(|chunk| unsafe { std::ptr::read_unaligned(chunk.as_ptr() as *const T) });
         std::iter::repeat(self.index).zip(vals)
     }
     #[cfg(not(docsrs))]
@@ -421,7 +420,7 @@ impl LamellarAM for ScalarSingleIdxMultiValAm {
     }
 }
 
-#[lamellar_impl::AmDataRT(AmGroup(false))]
+#[lamellar_impl::AmDataRT]
 pub(crate) struct ScalarSingleIdxMultiValAmReturn {
     pub(crate) array: LamellarByteArray,
     pub(crate) index: usize,
@@ -436,10 +435,9 @@ impl ScalarSingleIdxMultiValAmReturn {
         &self,
         bytes: &'a [u8],
     ) -> impl Iterator<Item = (usize, T)> + 'a {
-        let vals = bytes.chunks_exact(std::mem::size_of::<T>()).map(|chunk| {
-            let data = chunk.to_vec();
-            unsafe { std::ptr::read_unaligned(data.as_ptr() as *const T) }
-        });
+        let vals = bytes
+            .chunks_exact(std::mem::size_of::<T>())
+            .map(|chunk| unsafe { std::ptr::read_unaligned(chunk.as_ptr() as *const T) });
         std::iter::repeat(self.index).zip(vals)
     }
     impl_vec_to_bytes!();
@@ -466,7 +464,7 @@ impl LamellarAM for ScalarSingleIdxMultiValAmReturn {
     }
 }
 
-#[lamellar_impl::AmDataRT(AmGroup(false))]
+#[lamellar_impl::AmDataRT]
 pub(crate) struct ScalarMultiIdxSingleValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) val: Vec<u8>,
@@ -547,7 +545,7 @@ impl LamellarAM for ScalarMultiIdxSingleValAm {
     }
 }
 
-#[lamellar_impl::AmDataRT(AmGroup(false))]
+#[lamellar_impl::AmDataRT]
 pub(crate) struct ScalarMultiIdxSingleValAmReturn {
     pub(crate) array: LamellarByteArray,
     pub(crate) val: Vec<u8>,
@@ -629,7 +627,7 @@ impl LamellarAM for ScalarMultiIdxSingleValAmReturn {
     }
 }
 
-#[lamellar_impl::AmDataRT(AmGroup(false))]
+#[lamellar_impl::AmDataRT]
 pub(crate) struct ScalarMultiIdxMultiValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) idx_val: OneSidedMemoryRegion<u8>,
@@ -670,7 +668,7 @@ impl LamellarAM for ScalarMultiIdxMultiValAm {
     }
 }
 
-#[lamellar_impl::AmDataRT(AmGroup(false))]
+#[lamellar_impl::AmDataRT]
 pub(crate) struct ScalarMultiIdxMultiValAmReturn {
     pub(crate) array: LamellarByteArray,
     pub(crate) idx_val: OneSidedMemoryRegion<u8>,
@@ -712,7 +710,7 @@ impl LamellarAM for ScalarMultiIdxMultiValAmReturn {
     }
 }
 
-#[lamellar_impl::AmDataRT(AmGroup(false))]
+#[lamellar_impl::AmDataRT]
 pub(crate) struct UsizeSingleValMultiIdxAm {
     pub(crate) array: UnsafeArray<usize>,
     pub(crate) indices: OneSidedMemoryRegion<u8>,

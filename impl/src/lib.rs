@@ -152,17 +152,11 @@ fn check_for_pod(args: &Punctuated<syn::Meta, Token![,]>) -> bool {
 fn check_for_am_group(args: &Punctuated<syn::Meta, Token![,]>) -> bool {
     for arg in args.iter() {
         let t = arg.to_token_stream().to_string();
-        if t.contains("AmGroup") && t.contains("(") {
-            let attrs = &t[t.find("(").unwrap()
-                ..t.find(")")
-                    .expect("missing \")\" in when declaring ArrayOp macro")
-                    + 1];
-            if attrs.contains("false") {
-                return false;
-            }
+        if t.contains("AmGroup") && !t.contains("false") {
+            return true;
         }
     }
-    true
+    false
 }
 
 #[allow(non_snake_case)]

@@ -556,7 +556,7 @@ fn create_buf_ops(
         // Updating ops that dont return anything
         expanded.extend(quote! {
             #[allow(non_camel_case_types)]
-            #[#am_data(Debug,AmGroup(false))]
+            #[#am_data(Debug)]
             struct #multi_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -564,7 +564,7 @@ fn create_buf_ops(
                 idx_vals: Vec<u8>,
                 index_size: u8,
             }
-            #[#am(AmGroup(false))]
+            #[#am]
             impl LamellarAM for #multi_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
                     // println!("in multi val multi idx exec");
@@ -622,7 +622,7 @@ fn create_buf_ops(
             }
 
             #[allow(non_camel_case_types)]
-            #[#am_data(Debug,AmGroup(false))]
+            #[#am_data(Debug)]
             struct #single_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -631,7 +631,7 @@ fn create_buf_ops(
                 indices: Vec<u8>,
                 index_size: u8,
             }
-            #[#am(AmGroup(false))]
+            #[#am]
             impl LamellarAM for #single_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
                     // println!("in single val multi idx exec");
@@ -697,7 +697,7 @@ fn create_buf_ops(
             }
 
             #[allow(non_camel_case_types)]
-            #[#am_data(Debug,AmGroup(false))]
+            #[#am_data(Debug)]
             struct #multi_val_single_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -705,7 +705,7 @@ fn create_buf_ops(
                 vals: Vec<u8>,
                 index: usize,
             }
-            #[#am(AmGroup(false))]
+            #[#am]
             impl LamellarAM for #multi_val_single_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
                     // println!("in multi val single idx exec");
@@ -739,7 +739,7 @@ fn create_buf_ops(
         if optypes.contains(&OpType::CompEx) || optypes.contains(&OpType::CompExEps) {
             expanded.extend(quote! {
                 #[allow(non_camel_case_types)]
-                #[#am_data(Debug,AmGroup(false))]
+                #[#am_data(Debug)]
                 struct #multi_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -747,7 +747,7 @@ fn create_buf_ops(
                     idx_vals: Vec<u8>,
                     index_size: u8,
                 }
-                #[#am(AmGroup(false))]
+                #[#am]
                 impl LamellarAM for #multi_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                         // println!("in multi val multi idx result exec");
@@ -817,7 +817,7 @@ fn create_buf_ops(
                 }
 
                 #[allow(non_camel_case_types)]
-                #[#am_data(Debug,AmGroup(false))]
+                #[#am_data(Debug)]
                 struct #single_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -826,7 +826,7 @@ fn create_buf_ops(
                     indices: Vec<u8>,
                     index_size: u8,
                 }
-                #[#am(AmGroup(false))]
+                #[#am]
                 impl LamellarAM for #single_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                         // println!("in single val multi idx result exec");
@@ -901,7 +901,7 @@ fn create_buf_ops(
                 }
 
                 #[allow(non_camel_case_types)]
-                #[#am_data(Debug,AmGroup(false))]
+                #[#am_data(Debug)]
                 struct #multi_val_single_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -909,7 +909,7 @@ fn create_buf_ops(
                     vals: Vec<u8>,
                     index: usize,
                 }
-                #[#am(AmGroup(false))]
+                #[#am]
                 impl LamellarAM for #multi_val_single_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                         // println!("in multi val single idx result exec");
@@ -958,7 +958,7 @@ fn create_buf_ops(
     // println!("creating the access stuff");
     expanded.extend(quote! {
         #[allow(non_camel_case_types)]
-        #[#am_data(Debug,AmGroup(false))]
+        #[#am_data(Debug)]
         struct #multi_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -966,7 +966,7 @@ fn create_buf_ops(
             idx_vals: Vec<u8>,
             index_size: u8,
         }
-        #[#am(AmGroup(false))]
+        #[#am]
         impl LamellarAM for #multi_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                 // println!("in multi val multi idx fetch exec");
@@ -1040,7 +1040,7 @@ fn create_buf_ops(
         }
 
         #[allow(non_camel_case_types)]
-        #[#am_data(Debug,AmGroup(false))]
+        #[#am_data(Debug)]
         struct #single_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -1049,7 +1049,7 @@ fn create_buf_ops(
             indices: Vec<u8>,
             index_size: u8,
         }
-        #[#am(AmGroup(false))]
+        #[#am]
         impl LamellarAM for #single_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                 // println!("in single val multi idx fetch exec");
@@ -1133,7 +1133,7 @@ fn create_buf_ops(
         }
 
         #[allow(non_camel_case_types)]
-        #[#am_data(Debug,AmGroup(false))]
+        #[#am_data(Debug)]
         struct #multi_val_single_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
@@ -1141,7 +1141,7 @@ fn create_buf_ops(
             vals: Vec<u8>,
             index: usize,
         }
-        #[#am(AmGroup(false))]
+        #[#am]
         impl LamellarAM for #multi_val_single_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> #lamellar::memregion::OneSidedMemoryRegion<u8> {
                 // println!("in multi val single idx fetch exec");

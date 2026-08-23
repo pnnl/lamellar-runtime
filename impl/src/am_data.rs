@@ -41,6 +41,35 @@ fn check_attrs(attrs: &[syn::Attribute]) -> (bool, bool, Vec<syn::Attribute>) {
     (static_field, darc_iter, attrs)
 }
 
+fn has_static_attr(attrs: &[syn::Attribute]) -> bool {
+    attrs
+        .iter()
+        .any(|a| a.to_token_stream().to_string().contains("#[AmGroup(static)]"))
+}
+
+fn warn_if_shared_handle_type(field: &syn::Field) {
+    if let syn::Type::Path(ref ty) = field.ty {
+        if let Some(seg) = ty.path.segments.first() {
+            let ident = seg.ident.to_string();
+            if ident == "Darc" || ident == "LocalRwDarc" || ident == "GlobalRwDarc" {
+                let field_name = field
+                    .ident
+                    .as_ref()
+                    .map(|i| i.to_string())
+                    .unwrap_or_default();
+                println!(
+                    "warning: field `{}` of type `{}` is a shared handle -- \
+                     when batched into an AmGroup, its reference count is \
+                     updated once per batched active message; if this field \
+                     is the same for every AM in the group, mark it \
+                     `#[AmGroup(static)]` so it is only cloned/ref-counted once",
+                    field_name, ident
+                );
+            }
+        }
+    }
+}
+
 fn process_fields(
     args: Punctuated<syn::Meta, syn::Token![,]>,
     the_fields: &mut syn::Fields,
@@ -56,48 +85,6 @@ fn process_fields(
     bool,
     bool,
 ) {
-    let mut fields = FieldInfo::new();
-    let mut static_fields = FieldInfo::new();
-
-    for field in the_fields {
-        if let syn::Type::Path(ref ty) = field.ty {
-            if let Some(_seg) = ty.path.segments.first() {
-                if local {
-                    fields.add_field(field.clone(), false);
-                } else {
-                    let (static_field, darc_iter, attrs) = check_attrs(&field.attrs);
-                    field.attrs = attrs;
-                    if static_field {
-                        static_fields.add_field(field.clone(), darc_iter);
-                    } else {
-                        fields.add_field(field.clone(), darc_iter);
-                    }
-                }
-            }
-        } else if matches!(
-            field.ty,
-            syn::Type::Tuple(_) | syn::Type::Array(_) | syn::Type::Paren(_)
-        ) {
-            let (static_field, darc_iter, attrs) = check_attrs(&field.attrs);
-            field.attrs = attrs;
-            if static_field {
-                static_fields.add_field(field.clone(), darc_iter);
-            } else {
-                fields.add_field(field.clone(), darc_iter);
-            }
-        } else if let syn::Type::Reference(ref _ty) = field.ty {
-            if !local {
-                panic!("references are not supported in Remote Active Messages");
-            } else {
-                fields.add_field(field.clone(), false);
-            }
-        } else {
-            if !local {
-                panic!("unsupported type in Remote Active Message {:?}", field.ty);
-            }
-            fields.add_field(field.clone(), false);
-        }
-    }
     let mut lamellar = lamellar.clone();
     if lamellar.to_string() == "__lamellar" {
         lamellar = quote! {lamellar};
@@ -122,7 +109,7 @@ fn process_fields(
     let mut group_trait_strs = HashMap::new();
     let mut attr_strs = HashMap::new();
 
-    let mut create_am_group = true;
+    let mut create_am_group = false;
     let mut pod = false;
 
     for a in args {
@@ -161,14 +148,8 @@ fn process_fields(
                 .entry(String::from("Clone"))
                 .or_insert(quote! {Clone});
         } else if t.contains("AmGroup") {
-            if t.contains("(") {
-                let attrs = &t[t.find("(").unwrap()
-                    ..t.find(")")
-                        .expect("missing \")\" in when declaring ArrayOp macro")
-                        + 1];
-                if attrs.contains("false") {
-                    create_am_group = false;
-                }
+            if !t.contains("false") {
+                create_am_group = true;
             }
         } else if t.contains("Pod") {
             // opt-in zerocopy fast path for plain-old-data AM structs: skip
@@ -233,6 +214,53 @@ fn process_fields(
         };
     }
     let group_attrs = quote! {#serde_temp_2};
+
+    let mut fields = FieldInfo::new();
+    let mut static_fields = FieldInfo::new();
+
+    for field in the_fields {
+        if create_am_group && !local && !has_static_attr(&field.attrs) {
+            warn_if_shared_handle_type(field);
+        }
+        if let syn::Type::Path(ref ty) = field.ty {
+            if let Some(_seg) = ty.path.segments.first() {
+                if local {
+                    fields.add_field(field.clone(), false);
+                } else {
+                    let (static_field, darc_iter, attrs) = check_attrs(&field.attrs);
+                    field.attrs = attrs;
+                    if static_field {
+                        static_fields.add_field(field.clone(), darc_iter);
+                    } else {
+                        fields.add_field(field.clone(), darc_iter);
+                    }
+                }
+            }
+        } else if matches!(
+            field.ty,
+            syn::Type::Tuple(_) | syn::Type::Array(_) | syn::Type::Paren(_)
+        ) {
+            let (static_field, darc_iter, attrs) = check_attrs(&field.attrs);
+            field.attrs = attrs;
+            if static_field {
+                static_fields.add_field(field.clone(), darc_iter);
+            } else {
+                fields.add_field(field.clone(), darc_iter);
+            }
+        } else if let syn::Type::Reference(ref _ty) = field.ty {
+            if !local {
+                panic!("references are not supported in Remote Active Messages");
+            } else {
+                fields.add_field(field.clone(), false);
+            }
+        } else {
+            if !local {
+                panic!("unsupported type in Remote Active Message {:?}", field.ty);
+            }
+            fields.add_field(field.clone(), false);
+        }
+    }
+
     (
         traits,
         group_traits,

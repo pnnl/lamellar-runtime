@@ -7,14 +7,14 @@ use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning data--------------------//
-#[lamellar::AmData(Debug, Clone)]
+#[lamellar::AmData(Debug, Clone, AmGroup)]
 struct AmReturnUsize {
     val1: usize,
     #[AmGroup(static)]
     val2: String,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for AmReturnUsize {
     async fn exec(&self) -> usize {
         println!(

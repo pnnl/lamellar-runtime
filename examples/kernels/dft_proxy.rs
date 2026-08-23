@@ -60,7 +60,7 @@ impl LamellarAM for LocalSumAM {
     }
 }
 
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct LocalSumAM2 {
     local_len: usize,
     signal: SharedMemoryRegion<f64>,
@@ -69,7 +69,7 @@ struct LocalSumAM2 {
     pe: usize,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for LocalSumAM2 {
     async fn exec() -> f64 {
         let k_prime = self.k + self.pe * self.local_len;
@@ -86,7 +86,7 @@ impl LamellarAM for LocalSumAM2 {
     }
 }
 
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct LocalSumAM2Static {
     local_len: usize,
     #[AmGroup(static)]
@@ -96,7 +96,7 @@ struct LocalSumAM2Static {
     pe: usize,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for LocalSumAM2Static {
     async fn exec() -> f64 {
         let k_prime = self.k + self.pe * self.local_len;

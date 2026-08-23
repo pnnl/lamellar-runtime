@@ -7,7 +7,7 @@ use rand::distr::{Distribution, Uniform};
 
 // const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct DataAM {
     darc: Darc<AtomicUsize>,
     depth: usize,
@@ -15,7 +15,7 @@ struct DataAM {
     path: Vec<usize>,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for DataAM {
     async fn exec() {
         let mut rng = rand::rng();

@@ -25,14 +25,14 @@ fn create_reduction(
     // Recursive branch: left/right return Option<Vec<u8>>; deserialize, apply op, re-serialize.
     let array_impls = quote! {
         #[allow(non_camel_case_types)]
-        #[#am_data(Clone,Debug,AmGroup(false))]
+        #[#am_data(Clone,Debug)]
         struct #reduction_name {
             data: #lamellar::array::LamellarByteArray,
             start_pe: usize,
             end_pe: usize,
         }
 
-        #[#am(AmGroup(false))]
+        #[#am]
         impl LamellarAM for #reduction_name {
             async fn exec(&self) -> Vec<u8> {
                 if self.start_pe == self.end_pe {

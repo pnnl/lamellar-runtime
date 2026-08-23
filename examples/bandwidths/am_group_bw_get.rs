@@ -13,14 +13,15 @@ use std::time::Instant;
 
 const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct DataAM {
+    #[AmGroup(static)]
     array: OneSidedMemoryRegion<u8>,
     index: usize,
     length: usize,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for DataAM {
     async fn exec(&self) {
         unsafe {

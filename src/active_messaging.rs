@@ -559,11 +559,11 @@
 //! use lamellar::active_messaging::prelude::*;
 //! use lamellar::darc::prelude::*;
 //! use std::sync::atomic::AtomicUsize;
-//! #[AmData(Debug,Clone)]
+//! #[AmData(Debug,Clone,AmGroup)]
 //! struct ExampleAm {
 //!    cnt: Darc<AtomicUsize>,
 //! }
-//! #[lamellar::am]
+//! #[lamellar::am(AmGroup)]
 //! impl LamellarAM for ExampleAm{
 //!     async fn exec(self) -> usize{
 //!         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
@@ -900,12 +900,12 @@ pub use lamellar_impl::local_am;
 /// use lamellar::darc::prelude::*;
 /// use std::sync::atomic::AtomicUsize;
 ///
-/// #[AmData(Debug,Clone)]
+/// #[AmData(Debug,Clone,AmGroup)]
 /// struct ExampleAm {
 ///    cnt: Darc<AtomicUsize>,
 /// }
 ///
-/// #[lamellar::am]
+/// #[lamellar::am(AmGroup)]
 /// impl LamellarAm for ExampleAm {
 ///     async fn exec(self) -> usize {
 ///         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
@@ -974,7 +974,7 @@ pub use lamellar_impl::local_am;
 ///    cnt: Darc<AtomicUsize>,
 /// }
 ///```
-/// Other than the addition of `#[AmData(static)]` the rest of the code as the previous example would be the same.
+/// Other than the addition of `#[AmGroup(static)]` the rest of the code as the previous example would be the same.
 pub use lamellar_impl::typed_am_group;
 
 /// Supertrait specifying `Sync` + `Send`

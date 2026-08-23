@@ -91,7 +91,7 @@ impl Fold for ReplaceSelf {
                 println!("Warning: support for non format like macros are currently experimental with AmGroups ({:?} appears in {:?})", mac.clone().to_token_stream().to_string(),self.am_name.to_string());
                 println!("Below are a few workarounds that may work:");
                 println!("1. assign \"self.<field>\" to a local variable, and use that variable in the macro instead");
-                println!("2. If your active message fails to compile, first ensure it compiles when AmGroups are disabled by adding AmGroup(false) the at AmData macro, e.g. #[AmData(AmGroup(false))] on the LamellarAM attribute macro, e.g. #[am(AmGroup(false))]");
+                println!("2. If your active message fails to compile, first ensure it compiles when AmGroups are disabled by removing the AmGroup opt-in from the AmData macro, e.g. #[AmData(Clone, Debug)] and from the LamellarAM attribute macro, e.g. #[am]");
                 println!("  2.1 If you are able to successfully compile with AmGroups disabled, please open an issue at https://github.com/pnnl/lamellar-runtime/issues and include the following in the description: {:#?}", mac.to_token_stream().to_string());
 
                 let mac_string = mac_string.replace("self.", "__");

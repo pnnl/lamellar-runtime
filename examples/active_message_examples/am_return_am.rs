@@ -8,13 +8,13 @@
 use lamellar::active_messaging::prelude::*;
 
 //--Active message returning an active message that returns nothing--//
-#[lamellar::AmData(Clone, Debug)]
+#[lamellar::AmData(Clone, Debug, AmGroup)]
 struct InitialAM {
     val1: usize,
     val2: String,
 }
 
-#[lamellar::am(return_am = "ReturnAM")] //we specify as a proc_macro argument the type of AM we are returning
+#[lamellar::am(return_am = "ReturnAM", AmGroup)] //we specify as a proc_macro argument the type of AM we are returning
 impl LamellarAM for InitialAM {
     async fn exec(&self) -> ReturnAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
@@ -36,13 +36,13 @@ impl LamellarAM for InitialAM {
 
 //--the returned active message that will execute automically upon arrival at the originating node --//
 // note that because of the way macros are expanded and evaluated we need to define the returned AM before it is used in another AM
-#[lamellar::AmData(Debug)]
+#[lamellar::AmData(Debug, AmGroup)]
 struct ReturnAM {
     val1: usize,
     val2: String,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for ReturnAM {
     async fn exec(&self) {
         println!(

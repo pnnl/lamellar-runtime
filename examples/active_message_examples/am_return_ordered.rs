@@ -9,12 +9,12 @@ use rand::{Rng, SeedableRng};
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning data--------------------//
-#[lamellar::AmData(Debug, Clone)]
+#[lamellar::AmData(Debug, Clone, AmGroup)]
 struct AmReturnUsize {
     val1: usize,
 }
 
-#[lamellar::am]
+#[lamellar::am(AmGroup)]
 impl LamellarAM for AmReturnUsize {
     async fn exec(&self) -> usize {
         // println!("{:?} {:?}",lamellar::current_pe,self.val1);

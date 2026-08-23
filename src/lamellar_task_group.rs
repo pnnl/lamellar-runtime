@@ -2329,9 +2329,9 @@ impl<T> TypedAmGroupResult<T> {
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
-    /// #[AmData(Debug, Clone)]
+    /// #[AmData(Debug, Clone, AmGroup)]
     /// struct MyAm { val: usize }
-    /// #[lamellar::am]
+    /// #[lamellar::am(AmGroup)]
     /// impl LamellarAM for MyAm {
     ///     async fn exec(self) -> usize { self.val }
     /// }
@@ -2353,9 +2353,9 @@ impl<T> TypedAmGroupResult<T> {
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
-    /// #[AmData(Debug, Clone)]
+    /// #[AmData(Debug, Clone, AmGroup)]
     /// struct MyAm { val: usize }
-    /// #[lamellar::am]
+    /// #[lamellar::am(AmGroup)]
     /// impl LamellarAM for MyAm {
     ///     async fn exec(self) -> usize { self.val }
     /// }
@@ -2377,9 +2377,9 @@ impl<T> TypedAmGroupResult<T> {
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
-    /// #[AmData(Debug, Clone)]
+    /// #[AmData(Debug, Clone, AmGroup)]
     /// struct MyAm { val: usize }
-    /// #[lamellar::am]
+    /// #[lamellar::am(AmGroup)]
     /// impl LamellarAM for MyAm {
     ///     async fn exec(self) -> usize { self.val }
     /// }
@@ -2531,9 +2531,9 @@ impl<T> TypedAmGroupValResult<T> {
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
-    /// #[AmData(Debug, Clone)]
+    /// #[AmData(Debug, Clone, AmGroup)]
     /// struct MyAm { val: usize }
-    /// #[lamellar::am]
+    /// #[lamellar::am(AmGroup)]
     /// impl LamellarAM for MyAm {
     ///     async fn exec(self) -> usize { self.val }
     /// }
@@ -2575,9 +2575,9 @@ impl<T> TypedAmGroupValResult<T> {
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
-    /// #[AmData(Debug, Clone)]
+    /// #[AmData(Debug, Clone, AmGroup)]
     /// struct MyAm { val: usize }
-    /// #[lamellar::am]
+    /// #[lamellar::am(AmGroup)]
     /// impl LamellarAM for MyAm {
     ///     async fn exec(self) -> usize { self.val }
     /// }
@@ -2623,9 +2623,9 @@ impl<T> TypedAmGroupUnitResult<T> {
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
-    /// #[AmData(Debug, Clone)]
+    /// #[AmData(Debug, Clone, AmGroup)]
     /// struct MyAm {}
-    /// #[lamellar::am]
+    /// #[lamellar::am(AmGroup)]
     /// impl LamellarAM for MyAm {
     ///     async fn exec(self) -> () {}
     /// }
@@ -2664,9 +2664,9 @@ impl<T> TypedAmGroupUnitResult<T> {
     /// # Examples
     ///```
     /// use lamellar::active_messaging::prelude::*;
-    /// #[AmData(Debug, Clone)]
+    /// #[AmData(Debug, Clone, AmGroup)]
     /// struct MyAm {}
-    /// #[lamellar::am]
+    /// #[lamellar::am(AmGroup)]
     /// impl LamellarAM for MyAm {
     ///     async fn exec(self) -> () {}
     /// }
