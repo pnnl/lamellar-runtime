@@ -30,7 +30,7 @@ lamellar-ucc-sys = { version = "0.1.0", optional = true }
 lamellar-ucx-sys = { version = "0.1.0", optional = true }
 libfabric = { package = "lamellar-libfabric", version = "0.1.0", features = [
     # "use-async-std",
-    "threading-thread-safe",
+    "threading-domain",
 ], optional = true }
 libfabric-sys = { package = "lamellar-libfabric-sys", version = "0.1.0", optional = true }
 pmi = { version = "0.1.0", optional = true }
@@ -973,17 +973,17 @@ path = "examples/hello_world/hello_world_array_iteration.rs"
 ring = { git = "https://github.com/briansmith/ring", rev = "840167e18e4fa837eb48de46500454a616a15a6e" }
 
 # Uncomment to build against a local checkout of lamellar-repo instead of crates.io.
-# pmi = { path = "../lamellar-repo/process_management/pmi" }
-# pmi-sys = { path = "../lamellar-repo/process_management/pmi-sys" }
-# pmi2-sys = { path = "../lamellar-repo/process_management/pmi2-sys" }
-# pmi-mpich-src = { path = "../lamellar-repo/process_management/pmi-mpich-src" }
-# pmix-sys = { path = "../lamellar-repo/process_management/pmix-sys" }
-# prrte-sys = { path = "../lamellar-repo/process_management/prrte-sys" }
-# openpmix-src = { path = "../lamellar-repo/process_management/openpmix-src" }
-# prrte-src = { path = "../lamellar-repo/process_management/prrte-src" }
-# rofisys = { path = "../lamellar-repo/communication_frameworks/rofi-sys" }
-# lamellar-libfabric = { path = "../lamellar-repo/communication_frameworks/libfabric" }
-# lamellar-libfabric-sys = { path = "../lamellar-repo/communication_frameworks/libfabric-sys" }
-# lamellar-libfabric-src = { path = "../lamellar-repo/communication_frameworks/libfabric-src" }
-# lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys" }
-# lamellar-ucc-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucc-sys" }
+pmi = { path = "../lamellar-repo/process_management/pmi" }
+pmi-sys = { path = "../lamellar-repo/process_management/pmi-sys" }
+pmi2-sys = { path = "../lamellar-repo/process_management/pmi2-sys" }
+pmi-mpich-src = { path = "../lamellar-repo/process_management/pmi-mpich-src" }
+pmix-sys = { path = "../lamellar-repo/process_management/pmix-sys" }
+prrte-sys = { path = "../lamellar-repo/process_management/prrte-sys" }
+openpmix-src = { path = "../lamellar-repo/process_management/openpmix-src" }
+prrte-src = { path = "../lamellar-repo/process_management/prrte-src" }
+rofisys = { path = "../lamellar-repo/communication_frameworks/rofi-sys" }
+lamellar-libfabric = { path = "../lamellar-repo/communication_frameworks/libfabric" }
+lamellar-libfabric-sys = { path = "../lamellar-repo/communication_frameworks/libfabric-sys" }
+lamellar-libfabric-src = { path = "../lamellar-repo/communication_frameworks/libfabric-src" }
+lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys" }
+lamellar-ucc-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucc-sys" }
