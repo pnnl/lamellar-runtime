@@ -79,8 +79,7 @@ impl<T: Remote> UcxCollectiveAllReduceFuture<T> {
         res
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -97,15 +96,21 @@ impl<T: Remote> PinnedDrop for UcxCollectiveAllReduceFuture<T> {
 
 impl<T: Remote> Future for UcxCollectiveAllReduceFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective allreduce failed: {:?}", e),
+        }
         let mut res = Vec::new();
-        std::mem::swap(&mut self.result, &mut res);
+        std::mem::swap(this.result, &mut res);
         Poll::Ready(res)
     }
 }
@@ -141,8 +146,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceIntoBufferFuture<T
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -161,13 +165,19 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllReduceIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective allreduce into buffer failed: {:?}", e),
+        }
         Poll::Ready(())
     }
 }
@@ -200,8 +210,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceInPlaceFuture<T, B
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -218,13 +227,19 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveAllReduceInP
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllReduceInPlaceFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective allreduce in place failed: {:?}", e),
+        }
         Poll::Ready(())
     }
 }
@@ -268,8 +283,7 @@ impl<T: Remote> UcxCollectiveReduceFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -286,14 +300,20 @@ impl<T: Remote> PinnedDrop for UcxCollectiveReduceFuture<T> {
 
 impl<T: Remote> Future for UcxCollectiveReduceFuture<T> {
     type Output = Option<Vec<T>>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
-        match &mut self.target {
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective reduce failed: {:?}", e),
+        }
+        match this.target {
             RootOrBuffer::Root(res) => {
                 let mut out = Vec::new();
                 std::mem::swap(&mut out, res);
@@ -335,8 +355,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceIntoBufferFuture<T, B
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -353,13 +372,19 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveReduceIntoBu
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveReduceIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective reduce into buffer failed: {:?}", e),
+        }
         Poll::Ready(())
     }
 }
@@ -438,8 +463,7 @@ impl<T: Remote> UcxCollectiveAllGatherFuture<T> {
         out
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -456,15 +480,21 @@ impl<T: Remote> PinnedDrop for UcxCollectiveAllGatherFuture<T> {
 
 impl<T: Remote> Future for UcxCollectiveAllGatherFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective allgather failed: {:?}", e),
+        }
         let mut out = Vec::new();
-        std::mem::swap(&mut out, &mut self.result);
+        std::mem::swap(&mut out, this.result);
         Poll::Ready(out)
     }
 }
@@ -499,8 +529,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllGatherIntoBufferFuture<T
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -519,13 +548,19 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllGatherIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective allgather into buffer failed: {:?}", e),
+        }
         Poll::Ready(())
     }
 }
@@ -568,8 +603,7 @@ impl<T: Remote> UcxCollectiveGatherFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -586,14 +620,20 @@ impl<T: Remote> PinnedDrop for UcxCollectiveGatherFuture<T> {
 
 impl<T: Remote> Future for UcxCollectiveGatherFuture<T> {
     type Output = Option<Vec<T>>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
-        match &mut self.target {
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective gather failed: {:?}", e),
+        }
+        match this.target {
             RootOrBuffer::Root(res) => {
                 let mut out = Vec::new();
                 std::mem::swap(&mut out, res);
@@ -634,8 +674,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveGatherIntoBufferFuture<T, B
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -652,13 +691,19 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveGatherIntoBu
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveGatherIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective gather into buffer failed: {:?}", e),
+        }
         Poll::Ready(())
     }
 }
@@ -696,8 +741,7 @@ impl<T: Remote> UcxCollectiveAllToAllFuture<T> {
         out
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -714,15 +758,21 @@ impl<T: Remote> PinnedDrop for UcxCollectiveAllToAllFuture<T> {
 
 impl<T: Remote> Future for UcxCollectiveAllToAllFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective alltoall failed: {:?}", e),
+        }
         let mut out = Vec::new();
-        std::mem::swap(&mut out, &mut self.result);
+        std::mem::swap(&mut out, this.result);
         Poll::Ready(out)
     }
 }
@@ -757,8 +807,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllToAllIntoBufferFuture<T,
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -775,13 +824,19 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveAllToAllInto
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllToAllIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective alltoall into buffer failed: {:?}", e),
+        }
         Poll::Ready(())
     }
 }
@@ -823,8 +878,7 @@ impl<T: Remote> UcxCollectiveBroadcastFuture<T> {
         }
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -841,14 +895,20 @@ impl<T: Remote> PinnedDrop for UcxCollectiveBroadcastFuture<T> {
 
 impl<T: Remote> Future for UcxCollectiveBroadcastFuture<T> {
     type Output = Option<Vec<T>>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
-        match &mut self.target {
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective broadcast failed: {:?}", e),
+        }
+        match this.target {
             RootSrcOrBuffer::Root(_) => Poll::Ready(None),
             RootSrcOrBuffer::NotRoot(items, _) => {
                 let mut out = Vec::new();
@@ -888,8 +948,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveBroadcastIntoBufferFuture<T
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -908,13 +967,19 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveBroadcastIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective broadcast into buffer failed: {:?}", e),
+        }
         Poll::Ready(())
     }
 }
@@ -956,8 +1021,7 @@ impl<T: Remote> UcxCollectiveScatterFuture<T> {
         out
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -974,15 +1038,21 @@ impl<T: Remote> PinnedDrop for UcxCollectiveScatterFuture<T> {
 
 impl<T: Remote> Future for UcxCollectiveScatterFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective scatter failed: {:?}", e),
+        }
         let mut out = Vec::new();
-        std::mem::swap(&mut out, &mut self.result);
+        std::mem::swap(&mut out, this.result);
         Poll::Ready(out)
     }
 }
@@ -1021,8 +1091,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveScatterIntoBufferFuture<T, 
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -1039,13 +1108,19 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxCollectiveScatterIntoB
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveScatterIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective scatter into buffer failed: {:?}", e),
+        }
         Poll::Ready(())
     }
 }
@@ -1086,8 +1161,7 @@ impl<T: Remote> UcxCollectiveReduceScatterFuture<T> {
         out
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -1104,15 +1178,21 @@ impl<T: Remote> PinnedDrop for UcxCollectiveReduceScatterFuture<T> {
 
 impl<T: Remote> Future for UcxCollectiveReduceScatterFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => panic!("ucx collective reduce_scatter failed: {:?}", e),
+        }
         let mut out = Vec::new();
-        std::mem::swap(&mut out, &mut self.result);
+        std::mem::swap(&mut out, this.result);
         Poll::Ready(out)
     }
 }
@@ -1150,8 +1230,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceScatterIntoBufferFutu
             .unwrap();
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -1172,13 +1251,21 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future
     for UcxCollectiveReduceScatterIntoBufferFuture<T, B>
 {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc
-            .wait_ucc_request(self.req.as_ref().unwrap())
-            .unwrap();
+        let this = self.project();
+        match this.alloc.poll_wait_ucc_request(this.req.as_ref().unwrap()) {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => {
+                panic!("ucx collective reduce_scatter into buffer failed: {:?}", e)
+            }
+        }
         Poll::Ready(())
     }
 }

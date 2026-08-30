@@ -23,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    fabric::{OneSidedUcxAlloc, UcxAlloc, UcxRequest},
+    fabric::{AllocFlushState, OneSidedUcxAlloc, UcxAlloc, UcxRequest},
     Scheduler,
 };
 
@@ -45,6 +45,7 @@ pub(crate) struct UcxPutFuture<T: Remote> {
     counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     request: Option<UcxRequest>,
+    flush_state: AllocFlushState,
 }
 
 impl<T: Remote> UcxPutFuture<T> {
@@ -114,18 +115,8 @@ impl<T: Remote> UcxPutFuture<T> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        self.spawned = true;
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if let Some(request) = self.request.take() {
-                    request.wait().expect("ucx put failed");
-                } else if !self.local_op {
-                    self.alloc.wait_all();
-                }
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -148,16 +139,30 @@ impl<T: Remote> From<UcxPutFuture<T>> for RdmaHandle<T> {
 
 impl<T: Remote> Future for UcxPutFuture<T> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
         let this = self.project();
         *this.spawned = true;
-        if let Some(request) = this.request.take() {
-            let _ = request.wait().expect("ucx put failed");
+        if let Some(request) = this.request.as_mut() {
+            match request.poll_wait() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx put failed: {:?}", e),
+            }
         } else if !*this.local_op {
-            this.alloc.wait_all();
+            match this.alloc.poll_wait_all(this.flush_state) {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx put failed: {:?}", e),
+            }
         }
         Poll::Ready(())
     }
@@ -174,6 +179,7 @@ pub(crate) struct UcxGetFuture<T> {
     spawned: bool,
     result: Box<T>,
     request: Option<UcxRequest>,
+    flush_state: AllocFlushState,
 }
 
 impl<T: Remote> UcxGetFuture<T> {
@@ -202,17 +208,7 @@ impl<T: Remote> UcxGetFuture<T> {
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if let Some(request) = self.request.take() {
-                    request.wait().expect("ucx get failed");
-                } else if !self.local_op {
-                    self.alloc.wait_all();
-                }
-                *self.result
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -235,15 +231,29 @@ impl<T: Remote> From<UcxGetFuture<T>> for RdmaGetHandle<T> {
 
 impl<T: Remote> Future for UcxGetFuture<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_at();
         }
         let this = self.project();
-        if let Some(request) = this.request.take() {
-            request.wait().expect("ucx get failed");
+        if let Some(request) = this.request.as_mut() {
+            match request.poll_wait() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx get failed: {:?}", e),
+            }
         } else if !*this.local_op {
-            this.alloc.wait_all();
+            match this.alloc.poll_wait_all(this.flush_state) {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx get failed: {:?}", e),
+            }
         }
 
         Poll::Ready(**this.result)
@@ -262,6 +272,7 @@ pub(crate) struct UcxGetBufferFuture<T> {
     spawned: bool,
     result: Vec<T>,
     request: Option<UcxRequest>,
+    flush_state: AllocFlushState,
 }
 
 impl<T: Remote> UcxGetBufferFuture<T> {
@@ -286,19 +297,8 @@ impl<T: Remote> UcxGetBufferFuture<T> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_get();
-        self.spawned = true;
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if let Some(request) = self.request.take() {
-                    request.wait().expect("ucx get buffer failed");
-                } else if !self.local_op {
-                    self.alloc.wait_all();
-                }
-                std::mem::take(&mut self.result)
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -321,17 +321,30 @@ impl<T: Remote> From<UcxGetBufferFuture<T>> for RdmaGetBufferHandle<T> {
 
 impl<T: Remote> Future for UcxGetBufferFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_get();
         }
         let this = self.project();
         *this.spawned = true;
-        let scheduler = this.scheduler.clone();
-        if let Some(request) = this.request.take() {
-            scheduler.block_in_place(|| request.wait().expect("ucx get buffer failed"));
+        if let Some(request) = this.request.as_mut() {
+            match request.poll_wait() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx get buffer failed: {:?}", e),
+            }
         } else if !*this.local_op {
-            scheduler.block_in_place(|| this.alloc.wait_all());
+            match this.alloc.poll_wait_all(this.flush_state) {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx get buffer failed: {:?}", e),
+            }
         }
 
         Poll::Ready(std::mem::take(this.result))
@@ -349,6 +362,7 @@ pub(crate) struct UcxGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     counters: Option<Arc<[Arc<AMCounters>]>>,
     spawned: bool,
     request: Option<UcxRequest>,
+    flush_state: AllocFlushState,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxGetIntoBufferFuture<T, B> {
@@ -374,24 +388,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxGetIntoBufferFuture<T, B> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        self.spawned = true;
         let counters = self.counters.clone();
-        let request = self.request.take();
-        let alloc = self.alloc.clone();
-        let local_op = self.local_op;
-        self.scheduler.clone().spawn_task(
-            async move {
-                match request {
-                    Some(request) => request.wait().expect("ucx get failed"),
-                    None => {
-                        if !local_op {
-                            alloc.wait_all()
-                        }
-                    }
-                };
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -416,16 +414,30 @@ impl<T: Remote, B: AsLamellarBuffer<T>> From<UcxGetIntoBufferFuture<T, B>>
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxGetIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
         let this = self.project();
         *this.spawned = true;
-        if let Some(request) = this.request.take() {
-            request.wait().expect("ucx get into buffer failed");
+        if let Some(request) = this.request.as_mut() {
+            match request.poll_wait() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx get into buffer failed: {:?}", e),
+            }
         } else if !*this.local_op {
-            this.alloc.wait_all();
+            match this.alloc.poll_wait_all(this.flush_state) {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx get into buffer failed: {:?}", e),
+            }
         }
 
         Poll::Ready(())
@@ -460,6 +472,7 @@ impl CommAllocRdma for UcxAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -508,6 +521,7 @@ impl CommAllocRdma for UcxAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -546,6 +560,7 @@ impl CommAllocRdma for UcxAlloc {
             counters,
             local_op: false,
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -576,6 +591,7 @@ impl CommAllocRdma for UcxAlloc {
             counters,
             local_op: false,
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -618,6 +634,7 @@ impl CommAllocRdma for UcxAlloc {
             counters,
             result: Box::new(unsafe { std::mem::zeroed() }),
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -656,6 +673,7 @@ impl CommAllocRdma for UcxAlloc {
             counters,
             result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -691,6 +709,7 @@ impl CommAllocRdma for UcxAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -737,6 +756,7 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -805,6 +825,7 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -876,6 +897,7 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             counters,
             result: Box::new(unsafe { std::mem::zeroed() }),
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -915,6 +937,7 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             counters,
             result: (0..len).map(|_| unsafe { std::mem::zeroed() }).collect(),
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }
@@ -959,6 +982,7 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: AllocFlushState::default(),
         }
         .into()
     }

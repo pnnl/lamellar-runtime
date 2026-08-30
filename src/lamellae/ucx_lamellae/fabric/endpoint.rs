@@ -1,6 +1,7 @@
 use std::{
     mem::MaybeUninit,
     sync::{atomic::AtomicUsize, Arc},
+    task::Poll,
 };
 
 // use ucx1_sys::*;
@@ -14,7 +15,11 @@ use lamellar_ucx_sys::{
     ucs_status_t, UCS_PTR_IS_PTR,
 };
 
-use super::{error::Error, memory_region::RKey, worker::Worker};
+use super::{
+    error::Error,
+    memory_region::RKey,
+    worker::{FlushState, Worker},
+};
 
 use tracing::*;
 
@@ -22,6 +27,7 @@ pub(crate) struct UcxRequest {
     pub(crate) request: ucs_status_ptr_t,
     pub(crate) worker: Arc<Worker>,
     pub(crate) managed_put: bool,
+    flush_state: FlushState,
 }
 
 unsafe impl Sync for UcxRequest {}
@@ -33,8 +39,34 @@ impl UcxRequest {
             request,
             worker,
             managed_put,
+            flush_state: FlushState::default(),
         }
     }
+
+    /// Non-blocking, single-shot-per-call version of `wait`. Caller must keep
+    /// polling (e.g. via a waker) until this returns `Poll::Ready`.
+    pub(crate) fn poll_wait(&mut self) -> Poll<Result<(), Error>> {
+        if self.managed_put {
+            return self.worker.poll_wait_all(&mut self.flush_state);
+        }
+        if self.request.is_null() {
+            return Poll::Ready(Ok(()));
+        }
+        if UCS_PTR_IS_PTR(self.request) {
+            let _ = self.worker.progress();
+            if unsafe { ucp_request_check_status(self.request as _) }
+                == ucs_status_t::UCS_INPROGRESS
+            {
+                return Poll::Pending;
+            }
+            unsafe { ucp_request_free(self.request as _) };
+            self.request = std::ptr::null_mut();
+            Poll::Ready(Ok(()))
+        } else {
+            Poll::Ready(Error::from_ptr(self.request))
+        }
+    }
+
     pub(crate) fn wait(mut self) -> Result<(), Error> {
         if self.managed_put {
             self.worker

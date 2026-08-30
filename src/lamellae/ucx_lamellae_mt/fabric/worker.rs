@@ -1,5 +1,5 @@
 use lamellar_ucx_sys::*;
-use std::{mem::MaybeUninit, sync::Arc};
+use std::{mem::MaybeUninit, sync::Arc, task::Poll};
 
 use super::{context::Context, error::Error};
 
@@ -15,6 +15,17 @@ pub(crate) struct Worker {
 
 unsafe impl Sync for Worker {}
 unsafe impl Send for Worker {}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) enum FlushState {
+    #[default]
+    NotIssued,
+    Pending(ucs_status_ptr_t),
+    Done,
+}
+
+unsafe impl Sync for FlushState {}
+unsafe impl Send for FlushState {}
 
 impl Worker {
     pub(crate) fn new(context: Arc<Context>) -> Result<Arc<Worker>, Error> {
@@ -43,9 +54,9 @@ impl Worker {
         let res = unsafe { ucp_worker_progress(self.handle) };
         res
     }
-    /// This routine flushes all outstanding AMO and RMA communications on the worker.
-    pub(crate) fn wait_all(&self) -> Result<(), Error> {
-        let params = ucp_request_param_t {
+
+    fn flush_params() -> ucp_request_param_t {
+        ucp_request_param_t {
             op_attr_mask: 0,
             flags: 0,
             request: std::ptr::null_mut(),
@@ -58,7 +69,12 @@ impl Worker {
                 length: std::ptr::null_mut(),
             },
             memh: std::ptr::null_mut(),
-        };
+        }
+    }
+
+    /// This routine flushes all outstanding AMO and RMA communications on the worker.
+    pub(crate) fn wait_all(&self) -> Result<(), Error> {
+        let params = Self::flush_params();
         let request = unsafe { ucp_worker_flush_nbx(self.handle, &params) };
         if request.is_null() {
             Ok(())
@@ -77,6 +93,42 @@ impl Worker {
             Ok(())
         } else {
             Error::from_ptr(request)
+        }
+    }
+
+    /// Non-blocking, single-shot-per-call version of `wait_all`. Caller owns
+    /// `state` across polls and is responsible for re-polling (e.g. via a
+    /// waker) until this returns `Poll::Ready`.
+    pub(crate) fn poll_wait_all(&self, state: &mut FlushState) -> Poll<Result<(), Error>> {
+        loop {
+            match state {
+                FlushState::Done => return Poll::Ready(Ok(())),
+                FlushState::NotIssued => {
+                    let params = Self::flush_params();
+                    let request = unsafe { ucp_worker_flush_nbx(self.handle, &params) };
+                    if request.is_null() {
+                        *state = FlushState::Done;
+                        return Poll::Ready(Ok(()));
+                    } else if UCS_PTR_IS_PTR(request) {
+                        *state = FlushState::Pending(request);
+                    } else {
+                        *state = FlushState::Done;
+                        return Poll::Ready(Error::from_ptr(request));
+                    }
+                }
+                FlushState::Pending(request) => {
+                    let request = *request;
+                    let _ = self.progress();
+                    if unsafe { ucp_request_check_status(request as _) }
+                        == ucs_status_t::UCS_INPROGRESS
+                    {
+                        return Poll::Pending;
+                    }
+                    unsafe { ucp_request_free(request as _) };
+                    *state = FlushState::Done;
+                    return Poll::Ready(Ok(()));
+                }
+            }
         }
     }
 

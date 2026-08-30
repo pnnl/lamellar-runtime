@@ -9,7 +9,7 @@ use endpoint::Endpoint;
 pub(crate) use endpoint::UcxRequest;
 use endpoint::ATOMIC_PUT_TMP;
 use memory_region::{MemoryHandle, MemoryHandleInner, RKey};
-use worker::Worker;
+use worker::{FlushState, Worker};
 
 use crate::{
     LAMELLAR_THREAD_ID, config, lamellae::{
@@ -20,9 +20,12 @@ use crate::{
 use pmi::{pmi::Pmi, PmiBuilder};
 use lamellar_ucx_sys::ucp_atomic_op_t;
 
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc, Mutex,
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
+    task::Poll,
 };
 use tracing::{debug, trace};
 
@@ -519,6 +522,11 @@ enum AllocTable {
         Arc<Mutex<Vec<UcxMtAlloc>>>,
         Arc<Mutex<Vec<(UcxMtAlloc, Vec<(usize, Arc<RKey>)>)>>>,
     ), //the usize is the offset of the rt_alloc so that we can free it properly if a sub_alloc is the last reference
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct MtAllocFlushState {
+    groups: Vec<FlushState>,
 }
 
 pub(crate) struct UcxMtAlloc {
@@ -1351,12 +1359,29 @@ impl UcxMtAlloc {
             while let Err(err) = req.test() {
                 if !matches!(err, Error::Inprogress) {
                     return Err(err);
-                } 
+                }
                 ucc_team.context.progress()?;
             }
             Ok(())
         }
         else {
+            panic!("UCC team not initialized for waiting on UCC request");
+        }
+    }
+
+    /// Non-blocking, single-shot-per-call version of `wait_ucc_request`. Caller
+    /// must keep polling (e.g. via a waker) until this returns `Poll::Ready`.
+    pub(crate) fn poll_wait_ucc_request(&self, req: &UccRequest) -> Poll<Result<(), ucc::Error>> {
+        if let Some(ucc_team) = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].ucc_world_team {
+            match req.test() {
+                Ok(()) => Poll::Ready(Ok(())),
+                Err(Error::Inprogress) => {
+                    let _ = ucc_team.context.progress();
+                    Poll::Pending
+                }
+                Err(e) => Poll::Ready(Err(e)),
+            }
+        } else {
             panic!("UCC team not initialized for waiting on UCC request");
         }
     }
@@ -1386,6 +1411,42 @@ impl UcxMtAlloc {
         }
 
         self.wait_ucc_all();
+    }
+
+    /// Non-blocking, single-shot-per-call version of `wait_all`. Fans out
+    /// across every comm group without short-circuiting on the first
+    /// `Pending` one, since each group's own flush must be issued/progressed
+    /// every call (no other progress source drives a group besides its own
+    /// thread and this poll).
+    pub(crate) fn poll_wait_all(
+        &self,
+        state: &mut MtAllocFlushState,
+    ) -> Poll<Result<(), error::Error>> {
+        if state.groups.is_empty() {
+            state.groups = vec![FlushState::default(); self.comm_groups.len()];
+        }
+        let mut all_ready = true;
+        for (group, gstate) in self.comm_groups.iter().zip(state.groups.iter_mut()) {
+            match group.worker.poll_wait_all(gstate) {
+                Poll::Pending => all_ready = false,
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Ready(Ok(())) => {}
+            }
+        }
+        if !all_ready {
+            return Poll::Pending;
+        }
+        for group in self.comm_groups.iter() {
+            if let Some(ucc_team) = &group.ucc_world_team {
+                ucc_team.context.progress().unwrap();
+                let completed = ucc_team.req_completed.load(Ordering::SeqCst);
+                let pending = ucc_team.req_pending.load(Ordering::SeqCst);
+                if completed != pending {
+                    return Poll::Pending;
+                }
+            }
+        }
+        Poll::Ready(Ok(()))
     }
 
     #[allow(dead_code)] // WIP: called via trait dispatch, lint false-positive

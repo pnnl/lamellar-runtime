@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    fabric::{OneSidedUcxMtAlloc, UcxMtAlloc, UcxRequest},
+    fabric::{MtAllocFlushState, OneSidedUcxMtAlloc, UcxMtAlloc, UcxRequest},
     Scheduler,
 };
 
@@ -41,6 +41,7 @@ pub(crate) struct UcxMtAtomicFuture<T> {
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
     pub(crate) request: Option<UcxRequest>,
+    pub(crate) flush_state: MtAllocFlushState,
 }
 
 impl<T: Remote + Send + 'static> UcxMtAtomicFuture<T> {
@@ -70,20 +71,9 @@ impl<T: Remote + Send + 'static> UcxMtAtomicFuture<T> {
         }
         self.spawned = true;
     }
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
-        self.spawned = true;
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if let Some(request) = self.request.take() {
-                    request.wait().expect("Failed to wait for UcxRequest");
-                } else {
-                    self.alloc.wait_all();
-                }
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -106,15 +96,30 @@ impl<T> From<UcxMtAtomicFuture<T>> for AtomicOpHandle<T> {
 
 impl<T: Remote + Send + 'static> Future for UcxMtAtomicFuture<T> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
             self.spawned = true;
         }
-        if let Some(request) = self.request.take() {
-            request.wait().expect("Failed to wait for UcxRequest");
+        let this = self.project();
+        if let Some(request) = this.request.as_mut() {
+            match request.poll_wait() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx atomic op failed: {:?}", e),
+            }
         } else {
-            self.alloc.wait_all();
+            match this.alloc.poll_wait_all(this.flush_state) {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx atomic op failed: {:?}", e),
+            }
         }
         Poll::Ready(())
     }
@@ -131,6 +136,7 @@ pub(crate) struct UcxMtAtomicFetchFuture<T> {
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
     pub(crate) request: Option<UcxRequest>,
+    pub(crate) flush_state: MtAllocFlushState,
 }
 
 impl<T: Remote + Send + 'static> UcxMtAtomicFetchFuture<T> {
@@ -160,20 +166,9 @@ impl<T: Remote + Send + 'static> UcxMtAtomicFetchFuture<T> {
         *self.result
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<T> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<T> {
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if let Some(request) = self.request.take() {
-                    request.wait().expect("Failed to wait for UcxRequest");
-                } else {
-                    self.alloc.wait_all();
-                }
-                *self.result
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -196,16 +191,31 @@ impl<T> From<UcxMtAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
 
 impl<T: Remote + Send + 'static> Future for UcxMtAtomicFetchFuture<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        if let Some(request) = self.request.take() {
-            request.wait().expect("Failed to wait for UcxRequest");
+        let this = self.project();
+        if let Some(request) = this.request.as_mut() {
+            match request.poll_wait() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx atomic fetch op failed: {:?}", e),
+            }
         } else {
-            self.alloc.wait_all();
+            match this.alloc.poll_wait_all(this.flush_state) {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx atomic fetch op failed: {:?}", e),
+            }
         }
-        Poll::Ready(*self.result)
+        Poll::Ready(**this.result)
     }
 }
 
@@ -221,6 +231,7 @@ pub(crate) struct UcxMtAtomicCompareExchangeFuture<T> {
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
     pub(crate) request: Option<UcxRequest>,
+    pub(crate) flush_state: MtAllocFlushState,
 }
 
 impl<T: Remote + Send + PartialEq + 'static> UcxMtAtomicCompareExchangeFuture<T> {
@@ -248,21 +259,9 @@ impl<T: Remote + Send + PartialEq + 'static> UcxMtAtomicCompareExchangeFuture<T>
         compare_exchange_result(*self.result, *self.current)
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Result<T, T>> {
         let counters = self.counters.clone();
-        let alloc = self.alloc.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if let Some(request) = self.request.take() {
-                    request.wait().expect("Failed to wait for UcxRequest");
-                } else {
-                    alloc.wait_all();
-                }
-                compare_exchange_result(*self.result, *self.current)
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -285,16 +284,31 @@ impl<T> From<UcxMtAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeOpHan
 
 impl<T: Remote + Send + PartialEq + 'static> Future for UcxMtAtomicCompareExchangeFuture<T> {
     type Output = Result<T, T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        if let Some(request) = self.request.take() {
-            request.wait().expect("Failed to wait for UcxRequest");
+        let this = self.project();
+        if let Some(request) = this.request.as_mut() {
+            match request.poll_wait() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx atomic compare exchange failed: {:?}", e),
+            }
         } else {
-            self.alloc.wait_all();
+            match this.alloc.poll_wait_all(this.flush_state) {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(e)) => panic!("ucx atomic compare exchange failed: {:?}", e),
+            }
         }
-        Poll::Ready(compare_exchange_result(*self.result, *self.current))
+        Poll::Ready(compare_exchange_result(**this.result, **this.current))
     }
 }
 
@@ -316,6 +330,7 @@ impl CommAllocAtomic for UcxMtAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: MtAllocFlushState::default(),
         }
         .into()
     }
@@ -353,6 +368,7 @@ impl CommAllocAtomic for UcxMtAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: MtAllocFlushState::default(),
         }
         .into()
     }
@@ -380,6 +396,7 @@ impl CommAllocAtomic for UcxMtAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: MtAllocFlushState::default(),
         }
         .into()
     }
@@ -423,6 +440,7 @@ impl CommAllocAtomic for UcxMtAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: MtAllocFlushState::default(),
         }
         .into()
     }
@@ -471,6 +489,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: MtAllocFlushState::default(),
         }
         .into()
     }
@@ -537,6 +556,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: MtAllocFlushState::default(),
         }
         .into()
     }
@@ -590,6 +610,7 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             scheduler: scheduler.clone(),
             counters,
             request: None,
+            flush_state: MtAllocFlushState::default(),
         }
         .into()
     }

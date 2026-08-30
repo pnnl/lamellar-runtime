@@ -12,7 +12,7 @@ use endpoint::Endpoint;
 pub(crate) use endpoint::UcxRequest;
 use endpoint::ATOMIC_PUT_TMP;
 use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
-use worker::Worker;
+use worker::{FlushState, Worker};
 
 #[cfg(feature = "enable-on-node-shmem")]
 use crate::config;
@@ -42,6 +42,7 @@ use std::{
         atomic::{AtomicU32, AtomicUsize, Ordering},
         Arc, Mutex,
     },
+    task::Poll,
 };
 use tracing::{debug, trace};
 
@@ -942,6 +943,11 @@ enum AllocTable {
         Arc<Mutex<Vec<UcxAlloc>>>,
         Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
     ), //the usize is the offset of the rt_alloc so that we can free it properly if a sub_alloc is the last reference
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct AllocFlushState {
+    worker: FlushState,
 }
 
 pub(crate) struct UcxAlloc {
@@ -1910,6 +1916,23 @@ impl UcxAlloc {
         }
     }
 
+    /// Non-blocking, single-shot-per-call version of `wait_ucc_request`. Caller
+    /// must keep polling (e.g. via a waker) until this returns `Poll::Ready`.
+    pub(crate) fn poll_wait_ucc_request(&self, req: &UccRequest) -> Poll<Result<(), ucc::Error>> {
+        if let Some(ucc_team) = &self.ucc_team {
+            match req.test() {
+                Ok(()) => Poll::Ready(Ok(())),
+                Err(Error::Inprogress) => {
+                    let _ = ucc_team.context.progress();
+                    Poll::Pending
+                }
+                Err(e) => Poll::Ready(Err(e)),
+            }
+        } else {
+            panic!("UCC team not initialized for waiting on UCC request");
+        }
+    }
+
     pub(crate) unsafe fn as_mut_slice<T>(&self) -> &mut [T] {
         self.mem.as_mut_slice()
     }
@@ -1945,6 +1968,29 @@ impl UcxAlloc {
             .expect("UcxAlloc::wait_all failed waiting on UCX requests");
 
         self.wait_ucc_all();
+    }
+
+    /// Non-blocking, single-shot-per-call version of `wait_all`. Caller owns
+    /// `state` across polls and must keep polling (e.g. via a waker) until
+    /// this returns `Poll::Ready`.
+    pub(crate) fn poll_wait_all(
+        &self,
+        state: &mut AllocFlushState,
+    ) -> Poll<Result<(), error::Error>> {
+        match self.worker.poll_wait_all(&mut state.worker) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Ready(Ok(())) => {}
+        }
+        if let Some(ucc_team) = &self.ucc_team {
+            ucc_team.context.progress().unwrap();
+            let completed = ucc_team.req_completed.load(Ordering::SeqCst);
+            let pending = ucc_team.req_pending.load(Ordering::SeqCst);
+            if completed != pending {
+                return Poll::Pending;
+            }
+        }
+        Poll::Ready(Ok(()))
     }
 
     pub(crate) fn wait(&self) {
