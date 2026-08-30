@@ -6,6 +6,7 @@ use std::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
+    task::Poll,
 };
 
 use libfabric_sys;
@@ -27,9 +28,43 @@ use crate::{
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
 
+#[cfg(feature = "enable-on-node-shmem")]
+use crate::{
+    config,
+    lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment},
+};
+
+unsafe fn close_fid(name: &str, fid: *mut libfabric_sys::fid) {
+    if fid.is_null() {
+        return;
+    }
+    let ret = libfabric_sys::inlined_fi_close(fid);
+    if ret != 0 {
+        eprintln!("Error closing libfabric-sys {name}: {ret}");
+    }
+}
+
+struct RawMcGroup {
+    mc: *mut libfabric_sys::fid_mc,
+    av_set: *mut libfabric_sys::fid_av_set,
+    coll_addr: u64,
+}
+
+unsafe impl Send for RawMcGroup {}
+unsafe impl Sync for RawMcGroup {}
+
+impl Drop for RawMcGroup {
+    fn drop(&mut self) {
+        unsafe {
+            close_fid("multicast group", &mut (*self.mc).fid);
+            close_fid("address-vector set", &mut (*self.av_set).fid);
+        }
+    }
+}
+
 enum BarrierImpl {
     Uninit,
-    Collective(*mut libfabric_sys::fid_mc, u64),
+    Collective(Arc<RawMcGroup>),
     Manual(LibfabricSysAlloc, AtomicUsize),
     Pmi(Arc<dyn Pmi>),
 }
@@ -182,6 +217,61 @@ impl CommGroup {
         }
     }
 
+    // Non-blocking, single-poll check. `cntr` is a bulk completion COUNT shared by every
+    // issuer on this CommGroup, not a per-request handle, so completion order across issuers
+    // is not guaranteed. Must read `cntr` (completions) first, then `pending` (issued count)
+    // second, fresh every call: since `pending` only grows, sampling it strictly after the
+    // cntr read guarantees the target is >= true issued-count at read time, so `completed >=
+    // issued` proves every op issued as of this call (including this poll's own, since it was
+    // issued before this call started) has completed — regardless of completion order. Never
+    // cache/persist `pending` across polls and compare a stale target to a fresh cntr read.
+    fn poll_wait_for_cntr(&self, pending: &AtomicU64, cntr: *mut libfabric_sys::fid_cntr) -> Poll<()> {
+        if let Some(_lock) = self.lock.try_lock() {
+            self.progress();
+        }
+        let completed = unsafe { libfabric_sys::inlined_fi_cntr_read(cntr) as u64 };
+        let issued = pending.load(Ordering::SeqCst);
+        if completed >= issued {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
+    fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
+        self.poll_wait_for_cntr(&self.put_cnt, self.put_cntr)
+    }
+
+    fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
+        self.poll_wait_for_cntr(&self.get_cnt, self.get_cntr)
+    }
+
+    // Same fresh-read-order requirement as poll_wait_for_cntr: completed-count first,
+    // issued-count second.
+    fn poll_wait_for_collectives(&self) -> Poll<()> {
+        if let Some(_lock) = self.lock.try_lock() {
+            self.progress();
+        }
+        let completed = self.coll_cnt_completed.load(Ordering::SeqCst);
+        let issued = self.coll_cnt_issued.load(Ordering::SeqCst);
+        if completed >= issued {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
+    pub(crate) fn poll_wait_all(&self) -> Poll<()> {
+        let put_ready = self.poll_wait_for_tx_cntr().is_ready();
+        let get_ready = self.poll_wait_for_rx_cntr().is_ready();
+        let coll_ready = self.poll_wait_for_collectives().is_ready();
+        if put_ready && get_ready && coll_ready {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
     fn post_collective<F>(&self, blocking: bool, mut fun: F)
     where
         F: FnMut() -> isize,
@@ -301,6 +391,12 @@ impl LibfabricSysMem {
 pub(crate) struct Ofi {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
+    #[cfg(feature = "enable-on-node-shmem")]
+    same_node_pes: Vec<bool>,
+    #[cfg(feature = "enable-on-node-shmem")]
+    disable_on_node_shmem: bool,
+    #[cfg(feature = "enable-on-node-shmem")]
+    job_id: usize,
     domain: *mut libfabric_sys::fid_domain,
     #[allow(dead_code)] // WIP: held for ownership/lifetime, not yet read
     fabric: *mut libfabric_sys::fid_fabric,
@@ -330,6 +426,21 @@ impl Ofi {
 
         let num_pes = my_pmi.ranks().len();
 
+        #[cfg(feature = "enable-on-node-shmem")]
+        let disable_on_node_shmem = config().disable_on_node_shmem.unwrap_or(false);
+        #[cfg(feature = "enable-on-node-shmem")]
+        let mut same_node_pes = vec![false; num_pes];
+        #[cfg(feature = "enable-on-node-shmem")]
+        if !disable_on_node_shmem {
+            for pe in my_pmi.ranks_on_node(my_pmi.node()) {
+                if pe < same_node_pes.len() {
+                    same_node_pes[pe] = true;
+                }
+            }
+        }
+        #[cfg(feature = "enable-on-node-shmem")]
+        let job_id = my_pmi.job_id();
+
         let info = unsafe {
             let hints = libfabric_sys::inlined_fi_allocinfo();
             (*hints).caps = (libfabric_sys::FI_RMA
@@ -350,7 +461,7 @@ impl Ofi {
             (*hints).addr_format = libfabric_sys::FI_FORMAT_UNSPEC;
             let version = 1 << 16 | 22;
             let mut c_info = MaybeUninit::<*mut libfabric_sys::fi_info>::uninit();
-            libfabric_sys::fi_getinfo(
+            let ret = libfabric_sys::fi_getinfo(
                 version,
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
@@ -358,6 +469,11 @@ impl Ofi {
                 hints,
                 c_info.as_mut_ptr(),
             );
+            if ret != 0 {
+                libfabric_sys::fi_freeinfo(hints);
+                eprintln!("Error querying libfabric providers: {ret}");
+                Err(FabricError::InitError(-ret as u32))?;
+            }
             let info = c_info.assume_init();
             let mut curr_info = info;
             while !curr_info.is_null() {
@@ -385,9 +501,21 @@ impl Ofi {
                 }
                 break;
             }
+            if curr_info.is_null() {
+                libfabric_sys::fi_freeinfo(hints);
+                libfabric_sys::fi_freeinfo(info);
+                eprintln!(
+                    "No libfabric provider/domain matched provider={provider:?}, domain={domain:?}"
+                );
+                Err(FabricError::InitError(libfabric_sys::FI_ENODATA))?;
+            }
             let ret: *mut libfabric_sys::fi_info = libfabric_sys::fi_dupinfo(curr_info);
             libfabric_sys::fi_freeinfo(hints);
             libfabric_sys::fi_freeinfo(info);
+            if ret.is_null() {
+                eprintln!("Error duplicating selected libfabric provider info");
+                Err(FabricError::InitError(libfabric_sys::FI_ENOMEM))?;
+            }
             ret
         };
 
@@ -884,7 +1012,7 @@ impl Ofi {
         } == 0;
     }
 
-    fn create_mc_group(&self, pes: &[usize]) -> (*mut libfabric_sys::fid_mc, u64) {
+    fn create_mc_group(&self, pes: &[usize]) -> Arc<RawMcGroup> {
         let cg = &self.comm_group;
         let mut av_set_attr = libfabric_sys::fi_av_set_attr {
             flags: 0,
@@ -948,7 +1076,11 @@ impl Ofi {
             );
             mc.assume_init()
         };
-        (mc, av_set_addr)
+        Arc::new(RawMcGroup {
+            mc,
+            av_set,
+            coll_addr: av_set_addr,
+        })
     }
 
     fn collective_exchange_mr_info(
@@ -957,7 +1089,7 @@ impl Ofi {
         mem: &[u8],
         mr: *mut libfabric_sys::fid_mr,
     ) -> HashMap<usize, RemoteMemAddressInfo> {
-        let (_mc, av_set_addr) = self.create_mc_group(pes);
+        let mcast_group = self.create_mc_group(pes);
         let cg = &self.comm_group;
         let addr = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode }
             & (libfabric_sys::FI_MR_VIRT_ADDR | libfabric_sys::fi_mr_mode_FI_MR_BASIC) as i32
@@ -1031,7 +1163,7 @@ impl Ofi {
                 std::ptr::null_mut(),
                 all_mem_info_bytes.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                av_set_addr,
+                mcast_group.coll_addr,
                 rust_type_to_fi_type::<u8>().unwrap(),
                 0,
                 std::ptr::null_mut(),
@@ -1133,8 +1265,8 @@ impl Ofi {
             Ok(())
         } else {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
-            let (mc, av_set_addr) = self.create_mc_group(&all_pes);
-            *self.comm_group.barrier_impl.write() = BarrierImpl::Collective(mc, av_set_addr);
+            let mcast_group = self.create_mc_group(&all_pes);
+            *self.comm_group.barrier_impl.write() = BarrierImpl::Collective(mcast_group);
             Ok(())
         }
     }
@@ -1192,7 +1324,7 @@ impl Ofi {
         #[cfg(feature = "enable-on-node-shmem")]
         let (mem, mem_base_ptr, same_node_bases, same_node_segments) = if self.disable_on_node_shmem
         {
-            let mut mmap = memmap::MmapOptions::new()
+            let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
                 .expect(&format!(
@@ -1210,8 +1342,8 @@ impl Ofi {
                 vec![None; self.num_pes],
             )
         } else {
-            let alloc_id = LIBFABRIC_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
-            let shmem_id = format!("libfabric_alloc_{}_pe_{}", alloc_id, self.my_pe);
+            let alloc_id = LIBFABRIC_SYS_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+            let shmem_id = format!("libfabric_sys_alloc_{}_pe_{}", alloc_id, self.my_pe);
             let local_segment = Arc::new(attach_shmem_segment(
                 self.job_id,
                 aligned_size,
@@ -1343,7 +1475,7 @@ impl Ofi {
         #[cfg(feature = "enable-on-node-shmem")]
         let (mem, mem_base_ptr, same_node_bases, same_node_segments) = if self.disable_on_node_shmem
         {
-            let mut mmap = memmap::MmapOptions::new()
+            let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
                 .expect("Error in allocating aligned memory");
@@ -1352,13 +1484,13 @@ impl Ofi {
             }
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (
-                LibfabricMem::Mmap(Arc::new(mmap)),
+                LibfabricSysMem::Mmap(Arc::new(mmap)),
                 mem_base_ptr,
                 vec![None; self.num_pes],
                 vec![None; self.num_pes],
             )
         } else {
-            let alloc_id = LIBFABRIC_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+            let alloc_id = LIBFABRIC_SYS_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
             let shmem_id = format!("libfabric_sys_alloc_{}_pe_{}", alloc_id, self.my_pe);
             let local_segment = Arc::new(attach_shmem_segment(
                 self.job_id,
@@ -1384,7 +1516,7 @@ impl Ofi {
             same_node_bases[self.my_pe] = Some(mem_base_ptr as usize);
             same_node_segments[self.my_pe] = Some(local_segment.clone());
             (
-                LibfabricMem::Shmem(local_segment),
+                LibfabricSysMem::Shmem(local_segment),
                 mem_base_ptr,
                 same_node_bases,
                 same_node_segments,
@@ -1475,10 +1607,14 @@ impl Ofi {
             BarrierImpl::Uninit => {
                 panic!("Barrier is not initialized");
             }
-            BarrierImpl::Collective(_mc, coll_addr) => {
+            BarrierImpl::Collective(mcast_group) => {
                 let cg = &self.comm_group;
                 cg.post_collective(true, || unsafe {
-                    libfabric_sys::inlined_fi_barrier(cg.ep, *coll_addr, std::ptr::null_mut())
+                    libfabric_sys::inlined_fi_barrier(
+                        cg.ep,
+                        mcast_group.coll_addr,
+                        std::ptr::null_mut(),
+                    )
                 });
                 // trace!("Done with barrier");
                 Ok(())
@@ -1575,6 +1711,22 @@ impl Ofi {
         self.comm_group.wait_all()
     }
 
+    pub(crate) fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
+        self.comm_group.poll_wait_for_tx_cntr()
+    }
+
+    pub(crate) fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
+        self.comm_group.poll_wait_for_rx_cntr()
+    }
+
+    pub(crate) fn poll_wait_for_collectives(&self) -> Poll<()> {
+        self.comm_group.poll_wait_for_collectives()
+    }
+
+    pub(crate) fn poll_wait_all(&self) -> Poll<()> {
+        self.comm_group.poll_wait_all()
+    }
+
     pub(crate) fn progress_all(&self) {
         let _lock = self.comm_group.lock.lock();
         self.comm_group.progress()
@@ -1583,6 +1735,33 @@ impl Ofi {
     pub(crate) fn thread_progress(&self) {
         let _lock = self.comm_group.lock.lock();
         self.comm_group.progress()
+    }
+}
+
+impl Drop for Ofi {
+    fn drop(&mut self) {
+        trace!(target: "drop", "drop libfabric-sys Ofi");
+        self.comm_group.wait_all();
+        self._my_pmi
+            .barrier(false)
+            .expect("PMI Barrier failed during libfabric-sys OFI drop");
+
+        // Any collective barrier group must be closed while the endpoint and AV
+        // are still alive. Normally LibfabricSysComm::drop has already cleared it.
+        *self.comm_group.barrier_impl.write() = BarrierImpl::Uninit;
+
+        unsafe {
+            close_fid("endpoint", &mut (*self.comm_group.ep).fid);
+            close_fid("write counter", &mut (*self.comm_group.put_cntr).fid);
+            close_fid("read counter", &mut (*self.comm_group.get_cntr).fid);
+            close_fid("completion queue", &mut (*self.comm_group.cq).fid);
+            close_fid("event queue", &mut (*self.comm_group.eq).fid);
+            close_fid("address vector", &mut (*self.comm_group.av).fid);
+            close_fid("domain", &mut (*self.domain).fid);
+            close_fid("fabric", &mut (*self.fabric).fid);
+            libfabric_sys::fi_freeinfo(self.comm_group.info_entry);
+        }
+        trace!(target: "drop", "end drop libfabric-sys Ofi");
     }
 }
 
@@ -1890,7 +2069,7 @@ pub(crate) struct LibfabricSysAlloc {
     rt_ref_cnt_offset: usize,
     id: usize,
     alloc_table: AllocTable,
-    mcast_group: Option<(*mut libfabric_sys::fid_mc, u64)>,
+    mcast_group: Option<Arc<RawMcGroup>>,
     pub(crate) print: bool,
 }
 
@@ -1990,6 +2169,34 @@ impl From<LibfabricSysAlloc> for CommAlloc {
 }
 
 static ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "enable-on-node-shmem")]
+static LIBFABRIC_SYS_SHMEM_ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "enable-on-node-shmem")]
+fn build_same_node_segments(
+    pes: &[usize],
+    same_node_pes: &[bool],
+    job_id: usize,
+    size: usize,
+    align: usize,
+    alloc_id: usize,
+    my_pe: usize,
+) -> (Vec<Option<usize>>, Vec<Option<Arc<ShmemSegment>>>) {
+    let mut bases = vec![None; same_node_pes.len()];
+    let mut segments = vec![None; same_node_pes.len()];
+
+    for pe in pes {
+        if !same_node_pes.get(*pe).copied().unwrap_or(false) || *pe == my_pe {
+            continue;
+        }
+        let shmem_id = format!("libfabric_sys_alloc_{}_pe_{}", alloc_id, pe);
+        let segment = attach_shmem_segment(job_id, size, align, &shmem_id, alloc_id, false);
+        bases[*pe] = Some(segment.base_ptr() as usize);
+        segments[*pe] = Some(Arc::new(segment));
+    }
+
+    (bases, segments)
+}
 
 impl LibfabricSysAlloc {
     unsafe fn negate_atomic_value<OFI>(value: *mut OFI) {
@@ -2024,7 +2231,7 @@ impl LibfabricSysAlloc {
         std::ptr::copy(bytes.as_ptr(), value.cast::<u8>(), num_bytes);
     }
 
-    pub(crate) fn new(
+    fn new(
         ofi: Arc<Ofi>,
         mem: LibfabricSysMem,
         #[cfg(feature = "enable-on-node-shmem")] same_node_bases: Arc<Vec<Option<usize>>>,
@@ -2036,7 +2243,7 @@ impl LibfabricSysAlloc {
         num_bytes: usize,
         padding: usize,
         alloc_table: Arc<AllocInfoManager>,
-        mcast_group: Option<(*mut libfabric_sys::fid_mc, u64)>,
+        mcast_group: Option<Arc<RawMcGroup>>,
     ) -> Result<Self, i32> {
         let start = mem.as_ptr() as usize;
         let end = start + num_bytes;
@@ -2060,7 +2267,7 @@ impl LibfabricSysAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Fabric(alloc_table),
-            mcast_group: mcast_group,
+            mcast_group,
             print: false,
         };
 
@@ -2120,7 +2327,7 @@ impl LibfabricSysAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start + offset, alloc_manager),
-            mcast_group: self.mcast_group,
+            mcast_group: self.mcast_group.clone(),
             print: self.print,
         };
 
@@ -2165,7 +2372,7 @@ impl LibfabricSysAlloc {
             remote_allocs: self.remote_allocs.clone(),
             id: self.id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start, alloc_manager),
-            mcast_group: self.mcast_group,
+            mcast_group: self.mcast_group.clone(),
             print: true,
         };
         get_ref_count(unsafe {
@@ -2206,7 +2413,7 @@ impl LibfabricSysAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             id,
             alloc_table: self.alloc_table.clone(),
-            mcast_group: self.mcast_group,
+            mcast_group: self.mcast_group.clone(),
             print: self.print,
         };
         debug!(target: "libfabric-sys", "Created LibfabricSys sub-allocation: {:?}", alloc);
@@ -2355,14 +2562,22 @@ impl LibfabricSysAlloc {
     ) {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        if pe == self.ofi.my_pe {
+            std::ptr::copy(
+                src_addr.as_ptr() as *const u8,
+                (self.start() + offset) as *mut u8,
+                src_addr.len() * std::mem::size_of::<T>(),
+            );
+            return;
+        }
         #[cfg(feature = "enable-on-node-shmem")]
         if let Some(addr) = self.same_node_addr(pe, offset) {
-            std::ptr::copy_nonoverlapping(
+            std::ptr::copy(
                 src_addr.as_ptr() as *const u8,
                 addr.as_ptr::<u8>() as *mut u8,
                 src_addr.len() * std::mem::size_of::<T>(),
             );
-            return Ok(());
+            return;
         }
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
@@ -2445,14 +2660,22 @@ impl LibfabricSysAlloc {
     ) {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        if pe == self.ofi.my_pe {
+            std::ptr::copy(
+                (self.start() + offset) as *const u8,
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return;
+        }
         #[cfg(feature = "enable-on-node-shmem")]
         if let Some(addr) = self.same_node_addr(pe, offset) {
-            std::ptr::copy_nonoverlapping(
+            std::ptr::copy(
                 addr.as_ptr::<u8>(),
                 dst_addr.as_mut_ptr() as *mut u8,
                 dst_addr.len() * std::mem::size_of::<T>(),
             );
-            return Ok(());
+            return;
         }
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
@@ -2542,9 +2765,17 @@ impl LibfabricSysAlloc {
     ) {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        if pe == self.ofi.my_pe {
+            std::ptr::copy(
+                (self.start() + offset) as *const u8,
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return;
+        }
         #[cfg(feature = "enable-on-node-shmem")]
         if let Some(addr) = self.same_node_addr(pe, offset) {
-            std::ptr::copy_nonoverlapping(
+            std::ptr::copy(
                 addr.as_ptr::<u8>(),
                 dst_addr.as_mut_ptr() as *mut u8,
                 dst_addr.len() * std::mem::size_of::<T>(),
@@ -2717,7 +2948,9 @@ impl LibfabricSysAlloc {
             let offset_bytes = offset * std::mem::size_of::<T>();
             if let Some(addr) = self.same_node_addr(pe, offset_bytes) {
                 result[0] = match crate::lamellae::comm::atomic::net_atomic_compare_exchange(
-                    current, new, &addr,
+                    unsafe { *current },
+                    unsafe { *new },
+                    &addr,
                 ) {
                     Ok(old) | Err(old) => old,
                 };
@@ -2781,7 +3014,7 @@ impl LibfabricSysAlloc {
         // let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
         // let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let (_, addr) = self
+        let mcast_group = self
             .mcast_group
             .as_ref()
             .expect("No multicast group for allreduce");
@@ -2793,7 +3026,7 @@ impl LibfabricSysAlloc {
                 std::ptr::null_mut(),
                 result.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                *addr,
+                mcast_group.coll_addr,
                 rust_type_to_fi_type::<T>().expect("Unsupported type for allreduce operation"),
                 op.into(),
                 0,
@@ -2822,7 +3055,7 @@ impl LibfabricSysAlloc {
         // let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
         // let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let (_, coll_addr) = self
+        let mcast_group = self
             .mcast_group
             .as_ref()
             .expect("No multicast group for allgather");
@@ -2834,7 +3067,7 @@ impl LibfabricSysAlloc {
                 std::ptr::null_mut(),
                 result.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                *coll_addr,
+                mcast_group.coll_addr,
                 rust_type_to_fi_type::<T>().expect("Unsupported type for allgather operation"),
                 0,
                 std::ptr::null_mut(),
@@ -2846,7 +3079,7 @@ impl LibfabricSysAlloc {
         // let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
         // let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self
+        let mcast_group = self
             .mcast_group
             .as_ref()
             .expect("No multicast group for alltoall");
@@ -2858,7 +3091,7 @@ impl LibfabricSysAlloc {
                 std::ptr::null_mut(),
                 result.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                *coll_addr,
+                mcast_group.coll_addr,
                 rust_type_to_fi_type::<T>().expect("Unsupported type for alltoall operation"),
                 0,
                 std::ptr::null_mut(),
@@ -2874,7 +3107,7 @@ impl LibfabricSysAlloc {
         blocking: bool,
     ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self
+        let mcast_group = self
             .mcast_group
             .as_ref()
             .expect("No multicast group for collective reduce");
@@ -2900,7 +3133,7 @@ impl LibfabricSysAlloc {
                 std::ptr::null_mut(),
                 res.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                *coll_addr,
+                mcast_group.coll_addr,
                 cg.mapped_addresses[root_pe],
                 rust_type_to_fi_type::<T>().expect("Unsupported type for reduce operation"),
                 op.into(),
@@ -2917,7 +3150,7 @@ impl LibfabricSysAlloc {
         blocking: bool,
     ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self
+        let mcast_group = self
             .mcast_group
             .as_ref()
             .expect("No multicast group for collective reduce");
@@ -2941,7 +3174,7 @@ impl LibfabricSysAlloc {
                 std::ptr::null_mut(),
                 res.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                *coll_addr,
+                mcast_group.coll_addr,
                 cg.mapped_addresses[root_pe],
                 rust_type_to_fi_type::<T>().expect("Unsupported type for gather operation"),
                 0,
@@ -2956,7 +3189,7 @@ impl LibfabricSysAlloc {
         blocking: bool,
     ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self
+        let mcast_group = self
             .mcast_group
             .as_ref()
             .expect("No multicast group for collective reduce");
@@ -2971,7 +3204,7 @@ impl LibfabricSysAlloc {
                 result.as_mut_ptr().cast(),
                 result.len(),
                 std::ptr::null_mut(),
-                *coll_addr,
+                mcast_group.coll_addr,
                 cg.mapped_addresses[root_pe],
                 rust_type_to_fi_type::<T>().expect("Unsupported type for broadcast operation"),
                 0,
@@ -2987,7 +3220,7 @@ impl LibfabricSysAlloc {
         blocking: bool,
     ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self
+        let mcast_group = self
             .mcast_group
             .as_ref()
             .expect("No multicast group for collective reduce");
@@ -3008,7 +3241,7 @@ impl LibfabricSysAlloc {
                 std::ptr::null_mut(),
                 res.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                *coll_addr,
+                mcast_group.coll_addr,
                 cg.mapped_addresses[root_pe],
                 rust_type_to_fi_type::<T>().expect("Unsupported type for scatter operation"),
                 0,
@@ -3025,7 +3258,7 @@ impl LibfabricSysAlloc {
         blocking: bool,
     ) {
         let cg = &self.ofi.comm_group;
-        let (_mc, coll_addr) = self
+        let mcast_group = self
             .mcast_group
             .as_ref()
             .expect("No multicast group for allreduce");
@@ -3037,7 +3270,7 @@ impl LibfabricSysAlloc {
                 std::ptr::null_mut(),
                 result.as_mut_ptr().cast(),
                 std::ptr::null_mut(),
-                *coll_addr,
+                mcast_group.coll_addr,
                 rust_type_to_fi_type::<T>().expect("Unsupported type for reduce_scatter operation"),
                 op.into(),
                 0,
@@ -3095,6 +3328,15 @@ impl Drop for LibfabricSysAlloc {
                     debug!(target: "libfabric-sys", "Dropping fabric LibfabricSysAlloc from rt LibfabricSysAlloc: {:?}", self);
                     fabric_alloc_table.remove_from_alloc(self);
                 }
+            }
+        }
+
+        if fabric_ref_count == 1 {
+            // Close provider objects before the backing mmap/shared-memory
+            // segment is released by field destruction.
+            drop(self.mcast_group.take());
+            unsafe {
+                close_fid("memory region", &mut (*self.mr).fid);
             }
         }
     }
