@@ -614,7 +614,7 @@ impl InnerCQ {
             new_alloc = false;
             let alloc_id = self.alloc_id.fetch_add(1, Ordering::SeqCst);
 
-            let mut my_alloc_buf = self.alloc_buffer[self.my_pe].lock_blocking();
+            let mut my_alloc_buf = self.alloc_buffer[self.my_pe].lock().await;
             if my_alloc_buf[0].hash() == self.clear_cmd.hash() {
                 my_alloc_buf[0].daddr = alloc_id;
                 my_alloc_buf[0].dsize = min_size;
@@ -632,7 +632,7 @@ impl InnerCQ {
             let mut start = std::time::Instant::now();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    let alloc_buf = self.alloc_buffer[pe].lock_blocking();
+                    let alloc_buf = self.alloc_buffer[pe].lock().await;
                     while !alloc_buf[0].check_hash() || alloc_buf[0].cmd != Cmd::Alloc {
                         self.comm.thread_flush();
                         async_std::task::yield_now().await;
@@ -677,7 +677,7 @@ impl InnerCQ {
                         async_std::task::yield_now().await;
                     }
                 } else {
-                    let alloc_buf = self.alloc_buffer[pe].lock_blocking();
+                    let alloc_buf = self.alloc_buffer[pe].lock().await;
                     while !alloc_buf[0].check_hash() || alloc_buf[0].cmd != Cmd::Clear {
                         if alloc_buf[0].cmd == Cmd::Alloc {
                             if alloc_buf[0].daddr > alloc_id {
