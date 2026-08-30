@@ -113,12 +113,18 @@ impl<T: Remote> PutFutureData<T> {
     }
     pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                self.exec_op().await;
-            },
-            counters,
-        )
+        let scheduler = self.scheduler.clone();
+        let mut fut: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(self.exec_op());
+        let waker = futures_util::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        match fut.as_mut().poll(&mut cx) {
+            Poll::Ready(res) => {
+                let done: Pin<Box<dyn Future<Output = ()> + Send>> =
+                    Box::pin(std::future::ready(res));
+                scheduler.spawn_task(done, counters)
+            }
+            Poll::Pending => scheduler.spawn_task(fut, counters),
+        }
     }
 }
 
@@ -177,9 +183,18 @@ impl<T: Remote> GetFutureData<T> {
     }
     pub(crate) fn spawn(self) -> LamellarTask<T> {
         let counters = self.counters.clone();
-        self.scheduler
-            .clone()
-            .spawn_task(async move { self.exec_at().await }, counters)
+        let scheduler = self.scheduler.clone();
+        let mut fut: Pin<Box<dyn Future<Output = T> + Send>> = Box::pin(self.exec_at());
+        let waker = futures_util::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        match fut.as_mut().poll(&mut cx) {
+            Poll::Ready(res) => {
+                let done: Pin<Box<dyn Future<Output = T> + Send>> =
+                    Box::pin(std::future::ready(res));
+                scheduler.spawn_task(done, counters)
+            }
+            Poll::Pending => scheduler.spawn_task(fut, counters),
+        }
     }
 }
 
@@ -257,9 +272,18 @@ impl<T: Remote> GetBufferFutureData<T> {
     }
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
         let counters = self.counters.clone();
-        self.scheduler
-            .clone()
-            .spawn_task(async move { self.exec_at().await }, counters)
+        let scheduler = self.scheduler.clone();
+        let mut fut: Pin<Box<dyn Future<Output = Vec<T>> + Send>> = Box::pin(self.exec_at());
+        let waker = futures_util::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        match fut.as_mut().poll(&mut cx) {
+            Poll::Ready(res) => {
+                let done: Pin<Box<dyn Future<Output = Vec<T>> + Send>> =
+                    Box::pin(std::future::ready(res));
+                scheduler.spawn_task(done, counters)
+            }
+            Poll::Pending => scheduler.spawn_task(fut, counters),
+        }
     }
 }
 
@@ -327,12 +351,18 @@ impl<T: Remote, B: AsLamellarBuffer<T>> GetIntoBufferFutureData<T, B> {
     }
     pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                self.exec_op().await;
-            },
-            counters,
-        )
+        let scheduler = self.scheduler.clone();
+        let mut fut: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(self.exec_op());
+        let waker = futures_util::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        match fut.as_mut().poll(&mut cx) {
+            Poll::Ready(res) => {
+                let done: Pin<Box<dyn Future<Output = ()> + Send>> =
+                    Box::pin(std::future::ready(res));
+                scheduler.spawn_task(done, counters)
+            }
+            Poll::Pending => scheduler.spawn_task(fut, counters),
+        }
     }
 }
 

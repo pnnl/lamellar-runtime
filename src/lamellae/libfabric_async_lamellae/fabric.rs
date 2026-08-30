@@ -49,7 +49,6 @@ use libfabric::comm::atomic::AtomicFetchEp;
 use libfabric::comm::atomic::AtomicValidEp;
 use libfabric::comm::atomic::AtomicWriteEp;
 use libfabric::comm::collective::CollectiveAttr;
-use libfabric::comm::rma::ReadEp;
 use libfabric::comm::rma::WriteEp;
 use libfabric::domain::Domain;
 use libfabric::domain::DomainBuilder;
