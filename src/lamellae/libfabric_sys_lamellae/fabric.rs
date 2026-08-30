@@ -261,17 +261,6 @@ impl CommGroup {
         }
     }
 
-    pub(crate) fn poll_wait_all(&self) -> Poll<()> {
-        let put_ready = self.poll_wait_for_tx_cntr().is_ready();
-        let get_ready = self.poll_wait_for_rx_cntr().is_ready();
-        let coll_ready = self.poll_wait_for_collectives().is_ready();
-        if put_ready && get_ready && coll_ready {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
-    }
-
     fn post_collective<F>(&self, blocking: bool, mut fun: F)
     where
         F: FnMut() -> isize,
@@ -1721,10 +1710,6 @@ impl Ofi {
 
     pub(crate) fn poll_wait_for_collectives(&self) -> Poll<()> {
         self.comm_group.poll_wait_for_collectives()
-    }
-
-    pub(crate) fn poll_wait_all(&self) -> Poll<()> {
-        self.comm_group.poll_wait_all()
     }
 
     pub(crate) fn progress_all(&self) {
