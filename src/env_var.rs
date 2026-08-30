@@ -44,6 +44,8 @@
 //!         - `static` -- constant usize indices
 //!         - `dynamic` -- default, only uses as large an int as necessary to index the array, bounded by the max number of elements on any PE.
 //! - `LAMELLAR_AM_SIZE_THRESHOLD` - the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated, default: 100000
+//! - `LAMELLAR_SCALAR_INLINE_THRESHOLD` - the threshold (in bytes) below which a scalar (POD) array batch-op payload is inlined
+//!   directly into its active message instead of being allocated from the RDMAable memory pool and fetched via a GET, default: 524288
 //! - `LAMELLAR_ROFI_PROVIDER` - the provider for the rofi backend (only used with the rofi backend), default: "verbs"
 //! - `LAMELLAR_ROFI_DOMAIN` - the domain for the rofi backend (only used with the rofi backend), default: ""
 //! - `LAMELLAR_DISABLE_ON_NODE_SHMEM` - set to true or 1 to disable same-node shared-memory fast path (UCX/libfabric), default: false
@@ -208,6 +210,10 @@ fn default_am_size_threshold() -> usize {
     100000
 }
 
+fn default_scalar_inline_threshold() -> usize {
+    524288
+}
+
 fn default_rofi_provider() -> String {
     "verbs".to_owned()
 }
@@ -301,6 +307,9 @@ pub struct Config {
 
     #[serde(default = "default_am_size_threshold")]
     pub am_size_threshold: usize, //the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated
+    /// Threshold (bytes) below which a scalar array batch-op payload is inlined into its AM instead of using the RDMAable memory pool + GET, default: 524288
+    #[serde(default = "default_scalar_inline_threshold")]
+    pub scalar_inline_threshold: usize,
     #[serde(default = "default_rofi_provider")]
     pub rofi_provider: String,
     #[serde(default = "default_rofi_domain")]

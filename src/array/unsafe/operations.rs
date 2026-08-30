@@ -5,7 +5,7 @@ use crate::array::operations::*;
 use crate::array::scalar_impls::{
     PackedIdxVal, PackedIndicies, ScalarMultiIdxMultiValAm, ScalarMultiIdxMultiValAmReturn,
     ScalarMultiIdxSingleValAm, ScalarMultiIdxSingleValAmReturn, ScalarSingleIdxMultiValAm,
-    ScalarSingleIdxMultiValAmReturn,
+    ScalarSingleIdxMultiValAmReturn, ScalarValBuf,
 };
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv, ScalarType};
@@ -647,7 +647,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // exec_task() for them to finish -- see single_val_single_index for
         // why. This also ensures all the internal AMs have launched before
         // returning, so calls like wait_all work properly.
-        let all_reqs = futures_executor::block_on(futures_util::future::join_all(task_futures));
+        // Wrapped in block_in_place so that on the tokio executor, a worker thread
+        // blocking here doesn't exhaust the whole worker pool -- see
+        // lamellar_team.rs wait_all for the same idiom.
+        let scheduler = self.inner.data.team.scheduler.clone();
+        let all_reqs = scheduler.block_in_place(|| {
+            futures_executor::block_on(futures_util::future::join_all(task_futures))
+        });
         let mut res = VecDeque::new();
         for reqs in all_reqs {
             res.extend(reqs);
@@ -715,7 +721,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // Run all the per-value sub-tasks concurrently inline, rather than
         // spawning them onto the scheduler and busy-waiting on exec_task()
         // for them to finish -- see single_val_single_index for why.
-        let all_reqs = futures_executor::block_on(futures_util::future::join_all(task_futures));
+        // Wrapped in block_in_place so that on the tokio executor, a worker thread
+        // blocking here doesn't exhaust the whole worker pool -- see
+        // lamellar_team.rs wait_all for the same idiom.
+        let scheduler = self.inner.data.team.scheduler.clone();
+        let all_reqs = scheduler.block_in_place(|| {
+            futures_executor::block_on(futures_util::future::join_all(task_futures))
+        });
         let mut res = VecDeque::new();
         for reqs in all_reqs {
             res.extend(reqs);
@@ -825,7 +837,13 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // exec_task() for them to finish -- see single_val_single_index for
         // why. This also ensures all the internal AMs have launched before
         // returning, so calls like wait_all work properly.
-        let all_reqs = futures_executor::block_on(futures_util::future::join_all(task_futures));
+        // Wrapped in block_in_place so that on the tokio executor, a worker thread
+        // blocking here doesn't exhaust the whole worker pool -- see
+        // lamellar_team.rs wait_all for the same idiom.
+        let scheduler = self.inner.data.team.scheduler.clone();
+        let all_reqs = scheduler.block_in_place(|| {
+            futures_executor::block_on(futures_util::future::join_all(task_futures))
+        });
         let mut res = VecDeque::new();
         for reqs in all_reqs {
             res.extend(reqs);
@@ -862,18 +880,24 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // (inside a task already running on that same fixed-size worker
         // pool, e.g. via for_each_async) can wedge every worker thread at
         // once with nothing left to run the task they're all waiting on.
-        let (req, res_buff) = futures_executor::block_on(async move {
-            let am = MultiValMultiIndex::new(byte_array.clone(), op, &mut idx_val, index_size)
-                .await
-                .into_am::<T>(ret);
-            let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
-                pe,
-                am,
-                Some(the_array.inner.data.array_counters.clone()),
-            );
-            the_array.inner.data.array_counters.dec_outstanding(1);
-            the_array.inner.data.team.dec_outstanding(1);
-            (req, res_buff)
+        // Wrapped in block_in_place so that on the tokio executor, a worker thread
+        // blocking here doesn't exhaust the whole worker pool -- see
+        // lamellar_team.rs wait_all for the same idiom.
+        let scheduler = self.inner.data.team.scheduler.clone();
+        let (req, res_buff) = scheduler.block_in_place(|| {
+            futures_executor::block_on(async move {
+                let am = MultiValMultiIndex::new(byte_array.clone(), op, &mut idx_val, index_size)
+                    .await
+                    .into_am::<T>(ret);
+                let req = the_array.inner.data.team.exec_arc_am_pe::<R>(
+                    pe,
+                    am,
+                    Some(the_array.inner.data.array_counters.clone()),
+                );
+                the_array.inner.data.array_counters.dec_outstanding(1);
+                the_array.inner.data.team.dec_outstanding(1);
+                (req, res_buff)
+            })
         });
         let mut res = VecDeque::new();
         res.push_back((req, res_buff));
@@ -891,7 +915,7 @@ pub enum BatchReturnType {
 
 struct SingleValMultiIndex {
     array: LamellarByteArray,
-    indices: Option<OneSidedMemoryRegion<u8>>,
+    indices: Option<ScalarValBuf>,
     indices_u8: Option<Vec<u8>>,
     val: Vec<u8>,
     op: ArrayOpCmd<Vec<u8>>,
@@ -909,22 +933,28 @@ impl SingleValMultiIndex {
     ) -> Self {
         let scalar_type = ScalarType::get_type::<T>();
         let (indices_mr, indices_u8) = if scalar_type.is_some() {
-            let mut mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
-            while let None = mem_region {
-                // println!("Failed to allocate mem region, retrying...");
-                // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
-                async_std::task::yield_now().await;
-                mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
+            if indices.len() < config().scalar_inline_threshold {
+                let inline =
+                    unsafe { std::slice::from_raw_parts(indices.as_ptr(), indices.len()).to_vec() };
+                (Some(ScalarValBuf::Inline(inline)), None)
+            } else {
+                let mut mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
+                while let None = mem_region {
+                    // println!("Failed to allocate mem region, retrying...");
+                    // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
+                    async_std::task::yield_now().await;
+                    mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
+                }
+                let mem_region = mem_region.unwrap();
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        indices.as_ptr(),
+                        mem_region.as_mut_ptr().unwrap(),
+                        indices.len(),
+                    );
+                }
+                (Some(ScalarValBuf::Rdma(mem_region)), None)
             }
-            let mem_region = mem_region.unwrap();
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    indices.as_ptr(),
-                    mem_region.as_mut_ptr().unwrap(),
-                    indices.len(),
-                );
-            }
-            (Some(mem_region), None)
         } else {
             let indices_u8 =
                 unsafe { std::slice::from_raw_parts(indices.as_ptr(), indices.len()).to_vec() };
@@ -986,7 +1016,7 @@ impl SingleValMultiIndex {
 struct MultiValSingleIndex {
     array: LamellarByteArray,
     idx: usize,
-    vals: Option<OneSidedMemoryRegion<u8>>,
+    vals: Option<ScalarValBuf>,
     val_u8: Option<Vec<u8>>,
     op: ArrayOpCmd<Vec<u8>>,
     scalar_type: Option<(ScalarType, bool)>, // type and whether it is wrapped in an option
@@ -1000,28 +1030,32 @@ impl MultiValSingleIndex {
         val: Vec<T>,
     ) -> Self {
         let scalar_type = ScalarType::get_type::<T>();
+        let payload_bytes = val.len() * std::mem::size_of::<T>();
         let (vals, val_u8) = if scalar_type.is_some() {
-            let mut mem_region = array.team().try_alloc_one_sided_mem_region::<T>(val.len());
-            while let None = mem_region {
-                // println!("Failed to allocate mem region, retrying...");
-                // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
-                async_std::task::yield_now().await;
-                mem_region = array.team().try_alloc_one_sided_mem_region::<T>(val.len());
+            if payload_bytes < config().scalar_inline_threshold {
+                let inline = unsafe {
+                    std::slice::from_raw_parts(val.as_ptr() as *const u8, payload_bytes).to_vec()
+                };
+                (Some(ScalarValBuf::Inline(inline)), None)
+            } else {
+                let mut mem_region = array.team().try_alloc_one_sided_mem_region::<T>(val.len());
+                while let None = mem_region {
+                    // println!("Failed to allocate mem region, retrying...");
+                    // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
+                    async_std::task::yield_now().await;
+                    mem_region = array.team().try_alloc_one_sided_mem_region::<T>(val.len());
+                }
+                let mem_region = mem_region.unwrap();
+                let mem_region = unsafe {
+                    mem_region.as_mut_slice().copy_from_slice(&val);
+                    mem_region.to_base::<u8>()
+                };
+                (Some(ScalarValBuf::Rdma(mem_region)), None)
             }
-            let mem_region = mem_region.unwrap();
-            let mem_region = unsafe {
-                mem_region.as_mut_slice().copy_from_slice(&val);
-                mem_region.to_base::<u8>()
-            };
-            (Some(mem_region), None)
         } else {
-        let val_u8 = unsafe {
-            std::slice::from_raw_parts(
-                val.as_ptr() as *const u8,
-                val.len() * std::mem::size_of::<T>(),
-            )
-            .to_vec()
-        };
+            let val_u8 = unsafe {
+                std::slice::from_raw_parts(val.as_ptr() as *const u8, payload_bytes).to_vec()
+            };
             (None, Some(val_u8))
         };
 
@@ -1070,7 +1104,7 @@ impl MultiValSingleIndex {
 
 struct MultiValMultiIndex {
     array: LamellarByteArray,
-    idxs_vals: Option<OneSidedMemoryRegion<u8>>,
+    idxs_vals: Option<ScalarValBuf>,
     idx_vals_u8: Option<Vec<u8>>,
     op: ArrayOpCmd<Vec<u8>>,
     index_size: usize,
@@ -1086,22 +1120,29 @@ impl MultiValMultiIndex {
     ) -> Self {
         let scalar_type = ScalarType::get_type::<T>();
         let (idx_vals_mr, idx_vals_u8) = if let Some(_) = &scalar_type {
-            let mut mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
-            while let None = mem_region {
-                // println!("Failed to allocate mem region, retrying...");
-                // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
-                async_std::task::yield_now().await;
-                mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
+            if idxs_vals.len() < config().scalar_inline_threshold {
+                let inline = unsafe {
+                    std::slice::from_raw_parts(idxs_vals.as_ptr(), idxs_vals.len()).to_vec()
+                };
+                (Some(ScalarValBuf::Inline(inline)), None)
+            } else {
+                let mut mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
+                while let None = mem_region {
+                    // println!("Failed to allocate mem region, retrying...");
+                    // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
+                    async_std::task::yield_now().await;
+                    mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
+                }
+                let mem_region = mem_region.unwrap();
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        idxs_vals.as_ptr(),
+                        mem_region.as_mut_ptr().unwrap(),
+                        idxs_vals.len(),
+                    );
+                }
+                (Some(ScalarValBuf::Rdma(mem_region)), None)
             }
-            let mem_region = mem_region.unwrap();
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    idxs_vals.as_ptr(),
-                    mem_region.as_mut_ptr().unwrap(),
-                    idxs_vals.len(),
-                );
-            }
-            (Some(mem_region), None)
         } else {
             let idx_vals_u8 =
                 unsafe { std::slice::from_raw_parts(idxs_vals.as_ptr(), idxs_vals.len()).to_vec() };

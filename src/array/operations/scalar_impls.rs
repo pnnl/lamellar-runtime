@@ -2,6 +2,49 @@ use crate::array::*;
 use crate::OneSidedMemoryRegion;
 use crate::Remote;
 
+/// Holds a scalar batch-op payload (vals/indices/idx_val) either inline (small
+/// payloads, avoids the RDMA-registered pool + extra GET round trip) or via the
+/// existing `OneSidedMemoryRegion` RDMA path (large payloads, where the round
+/// trip is amortized). See `SCALAR_INLINE_THRESHOLD` in `array/unsafe/operations.rs`.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub(crate) enum ScalarValBuf {
+    Rdma(OneSidedMemoryRegion<u8>),
+    Inline(Vec<u8>),
+}
+
+impl ScalarValBuf {
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            Self::Rdma(r) => r.len(),
+            Self::Inline(v) => v.len(),
+        }
+    }
+
+    pub(crate) async unsafe fn get_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::Rdma(r) => {
+                let n = r.len();
+                unsafe { r.get_buffer(0, n).await }
+            }
+            Self::Inline(v) => v.clone(),
+        }
+    }
+
+    /// Fetches `num_elems` elements of `T`. For the `Rdma` variant this mirrors
+    /// the existing `to_base::<T>().get_buffer(...)` pattern. For `Inline`,
+    /// `read_unaligned` is required per-element since a `Vec<u8>`'s allocation
+    /// is only guaranteed byte-aligned.
+    pub(crate) async unsafe fn get_typed<T: Remote>(&self, num_elems: usize) -> Vec<T> {
+        match self {
+            Self::Rdma(r) => unsafe { r.clone().to_base::<T>().get_buffer(0, num_elems).await },
+            Self::Inline(v) => v
+                .chunks_exact(std::mem::size_of::<T>())
+                .map(|c| unsafe { std::ptr::read_unaligned(c.as_ptr() as *const T) })
+                .collect(),
+        }
+    }
+}
+
 // crabtime expands these by running a scratch `cargo run` at macro-expansion time,
 // which needs network/registry access - unavailable in docs.rs's sandboxed build.
 // Both generated methods are pub(crate) and never invoked during doc generation, so
@@ -381,7 +424,7 @@ impl PackedIdxVal {
 pub(crate) struct ScalarSingleIdxMultiValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) index: usize,
-    pub(crate) vals: OneSidedMemoryRegion<u8>,
+    pub(crate) vals: ScalarValBuf,
     pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
@@ -408,8 +451,7 @@ impl ScalarSingleIdxMultiValAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for ScalarSingleIdxMultiValAm {
     async fn exec(&self) {
-        let num_bytes = self.vals.len();
-        let bytes = unsafe { self.vals.get_buffer(0, num_bytes).await };
+        let bytes = unsafe { self.vals.get_bytes().await };
         let array = self.array.clone();
 
         if self.opt {
@@ -424,7 +466,7 @@ impl LamellarAM for ScalarSingleIdxMultiValAm {
 pub(crate) struct ScalarSingleIdxMultiValAmReturn {
     pub(crate) array: LamellarByteArray,
     pub(crate) index: usize,
-    pub(crate) vals: OneSidedMemoryRegion<u8>,
+    pub(crate) vals: ScalarValBuf,
     pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
     pub(crate) op: ArrayOpCmd<Vec<u8>>,
@@ -452,8 +494,7 @@ impl ScalarSingleIdxMultiValAmReturn {
 #[lamellar_impl::rt_am]
 impl LamellarAM for ScalarSingleIdxMultiValAmReturn {
     async fn exec(&self) -> OneSidedMemoryRegion<u8> {
-        let num_bytes = self.vals.len();
-        let bytes = unsafe { self.vals.get_buffer(0, num_bytes).await };
+        let bytes = unsafe { self.vals.get_bytes().await };
         let array = self.array.clone();
 
         if self.opt {
@@ -468,7 +509,7 @@ impl LamellarAM for ScalarSingleIdxMultiValAmReturn {
 pub(crate) struct ScalarMultiIdxSingleValAm {
     pub(crate) array: LamellarByteArray,
     pub(crate) val: Vec<u8>,
-    pub(crate) indices: OneSidedMemoryRegion<u8>,
+    pub(crate) indices: ScalarValBuf,
     pub(crate) idx_size: usize,
     pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
@@ -499,42 +540,24 @@ impl LamellarAM for ScalarMultiIdxSingleValAm {
 
         let indices: Box<dyn Iterator<Item = usize> + Send + '_> = match self.idx_size {
             1 => Box::new(
-                unsafe { self.indices.get_buffer(0, num_bytes).await }
+                unsafe { self.indices.get_typed::<u8>(num_bytes).await }
                     .into_iter()
                     .map(|b| b as usize),
             ),
             2 => Box::new(
-                unsafe {
-                    self.indices
-                        .clone()
-                        .to_base::<u16>()
-                        .get_buffer(0, num_bytes / 2)
-                        .await
-                }
-                .into_iter()
-                .map(|b| b as usize),
+                unsafe { self.indices.get_typed::<u16>(num_bytes / 2).await }
+                    .into_iter()
+                    .map(|b| b as usize),
             ),
             4 => Box::new(
-                unsafe {
-                    self.indices
-                        .clone()
-                        .to_base::<u32>()
-                        .get_buffer(0, num_bytes / 4)
-                        .await
-                }
-                .into_iter()
-                .map(|b| b as usize),
+                unsafe { self.indices.get_typed::<u32>(num_bytes / 4).await }
+                    .into_iter()
+                    .map(|b| b as usize),
             ),
             _ => Box::new(
-                unsafe {
-                    self.indices
-                        .clone()
-                        .to_base::<u64>()
-                        .get_buffer(0, num_bytes / 8)
-                        .await
-                }
-                .into_iter()
-                .map(|b| b as usize),
+                unsafe { self.indices.get_typed::<u64>(num_bytes / 8).await }
+                    .into_iter()
+                    .map(|b| b as usize),
             ),
         };
         if self.opt {
@@ -549,7 +572,7 @@ impl LamellarAM for ScalarMultiIdxSingleValAm {
 pub(crate) struct ScalarMultiIdxSingleValAmReturn {
     pub(crate) array: LamellarByteArray,
     pub(crate) val: Vec<u8>,
-    pub(crate) indices: OneSidedMemoryRegion<u8>,
+    pub(crate) indices: ScalarValBuf,
     pub(crate) idx_size: usize,
     pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
@@ -581,42 +604,24 @@ impl LamellarAM for ScalarMultiIdxSingleValAmReturn {
 
         let indices: Box<dyn Iterator<Item = usize> + Send + '_> = match self.idx_size {
             1 => Box::new(
-                unsafe { self.indices.get_buffer(0, num_bytes).await }
+                unsafe { self.indices.get_typed::<u8>(num_bytes).await }
                     .into_iter()
                     .map(|b| b as usize),
             ),
             2 => Box::new(
-                unsafe {
-                    self.indices
-                        .clone()
-                        .to_base::<u16>()
-                        .get_buffer(0, num_bytes / 2)
-                        .await
-                }
-                .into_iter()
-                .map(|b| b as usize),
+                unsafe { self.indices.get_typed::<u16>(num_bytes / 2).await }
+                    .into_iter()
+                    .map(|b| b as usize),
             ),
             4 => Box::new(
-                unsafe {
-                    self.indices
-                        .clone()
-                        .to_base::<u32>()
-                        .get_buffer(0, num_bytes / 4)
-                        .await
-                }
-                .into_iter()
-                .map(|b| b as usize),
+                unsafe { self.indices.get_typed::<u32>(num_bytes / 4).await }
+                    .into_iter()
+                    .map(|b| b as usize),
             ),
             _ => Box::new(
-                unsafe {
-                    self.indices
-                        .clone()
-                        .to_base::<u64>()
-                        .get_buffer(0, num_bytes / 8)
-                        .await
-                }
-                .into_iter()
-                .map(|b| b as usize),
+                unsafe { self.indices.get_typed::<u64>(num_bytes / 8).await }
+                    .into_iter()
+                    .map(|b| b as usize),
             ),
         };
         if self.opt {
@@ -630,7 +635,7 @@ impl LamellarAM for ScalarMultiIdxSingleValAmReturn {
 #[lamellar_impl::AmDataRT]
 pub(crate) struct ScalarMultiIdxMultiValAm {
     pub(crate) array: LamellarByteArray,
-    pub(crate) idx_val: OneSidedMemoryRegion<u8>,
+    pub(crate) idx_val: ScalarValBuf,
     pub(crate) idx_size: usize,
     pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
@@ -656,8 +661,7 @@ impl ScalarMultiIdxMultiValAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for ScalarMultiIdxMultiValAm {
     async fn exec(&self) {
-        let num_bytes = self.idx_val.len();
-        let bytes = unsafe { self.idx_val.get_buffer(0, num_bytes).await };
+        let bytes = unsafe { self.idx_val.get_bytes().await };
         let array = self.array.clone();
 
         if self.opt {
@@ -671,7 +675,7 @@ impl LamellarAM for ScalarMultiIdxMultiValAm {
 #[lamellar_impl::AmDataRT]
 pub(crate) struct ScalarMultiIdxMultiValAmReturn {
     pub(crate) array: LamellarByteArray,
-    pub(crate) idx_val: OneSidedMemoryRegion<u8>,
+    pub(crate) idx_val: ScalarValBuf,
     pub(crate) idx_size: usize,
     pub(crate) scalar_type: ScalarType,
     pub(crate) opt: bool,
@@ -698,8 +702,7 @@ impl ScalarMultiIdxMultiValAmReturn {
 #[lamellar_impl::rt_am]
 impl LamellarAM for ScalarMultiIdxMultiValAmReturn {
     async fn exec(&self) -> OneSidedMemoryRegion<u8> {
-        let num_bytes = self.idx_val.len();
-        let bytes = unsafe { self.idx_val.get_buffer(0, num_bytes).await };
+        let bytes = unsafe { self.idx_val.get_bytes().await };
         let array = self.array.clone();
 
         if self.opt {
