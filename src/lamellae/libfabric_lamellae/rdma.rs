@@ -106,9 +106,9 @@ impl<T: Remote> LibfabricPutFuture<T> {
         self.spawned = true;
     }
     pub(crate) fn block(mut self) {
+        self.exec_op();
         let scheduler = self.scheduler.clone();
         scheduler.block_in_place(move || {
-            self.exec_op();
             if !self.local_op {
                 self.alloc.ofi.wait_all().unwrap();
             }
@@ -117,14 +117,7 @@ impl<T: Remote> LibfabricPutFuture<T> {
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if !self.local_op {
-                    self.alloc.ofi.wait_all().unwrap();
-                }
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -147,12 +140,18 @@ impl<T: Remote> From<LibfabricPutFuture<T>> for RdmaHandle<T> {
 
 impl<T: Remote> Future for LibfabricPutFuture<T> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
         if !self.local_op {
-            self.alloc.ofi.wait_all().unwrap();
+            match self.alloc.ofi.poll_wait_for_tx_cntr() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(()) => {}
+            }
         }
 
         Poll::Ready(())
@@ -201,15 +200,7 @@ impl<T: Remote> LibfabricGetFuture<T> {
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if !self.local_op {
-                    self.alloc.ofi.wait_all().unwrap();
-                }
-                *self.result
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -232,14 +223,20 @@ impl<T: Remote> From<LibfabricGetFuture<T>> for RdmaGetHandle<T> {
 
 impl<T: Remote> Future for LibfabricGetFuture<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_at();
         }
 
         let this = self.project();
         if !*this.local_op {
-            this.alloc.ofi.wait_all().unwrap();
+            match this.alloc.ofi.poll_wait_for_rx_cntr() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(()) => {}
+            }
         }
 
         // Poll::Ready(unsafe { this.result.assume_init_read() })
@@ -286,15 +283,7 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if !self.local_op {
-                    self.alloc.ofi.wait_all().unwrap();
-                }
-                std::mem::take(&mut self.result)
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -317,13 +306,19 @@ impl<T: Remote> From<LibfabricGetBufferFuture<T>> for RdmaGetBufferHandle<T> {
 
 impl<T: Remote> Future for LibfabricGetBufferFuture<T> {
     type Output = Vec<T>;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_at();
         }
         let this = self.project();
         if !*this.local_op {
-            this.alloc.ofi.wait_all().unwrap();
+            match this.alloc.ofi.poll_wait_for_rx_cntr() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(()) => {}
+            }
         }
         Poll::Ready(std::mem::take(this.result))
     }
@@ -369,14 +364,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricGetIntoBufferFuture<T, B> {
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                if !self.local_op {
-                    self.alloc.ofi.wait_all().unwrap();
-                }
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -401,12 +389,18 @@ impl<T: Remote, B: AsLamellarBuffer<T>> From<LibfabricGetIntoBufferFuture<T, B>>
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricGetIntoBufferFuture<T, B> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
         if !self.local_op {
-            self.alloc.ofi.wait_all().unwrap();
+            match self.alloc.ofi.poll_wait_for_rx_cntr() {
+                Poll::Pending => {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                Poll::Ready(()) => {}
+            }
         }
         Poll::Ready(())
     }

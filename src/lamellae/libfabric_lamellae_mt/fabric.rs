@@ -42,6 +42,7 @@ use std::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
+    task::Poll,
 };
 use tracing::{debug, trace};
 
@@ -257,6 +258,47 @@ impl CommGroup {
         );
         // }
         Ok(())
+    }
+
+    // Non-blocking, single-shot-per-poll check. `cntr.read()` (completions) must be
+    // read BEFORE `pending.load()` (issued-count) — see plan note on fresh-read
+    // ordering: this guarantees the issued-count snapshot is >= the true count at
+    // the instant completions were sampled, so completed >= issued proves every op
+    // issued by then (including this future's own) has completed.
+    fn poll_wait_for_cntr(&self, pending: &AtomicU64, cntr: &Counter<WaitableCntr>) -> Poll<()> {
+        if let Err(e) = self.progress() {
+            panic!("Error in progress: {:?}", e);
+        }
+        let completed = cntr.read();
+        let issued = pending.load(Ordering::SeqCst);
+        if completed >= issued {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
+    fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
+        self.poll_wait_for_cntr(&self.put_cnt, &self.put_cntr)
+    }
+
+    fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
+        self.poll_wait_for_cntr(&self.get_cnt, &self.get_cntr)
+    }
+
+    // Same fresh-read-order requirement as poll_wait_for_cntr: completed-count first,
+    // issued-count second.
+    fn poll_wait_for_collectives(&self) -> Poll<()> {
+        if let Err(e) = self.progress() {
+            panic!("Error in progress: {:?}", e);
+        }
+        let completed = self.coll_cnt_completed.load(Ordering::SeqCst);
+        let issued = self.coll_cnt_issued.load(Ordering::SeqCst);
+        if completed >= issued {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
     }
 
     fn post_put(
@@ -1381,6 +1423,51 @@ impl Ofi {
 
     pub(crate) fn thread_progress(&self) -> Result<(), libfabric::error::Error> {
         self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].progress()
+    }
+
+    // Fan out over every comm_group without short-circuiting: each group's own
+    // pending/completed counters are checked (and progressed) every poll, not just
+    // the group that issued this particular op, so no group silently stalls.
+    pub(crate) fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
+        let mut all_ready = true;
+        for cg in self.comm_groups.iter() {
+            if cg.poll_wait_for_tx_cntr().is_pending() {
+                all_ready = false;
+            }
+        }
+        if all_ready {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
+    pub(crate) fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
+        let mut all_ready = true;
+        for cg in self.comm_groups.iter() {
+            if cg.poll_wait_for_rx_cntr().is_pending() {
+                all_ready = false;
+            }
+        }
+        if all_ready {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
+    pub(crate) fn poll_wait_for_collectives(&self) -> Poll<()> {
+        let mut all_ready = true;
+        for cg in self.comm_groups.iter() {
+            if cg.poll_wait_for_collectives().is_pending() {
+                all_ready = false;
+            }
+        }
+        if all_ready {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
     }
 }
 

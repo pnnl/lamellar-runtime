@@ -62,15 +62,9 @@ impl<T: Send + 'static> LibfabricAtomicFuture<T> {
             self.alloc.ofi.wait_all().unwrap();
         })
     }
-    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<()> {
         let counters = self.counters.clone();
-        self.scheduler.clone().spawn_task(
-            async move {
-                self.alloc.ofi.wait_all().unwrap();
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -93,11 +87,17 @@ impl<T> From<LibfabricAtomicFuture<T>> for AtomicOpHandle<T> {
 
 impl<T: Send + 'static> Future for LibfabricAtomicFuture<T> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        match self.alloc.ofi.poll_wait_for_tx_cntr() {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(()) => {}
+        }
         Poll::Ready(())
     }
 }
@@ -143,9 +143,7 @@ impl<T: Remote> LibfabricAtomicFetchFuture<T> {
         })
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<T> {
-        self.exec_op();
-
+    pub(crate) fn spawn(self) -> LamellarTask<T> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -170,11 +168,17 @@ impl<T> From<LibfabricAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
 
 impl<T: Remote> Future for LibfabricAtomicFetchFuture<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        match self.alloc.ofi.poll_wait_for_rx_cntr() {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(()) => {}
+        }
         Poll::Ready(*self.result)
     }
 }
@@ -216,8 +220,7 @@ impl<T: Remote + PartialEq> LibfabricAtomicCompareExchangeFuture<T> {
         })
     }
 
-    pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
-        self.exec_op();
+    pub(crate) fn spawn(self) -> LamellarTask<Result<T, T>> {
         let counters = self.counters.clone();
         self.scheduler.clone().spawn_task(self, counters)
     }
@@ -243,11 +246,17 @@ impl<T> From<LibfabricAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeO
 impl<T: Remote + PartialEq> Future for LibfabricAtomicCompareExchangeFuture<T> {
     type Output = Result<T, T>;
 
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
         }
-        self.alloc.ofi.wait_all().unwrap();
+        match self.alloc.ofi.poll_wait_for_rx_cntr() {
+            Poll::Pending => {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(()) => {}
+        }
 
         Poll::Ready(compare_exchange_result(*self.result, *self.current))
     }

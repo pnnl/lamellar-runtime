@@ -56,6 +56,7 @@ use std::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
+    task::Poll,
 };
 use tracing::{debug, trace};
 
@@ -408,6 +409,65 @@ impl CommGroup {
         );
         // }
         Ok(())
+    }
+
+    // Non-blocking, single-poll check. `cntr` is a bulk completion COUNT shared by every
+    // issuer on this CommGroup, not a per-request handle, so completion order across issuers
+    // is not guaranteed. Must read `cntr` (completions) first, then `pending` (issued count)
+    // second, fresh every call: since `pending` only grows, sampling it strictly after the
+    // cntr read guarantees the target is >= true issued-count at read time, so `completed >=
+    // issued` proves every op issued as of this call (including this poll's own, since it was
+    // issued before this call started) has completed — regardless of completion order. Never
+    // cache/persist `pending` across polls and compare a stale target to a fresh cntr read.
+    fn poll_wait_for_cntr(&self, pending: &AtomicU64, cntr: &Counter<WaitableCntr>) -> Poll<()> {
+        if let Some(_lock) = self.lock.try_lock() {
+            if let Err(e) = self.progress() {
+                panic!("Error in progress: {:?}", e);
+            }
+        }
+        let completed = cntr.read();
+        let issued = pending.load(Ordering::SeqCst);
+        if completed >= issued {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
+    fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
+        self.poll_wait_for_cntr(&self.put_cnt, &self.put_cntr)
+    }
+
+    fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
+        self.poll_wait_for_cntr(&self.get_cnt, &self.get_cntr)
+    }
+
+    // Same fresh-read-order requirement as poll_wait_for_cntr: completed-count first,
+    // issued-count second.
+    fn poll_wait_for_collectives(&self) -> Poll<()> {
+        if let Some(_lock) = self.lock.try_lock() {
+            if let Err(e) = self.progress() {
+                panic!("Error in progress: {:?}", e);
+            }
+        }
+        let completed = self.coll_cnt_completed.load(Ordering::SeqCst);
+        let issued = self.coll_cnt_issued.load(Ordering::SeqCst);
+        if completed >= issued {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+
+    pub(crate) fn poll_wait_all(&self) -> Poll<()> {
+        let put_ready = self.poll_wait_for_tx_cntr().is_ready();
+        let get_ready = self.poll_wait_for_rx_cntr().is_ready();
+        let coll_ready = self.poll_wait_for_collectives().is_ready();
+        if put_ready && get_ready && coll_ready {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
     }
 
     fn post_collective(
@@ -1535,6 +1595,18 @@ impl Ofi {
 
     pub(crate) fn thread_wait(&self) -> Result<(), libfabric::error::Error> {
         self.comm_group.wait_all()
+    }
+    pub(crate) fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
+        self.comm_group.poll_wait_for_tx_cntr()
+    }
+    pub(crate) fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
+        self.comm_group.poll_wait_for_rx_cntr()
+    }
+    pub(crate) fn poll_wait_for_collectives(&self) -> Poll<()> {
+        self.comm_group.poll_wait_for_collectives()
+    }
+    pub(crate) fn poll_wait_all(&self) -> Poll<()> {
+        self.comm_group.poll_wait_all()
     }
 
     pub(crate) fn progress_all(&self) -> Result<(), libfabric::error::Error> {
