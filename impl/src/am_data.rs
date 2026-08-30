@@ -47,7 +47,7 @@ fn has_static_attr(attrs: &[syn::Attribute]) -> bool {
         .any(|a| a.to_token_stream().to_string().contains("#[AmGroup(static)]"))
 }
 
-fn warn_if_shared_handle_type(field: &syn::Field) {
+fn warn_if_shared_handle_type(field: &syn::Field, am_name: &syn::Ident) {
     if let syn::Type::Path(ref ty) = field.ty {
         if let Some(seg) = ty.path.segments.first() {
             let ident = seg.ident.to_string();
@@ -58,12 +58,12 @@ fn warn_if_shared_handle_type(field: &syn::Field) {
                     .map(|i| i.to_string())
                     .unwrap_or_default();
                 println!(
-                    "warning: field `{}` of type `{}` is a shared handle -- \
+                    "warning: AM `{}` field `{}` of type `{}` is a shared handle -- \
                      when batched into an AmGroup, its reference count is \
                      updated once per batched active message; if this field \
                      is the same for every AM in the group, mark it \
                      `#[AmGroup(static)]` so it is only cloned/ref-counted once",
-                    field_name, ident
+                    am_name, field_name, ident
                 );
             }
         }
@@ -75,6 +75,7 @@ fn process_fields(
     the_fields: &mut syn::Fields,
     lamellar: &proc_macro2::TokenStream,
     local: bool,
+    am_name: &syn::Ident,
 ) -> (
     proc_macro2::TokenStream,
     proc_macro2::TokenStream,
@@ -220,7 +221,7 @@ fn process_fields(
 
     for field in the_fields {
         if create_am_group && !local && !has_static_attr(&field.attrs) {
-            warn_if_shared_handle_type(field);
+            warn_if_shared_handle_type(field, am_name);
         }
         if let syn::Type::Path(ref ty) = field.ty {
             if let Some(_seg) = ty.path.segments.first() {
@@ -297,7 +298,7 @@ pub(crate) fn derive_am_data(
             static_fields,
             create_am_group,
             _pod,
-        ) = process_fields(args, &mut data.fields, &lamellar, local);
+        ) = process_fields(args, &mut data.fields, &lamellar, local, name);
 
         let vis = data.vis.to_token_stream();
         let mut attributes = quote!();
