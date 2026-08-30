@@ -553,6 +553,16 @@ impl RofiCAlloc {
         Ok(())
     }
 
+    // KNOWN LIMITATION: this ticket scheme lets many gets be issued concurrently
+    // at the Rust level, but it's neutralized by rofi-sys/rofi/src/transport.c:
+    // rofi_transport_get_small/_large and rofi_transport_wait_on_cntr all lock
+    // the SAME global `rofi->lock`, and wait_on_cntr holds it across the entire
+    // blocking fi_cntr_wait(...,-1) call (not just the counter check). So while
+    // one thread is inside rofi_c_wait(), every other thread's get *issue* also
+    // blocks on that mutex — issue and wait fully serialize process-wide,
+    // independent of executor thread count (confirmed: 4->16 threads, no change).
+    // Real fix is in the vendored rofi C lib: shrink rofi_transport_wait_on_cntr's
+    // critical section so rofi->lock isn't held across the blocking wait.
     pub(crate) fn try_wait(&self, my_cnt_val: &mut Option<usize>) {
         let my_cnt = match my_cnt_val {
             Some(cnt) => *cnt,
