@@ -41,4 +41,5 @@ ASAN_BUILD.md
 batch_runner*
 *run*.sh
 /scripts
+*.prterun-*
 
