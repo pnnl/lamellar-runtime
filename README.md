@@ -53,7 +53,7 @@ Currently the following Lamellae exist:
 - `local` -  used for single-PE (single system, single process) development (this is the default),
 - `shmem` -  used for multi-PE (single system, multi-process) development, useful for emulating distributed environments (communicates through shared memory)
 - `rofi_c` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
-    - Enabled by adding ```features = ["enable-rofi-c"]``` (or `enable-rofi-c-shared` / `enable-rofi-rust`) to the lamellar entry in your `Cargo.toml` file
+    - Enabled by adding ```features = ["enable-rofi-c"]``` (or `enable-rofi-c-shared` / `enable-rofi-rust`) to the lamellar entry in your `Cargo.toml` file. This builds against ROFI's default PMI-1 backend; add `enable-rofi-c-pmix` (or `enable-rofi-c-shared-pmix`) instead to use ROFI's PMIx backend (ROFI has no PMI-2 client, so PMI-1/PMIx are the only choices).
 - `libfabric` / `libfabric-sys` / `libfabric-async` - used for multi-PE distributed development directly against libfabric.
     - Enabled by adding ```features = ["enable-libfabric"]``` (see Cargo.toml for the `-sys`/`-async` variants) to the lamellar entry in your `Cargo.toml` file
 - `ucx` - used for multi-PE distributed development based on [UCX](https://github.com/openucx/ucx).
@@ -80,7 +80,7 @@ The relevant feature flags:
 - `vendored-libevent` (**enabled by default**) - builds libevent from source for PRRTE (and, when PMIx is also vendored, for PMIx too), via `prrte-sys/vendored-libevent` and `pmix-sys/vendored-libevent`. Without it, a system libevent is linked instead.
 - `vendored-hwloc` (**not enabled by default**) - builds hwloc from source, both for PRRTE (via `prrte-sys/vendored-hwloc`) and for lamellar's own NUMA-domain detection (via `hwlocality/vendored`). Without it, a system hwloc is auto-detected via pkg-config (or pointed to explicitly via `HWLOC_DIR`) — this is the default and the required setting on macOS, where hwloc's vendored autotools build is known to fail. Enable it only if no system hwloc/pkg-config is available.
 - `enable-numa-detect` (**enabled by default**) - enables NUMA-domain detection (via `hwlocality`) used by `#[lamellar::main]` to pick PE-per-node defaults.
-- `enable-rofi-c` / `enable-rofi-c-shared` - pull in `pmix-sys` (PMIx is required by ROFI's PMIx backend); vendoring for it is controlled by the same `vendored-pmix`/`vendored-libevent` toggles above.
+- `enable-rofi-c` / `enable-rofi-c-shared` - build ROFI against its default PMI-1 backend; no `pmix-sys` involved. Add `enable-rofi-c-pmix` / `enable-rofi-c-shared-pmix` on top to switch ROFI to its PMIx backend instead — pulls in `pmix-sys`, with vendoring controlled by the same `vendored-pmix`/`vendored-libevent` toggles above.
 - `system-pmix-launcher` - convenience alias for the default feature set minus `vendored-pmi`/`vendored-pmix`/`vendored-libevent`, for clusters with a system-installed, version-matched PMIx/PRRTE (and libevent) — see the recipe below.
 
 To link against system libraries instead, disable default features and select only what you need, e.g.:

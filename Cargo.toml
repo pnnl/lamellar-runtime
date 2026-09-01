@@ -185,19 +185,25 @@ system-pmix-launcher = ["with-pmix", "enable-lamellar-main", "enable-numa-detect
 
 # --- network backends ---
 rofi-c = []
+# Base rofi-c backend: builds against rofi's default PMI-1 client (simple_pmi.c),
+# no PMIx involved. Add enable-rofi-c-pmix on top to switch rofi's process
+# management to PMIx instead (rofi has no PMI-2 client, so PMI-1/PMIx are the
+# only options).
 enable-rofi-c = [
-    "rofisys/pmix",
     "rofisys",
     "libc",
     "libfabric",
-    "pmix-sys/vendored",
 ]
+enable-rofi-c-pmix = ["enable-rofi-c", "rofisys/pmix", "pmix-sys/vendored"]
 enable-rofi-c-shared = [
-    "rofisys/pmix",
     "rofisys/shared",
     "libc",
     "libfabric",
     "libfabric-sys/shared",
+]
+enable-rofi-c-shared-pmix = [
+    "enable-rofi-c-shared",
+    "rofisys/pmix",
     "pmix-sys/vendored",
 ]
 enable-rofi-rust = []
