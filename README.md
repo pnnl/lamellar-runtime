@@ -69,15 +69,19 @@ Additional information on using each of the lamellae backends can be found below
 
 The distributed backends above depend on native C libraries (PMIx, PRRTE, libfabric, UCX, UCC, ROFI, hwloc, libevent). For each of these, lamellar can either build a bundled ("vendored") copy from source, or link against a system-installed version.
 
-**By default on Linux, lamellar is fully vendored** — every native dependency pulled in by the default feature set (`with-pmix-vendored`, `enable-lamellar-main`, `vendored-hwloc`, `enable-numa-detect`) is built from source, so nothing needs to be preinstalled. This is what you want on clusters/containers where you don't control what's installed, or where installed versions are outdated/incompatible. On macOS, hwloc's vendored autotools build is known to fail, so `vendored-hwloc` should be disabled there (see below).
+**By default on Linux, lamellar vendors PMIx/PRRTE/libevent from source** — every native dependency pulled in by the default feature set (`with-pmix-vendored`, `enable-lamellar-main`, `enable-numa-detect`) is built from source except hwloc, which is auto-detected via system pkg-config by default. This is what you want on clusters/containers where you don't control what's installed, or where installed versions are outdated/incompatible. If no system hwloc/pkg-config is available (e.g. an offline build node), enable `vendored-hwloc` explicitly (see below). On macOS, hwloc's vendored autotools build is known to fail, so `vendored-hwloc` should stay disabled there and a system hwloc relied on instead.
 
 The relevant feature flags:
-- `with-pmix-vendored` (**enabled by default**) - builds PMIx from source (via `pmix-sys/vendored`) instead of requiring a system PMIx install. This also vendors PMIx's own hwloc/libevent dependencies.
-- `vendored-pmi` - builds PMI/PMI2 from source (via `pmi/vendored`) instead of requiring a system PMI install.
-- `enable-lamellar-main` (**enabled by default**) - builds PRRTE and its PMIx/libevent dependencies from source (via `prrte-sys/prrte-src`, `prrte-sys/vendored-libevent`, `prrte-sys/vendored-pmix`) for the `#[lamellar::main]` launcher. hwloc is *not* included here — see `vendored-hwloc` below.
-- `vendored-hwloc` (**enabled by default**) - builds hwloc from source, both for PRRTE (via `prrte-sys/vendored-hwloc`) and for lamellar's own NUMA-domain detection (via `hwlocality/vendored`). Disable this and set `HWLOC_DIR` to link a system hwloc instead — **required on macOS**, where hwloc's vendored autotools build is known to fail.
+- `with-pmix` (**enabled by default**) - selects PMIx as the backend for the `pmi` abstraction crate (used by `enable-libfabric`/`enable-ucx`), via `pmi/with-pmix`. Just a backend selection — doesn't vendor anything by itself, see `vendored-pmi` below.
+- `vendored-pmi` (**enabled by default**) - builds `pmi`'s PMIx (and PMI/PMI2, if those backends are selected instead/as well) from source, via `pmi/vendored`. Without it, `pmi`'s backend links a system install.
+- `with-pmix-vendored` - convenience alias equal to `with-pmix` + `vendored-pmi` together (matches `pmi`'s own feature name).
+- `enable-lamellar-main` (**enabled by default**) - builds PRRTE from source (via `prrte-sys/prrte-src`) for the `#[lamellar::main]` launcher, and pulls in `pmix-sys` as PRRTE's PMIx dependency. hwloc is *not* included here — see `vendored-hwloc` below.
+- `vendored-pmix` (**enabled by default**) - builds PMIx from source (via `pmix-sys/openpmix-src`) for whichever of `enable-lamellar-main` / `enable-rofi-c(-shared)` pulled `pmix-sys` in. Without it, a system PMIx is linked instead — useful on clusters where PMIx is already installed and version-matched to the system Slurm/PRRTE. **Note:** `pmix-sys` is a single shared crate — `vendored-pmi` above requests vendoring for it too (independently, for the `pmi`-crate use case), so both toggles need to be off to get a fully system-linked PMIx.
+- `vendored-libevent` (**enabled by default**) - builds libevent from source for PRRTE (and, when PMIx is also vendored, for PMIx too), via `prrte-sys/vendored-libevent` and `pmix-sys/vendored-libevent`. Without it, a system libevent is linked instead.
+- `vendored-hwloc` (**not enabled by default**) - builds hwloc from source, both for PRRTE (via `prrte-sys/vendored-hwloc`) and for lamellar's own NUMA-domain detection (via `hwlocality/vendored`). Without it, a system hwloc is auto-detected via pkg-config (or pointed to explicitly via `HWLOC_DIR`) — this is the default and the required setting on macOS, where hwloc's vendored autotools build is known to fail. Enable it only if no system hwloc/pkg-config is available.
 - `enable-numa-detect` (**enabled by default**) - enables NUMA-domain detection (via `hwlocality`) used by `#[lamellar::main]` to pick PE-per-node defaults.
-- `enable-rofi-c` / `enable-rofi-c-shared` - pull in `pmix-sys/vendored` (PMIx is required by ROFI's PMIx backend).
+- `enable-rofi-c` / `enable-rofi-c-shared` - pull in `pmix-sys` (PMIx is required by ROFI's PMIx backend); vendoring for it is controlled by the same `vendored-pmix`/`vendored-libevent` toggles above.
+- `system-pmix-launcher` - convenience alias for the default feature set minus `vendored-pmi`/`vendored-pmix`/`vendored-libevent`, for clusters with a system-installed, version-matched PMIx/PRRTE (and libevent) — see the recipe below.
 
 To link against system libraries instead, disable default features and select only what you need, e.g.:
 ```toml
@@ -90,20 +94,22 @@ Each native dependency has its own env-var override, checked by the correspondin
 
 | Dependency | Env var(s) | Notes |
 |---|---|---|
-| PMIx | `PMIX_LIB_DIR` + `PMIX_INCLUDE_DIR` | drop `with-pmix-vendored` |
+| PMIx | `PMIX_LIB_DIR` + `PMIX_INCLUDE_DIR` (links `pmix-sys` itself) and/or `PMIX_DIR` (PRRTE's own `--with-pmix`, if not pkg-config-discoverable) | drop `vendored-pmix`, and `vendored-pmi` too if `enable-libfabric`/`enable-ucx` are in use — see note above |
 | PRRTE | `PRRTE_LIB_DIR` + `PRRTE_INCLUDE_DIR` + `PRRTE_BIN_DIR` | use `prrte-sys` with `prrte-src` omitted, see `prrte-sys`'s README |
-| hwloc | `HWLOC_DIR` (install prefix; also put it on `PKG_CONFIG_PATH` for `hwlocality`, e.g. `PKG_CONFIG_PATH=$HWLOC_DIR/lib/pkgconfig`) | drop `vendored-hwloc` — **use this on macOS** |
-| libevent | `LIBEVENT_DIR` (install prefix) | drop `prrte-sys/vendored-libevent` (depend on `prrte-sys` directly to omit just this one) |
+| hwloc | `PKG_CONFIG_PATH` (e.g. `PKG_CONFIG_PATH=$HWLOC_DIR/lib/pkgconfig`) for `hwlocality` (pkg-config only, ignores `HWLOC_DIR`), **and** `HWLOC_DIR` for PRRTE's own vendored build — both needed together | not vendored by default already — only relevant if you turned on `vendored-hwloc` and want to turn it back off, or just need to point a non-standard hwloc install at pkg-config. **Required on macOS** since vendored hwloc's autotools build fails there |
+| libevent | `LIBEVENT_DIR` (install prefix) | drop `vendored-libevent` |
 | PMI/PMI2 | `PMI_LIB_DIR` / `PMI2_LIB_DIR` | drop `vendored-pmi` |
 | libfabric | `OFI_DIR` (install prefix) | used automatically if set, no feature to disable |
 | UCX | `UCX_DIR` (install prefix) | used automatically if set, no feature to disable |
 | UCC | `UCC_DIR` (install prefix) | used automatically if set, no feature to disable |
 | ROFI | `ROFI_DIR` (install prefix) | used automatically if set, no feature to disable |
 
-Example, PRRTE/PMIx/libevent vendored but hwloc linked from a system install (the macOS case):
+Example, on an HPC cluster with a system-installed, version-matched PMIx/PRRTE/libevent already on `PKG_CONFIG_PATH` (or pointed to via `PMIX_DIR`/`LIBEVENT_DIR`) — hwloc still auto-detected via pkg-config as usual:
 ```toml
-lamellar = { version = "...", default-features = false, features = ["with-pmix-vendored", "enable-lamellar-main", "enable-numa-detect"] }
+lamellar = { version = "...", default-features = false, features = ["system-pmix-launcher"] }
 ```
+
+Example, PRRTE/PMIx/libevent vendored but hwloc linked from a system install (the macOS case) — this is just the default feature set (hwloc isn't vendored by default, so no feature overrides needed), pointed at a Homebrew hwloc:
 ```
 HWLOC_DIR=$(brew --prefix hwloc) PKG_CONFIG_PATH=$(brew --prefix hwloc)/lib/pkgconfig cargo build
 ```

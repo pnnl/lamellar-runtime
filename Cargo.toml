@@ -34,7 +34,7 @@ libfabric = { package = "lamellar-libfabric", version = "0.1.0", features = [
 ], optional = true }
 libfabric-sys = { package = "lamellar-libfabric-sys", version = "0.1.0", optional = true }
 pmi = { version = "0.1.0", optional = true }
-pmix-sys = { version = "0.1.0", optional = true, features = ["vendored"] }
+pmix-sys = { version = "0.1.0", optional = true }
 prrte-sys = { version = "0.1.0", optional = true }
 rofisys = { version = "0.5.0", optional = true }
 
@@ -125,10 +125,12 @@ opt-level = 3
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
 default = [
-    "with-pmix-vendored",
+    "with-pmix",
+    "vendored-pmi",
     "enable-lamellar-main",
-    "vendored-hwloc",
     "enable-numa-detect",
+    "vendored-libevent",
+    "vendored-pmix",
 ]
 
 # --- launcher (lamellar_main / hpc_launch) ---
@@ -147,6 +149,17 @@ with-salloc = ["lamellar_main/with-salloc"]
 # instead. Use system hwloc on macOS, where hwloc's vendored autotools build
 # fails.
 vendored-hwloc = ["prrte-sys?/vendored-hwloc", "hwlocality?/vendored"]
+# Builds PRRTE's (and, when pmix is also vendored, PMIx's) libevent from source.
+# Only takes effect if prrte-sys and/or pmix-sys are already pulled in by
+# enable-lamellar-main / enable-rofi-c(-shared). Omit and set LIBEVENT_DIR (or
+# rely on system pkg-config auto-detection) to link a system libevent instead.
+vendored-libevent = ["prrte-sys?/vendored-libevent", "pmix-sys?/vendored-libevent", "rofisys?/vendored-libevent"]
+# Builds PMIx from source (via pmix-sys/openpmix-src) instead of linking a system
+# PMIx. Only takes effect if pmix-sys is already pulled in (enable-lamellar-main
+# or enable-rofi-c(-shared)). Omit and set PMIX_DIR (or rely on system pkg-config
+# auto-detection) to link a system PMIx instead — useful on clusters where PMIx
+# is already installed and version-matched to the system Slurm/PRRTE.
+vendored-pmix = ["prrte-sys?/vendored-pmix", "pmix-sys?/openpmix-src", "rofisys?/vendored-pmix"]
 enable-numa-detect = ["hwlocality"]
 
 # --- PMI (process management interface) ---
@@ -154,7 +167,21 @@ with-pmi1 = ["pmi/with-pmi1"]
 with-pmi2 = ["pmi/with-pmi2"]
 with-pmix = ["pmi/with-pmix"]
 with-pmix-vendored = ["pmi/with-pmix-vendored"]
+# Vendors pmix-sys as pulled in through the `pmi` abstraction crate (used by
+# enable-libfabric/enable-ucx) — a separate instance from the one governed by
+# vendored-pmix/vendored-libevent above, which only cover pmix-sys as pulled in
+# directly by lamellar-runtime/rofisys/prrte-sys. Only takes effect once a pmi
+# backend is selected (with-pmix/with-pmi1/with-pmi2).
 vendored-pmi = ["pmi/vendored"]
+
+# Convenience alias for the default feature set minus vendored-pmi/vendored-libevent/
+# vendored-pmix (Cargo features are additive-only, so there's no way to remove just
+# those from `default` without restating the rest). Use on clusters with a
+# system-installed, version-matched PMIx/PRRTE (and libevent) already on
+# PKG_CONFIG_PATH or pointed to via PMIX_DIR/LIBEVENT_DIR:
+#   cargo build --no-default-features --features system-pmix-launcher
+# Kept in sync with `default` by hand — if `default`'s core set changes, update both.
+system-pmix-launcher = ["with-pmix", "enable-lamellar-main", "enable-numa-detect"]
 
 # --- network backends ---
 rofi-c = []
@@ -972,18 +999,39 @@ path = "examples/hello_world/hello_world_array_iteration.rs"
 [patch.crates-io]
 ring = { git = "https://github.com/briansmith/ring", rev = "840167e18e4fa837eb48de46500454a616a15a6e" }
 
-# Uncomment to build against a local checkout of lamellar-repo instead of crates.io.
-pmi = { path = "../lamellar-repo/process_management/pmi" }
-pmi-sys = { path = "../lamellar-repo/process_management/pmi-sys" }
-pmi2-sys = { path = "../lamellar-repo/process_management/pmi2-sys" }
-pmi-mpich-src = { path = "../lamellar-repo/process_management/pmi-mpich-src" }
-pmix-sys = { path = "../lamellar-repo/process_management/pmix-sys" }
-prrte-sys = { path = "../lamellar-repo/process_management/prrte-sys" }
-openpmix-src = { path = "../lamellar-repo/process_management/openpmix-src" }
-prrte-src = { path = "../lamellar-repo/process_management/prrte-src" }
-rofisys = { path = "../lamellar-repo/communication_frameworks/rofi-sys" }
-lamellar-libfabric = { path = "../lamellar-repo/communication_frameworks/libfabric" }
-lamellar-libfabric-sys = { path = "../lamellar-repo/communication_frameworks/libfabric-sys" }
-lamellar-libfabric-src = { path = "../lamellar-repo/communication_frameworks/libfabric-src" }
-lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys" }
-lamellar-ucc-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucc-sys" }
+# Local testing against process_management/* and communication_frameworks/*
+# from the lamellar-repo monorepo instead of the published crates.io versions.
+# Uncomment exactly one variant below.
+
+# --- Variant A: GitHub-hosted lamellar-repo (works from any checkout) ---
+# pmi = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "process_management/pmi" }
+# pmi-sys = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "process_management/pmi-sys" }
+# pmi2-sys = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "process_management/pmi2-sys" }
+# pmi-mpich-src = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "process_management/pmi-mpich-src" }
+# pmix-sys = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "process_management/pmix-sys" }
+# prrte-sys = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "process_management/prrte-sys" }
+# openpmix-src = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "process_management/openpmix-src" }
+# prrte-src = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "process_management/prrte-src" }
+# rofisys = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "communication_frameworks/rofi-sys" }
+# lamellar-libfabric = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "communication_frameworks/libfabric" }
+# lamellar-libfabric-sys = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "communication_frameworks/libfabric-sys" }
+# lamellar-libfabric-src = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "communication_frameworks/libfabric-src" }
+# lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "communication_frameworks/lamellar-ucx-sys" }
+# lamellar-ucc-sys = { git = "https://github.com/pnnl/lamellar", branch = "master", path = "communication_frameworks/lamellar-ucc-sys" }
+
+# --- Variant B: relative paths, for lamellar-runtime checked out inside this
+# --- lamellar-repo staging tree (sibling to process_management/, communication_frameworks/) ---
+# pmi = { path = "../process_management/pmi" }
+# pmi-sys = { path = "../process_management/pmi-sys" }
+# pmi2-sys = { path = "../process_management/pmi2-sys" }
+# pmi-mpich-src = { path = "../process_management/pmi-mpich-src" }
+# pmix-sys = { path = "../process_management/pmix-sys" }
+# prrte-sys = { path = "../process_management/prrte-sys" }
+# openpmix-src = { path = "../process_management/openpmix-src" }
+# prrte-src = { path = "../process_management/prrte-src" }
+# rofisys = { path = "../communication_frameworks/rofi-sys" }
+# lamellar-libfabric = { path = "../communication_frameworks/libfabric" }
+# lamellar-libfabric-sys = { path = "../communication_frameworks/libfabric-sys" }
+# lamellar-libfabric-src = { path = "../communication_frameworks/libfabric-src" }
+# lamellar-ucx-sys = { path = "../communication_frameworks/lamellar-ucx-sys" }
+# lamellar-ucc-sys = { path = "../communication_frameworks/lamellar-ucc-sys" }
