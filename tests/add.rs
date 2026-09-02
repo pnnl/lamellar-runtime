@@ -20,6 +20,8 @@
 use assert_cmd::Command;
 use serial_test::serial;
 
+mod common;
+
 macro_rules! create_test {
     ( $array:ty, $dist:expr, $elem:ty, $num_pes:expr, $len:expr) => {
         paste::paste! {
@@ -27,7 +29,8 @@ macro_rules! create_test {
             #[serial]
             #[allow(non_snake_case)]
             fn [<$array _ $dist _ $elem _ $num_pes _ $len __ add>](){
-                let profile = std::env::var("LAMELLAR_TEST_PROFILE").unwrap_or_else(|_| "release".to_string());
+                common::ensure_example_built("add_test");
+                let profile = common::profile();
                 let result = Command::new(format!("./target/{}/examples/add_test",profile))
                     .arg(stringify!($array))
                     .arg($dist)
