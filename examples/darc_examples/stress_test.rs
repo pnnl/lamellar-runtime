@@ -9,6 +9,7 @@ use rand::distr::{Distribution, Uniform};
 
 #[lamellar::AmData(Clone, Debug, AmGroup)]
 struct DataAM {
+    #[AmGroup(static)]
     darc: Darc<AtomicUsize>,
     depth: usize,
     width: usize,
