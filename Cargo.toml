@@ -282,20 +282,20 @@ ring = { git = "https://github.com/briansmith/ring", rev = "840167e18e4fa837eb48
 
 # --- Variant B: relative paths, for lamellar-runtime checked out inside this
 # --- lamellar-repo staging tree (sibling to process_management/, communication_frameworks/) ---
-# pmi = { path = "../process_management/pmi" }
-# pmi-sys = { path = "../process_management/pmi-sys" }
-# pmi2-sys = { path = "../process_management/pmi2-sys" }
-# pmi-mpich-src = { path = "../process_management/pmi-mpich-src" }
-# pmix-sys = { path = "../process_management/pmix-sys" }
-# prrte-sys = { path = "../process_management/prrte-sys" }
-# openpmix-src = { path = "../process_management/openpmix-src" }
-# prrte-src = { path = "../process_management/prrte-src" }
-# rofisys = { path = "../communication_frameworks/rofi-sys" }
-# lamellar-libfabric = { path = "../communication_frameworks/libfabric" }
-# lamellar-libfabric-sys = { path = "../communication_frameworks/libfabric-sys" }
-# lamellar-libfabric-src = { path = "../communication_frameworks/libfabric-src" }
-# lamellar-ucx-sys = { path = "../communication_frameworks/lamellar-ucx-sys" }
-# lamellar-ucc-sys = { path = "../communication_frameworks/lamellar-ucc-sys" }
+pmi = { path = "../process_management/pmi" }
+pmi-sys = { path = "../process_management/pmi-sys" }
+pmi2-sys = { path = "../process_management/pmi2-sys" }
+pmi-mpich-src = { path = "../process_management/pmi-mpich-src" }
+pmix-sys = { path = "../process_management/pmix-sys" }
+prrte-sys = { path = "../process_management/prrte-sys" }
+openpmix-src = { path = "../process_management/openpmix-src" }
+prrte-src = { path = "../process_management/prrte-src" }
+rofisys = { path = "../communication_frameworks/rofi-sys" }
+lamellar-libfabric = { path = "../communication_frameworks/libfabric" }
+lamellar-libfabric-sys = { path = "../communication_frameworks/libfabric-sys" }
+lamellar-libfabric-src = { path = "../communication_frameworks/libfabric-src" }
+lamellar-ucx-sys = { path = "../communication_frameworks/lamellar-ucx-sys" }
+lamellar-ucc-sys = { path = "../communication_frameworks/lamellar-ucc-sys" }
 
 # --- Variant C: relative paths, for lamellar-runtime checked out in a different directory than the lamellar-repo staging tree (e.g. lamellar-runtime/ and lamellar-repo/ are siblings) ---
 # --- lamellar-repo staging tree (sibling to process_management/, communication_frameworks/) ---
@@ -1022,9 +1022,9 @@ path = "examples/misc/lamellar_env.rs"
 name = "ping_pong"
 path = "examples/misc/ping_pong.rs"
 
-# [[example]]
-# name="dist_hashmap"
-# path="examples/misc/dist_hashmap.rs"
+[[example]]
+name = "dist_hashmap"
+path = "examples/misc/dist_hashmap.rs"
 
 
 ##------------ Darc examples ------------------##

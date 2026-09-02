@@ -52,7 +52,6 @@ impl DistHashMap {
 // this is one way we can implement commands for the distributed hashmap
 // a maybe more efficient way to do this would be to create and individual
 // active message for each command
-// #[AmData(Debug, Clone)] eventually we will be able to do this... instead  derive serialize and deserialize directly with serde
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum DistCmd {
     Add(i32, i32),
