@@ -105,9 +105,6 @@ tracing-subscriber = { version = "0.3", features = [
 trybuild = "1.0.71"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
-[[bench]]
-name = "serialization"
-harness = false
 
 [workspace]
 members = [
@@ -134,10 +131,7 @@ default = [
 ]
 
 # --- launcher (lamellar_main / hpc_launch) ---
-enable-lamellar-main = [
-    "lamellar_main/use-prterun",
-    "prrte-sys/prrte-src",
-]
+enable-lamellar-main = ["lamellar_main/use-prterun", "prrte-sys/prrte-src"]
 with-salloc = ["lamellar_main/with-salloc"]
 
 # --- NUMA / hwloc detection, used by `#[lamellar::main]` to pick PE-per-node defaults ---
