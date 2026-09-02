@@ -137,8 +137,6 @@ default = [
 enable-lamellar-main = [
     "lamellar_main/use-prterun",
     "prrte-sys/prrte-src",
-    "prrte-sys/vendored-libevent",
-    "prrte-sys/vendored-pmix",
 ]
 with-salloc = ["lamellar_main/with-salloc"]
 
@@ -200,20 +198,18 @@ rofi-c = []
 # Base rofi-c backend: builds against rofi's default PMI-1 client (simple_pmi.c),
 # no PMIx involved. Add enable-rofi-c-pmix on top to switch rofi's process
 # management to PMIx instead (rofi has no PMI-2 client, so PMI-1/PMIx are the
-# only options).
+# only options). Vendoring PMIx here is controlled by the top-level
+# vendored-pmix feature (which pulls in rofisys?/vendored-pmix); omit it and
+# set PMIX_LIB_DIR/PMIX_INCLUDE_DIR to link a system PMIx instead.
 enable-rofi-c = ["rofisys", "libc", "libfabric"]
-enable-rofi-c-pmix = ["enable-rofi-c", "rofisys/pmix", "pmix-sys/vendored"]
+enable-rofi-c-pmix = ["enable-rofi-c", "rofisys/pmix"]
 enable-rofi-c-shared = [
     "rofisys/shared",
     "libc",
     "libfabric",
     "libfabric-sys/shared",
 ]
-enable-rofi-c-shared-pmix = [
-    "enable-rofi-c-shared",
-    "rofisys/pmix",
-    "pmix-sys/vendored",
-]
+enable-rofi-c-shared-pmix = ["enable-rofi-c-shared", "rofisys/pmix"]
 enable-rofi-rust = []
 enable-libfabric = ["libfabric", "pmi", "libc"]
 enable-libfabric-sys = ["libfabric-sys", "pmi", "libc"]
