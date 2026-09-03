@@ -79,7 +79,7 @@ pub fn resolve_pe_defaults(
 /// output shared libraries (found via `LD_LIBRARY_PATH`) are resolvable at
 /// runtime, even after the binary has been re-invoked under
 /// `prterun`/`srun`.
-#[cfg(any(feature = "use-prterun", feature = "use-srun"))]
+#[cfg(any(feature = "prterun-codegen", feature = "use-srun"))]
 pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
     quote::quote! {
         {

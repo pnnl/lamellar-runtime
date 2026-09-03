@@ -32,10 +32,15 @@ use-prterun = [
     "hpc_launch_impl/use-prterun",
     "prrte-sys",
     "prrte-sys/prrte-src",
-    "prrte-sys/vendored-libevent",
-    "prrte-sys/vendored-pmix",
-    "vendored-hwloc",
+    "prterun-codegen",
 ]
+# Marker only (no deps) — gates `binary_update_block_tokens()`, which is pure
+# codegen and never touches `prrte-sys`. Lets proc-macro (host-context)
+# consumers that only need the generated tokens (e.g. lamellar_main_impl)
+# unlock it without pulling `prrte-sys` into host-context feature resolution,
+# where top-level vendoring toggles can never reach it (Cargo resolves
+# features separately per host/target context).
+prterun-codegen = []
 with-salloc = ["hpc_launch_impl/with-salloc"]
 enable-numa-detect = ["hwlocality"]
 vendored-hwloc = ["prrte-sys/vendored-hwloc", "hwlocality/vendored"]

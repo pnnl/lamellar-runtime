@@ -22,6 +22,6 @@ proc-macro2 = { version = "1.0.101" }
 
 [features]
 use-srun = ["hpc_launch/use-srun"]
-use-prterun = ["hpc_launch/use-prterun"]
+use-prterun = ["hpc_launch/prterun-codegen"]
 with-salloc = ["hpc_launch/with-salloc"]
 enable-prof = []
