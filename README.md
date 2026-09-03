@@ -69,6 +69,8 @@ Additional information on using each of the lamellae backends can be found below
 
 The distributed backends above depend on native C libraries (PMIx, PRRTE, libfabric, UCX, UCC, ROFI, hwloc, libevent). For each of these, lamellar can either build a bundled ("vendored") copy from source, or link against a system-installed version.
 
+For the full breakdown of required packages, backend-by-backend native library tables, and system-install env vars, see [NATIVE_DEPENDENCIES.md](https://github.com/pnnl/lamellar/blob/master/NATIVE_DEPENDENCIES.md) in the parent `lamellar` repo (also mirrored at `NATIVE_DEPENDENCIES.md` in this directory).
+
 **By default on Linux, lamellar vendors PMIx/PRRTE/libevent from source** — every native dependency pulled in by the default feature set (`with-pmix-vendored`, `enable-lamellar-main`, `enable-numa-detect`) is built from source except hwloc, which is auto-detected via system pkg-config by default. This is what you want on clusters/containers where you don't control what's installed, or where installed versions are outdated/incompatible. If no system hwloc/pkg-config is available (e.g. an offline build node), enable `vendored-hwloc` explicitly (see below). On macOS, hwloc's vendored autotools build is known to fail, so `vendored-hwloc` should stay disabled there and a system hwloc relied on instead.
 
 The relevant feature flags:
