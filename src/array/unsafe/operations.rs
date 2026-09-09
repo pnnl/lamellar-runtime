@@ -13,10 +13,12 @@ use crate::env_var::{IndexType, config};
 use crate::lamellae::AtomicOp;
 use crate::memregion::OneSidedMemoryRegion;
 use core::panic;
+use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 type MultiValMultiIdxFn = fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, u8) -> LamellarArcAm;
 type SingleValMultiIdxFn =
@@ -555,6 +557,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 
         let num_pes = self.inner.data.team.num_pes();
         // let my_pe = self.inner.data.team.my_pe();
+        let num_tasks = indices.len();
+        let tasks_done = Arc::new(AtomicUsize::new(0));
+        let results = Arc::new(Mutex::new(VecDeque::new()));
         let mut start_i = 0;
 
         let val_bytes_slice = unsafe {
@@ -563,15 +568,16 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 
         // println!("single_val_multi_index");
 
-        let mut task_futures = Vec::with_capacity(indices.len());
         for (_i, index) in indices.drain(..).enumerate() {
+            let tasks_done2 = tasks_done.clone();
+            let results2 = results.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
             self.inner.data.array_counters.inc_outstanding(1);
             self.inner.data.team.inc_outstanding(1);
             let index_vec = index.to_vec();
             let the_array: UnsafeArray<T> = self.clone();
-            task_futures.push(async move {
+            self.inner.data.team.scheduler.submit_immediate_task(async move {
                     // let mut buffs = vec![index_size.create_buf(num_per_batch); num_pes];
                     let mut buffs =
                         vec![PackedIndicies::new_with_capacity(index_size, num_per_batch); num_pes];
@@ -636,28 +642,28 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             reqs.push((req, res_buff));
                         }
                     }
+                    results2.lock().extend(reqs);
+                    tasks_done2.fetch_add(1, Ordering::SeqCst);
                     the_array.inner.data.array_counters.dec_outstanding(1);
                     the_array.inner.data.team.dec_outstanding(1);
-                    reqs
                 });
             start_i += len;
         }
-        // Run all the per-index-batch sub-tasks concurrently inline, rather
-        // than spawning them onto the scheduler and busy-waiting on
-        // exec_task() for them to finish -- see single_val_single_index for
-        // why. This also ensures all the internal AMs have launched before
-        // returning, so calls like wait_all work properly.
-        // Wrapped in block_in_place so that on the tokio executor, a worker thread
-        // blocking here doesn't exhaust the whole worker pool -- see
-        // lamellar_team.rs wait_all for the same idiom.
+        // Dispatch each index-batch as its own scheduler task instead of
+        // driving them all through a single block_on(join_all(...)) -- lets
+        // them run in parallel across the scheduler's worker pool rather
+        // than being serialized onto this one thread. Wrapped in
+        // block_in_place so that on the tokio/async_std executors this
+        // thread doesn't wedge the whole worker pool while it waits --
+        // exec_task() is a no-op there, but the submitted tasks make
+        // progress on their own via the executor's own spawn.
         let scheduler = self.inner.data.team.scheduler.clone();
-        let all_reqs = scheduler.block_in_place(|| {
-            futures_executor::block_on(futures_util::future::join_all(task_futures))
+        scheduler.block_in_place(|| {
+            while tasks_done.load(Ordering::SeqCst) < num_tasks {
+                scheduler.exec_task();
+            }
         });
-        let mut res = VecDeque::new();
-        for reqs in all_reqs {
-            res.extend(reqs);
-        }
+        let res = std::mem::take(&mut *results.lock());
         res
     }
 
@@ -684,15 +690,19 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             ),
         };
         let mut start_i = 0;
-        let mut task_futures = Vec::with_capacity(vals.len());
+        let num_tasks = vals.len();
+        let tasks_done = Arc::new(AtomicUsize::new(0));
+        let results = Arc::new(Mutex::new(VecDeque::new()));
         for val in vals.drain(..) {
+            let tasks_done2 = tasks_done.clone();
+            let results2 = results.clone();
             let byte_array2 = byte_array.clone();
             let len = val.len();
             self.inner.data.array_counters.inc_outstanding(1);
             self.inner.data.team.inc_outstanding(1);
             let the_array: UnsafeArray<T> = self.clone();
             let val_chunks = val.into_vec_chunks(num_per_batch);
-            task_futures.push(async move {
+            self.inner.data.team.scheduler.submit_immediate_task(async move {
                 let mut inner_start_i = start_i;
                 let mut reqs: Vec<(AmHandle<R>, Vec<usize>)> = Vec::new();
                 for val_chunk in val_chunks.into_iter() {
@@ -711,27 +721,24 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     reqs.push((req, res_buffer));
                     inner_start_i += val_len;
                 }
+                results2.lock().extend(reqs);
+                tasks_done2.fetch_add(1, Ordering::SeqCst);
                 the_array.inner.data.array_counters.dec_outstanding(1);
                 the_array.inner.data.team.dec_outstanding(1);
-                reqs
             });
             start_i += len;
         }
 
-        // Run all the per-value sub-tasks concurrently inline, rather than
-        // spawning them onto the scheduler and busy-waiting on exec_task()
-        // for them to finish -- see single_val_single_index for why.
-        // Wrapped in block_in_place so that on the tokio executor, a worker thread
-        // blocking here doesn't exhaust the whole worker pool -- see
-        // lamellar_team.rs wait_all for the same idiom.
+        // Dispatch each value-chunk as its own scheduler task rather than
+        // driving them all through block_on(join_all(...)) on this one
+        // thread -- see one_val_multi_indices for why.
         let scheduler = self.inner.data.team.scheduler.clone();
-        let all_reqs = scheduler.block_in_place(|| {
-            futures_executor::block_on(futures_util::future::join_all(task_futures))
+        scheduler.block_in_place(|| {
+            while tasks_done.load(Ordering::SeqCst) < num_tasks {
+                scheduler.exec_task();
+            }
         });
-        let mut res = VecDeque::new();
-        for reqs in all_reqs {
-            res.extend(reqs);
-        }
+        let res = std::mem::take(&mut *results.lock());
         res
     }
 
@@ -754,8 +761,12 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // println!("num_reqs {:?}", vals.len());
         let mut start_i = 0;
 
-        let mut task_futures = Vec::with_capacity(vals.len());
+        let num_tasks = vals.len();
+        let tasks_done = Arc::new(AtomicUsize::new(0));
+        let results = Arc::new(Mutex::new(VecDeque::new()));
         for (_i, (index, val)) in indices.drain(..).zip(vals.drain(..)).enumerate() {
+            let tasks_done2 = tasks_done.clone();
+            let results2 = results.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
             self.inner.data.array_counters.inc_outstanding(1);
@@ -763,7 +774,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let index_vec = index.to_vec();
             let vals_vec = val.to_vec();
             let the_array: UnsafeArray<T> = self.clone();
-            task_futures.push(async move {
+            self.inner.data.team.scheduler.submit_immediate_task(async move {
                     let mut buffs =
                         vec![
                             PackedIdxVal::new_with_capacity::<T>(index_size, num_per_batch);
@@ -826,28 +837,23 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             reqs.push((req, res_buff));
                         }
                     }
+                    results2.lock().extend(reqs);
+                    tasks_done2.fetch_add(1, Ordering::SeqCst);
                     the_array.inner.data.array_counters.dec_outstanding(1);
                     the_array.inner.data.team.dec_outstanding(1);
-                    reqs
                 });
             start_i += len;
         }
-        // Run all the per-index-batch sub-tasks concurrently inline, rather
-        // than spawning them onto the scheduler and busy-waiting on
-        // exec_task() for them to finish -- see single_val_single_index for
-        // why. This also ensures all the internal AMs have launched before
-        // returning, so calls like wait_all work properly.
-        // Wrapped in block_in_place so that on the tokio executor, a worker thread
-        // blocking here doesn't exhaust the whole worker pool -- see
-        // lamellar_team.rs wait_all for the same idiom.
+        // Dispatch each index/value-batch as its own scheduler task rather
+        // than driving them all through block_on(join_all(...)) on this one
+        // thread -- see one_val_multi_indices for why.
         let scheduler = self.inner.data.team.scheduler.clone();
-        let all_reqs = scheduler.block_in_place(|| {
-            futures_executor::block_on(futures_util::future::join_all(task_futures))
+        scheduler.block_in_place(|| {
+            while tasks_done.load(Ordering::SeqCst) < num_tasks {
+                scheduler.exec_task();
+            }
         });
-        let mut res = VecDeque::new();
-        for reqs in all_reqs {
-            res.extend(reqs);
-        }
+        let res = std::mem::take(&mut *results.lock());
         res
     }
 
