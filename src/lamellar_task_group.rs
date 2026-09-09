@@ -991,18 +991,24 @@ impl ActiveMessaging for LamellarTaskGroup {
         <I as IntoIterator>::Item: Future + Send + 'static,
         <<I as IntoIterator>::Item as Future>::Output: Send,
     {
-        self.team
-            .scheduler
-            .block_on(join_all(iter.into_iter().map(|task| {
-                self.team.scheduler.spawn_task(
-                    task,
-                    Some(Arc::from([
-                        self.team.world_counters.clone(),
-                        self.team.team_counters.clone(),
-                        self.counters.clone(),
-                    ])),
-                )
-            })))
+        let scheduler = self.team.scheduler.clone();
+        let scheduler2 = scheduler.clone();
+        let tasks = iter.into_iter().map(|task| {
+            self.team.scheduler.spawn_task(
+                task,
+                Some(Arc::from([
+                    self.team.world_counters.clone(),
+                    self.team.team_counters.clone(),
+                    self.counters.clone(),
+                ])),
+            )
+        });
+        // spawn_task dispatches each task onto the scheduler's own worker
+        // pool before we block here, but block_in_place still matters: on
+        // tokio/async_std, calling block_on from inside a worker thread
+        // occupies that worker until the join_all resolves, which can
+        // starve the pool if all workers end up blocked here.
+        scheduler.block_in_place(move || scheduler2.block_on(join_all(tasks)))
     }
 }
 
