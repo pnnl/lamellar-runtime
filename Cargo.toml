@@ -140,6 +140,9 @@ with-salloc = ["lamellar_main/with-salloc"]
 # hwlocality-sys, ensure it's on PKG_CONFIG_PATH) to link a system hwloc
 # instead. Use system hwloc on macOS, where hwloc's vendored autotools build
 # fails.
+# "error: failed to run custom build command for `hwlocality-sys`" means no
+# system hwloc/pkg-config found -> enable this feature, or set HWLOC_DIR +
+# PKG_CONFIG_PATH as above.
 vendored-hwloc = ["prrte-sys?/vendored-hwloc", "hwlocality?/vendored"]
 # Builds PRRTE's (and, when pmix is also vendored, PMIx's) libevent from source.
 # Only takes effect if prrte-sys and/or pmix-sys are already pulled in by

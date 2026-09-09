@@ -106,6 +106,11 @@ Each native dependency has its own env-var override, checked by the correspondin
 | UCC | `UCC_DIR` (install prefix) | used automatically if set, no feature to disable |
 | ROFI | `ROFI_DIR` (install prefix) | used automatically if set, no feature to disable |
 
+`error: failed to run custom build command for `hwlocality-sys v0.7.1`` (pkg-config
+can't find hwloc) means no system hwloc/pkg-config is on the path. Either enable
+`vendored-hwloc` to build hwloc from source, or set `HWLOC_DIR` + add
+`$HWLOC_DIR/lib/pkgconfig` to `PKG_CONFIG_PATH` to point at a system install.
+
 Example, on an HPC cluster with a system-installed, version-matched PMIx/PRRTE/libevent already on `PKG_CONFIG_PATH` (or pointed to via `PMIX_DIR`/`LIBEVENT_DIR`) — hwloc still auto-detected via pkg-config as usual:
 ```toml
 lamellar = { version = "...", default-features = false, features = ["system-pmix-launcher"] }
