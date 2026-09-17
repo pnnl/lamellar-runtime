@@ -153,6 +153,25 @@ impl Drop for UcxMtComm {
             world_ref_count
         );
         let _ = self.ucx.barrier();
+
+        // Explicitly drive UcxWorld's teardown (including its raw PMI
+        // barrier calls) ourselves, on this thread, rather than relying on
+        // the implicit Arc<UcxWorld> field-drop to trigger it -- PMI
+        // barrier calls are not safe from an arbitrary OS thread, and
+        // Rust's Drop runs on whichever thread drops the last Arc<UcxWorld>,
+        // which is not deterministic. final_teardown() needs &mut self (the
+        // UCC/exchange-buffer fields have no interior mutability), so wait
+        // for exclusive ownership via Arc::get_mut -- same wait Drop::drop
+        // would naturally block on anyway once the last clone is gone.
+        // final_teardown() is idempotent, so a racing Arc<UcxWorld>::drop
+        // elsewhere is a harmless no-op after this.
+        loop {
+            if let Some(world) = Arc::get_mut(&mut self.ucx) {
+                world.final_teardown();
+                break;
+            }
+            std::thread::yield_now();
+        }
         trace!(target: "drop", "end drop UcxMtComm");
     }
 }

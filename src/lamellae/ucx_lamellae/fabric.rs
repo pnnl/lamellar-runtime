@@ -39,7 +39,7 @@ use lamellar_ucx_sys::ucp_atomic_op_t;
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU32, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
         Arc, Mutex,
     },
     task::Poll,
@@ -210,6 +210,12 @@ pub(crate) struct UcxWorld {
     exchange_buffer: Option<UcxAlloc>,
     barrier: Option<Arc<Mutex<UcxBarrier>>>,
     ucc_world_buffer: Option<Arc<UcxAlloc>>,
+    /// Guards `final_teardown` so it runs exactly once no matter who calls
+    /// it: UcxComm::drop calls it explicitly (on a known-good thread), and
+    /// Drop::drop below calls it too as a fallback. PMI barrier calls are
+    /// not safe from an arbitrary OS thread, and Rust's implicit Arc-drop
+    /// can run on any thread.
+    teardown_done: AtomicBool,
 }
 
 #[cfg(feature = "enable-on-node-shmem")]
@@ -332,6 +338,7 @@ impl UcxWorld {
                 barrier_buffer,
             )))),
             ucc_world_buffer: None,
+            teardown_done: AtomicBool::new(false),
         };
         my_pmi
             .barrier(false)
@@ -902,8 +909,23 @@ fn build_same_node_segments(
     (bases, segments)
 }
 
-impl Drop for UcxWorld {
-    fn drop(&mut self) {
+impl UcxWorld {
+    /// Explicit, idempotent teardown -- called directly from UcxComm::drop
+    /// on its own (known-good) thread rather than left to fire implicitly
+    /// whenever the last Arc<UcxWorld> clone happens to drop. PMI barrier
+    /// calls are not safe from an arbitrary OS thread; see
+    /// libfabric_sys_opt_lamellae for the confirmed hang this caused there.
+    /// Drop::drop below calls this too as a fallback.
+    ///
+    /// Takes `&mut self`: the `ucc_*`/`exchange_buffer`/`barrier` fields are
+    /// plain `Option<T>` (no interior mutability), so the caller must obtain
+    /// exclusive access via `Arc::get_mut` (comm.rs spin-waits for
+    /// `strong_count == 1` before calling this, same as `Drop::drop` itself
+    /// naturally gets once the last `Arc<UcxWorld>` clone is gone).
+    pub(crate) fn final_teardown(&mut self) {
+        if self.teardown_done.swap(true, Ordering::SeqCst) {
+            return;
+        }
         trace!(target: "drop", "begin drop UcxWorld");
         debug!("dropping ucx world");
         self.pmi_barrier();
@@ -928,6 +950,12 @@ impl Drop for UcxWorld {
         self.pmi_barrier();
         debug!("dropped ucx world");
         trace!(target: "drop", "end drop UcxWorld");
+    }
+}
+
+impl Drop for UcxWorld {
+    fn drop(&mut self) {
+        self.final_teardown();
     }
 }
 
