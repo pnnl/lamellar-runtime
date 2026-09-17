@@ -1128,7 +1128,7 @@ enum CQVariant {
 pub(crate) struct CommandQueue {
     pub(crate) scheduler: Arc<Scheduler>,
     inner: CQVariant,
-    background_done: Arc<AtomicUsize>, // counts down from 2 as alloc_task and panic_task exit
+    background_done: Arc<AtomicUsize>, // counts down from 3 as alloc_task, panic_task, and recv_data exit
 }
 
 impl CommandQueue {
@@ -1198,7 +1198,7 @@ impl CommandQueue {
         CommandQueue {
             scheduler,
             inner,
-            background_done: Arc::new(AtomicUsize::new(2)),
+            background_done: Arc::new(AtomicUsize::new(3)),
         }
     }
 
@@ -1310,6 +1310,7 @@ impl CommandQueue {
             CQVariant::PutSlots(cq) => cq.recv_data(lamellae).await,
             CQVariant::PutEager(cq) => cq.recv_data(lamellae).await,
         }
+        self.background_done.fetch_sub(1, Ordering::Release);
         debug!(target: "drop","recv_data exiting");
     }
 
