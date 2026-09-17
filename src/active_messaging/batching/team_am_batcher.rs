@@ -920,7 +920,10 @@ impl TeamAmBatcher {
         let am_len =
             usize::try_read_from_bytes(&data[*i..*i + AM_LEN_LEN]).expect("failed to parse am len");
         *i += AM_LEN_LEN;
-        let am = AMS_EXECS.get(&am_id).unwrap()(&data[*i..*i + am_len], team.team.team_pe);
+        let am = {
+            let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+            AMS_EXECS.get(&am_id).unwrap()(&data[*i..*i + am_len], team.team.team_pe)
+        };
         *i += am_len;
         // println!("Team Batcher exec am");
 
@@ -982,7 +985,10 @@ impl TeamAmBatcher {
         let am_len =
             usize::try_read_from_bytes(&data[*i..*i + AM_LEN_LEN]).expect("failed to parse am len");
         *i += AM_LEN_LEN;
-        let am = AMS_EXECS.get(&am_id).unwrap()(&data[*i..*i + am_len], team.team.team_pe);
+        let am = {
+            let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+            AMS_EXECS.get(&am_id).unwrap()(&data[*i..*i + am_len], team.team.team_pe)
+        };
         *i += am_len;
 
         let req_data = ReqMetaData {

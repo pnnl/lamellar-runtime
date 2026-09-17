@@ -593,10 +593,10 @@ fn exec_am_group(
                 .expect("VecTeamAmBatcher: failed to parse MyAmReqHeader");
                 offset += std::mem::size_of::<MyAmReqHeader>();
                 let am_len = req_header.am_len.get() as usize;
-                let am = AMS_EXECS.get(&am_id).unwrap()(
-                    &data[offset..offset + am_len],
-                    team.team.team_pe,
-                );
+                let am = {
+                    let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+                    AMS_EXECS.get(&am_id).unwrap()(&data[offset..offset + am_len], team.team.team_pe)
+                };
                 offset += am_len;
 
                 let team_arc = team.clone();
@@ -683,10 +683,10 @@ async fn exec_return_am_group(
                 .expect("VecTeamAmBatcher: failed to parse MyAmReqHeader (return)");
                 offset += std::mem::size_of::<MyAmReqHeader>();
                 let am_len = req_header.am_len.get() as usize;
-                let am = AMS_EXECS.get(&am_id).unwrap()(
-                    &data[offset..offset + am_len],
-                    team.team.team_pe,
-                );
+                let am = {
+                    let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+                    AMS_EXECS.get(&am_id).unwrap()(&data[offset..offset + am_len], team.team.team_pe)
+                };
                 offset += am_len;
 
                 let req_data = ReqMetaData {

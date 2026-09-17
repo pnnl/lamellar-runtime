@@ -514,7 +514,10 @@ impl DirectBatcher {
         offset += data_len;
         let (team, world) =
             ame.get_team_and_world(src, am_header.team_addr.get() as usize, lamellae);
-        let am = AMS_EXECS.get(&am_header.am_id.get()).unwrap()(am_data_bytes, team.team.team_pe);
+        let am = {
+            let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+            AMS_EXECS.get(&am_header.am_id.get()).unwrap()(am_data_bytes, team.team.team_pe)
+        };
         let req_data = ReqMetaData {
             src: team.team.world_pe,
             dst: Some(src),
@@ -577,7 +580,10 @@ impl DirectBatcher {
         offset += data_len;
         let (team, world) =
             ame.get_team_and_world(src, am_header.team_addr.get() as usize, lamellae);
-        let am = AMS_EXECS.get(&am_header.am_id.get()).unwrap()(am_data_bytes, team.team.team_pe);
+        let am = {
+            let _mrg = crate::memregion::one_sided::MemRegionRecvGuard::new();
+            AMS_EXECS.get(&am_header.am_id.get()).unwrap()(am_data_bytes, team.team.team_pe)
+        };
         let req_data = ReqMetaData {
             src: src,
             dst: Some(team.team.world_pe),
