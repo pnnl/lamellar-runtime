@@ -250,19 +250,6 @@ fn create_launch_block(
             }
             let end = args.len();
 
-            if let Some(ref mode) = gdb_mode {
-                prterun_args.push("rust-gdb".to_string());
-                if mode == "bt" {
-                    prterun_args.push("--ex".to_string());
-                    prterun_args.push("run".to_string());
-                    prterun_args.push("--ex".to_string());
-                    prterun_args.push("thread apply all bt full".to_string());
-                    prterun_args.push("--ex".to_string());
-                    prterun_args.push("quit".to_string());
-                }
-                prterun_args.push("--args".to_string());
-            }
-
             let nodes = nodes.or_else(|| std::env::var("LAMELLAR_NODES").ok().and_then(|s| s.parse().ok()));
             let pes = pes.or_else(|| std::env::var("LAMELLAR_PES").ok().and_then(|s| s.parse().ok()));
             let pes_per_node = pes_per_node.or_else(|| std::env::var("LAMELLAR_PES_PER_NODE").ok().and_then(|s| s.parse().ok()));
@@ -317,6 +304,23 @@ fn create_launch_block(
             let mut ld_library_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_else(|_| String::new());
 
             #binary_update_block
+
+            // rust-gdb wrapping goes immediately before the executable itself, not
+            // mixed in with prterun's own launcher flags (--np/--map-by/etc. above) --
+            // otherwise prterun sees "rust-gdb ... --args --np N ..." and gdb tries to
+            // treat "--np"/"N" as its own target program.
+            if let Some(ref mode) = gdb_mode {
+                prterun_args.push("rust-gdb".to_string());
+                if mode == "bt" {
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("run".to_string());
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("thread apply all bt full".to_string());
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("quit".to_string());
+                }
+                prterun_args.push("--args".to_string());
+            }
 
             prterun_args.push(exec);
 
@@ -417,9 +421,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         }
         match &stmts[0] {
             syn::Stmt::Expr(syn::Expr::Unsafe(e), _) => Some((true, &e.block)),
-            syn::Stmt::Expr(syn::Expr::Block(e), _) if e.label.is_none() => {
-                Some((false, &e.block))
-            }
+            syn::Stmt::Expr(syn::Expr::Block(e), _) if e.label.is_none() => Some((false, &e.block)),
             _ => None,
         }
     }

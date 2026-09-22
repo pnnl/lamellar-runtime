@@ -459,19 +459,6 @@ fn create_launch_block(
             }
             let end = args.len();
 
-            if let Some(ref mode) = gdb_mode {
-                prterun_args.push("rust-gdb".to_string());
-                if mode == "bt" {
-                    prterun_args.push("--ex".to_string());
-                    prterun_args.push("run".to_string());
-                    prterun_args.push("--ex".to_string());
-                    prterun_args.push("thread apply all bt full".to_string());
-                    prterun_args.push("--ex".to_string());
-                    prterun_args.push("quit".to_string());
-                }
-                prterun_args.push("--args".to_string());
-            }
-
             // Resolve --nodes/--pes/--pes-per-node, falling back to env vars, then
             // deriving whichever of the three wasn't given from the other two.
             let nodes = nodes.or_else(|| std::env::var("LAMELLAR_NODES").ok().and_then(|s| s.parse().ok()));
@@ -541,6 +528,23 @@ fn create_launch_block(
 
             // println!("initial LD_LIBRARY_PATH: {}", ld_library_path);
             #binary_update_block
+
+            // rust-gdb wrapping goes immediately before the executable itself, not
+            // mixed in with prterun's own launcher flags (--np/--map-by/etc. above) —
+            // otherwise prterun sees "rust-gdb ... --args --np N ..." and gdb tries to
+            // treat "--np"/"N" as its own target program.
+            if let Some(ref mode) = gdb_mode {
+                prterun_args.push("rust-gdb".to_string());
+                if mode == "bt" {
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("run".to_string());
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("thread apply all bt full".to_string());
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("quit".to_string());
+                }
+                prterun_args.push("--args".to_string());
+            }
 
             // After the prterun arguments, add the executable name (which may have been updated in place)
             prterun_args.push(exec);
