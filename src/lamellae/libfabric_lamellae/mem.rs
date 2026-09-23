@@ -58,36 +58,7 @@ impl CommMem for LibfabricComm {
 
     //#[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
-        // add space for ref count
-        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
-
-        let allocs = self.runtime_allocs.read();
-        for (inner_alloc, alloc) in allocs.iter() {
-            if let Some(addr) = alloc.try_malloc(size, align) {
-                let alloc = inner_alloc.rt_alloc(
-                    alloc.clone(),
-                    addr - inner_alloc.start(),
-                    padding,
-                    size,
-                )?;
-                trace!(
-                    "new rt alloc: 0x{:x}-0x{:x} {} {} {:?}", // {:?}",
-                    addr,
-                    addr + size,
-                    addr - inner_alloc.start(),
-                    size,
-                    alloc,
-                    // std::backtrace::Backtrace::capture()
-                );
-                // unsafe {
-                //     alloc.zeroize_bytes();
-                // }
-                return Ok(CommAlloc {
-                    inner_alloc: Arc::new(CommAllocInner::LibfabricAlloc(alloc)),
-                });
-            }
-        }
-        Err(AllocError::OutOfMemoryError(size))
+        Ok(self.ofi.rt_alloc(size, align)?.into())
     }
 
     //#[tracing::instrument(skip(self), level = "debug")]
@@ -95,7 +66,7 @@ impl CommMem for LibfabricComm {
         // add space for ref count
         let (_padding, size, align) = calc_alloc_padding_size_align(size, align);
 
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         for (_, alloc) in allocs.iter() {
             if alloc.fake_malloc(size, align) {
                 return true;
@@ -115,7 +86,7 @@ impl CommMem for LibfabricComm {
     //                 addr,
     //                 std::backtrace::Backtrace::capture()
     //             );
-    //             let allocs = self.runtime_allocs.read();
+    //             let allocs = self.ofi.runtime_allocs.read();
     //             for (_, alloc) in allocs.iter() {
     //                 if let Ok(_) = alloc.free(addr) {
     //                     info!(
@@ -143,7 +114,7 @@ impl CommMem for LibfabricComm {
     //                 std::sync::Arc::strong_count(&inner_alloc),
     //                 std::backtrace::Backtrace::capture()
     //             );
-    //             let allocs = self.runtime_allocs.read();
+    //             let allocs = self.ofi.runtime_allocs.read();
     //             for (_, alloc) in allocs.iter() {
     //                 if let Ok(_) = alloc.free(inner_alloc.start()) {
     //                     info!(
@@ -176,7 +147,7 @@ impl CommMem for LibfabricComm {
     //#[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         for alloc in allocs.iter() {
             let tmp = alloc.1.occupied();
             if tmp > 0 {
@@ -204,7 +175,7 @@ impl CommMem for LibfabricComm {
                 println!("Allocated new libfabric alloc pool: {:?}", inner_alloc);
                 let mut new_alloc = BTreeAlloc::new("libfabric_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
-                self.runtime_allocs
+                self.ofi.runtime_allocs
                     .write()
                     .push((inner_alloc.clone(), new_alloc));
             } else {
@@ -217,12 +188,12 @@ impl CommMem for LibfabricComm {
 
     //#[tracing::instrument(skip(self), level = "debug")]
     fn num_pool_allocs(&self) -> usize {
-        self.runtime_allocs.read().len()
+        self.ofi.runtime_allocs.read().len()
     }
 
     //#[tracing::instrument(skip(self), level = "debug")]
     fn print_pools(&self) {
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
         for (_info, alloc) in allocs.iter() {
             println!("{:x} {:?}", alloc.start_addr, alloc.max_size,);
@@ -258,7 +229,7 @@ impl CommMem for LibfabricComm {
     }
 
     fn local_rt_alloc_from_local_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
-        for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
+        for (inner_alloc, alloc) in self.ofi.runtime_allocs.read().iter() {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
                     inner_alloc: Arc::new(CommAllocInner::LibfabricAlloc(
@@ -287,7 +258,7 @@ impl CommMem for LibfabricComm {
             });
         }
 
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {

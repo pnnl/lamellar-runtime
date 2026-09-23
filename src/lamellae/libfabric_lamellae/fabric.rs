@@ -22,10 +22,12 @@ use libfabric::{
     infocapsoptions::InfoCaps,
     mcast::{MultiCastGroup, MulticastGroupBuilder},
     mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder},
+    xcontext::RxCaps,
     *,
 };
 
 use crate::{
+    config,
     lamellae::{
         collective::{
             AllReduceOp, ReduceOp as LamellarReduceOp, RootOrSliceMut, RootSrcOrSliceMut,
@@ -41,10 +43,7 @@ use crate::{
 };
 
 #[cfg(feature = "enable-on-node-shmem")]
-use crate::{
-    config,
-    lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment},
-};
+use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
 
 use libc::{sysconf, _SC_PAGESIZE, _SC_PHYS_PAGES};
 use parking_lot::{Mutex, RwLock};
@@ -53,7 +52,7 @@ use std::{
     collections::HashMap,
     env,
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
     task::Poll,
@@ -113,6 +112,14 @@ pub(crate) struct CommGroup {
     coll_cnt_issued: AtomicU64,
     coll_cnt_completed: AtomicU64,
     lock: Mutex<()>,
+    // rofi_c-style wait ticketing (mirrors rofi_c_lamellae/fabric.rs
+    // wait_cnt_cur / wait_cnt_fin / wait_flag). A future takes one ticket on
+    // its first poll after issue and keeps it. Whoever wins `wait_flag` runs a
+    // full drain (put then get) under `lock`; every ticket <= the winner's is
+    // then satisfied for free. Losers return Pending with no FFI at all.
+    wait_cnt_cur: AtomicUsize,
+    wait_cnt_fin: AtomicUsize,
+    wait_flag: AtomicBool,
     contexts_cache: Arc<Mutex<Vec<CachedContext>>>,
     contexts_cache_size: usize,
 }
@@ -184,6 +191,29 @@ pub(crate) struct Ofi {
     _my_pmi: Arc<dyn Pmi>,
     alloc_manager: Arc<AllocInfoManager>,
     pub(crate) comm_group: CommGroup,
+    /// Runtime (rt_alloc) sub-allocation pool, shared by any `LibfabricAlloc`
+    /// reachable via its `ofi: Arc<Ofi>` field. Lives here (rather than on
+    /// LibfabricComm) so that `LibfabricAlloc`/`OneSidedLibfabricAlloc` --
+    /// which have no other path back to LibfabricComm -- can still reach an
+    /// already-registered scratch pool (e.g. from inside `get_buffer`).
+    ///
+    /// NOTE: each `LibfabricAlloc` stored here holds its own `Arc<Ofi>`
+    /// clone pointing back at this very `Ofi`, i.e. this field creates a
+    /// genuine Arc reference cycle (mirrors the existing `alloc_manager`
+    /// cycle broken via `clear_allocs()`). It MUST be `.clear()`-ed during
+    /// teardown (see `Drop for LibfabricComm`) or `Ofi` will never be freed.
+    pub(crate) runtime_allocs: RwLock<Vec<(LibfabricAlloc, BTreeAlloc)>>,
+    /// `LAMELLAR_RDMA_STAGING` (default on): heap-backed RDMA local buffers are
+    /// staged through `runtime_allocs` so rxm never registers them on the fly.
+    staging_enabled: bool,
+    staging_fallbacks: AtomicUsize,
+    staging_warned: AtomicBool,
+    /// Guards `final_teardown` so it runs exactly once no matter who calls
+    /// it: LibfabricComm::drop calls it explicitly (on a known-good thread),
+    /// and Drop::drop below calls it too as a fallback. PMI barrier calls
+    /// are not safe from an arbitrary OS thread, and Rust's implicit
+    /// Arc-drop can run on any thread.
+    teardown_done: AtomicBool,
 }
 
 impl CommGroup {
@@ -419,27 +449,36 @@ impl CommGroup {
     // issued` proves every op issued as of this call (including this poll's own, since it was
     // issued before this call started) has completed — regardless of completion order. Never
     // cache/persist `pending` across polls and compare a stale target to a fresh cntr read.
-    fn poll_wait_for_cntr(&self, pending: &AtomicU64, cntr: &Counter<WaitableCntr>) -> Poll<()> {
-        if let Some(_lock) = self.lock.try_lock() {
-            if let Err(e) = self.progress() {
-                panic!("Error in progress: {:?}", e);
-            }
-        }
-        let completed = cntr.read();
-        let issued = pending.load(Ordering::SeqCst);
-        if completed >= issued {
-            Poll::Ready(())
+    // Direct port of RofiCAlloc::try_wait. `my_cnt_val` is the caller's ticket:
+    // None on first call (take one now), Some while still outstanding. On
+    // return, None means satisfied. The winner's `rofi_c_wait()` equivalent is
+    // the existing blocking drain (put wait_all, then get wait_all), each under
+    // the single CommGroup `lock`, matching rofi_wait_internal's
+    // put_wait_all -> get_wait_all under rofi->lock.
+    fn try_wait(&self, my_cnt_val: &mut Option<usize>) {
+        let my_cnt = match my_cnt_val {
+            Some(cnt) => *cnt,
+            None => self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst),
+        };
+        if self
+            .wait_flag
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            *my_cnt_val = Some(my_cnt);
         } else {
-            Poll::Pending
+            if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
+                if let Err(e) = self.wait_for_tx_cntr() {
+                    panic!("Error in tx wait: {:?}", e);
+                }
+                if let Err(e) = self.wait_for_rx_cntr() {
+                    panic!("Error in rx wait: {:?}", e);
+                }
+                self.wait_cnt_fin.fetch_max(my_cnt, Ordering::SeqCst);
+            }
+            *my_cnt_val = None;
+            self.wait_flag.store(false, Ordering::SeqCst);
         }
-    }
-
-    fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
-        self.poll_wait_for_cntr(&self.put_cnt, &self.put_cntr)
-    }
-
-    fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
-        self.poll_wait_for_cntr(&self.get_cnt, &self.get_cntr)
     }
 
     // Same fresh-read-order requirement as poll_wait_for_cntr: completed-count first,
@@ -604,7 +643,8 @@ impl Ofi {
 
         // trace!("Using PMI my_pe {} num_pes {}",my_pmi.rank(), num_pes);
 
-        let info = Info::new(&libfabric_version())
+        let rofi_msg_hint = env::var_os("LAMELLAR_LIBFABRIC_MSG_HINT").is_some();
+        let mut info_tx_attr = Info::new(&libfabric_version())
             .enter_hints()
             .caps(InfoCaps::new().rma().atomic().collective())
             .mode(Mode::new().context())
@@ -620,10 +660,22 @@ impl Ofi {
             .resource_mgmt(ResourceMgmt::Enabled)
             .data_progress(Progress::Manual)
             .leave_domain_attr()
-            .enter_tx_attr()
-            .traffic_class(TrafficClass::LowLatency)
+            .enter_tx_attr();
+        if env::var_os("LAMELLAR_LIBFABRIC_NO_TCLASS").is_none() {
+            info_tx_attr = info_tx_attr.traffic_class(TrafficClass::LowLatency);
+        }
+        if rofi_msg_hint {
+            info_tx_attr = info_tx_attr.size(1024);
+        }
+        let mut info_rx_attr = info_tx_attr
             .op_flags(TransferOptions::new().delivery_complete())
             .leave_tx_attr()
+            .enter_rx_attr();
+        if rofi_msg_hint {
+            info_rx_attr = info_rx_attr.caps(RxCaps::new().recv()).size(1024);
+        }
+        let info = info_rx_attr
+            .leave_rx_attr()
             .addr_format(AddressFormat::Unspec)
             .leave_hints()
             .get()
@@ -762,6 +814,12 @@ impl Ofi {
             put_cnt: AtomicU64::new(0),
             get_cnt: AtomicU64::new(0),
             lock: Mutex::new(()),
+            // Starts at 1, not 0: try_wait's elect-one-waiter check is `my_cnt > fin`. If both
+            // started at 0, ticket #0 would see 0 > 0 == false and skip the real cntr wait,
+            // returning as already-covered before anything had actually drained.
+            wait_cnt_cur: AtomicUsize::new(1),
+            wait_cnt_fin: AtomicUsize::new(0),
+            wait_flag: AtomicBool::new(false),
             contexts_cache: contexts,
             contexts_cache_size,
         };
@@ -784,6 +842,11 @@ impl Ofi {
             alloc_manager: Arc::new(alloc_manager),
             barrier_impl: RwLock::new(BarrierImpl::Pmi(my_pmi)),
             comm_group,
+            runtime_allocs: RwLock::new(Vec::new()),
+            staging_enabled: config().rdma_staging.unwrap_or(true),
+            staging_fallbacks: AtomicUsize::new(0),
+            staging_warned: AtomicBool::new(false),
+            teardown_done: AtomicBool::new(false),
         });
 
         // ofi.init_barrier()?;
@@ -1224,6 +1287,80 @@ impl Ofi {
         }
     }
 
+    /// Non-collective: sub-allocates from the pool of already-mmap'd,
+    /// already-registered `runtime_allocs` entries (created once,
+    /// collectively, at startup / via `alloc_pool()`). Safe to call from a
+    /// single PE without any other PE's participation. Returns
+    /// `Err(AllocError::OutOfMemoryError)` if no pool entry has room --
+    /// callers must not treat this as fatal, only as "pool exhausted, fall
+    /// back to some other allocation strategy."
+    pub(crate) fn rt_alloc(self: &Arc<Ofi>, size: usize, align: usize) -> AllocResult<LibfabricAlloc> {
+        // add space for ref count
+        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+
+        let allocs = self.runtime_allocs.read();
+        for (inner_alloc, alloc) in allocs.iter() {
+            if let Some(addr) = alloc.try_malloc(size, align) {
+                let alloc = inner_alloc.rt_alloc(alloc.clone(), addr - inner_alloc.start(), padding, size)?;
+                trace!(
+                    "new rt alloc (Ofi pool): 0x{:x}-0x{:x} {} {} {:?}",
+                    addr,
+                    addr + size,
+                    addr - inner_alloc.start(),
+                    size,
+                    alloc,
+                );
+                return Ok(alloc);
+            }
+        }
+        Err(AllocError::OutOfMemoryError(size))
+    }
+
+    /// Registered scratch memory for an RDMA op whose local buffer would
+    /// otherwise be plain heap/stack memory. With verbs;ofi_rxm the provider
+    /// registers such buffers on the fly through the MR cache, and a cached
+    /// entry can go stale when the heap range is recycled -- a GET then lands
+    /// in old physical pages. A sub-range of our already-registered pool is a
+    /// pure cache hit, so staging removes both the staleness and the per-op
+    /// registration cost.
+    ///
+    /// `None` means "use the caller's own buffer" (staging disabled, empty
+    /// op, or pool exhausted after letting in-flight ops drain).
+    pub(crate) fn staging_alloc(
+        self: &Arc<Ofi>,
+        bytes: usize,
+        align: usize,
+    ) -> Option<LibfabricAlloc> {
+        if !self.staging_enabled || bytes == 0 {
+            return None;
+        }
+        for attempt in 0..3 {
+            match self.rt_alloc(bytes, align) {
+                Ok(alloc) => return Some(alloc),
+                Err(AllocError::OutOfMemoryError(_)) if attempt < 2 => {
+                    let _ = self.progress_all();
+                }
+                Err(_) => break,
+            }
+        }
+        self.staging_fallbacks.fetch_add(1, Ordering::Relaxed);
+        if !self.staging_warned.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "[LAMELLAR WARNING][{}] registered staging pool exhausted (needed {} bytes); RDMA op falling back to unregistered heap memory, results may be affected by libfabric MR-cache staleness. Remedies: increase LAMELLAR_HEAP_SIZE, verify your results, or set FI_MR_CACHE_MAX_COUNT=0 (slow).",
+                self.my_pe, bytes
+            );
+        }
+        None
+    }
+
+    pub(crate) fn staging_fallbacks(&self) -> usize {
+        self.staging_fallbacks.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn inject_size(&self) -> usize {
+        self.info_entry.tx_attr().inject_size()
+    }
+
     fn full_alloc(self: &Arc<Ofi>, data_size: usize, align: usize) -> AllocResult<LibfabricAlloc> {
         //add space for ref count and padding to align it
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
@@ -1585,11 +1722,8 @@ impl Ofi {
     pub(crate) fn thread_wait(&self) -> Result<(), libfabric::error::Error> {
         self.comm_group.wait_all()
     }
-    pub(crate) fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
-        self.comm_group.poll_wait_for_tx_cntr()
-    }
-    pub(crate) fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
-        self.comm_group.poll_wait_for_rx_cntr()
+    pub(crate) fn try_wait(&self, my_cnt_val: &mut Option<usize>) {
+        self.comm_group.try_wait(my_cnt_val)
     }
     pub(crate) fn poll_wait_for_collectives(&self) -> Poll<()> {
         self.comm_group.poll_wait_for_collectives()
@@ -1603,10 +1737,17 @@ impl Ofi {
         let _lock = self.comm_group.lock.lock();
         self.comm_group.progress()
     }
-}
 
-impl Drop for Ofi {
-    fn drop(&mut self) {
+    /// Explicit, idempotent teardown -- called directly from
+    /// LibfabricComm::drop on its own (known-good) thread rather than left
+    /// to fire implicitly whenever the last Arc<Ofi> clone happens to drop.
+    /// PMI barrier calls are not safe from an arbitrary OS thread; see
+    /// libfabric_sys_opt_lamellae for the confirmed hang this caused there.
+    /// Drop::drop below calls this too as a fallback.
+    pub(crate) fn final_teardown(&self) {
+        if self.teardown_done.swap(true, Ordering::SeqCst) {
+            return;
+        }
         trace!(target: "drop", "drop Ofi");
         let _ = self.comm_group.wait_all();
 
@@ -1614,6 +1755,12 @@ impl Drop for Ofi {
             .barrier(false)
             .expect("PMI Barrier failed during OFI drop");
         trace!(target: "drop", "end drop Ofi");
+    }
+}
+
+impl Drop for Ofi {
+    fn drop(&mut self) {
+        self.final_teardown();
     }
 }
 

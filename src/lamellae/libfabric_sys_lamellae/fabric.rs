@@ -1,20 +1,35 @@
 use std::{
     collections::HashMap,
+    env,
     mem::MaybeUninit,
     ops::{Range, RangeFrom, RangeFull, RangeTo},
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
     task::Poll,
 };
 
+use libc::{sysconf, _SC_PAGESIZE, _SC_PHYS_PAGES};
 use libfabric_sys;
 use parking_lot::{Mutex, RwLock};
 use pmi::{Pmi, PmiBuilder};
 use tracing::{debug, trace};
 
+fn node_total_memory_bytes() -> Option<u64> {
+    let pages = unsafe { sysconf(_SC_PHYS_PAGES) };
+    let page_size = unsafe { sysconf(_SC_PAGESIZE) };
+    if pages <= 0 || page_size <= 0 {
+        return None;
+    }
+
+    let pages = pages as u64;
+    let page_size = page_size as u64;
+    pages.checked_mul(page_size)
+}
+
 use crate::{
+    config,
     lamellae::{
         calc_alloc_padding_size_align,
         collective::{
@@ -98,6 +113,14 @@ pub(crate) struct CommGroup {
     coll_cnt_completed: AtomicU64,
     barrier_impl: RwLock<BarrierImpl>,
     lock: Mutex<()>,
+    // rofi_c-style wait ticketing (mirrors rofi_c_lamellae/fabric.rs
+    // wait_cnt_cur / wait_cnt_fin / wait_flag). A future takes one ticket on
+    // its first poll after issue and keeps it. Whoever wins `wait_flag` runs a
+    // full drain (put then get) under `lock`; every ticket <= the winner's is
+    // then satisfied for free. Losers return Pending with no FFI at all.
+    wait_cnt_cur: AtomicUsize,
+    wait_cnt_fin: AtomicUsize,
+    wait_flag: AtomicBool,
 }
 
 unsafe impl Send for CommGroup {}
@@ -145,8 +168,40 @@ impl CommGroup {
         if ret >= 0 {
             self.coll_cnt_completed.fetch_add(1, Ordering::SeqCst);
         } else if ret != -(libfabric_sys::FI_EAGAIN as isize) {
-            panic!("Error reading CQ: {}", ret);
+            panic!("Error reading CQ: {} ({})", ret, self.decode_cq_error());
         }
+    }
+
+    /// Drains and decodes a pending CQ error entry via `fi_cq_readerr`/`fi_cq_strerror`,
+    /// mirroring rofi's error-reporting helpers (`rofi_transport_ctx_check_err` et al.,
+    /// transport.c). Called only from panic paths after a non-EAGAIN error was observed,
+    /// so failure to read a useful entry still degrades to *some* message.
+    fn decode_cq_error(&self) -> String {
+        let mut err_entry = MaybeUninit::<libfabric_sys::fi_cq_err_entry>::uninit();
+        let ret =
+            unsafe { libfabric_sys::inlined_fi_cq_readerr(self.cq, err_entry.as_mut_ptr(), 0) };
+        if ret <= 0 {
+            return format!("fi_cq_readerr failed: {}", ret);
+        }
+        let entry = unsafe { err_entry.assume_init() };
+        let msg = unsafe {
+            let ptr = libfabric_sys::inlined_fi_cq_strerror(
+                self.cq,
+                entry.prov_errno,
+                entry.err_data,
+                std::ptr::null_mut(),
+                0,
+            );
+            if ptr.is_null() {
+                "<no error string>".to_string()
+            } else {
+                std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
+            }
+        };
+        format!(
+            "err={} prov_errno={} ({})",
+            entry.err, entry.prov_errno, msg
+        )
     }
 
     pub(crate) fn wait_all(&self) {
@@ -207,7 +262,12 @@ impl CommGroup {
             unsafe {
                 let ret = libfabric_sys::inlined_fi_cntr_wait(cntr, prev_expected_cnt as u64, -1);
                 if ret != 0 {
-                    panic!("Error waiting on {} counter: {}", _dir, ret);
+                    panic!(
+                        "Error waiting on {} counter: {} ({})",
+                        _dir,
+                        ret,
+                        self.decode_cq_error()
+                    );
                 }
             }
 
@@ -217,37 +277,37 @@ impl CommGroup {
         }
     }
 
-    // Non-blocking, single-poll check. `cntr` is a bulk completion COUNT shared by every
-    // issuer on this CommGroup, not a per-request handle, so completion order across issuers
-    // is not guaranteed. Must read `cntr` (completions) first, then `pending` (issued count)
-    // second, fresh every call: since `pending` only grows, sampling it strictly after the
-    // cntr read guarantees the target is >= true issued-count at read time, so `completed >=
-    // issued` proves every op issued as of this call (including this poll's own, since it was
-    // issued before this call started) has completed — regardless of completion order. Never
-    // cache/persist `pending` across polls and compare a stale target to a fresh cntr read.
-    fn poll_wait_for_cntr(&self, pending: &AtomicU64, cntr: *mut libfabric_sys::fid_cntr) -> Poll<()> {
-        if let Some(_lock) = self.lock.try_lock() {
-            self.progress();
-        }
-        let completed = unsafe { libfabric_sys::inlined_fi_cntr_read(cntr) as u64 };
-        let issued = pending.load(Ordering::SeqCst);
-        if completed >= issued {
-            Poll::Ready(())
+    // Direct port of RofiCAlloc::try_wait. `my_cnt_val` is the caller's ticket:
+    // None on first call (take one now), Some while still outstanding. On
+    // return, None means satisfied. The winner's `rofi_c_wait()` equivalent is
+    // the existing blocking drain (put wait_all, then get wait_all), each under
+    // the single CommGroup `lock`, matching rofi_wait_internal's
+    // put_wait_all -> get_wait_all under rofi->lock.
+    fn try_wait(&self, my_cnt_val: &mut Option<usize>) {
+        let my_cnt = match my_cnt_val {
+            Some(cnt) => *cnt,
+            None => self.wait_cnt_cur.fetch_add(1, Ordering::SeqCst),
+        };
+        if self
+            .wait_flag
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            *my_cnt_val = Some(my_cnt);
         } else {
-            Poll::Pending
+            if my_cnt > self.wait_cnt_fin.load(Ordering::SeqCst) {
+                self.wait_for_tx_cntr();
+                self.wait_for_rx_cntr();
+                self.wait_cnt_fin.fetch_max(my_cnt, Ordering::SeqCst);
+            }
+            *my_cnt_val = None;
+            self.wait_flag.store(false, Ordering::SeqCst);
         }
     }
 
-    fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
-        self.poll_wait_for_cntr(&self.put_cnt, self.put_cntr)
-    }
-
-    fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
-        self.poll_wait_for_cntr(&self.get_cnt, self.get_cntr)
-    }
-
-    // Same fresh-read-order requirement as poll_wait_for_cntr: completed-count first,
-    // issued-count second.
+    // Non-blocking, single-poll check, completed-count first then issued-count
+    // second (fresh every call, never cached) so a growing `pending` can't
+    // race a stale comparison.
     fn poll_wait_for_collectives(&self) -> Poll<()> {
         if let Some(_lock) = self.lock.try_lock() {
             self.progress();
@@ -307,7 +367,14 @@ impl CommGroup {
         let cnt = self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1;
         if blocking {
             unsafe {
-                let _ = libfabric_sys::inlined_fi_cntr_wait(self.put_cntr, cnt as u64, -1);
+                let ret = libfabric_sys::inlined_fi_cntr_wait(self.put_cntr, cnt as u64, -1);
+                if ret != 0 {
+                    panic!(
+                        "Error waiting on put counter: {} ({})",
+                        ret,
+                        self.decode_cq_error()
+                    );
+                }
             }
         }
         cnt
@@ -335,7 +402,14 @@ impl CommGroup {
 
         if blocking {
             unsafe {
-                let _ = libfabric_sys::inlined_fi_cntr_wait(self.get_cntr, new_cnt as u64, -1);
+                let ret = libfabric_sys::inlined_fi_cntr_wait(self.get_cntr, new_cnt as u64, -1);
+                if ret != 0 {
+                    panic!(
+                        "Error waiting on get counter: {} ({})",
+                        ret,
+                        self.decode_cq_error()
+                    );
+                }
             }
         }
         new_cnt
@@ -391,7 +465,39 @@ pub(crate) struct Ofi {
     fabric: *mut libfabric_sys::fid_fabric,
     _my_pmi: Arc<dyn Pmi>,
     alloc_manager: Arc<AllocInfoManager>,
+    /// Whether the negotiated domain supports the `FI_ALLGATHER` OFI
+    /// collective, probed once here (mirrors rofi's one-time
+    /// `fi_query_collective(FI_ALLGATHER)` check). Gates whether MR-info
+    /// exchange uses `fi_join_collective`+`fi_allgather` or a PMI-based
+    /// manual fallback.
+    mr_exchange_via_collective: bool,
     comm_group: CommGroup,
+    /// Runtime (rt_alloc) sub-allocation pool, shared by any `LibfabricSysAlloc`
+    /// reachable via its `ofi: Arc<Ofi>` field. Lives here (rather than on
+    /// LibfabricSysComm) so that `LibfabricSysAlloc`/`OneSidedLibfabricSysAlloc`
+    /// -- which have no other path back to LibfabricSysComm -- can still reach
+    /// an already-registered scratch pool (e.g. from inside `get_buffer`).
+    ///
+    /// NOTE: each `LibfabricSysAlloc` stored here holds its own `Arc<Ofi>`
+    /// clone pointing back at this very `Ofi`, i.e. this field creates a
+    /// genuine Arc reference cycle (mirrors the existing `alloc_manager`
+    /// cycle broken via `clear_allocs()`). It MUST be `.clear()`-ed during
+    /// teardown (see `Drop for LibfabricSysComm`) or `Ofi` would never be freed.
+    pub(crate) runtime_allocs: RwLock<Vec<(LibfabricSysAlloc, BTreeAlloc)>>,
+    /// `LAMELLAR_RDMA_STAGING` (default on): heap-backed RDMA local buffers are
+    /// staged through `runtime_allocs` so rxm never registers them on the fly.
+    staging_enabled: bool,
+    staging_fallbacks: AtomicUsize,
+    staging_warned: AtomicBool,
+    /// Guards `final_teardown` so it runs exactly once no matter who calls it:
+    /// LibfabricSysComm::drop calls it explicitly (on a known-good thread),
+    /// and Drop::drop below calls it too as a fallback for any other path
+    /// that drops the last Arc<Ofi> without going through comm.rs first.
+    /// PMI barrier calls are not safe from an arbitrary OS thread, and Rust's
+    /// implicit Arc-drop can run on any thread, so this can't be left to fire
+    /// implicitly (see libfabric_sys_opt_lamellae for the confirmed hang this
+    /// caused there).
+    teardown_done: AtomicBool,
 }
 
 unsafe impl Send for Ofi {}
@@ -414,6 +520,19 @@ impl Ofi {
         })?);
 
         let num_pes = my_pmi.ranks().len();
+        if env::var_os("FI_UNIVERSE").is_none() {
+            env::set_var("FI_UNIVERSE", num_pes.to_string());
+        }
+
+        if env::var_os("FI_MR_CACHE_MAX_SIZE").is_none() {
+            if let Some(total_bytes) = node_total_memory_bytes() {
+                env::set_var("FI_MR_CACHE_MAX_SIZE", total_bytes.to_string());
+            } else {
+                eprintln!(
+                    "Warning: unable to determine total system memory for FI_MR_CACHE_MAX_SIZE"
+                );
+            }
+        }
 
         #[cfg(feature = "enable-on-node-shmem")]
         let disable_on_node_shmem = config().disable_on_node_shmem.unwrap_or(false);
@@ -437,12 +556,13 @@ impl Ofi {
                 | libfabric_sys::FI_COLLECTIVE) as u64;
             (*hints).mode = libfabric_sys::FI_CONTEXT;
             (*(*hints).ep_attr).type_ = libfabric_sys::fi_ep_type_FI_EP_RDM;
-            (*(*hints).domain_attr).threading = libfabric_sys::fi_threading_FI_THREAD_SAFE;
+            (*(*hints).domain_attr).threading = libfabric_sys::fi_threading_FI_THREAD_DOMAIN;
             // (*(*hints).domain_attr).control_progress = libfabric_sys::fi_progress_FI_PROGRESS_AUTO as u8;
             (*(*hints).domain_attr).data_progress = libfabric_sys::fi_progress_FI_PROGRESS_MANUAL;
             (*(*hints).domain_attr).mr_mode = (libfabric_sys::FI_MR_PROV_KEY
                 | libfabric_sys::FI_MR_VIRT_ADDR
-                | libfabric_sys::FI_MR_ALLOCATED)
+                | libfabric_sys::FI_MR_ALLOCATED
+                | libfabric_sys::FI_MR_ENDPOINT)
                 as i32;
             (*(*hints).domain_attr).resource_mgmt = libfabric_sys::fi_resource_mgmt_FI_RM_ENABLED;
             (*(*hints).tx_attr).tclass = libfabric_sys::FI_TC_LOW_LATENCY;
@@ -490,12 +610,16 @@ impl Ofi {
                 }
                 break;
             }
+            if curr_info.is_null() && (provider.is_some() || domain.is_some()) {
+                eprintln!(
+                    "Warning: no libfabric provider/domain matched provider={provider:?}, domain={domain:?}; falling back to first available provider"
+                );
+                curr_info = info;
+            }
             if curr_info.is_null() {
                 libfabric_sys::fi_freeinfo(hints);
                 libfabric_sys::fi_freeinfo(info);
-                eprintln!(
-                    "No libfabric provider/domain matched provider={provider:?}, domain={domain:?}"
-                );
+                eprintln!("No libfabric provider available");
                 Err(FabricError::InitError(libfabric_sys::FI_ENODATA))?;
             }
             let ret: *mut libfabric_sys::fi_info = libfabric_sys::fi_dupinfo(curr_info);
@@ -505,6 +629,23 @@ impl Ofi {
                 eprintln!("Error duplicating selected libfabric provider info");
                 Err(FabricError::InitError(libfabric_sys::FI_ENOMEM))?;
             }
+
+            let base_caps = (libfabric_sys::FI_RMA
+                | libfabric_sys::FI_WRITE
+                | libfabric_sys::FI_READ
+                | libfabric_sys::FI_REMOTE_WRITE
+                | libfabric_sys::FI_REMOTE_READ
+                | libfabric_sys::FI_ATOMIC
+                | libfabric_sys::FI_COLLECTIVE) as u64;
+            (*ret).caps = base_caps;
+            (*ret).mode = 0;
+            (*(*ret).tx_attr).mode = 0;
+            (*(*ret).tx_attr).size = 1024;
+            (*(*ret).tx_attr).caps = base_caps;
+            (*(*ret).rx_attr).mode = 0;
+            (*(*ret).rx_attr).size = 1024;
+            (*(*ret).rx_attr).caps = (libfabric_sys::FI_RECV | libfabric_sys::FI_COLLECTIVE) as u64;
+
             ret
         };
 
@@ -731,13 +872,21 @@ impl Ofi {
             addr
         };
 
-        my_pmi.put(&format!("epname"), &address_bytes).unwrap();
-        my_pmi.exchange().unwrap();
+        my_pmi
+            .put(&format!("epname"), &address_bytes)
+            .expect("PMI put failed during epname exchange");
+        my_pmi
+            .exchange()
+            .expect("PMI exchange failed during epname exchange");
 
         let unmapped_addresses: Vec<Vec<u8>> = my_pmi
             .ranks()
             .iter()
-            .map(|r| my_pmi.get(&format!("epname"), &r).unwrap())
+            .map(|r| {
+                my_pmi
+                    .get(&format!("epname"), &r)
+                    .expect("PMI get failed during epname exchange")
+            })
             .collect();
 
         let mapped_addresses = unsafe {
@@ -760,6 +909,13 @@ impl Ofi {
             if ret < 0 {
                 eprintln!("Error inserting addresses into AV: {}", ret);
                 Err(FabricError::InitError(-ret as u32))?;
+            } else if ret as usize != mapped_addresses.len() {
+                eprintln!(
+                    "Error inserting addresses into AV: number of addresses inserted = {}; number of addresses given = {}",
+                    ret,
+                    mapped_addresses.len()
+                );
+                Err(FabricError::InitError(ret as u32))?;
             }
             mapped_addresses
         };
@@ -779,6 +935,31 @@ impl Ofi {
             get_cnt: AtomicU64::new(0),
             lock: Mutex::new(()),
             barrier_impl: RwLock::new(BarrierImpl::Pmi(my_pmi.clone())),
+            // Starts at 1, not 0: try_wait's elect-one-waiter check is `my_cnt > fin`. If both
+            // started at 0, ticket #0 would see 0 > 0 == false and skip the real cntr wait,
+            // returning as already-covered before anything had actually drained.
+            wait_cnt_cur: AtomicUsize::new(1),
+            wait_cnt_fin: AtomicUsize::new(0),
+            wait_flag: AtomicBool::new(false),
+        };
+
+        let mr_exchange_via_collective = {
+            let data_type = rust_type_to_fi_type::<u64>().expect("u64 must map to an fi_datatype");
+            let mut attr = libfabric_sys::fi_collective_attr {
+                op: 0,
+                datatype: data_type,
+                datatype_attr: libfabric_sys::fi_atomic_attr { count: 0, size: 0 },
+                max_members: 0,
+                mode: 0,
+            };
+            (unsafe {
+                libfabric_sys::inlined_fi_query_collective(
+                    domain,
+                    libfabric_sys::fi_collective_op_FI_ALLGATHER,
+                    &mut attr,
+                    0,
+                )
+            }) == 0
         };
 
         let alloc_manager = AllocInfoManager::new();
@@ -796,7 +977,13 @@ impl Ofi {
             fabric: fabric,
             domain,
             alloc_manager: Arc::new(alloc_manager),
+            mr_exchange_via_collective,
             comm_group,
+            runtime_allocs: RwLock::new(Vec::new()),
+            staging_enabled: config().rdma_staging.unwrap_or(true),
+            staging_fallbacks: AtomicUsize::new(0),
+            staging_warned: AtomicBool::new(false),
+            teardown_done: AtomicBool::new(false),
         });
 
         Ok(ofi)
@@ -865,20 +1052,37 @@ impl Ofi {
         };
 
         let mut avail = true;
-        let ret = unsafe {
-            libfabric_sys::inlined_fi_atomicvalid(cg.ep, data_type, fi_op, &mut count as *mut usize)
-        };
-        avail &= if ret != 0 { false } else { true };
+        if matches!(op, AtomicOpKind::Cas) {
+            let ret = unsafe {
+                libfabric_sys::inlined_fi_compare_atomicvalid(
+                    cg.ep,
+                    data_type,
+                    fi_op,
+                    &mut count as *mut usize,
+                )
+            };
+            avail &= if ret != 0 { false } else { true };
+        } else {
+            let ret = unsafe {
+                libfabric_sys::inlined_fi_atomicvalid(
+                    cg.ep,
+                    data_type,
+                    fi_op,
+                    &mut count as *mut usize,
+                )
+            };
+            avail &= if ret != 0 { false } else { true };
 
-        let ret = unsafe {
-            libfabric_sys::inlined_fi_fetch_atomicvalid(
-                cg.ep,
-                data_type,
-                fi_op,
-                &mut count as *mut usize,
-            )
-        };
-        avail &= if ret != 0 { false } else { true };
+            let ret = unsafe {
+                libfabric_sys::inlined_fi_fetch_atomicvalid(
+                    cg.ep,
+                    data_type,
+                    fi_op,
+                    &mut count as *mut usize,
+                )
+            };
+            avail &= if ret != 0 { false } else { true };
+        }
         avail
     }
 
@@ -1072,14 +1276,7 @@ impl Ofi {
         })
     }
 
-    fn collective_exchange_mr_info(
-        &self,
-        pes: &[usize],
-        mem: &[u8],
-        mr: *mut libfabric_sys::fid_mr,
-    ) -> HashMap<usize, RemoteMemAddressInfo> {
-        let mcast_group = self.create_mc_group(pes);
-        let cg = &self.comm_group;
+    fn build_local_mr_info_bytes(&self, mem: &[u8], mr: *mut libfabric_sys::fid_mr) -> Vec<u8> {
         let addr = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode }
             & (libfabric_sys::FI_MR_VIRT_ADDR | libfabric_sys::fi_mr_mode_FI_MR_BASIC) as i32
             != 0
@@ -1143,6 +1340,70 @@ impl Ofi {
             )
         });
 
+        key_bytes
+    }
+
+    fn decode_remote_mem_info(&self, chunk: &[u8]) -> RemoteMemAddressInfo {
+        let addr_len = unsafe {
+            *(chunk[chunk.len() - std::mem::size_of::<usize>()..].as_ptr() as *const u64)
+        };
+        let key_addr = unsafe {
+            *(chunk[chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()
+                ..chunk.len() - std::mem::size_of::<usize>()]
+                .as_ptr() as *const u64)
+        };
+        let mut key = chunk
+            [..chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()]
+            .to_vec();
+
+        if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode }
+            & (libfabric_sys::FI_MR_RAW as i32)
+            != 0
+        {
+            let mut mapped_key = 0u64;
+            let err = unsafe {
+                libfabric_sys::inlined_fi_mr_map_raw(
+                    self.domain,
+                    key_addr,
+                    key.as_mut_ptr(),
+                    key.len(),
+                    &mut mapped_key,
+                    0,
+                )
+            };
+            if err != 0 {
+                panic!("Error mapping raw MR key: {}", err);
+            }
+            RemoteMemAddressInfo {
+                mem_address: key_addr as *const u8,
+                key: mapped_key,
+                len: addr_len as usize,
+            }
+        } else {
+            let mut key_mapped = 0u64;
+            unsafe {
+                std::slice::from_raw_parts_mut(&mut key_mapped as *mut u64 as *mut u8, 8)
+                    .copy_from_slice(&key)
+            };
+            RemoteMemAddressInfo {
+                mem_address: key_addr as *const u8,
+                key: key_mapped,
+                len: addr_len as usize,
+            }
+        }
+    }
+
+    fn collective_exchange_mr_info(
+        &self,
+        pes: &[usize],
+        mem: &[u8],
+        mr: *mut libfabric_sys::fid_mr,
+    ) -> HashMap<usize, RemoteMemAddressInfo> {
+        let mcast_group = self.create_mc_group(pes);
+        let cg = &self.comm_group;
+
+        let key_bytes = self.build_local_mr_info_bytes(mem, mr);
+
         let mut all_mem_info_bytes = vec![0u8; key_bytes.len() * pes.len()];
         cg.post_collective(true, || unsafe {
             libfabric_sys::inlined_fi_allgather(
@@ -1159,66 +1420,65 @@ impl Ofi {
             )
         });
 
-        let all_mem_info = all_mem_info_bytes
+        all_mem_info_bytes
             .chunks_exact(key_bytes.len())
             .enumerate()
-            .map(|(pe, chunk)| {
-                let addr_len = unsafe {
-                    *(chunk[chunk.len() - std::mem::size_of::<usize>()..].as_ptr() as *const u64)
-                };
-                let key_addr = unsafe {
-                    *(chunk[chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()
-                        ..chunk.len() - std::mem::size_of::<usize>()]
-                        .as_ptr() as *const u64)
-                };
-                let mut key = chunk
-                    [..chunk.len() - std::mem::size_of::<usize>() - std::mem::size_of::<u64>()]
-                    .to_vec();
-                let mem_info = if unsafe { (*(*self.comm_group.info_entry).domain_attr).mr_mode }
-                    & (libfabric_sys::FI_MR_RAW as i32)
-                    != 0
-                {
-                    let mut mapped_key = 0u64;
-                    let err = unsafe {
-                        libfabric_sys::inlined_fi_mr_map_raw(
-                            self.domain,
-                            key_addr,
-                            key.as_mut_ptr(),
-                            key.len(),
-                            &mut mapped_key,
-                            0,
-                        )
-                    };
-                    if err != 0 {
-                        panic!("Error mapping raw MR key: {}", err);
-                    }
-                    RemoteMemAddressInfo {
-                        mem_address: key_addr as *const u8,
-                        key: mapped_key,
-                        len: addr_len as usize,
-                    }
-                } else {
-                    let mut key_mapped = 0u64;
-                    unsafe {
-                        std::slice::from_raw_parts_mut(&mut key_mapped as *mut u64 as *mut u8, 8)
-                            .copy_from_slice(&key)
-                    };
-                    RemoteMemAddressInfo {
-                        mem_address: key_addr as *const u8,
-                        key: key_mapped,
-                        len: addr_len as usize,
-                    }
-                };
-
-                (pes[pe], mem_info)
-            })
-            .collect();
-
-        all_mem_info
+            .map(|(pe, chunk)| (pes[pe], self.decode_remote_mem_info(chunk)))
+            .collect()
     }
 
-    #[allow(dead_code)]
-    fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
+    /// PMI-based fallback for exchanging MR info when the provider doesn't
+    /// support the `FI_ALLGATHER` OFI collective (`mr_exchange_via_collective
+    /// == false`). Mirrors rofi's manual MR-exchange path, but reuses the
+    /// put/exchange/get pattern already used for endpoint-address discovery
+    /// in `Ofi::new` instead of rofi's RMA+dissemination-barrier approach,
+    /// since PMI is already available here as a generic exchange primitive.
+    /// `mr_key_id` must be unique per exchanged allocation; callers pass the
+    /// same key used to register the MR (already unique via
+    /// `AllocInfoManager::next_key`).
+    fn manual_exchange_mr_info(
+        &self,
+        pes: &[usize],
+        mem: &[u8],
+        mr: *mut libfabric_sys::fid_mr,
+        mr_key_id: u64,
+    ) -> HashMap<usize, RemoteMemAddressInfo> {
+        let local_bytes = self.build_local_mr_info_bytes(mem, mr);
+        let key = format!("mr_info_{}", mr_key_id);
+
+        self._my_pmi
+            .put(&key, &local_bytes)
+            .expect("PMI put failed during manual MR-info exchange");
+        self._my_pmi
+            .exchange()
+            .expect("PMI exchange failed during manual MR-info exchange");
+
+        pes.iter()
+            .map(|&pe| {
+                let bytes = self
+                    ._my_pmi
+                    .get(&key, &pe)
+                    .expect("PMI get failed during manual MR-info exchange");
+                (pe, self.decode_remote_mem_info(&bytes))
+            })
+            .collect()
+    }
+
+    fn exchange_mr_info(
+        &self,
+        pes: &[usize],
+        mem: &[u8],
+        mr: *mut libfabric_sys::fid_mr,
+        mr_key_id: u64,
+    ) -> HashMap<usize, RemoteMemAddressInfo> {
+        if self.mr_exchange_via_collective {
+            self.collective_exchange_mr_info(pes, mem, mr)
+        } else {
+            self.manual_exchange_mr_info(pes, mem, mr, mr_key_id)
+        }
+    }
+
+    pub(crate) fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
         let mut coll_attr = libfabric_sys::fi_collective_attr {
             op: 0,
             datatype: 0,
@@ -1278,6 +1538,133 @@ impl Ofi {
         }
     }
 
+    /// Non-collective: sub-allocates from the pool of already-mmap'd,
+    /// already-registered `runtime_allocs` entries (created once,
+    /// collectively, at startup / via `alloc_pool()`). Safe to call from a
+    /// single PE without any other PE's participation. Returns
+    /// `Err(AllocError::OutOfMemoryError)` if no pool entry has room --
+    /// callers must not treat this as fatal, only as "pool exhausted, fall
+    /// back to some other allocation strategy."
+    pub(crate) fn rt_alloc(
+        self: &Arc<Ofi>,
+        size: usize,
+        align: usize,
+    ) -> AllocResult<LibfabricSysAlloc> {
+        // add space for ref count
+        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+
+        let allocs = self.runtime_allocs.read();
+        for (inner_alloc, alloc) in allocs.iter() {
+            if let Some(addr) = alloc.try_malloc(size, align) {
+                let alloc =
+                    inner_alloc.rt_alloc(alloc.clone(), addr - inner_alloc.start(), padding, size)?;
+                trace!(
+                    "new rt alloc (Ofi pool): 0x{:x}-0x{:x} {} {} {:?}",
+                    addr,
+                    addr + size,
+                    addr - inner_alloc.start(),
+                    size,
+                    alloc,
+                );
+                return Ok(alloc);
+            }
+        }
+        Err(AllocError::OutOfMemoryError(size))
+    }
+
+    /// Registered scratch memory for an RDMA op whose local buffer would
+    /// otherwise be plain heap/stack memory. With verbs;ofi_rxm the provider
+    /// registers such buffers on the fly through the MR cache, and a cached
+    /// entry can go stale when the heap range is recycled -- a GET then lands
+    /// in old physical pages. A sub-range of our already-registered pool is a
+    /// pure cache hit, so staging removes both the staleness and the per-op
+    /// registration cost.
+    ///
+    /// `None` means "use the caller's own buffer" (staging disabled, empty
+    /// op, or pool exhausted after letting in-flight ops drain).
+    pub(crate) fn staging_alloc(
+        self: &Arc<Ofi>,
+        bytes: usize,
+        align: usize,
+    ) -> Option<LibfabricSysAlloc> {
+        if !self.staging_enabled || bytes == 0 {
+            return None;
+        }
+        for attempt in 0..3 {
+            match self.rt_alloc(bytes, align) {
+                Ok(alloc) => return Some(alloc),
+                Err(AllocError::OutOfMemoryError(_)) if attempt < 2 => {
+                    self.progress_all();
+                }
+                Err(_) => break,
+            }
+        }
+        self.staging_fallbacks.fetch_add(1, Ordering::Relaxed);
+        if !self.staging_warned.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "[LAMELLAR WARNING][{}] registered staging pool exhausted (needed {} bytes); RDMA op falling back to unregistered heap memory, results may be affected by libfabric MR-cache staleness. Remedies: increase LAMELLAR_HEAP_SIZE, verify your results, or set FI_MR_CACHE_MAX_COUNT=0 (slow).",
+                self.my_pe, bytes
+            );
+        }
+        None
+    }
+
+    pub(crate) fn staging_fallbacks(&self) -> usize {
+        self.staging_fallbacks.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn inject_size(&self) -> usize {
+        unsafe { (*(*self.comm_group.info_entry).tx_attr).inject_size }
+    }
+
+    /// Returns the MR descriptor of the `runtime_allocs` (staging pool)
+    /// entry that actually backs `addr`, or `fallback` if `addr` doesn't
+    /// fall inside any pool sub-allocation. Under `FI_MR_ENDPOINT`, the
+    /// provider validates the local-buffer desc against its real backing
+    /// MR; a staged buffer's real MR is the pool's, not the target alloc's
+    /// (`self.mr_desc`, the old always-used value) -- passing the wrong one
+    /// causes SIGBUS at real network scale.
+    pub(crate) fn local_desc_for(
+        &self,
+        addr: usize,
+        fallback: *mut std::ffi::c_void,
+    ) -> *mut std::ffi::c_void {
+        let allocs = self.runtime_allocs.read();
+        for (alloc, _) in allocs.iter() {
+            let start = alloc.start();
+            if addr >= start && addr < start + alloc.num_bytes() {
+                return alloc.mr_desc;
+            }
+        }
+        fallback
+    }
+
+    /// Binds and enables a newly registered MR when the negotiated domain
+    /// requires endpoint-bound memory regions (`FI_MR_ENDPOINT`). No-op for
+    /// providers that don't require it (everything reachable today).
+    unsafe fn bind_and_enable_mr_if_required(
+        &self,
+        mr: *mut libfabric_sys::fid_mr,
+    ) -> AllocResult<()> {
+        let mr_mode = (*(*self.comm_group.info_entry).domain_attr).mr_mode as u32;
+        if mr_mode & libfabric_sys::FI_MR_ENDPOINT == 0 {
+            return Ok(());
+        }
+        let ret = libfabric_sys::inlined_fi_mr_bind(mr, &mut (*self.comm_group.ep).fid, 0);
+        if ret != 0 {
+            eprintln!("Error binding memory region to endpoint: {}", ret);
+            close_fid("memory region", &mut (*mr).fid);
+            Err(AllocError::FabricAllocationError(-ret as i32))?;
+        }
+        let ret = libfabric_sys::inlined_fi_mr_enable(mr);
+        if ret != 0 {
+            eprintln!("Error enabling memory region: {}", ret);
+            close_fid("memory region", &mut (*mr).fid);
+            Err(AllocError::FabricAllocationError(-ret as i32))?;
+        }
+        Ok(())
+    }
+
     fn full_alloc(
         self: &Arc<Ofi>,
         data_size: usize,
@@ -1299,10 +1686,7 @@ impl Ofi {
             let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
-                .expect(&format!(
-                    "Error in allocating aligned memory of size: {} {}",
-                    aligned_size, size,
-                ));
+                .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
             unsafe {
                 std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
             }
@@ -1316,10 +1700,7 @@ impl Ofi {
             let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
-                .expect(&format!(
-                    "Error in allocating aligned memory of size: {} {}",
-                    aligned_size, size,
-                ));
+                .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
             unsafe {
                 std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
             }
@@ -1365,6 +1746,7 @@ impl Ofi {
         };
         let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
 
+        let mr_key = self.alloc_manager.next_key() as u64;
         let mr = unsafe {
             let mut mr = MaybeUninit::<*mut libfabric_sys::fid_mr>::uninit();
             let ret = libfabric_sys::inlined_fi_mr_reg(
@@ -1376,7 +1758,7 @@ impl Ofi {
                     | libfabric_sys::FI_REMOTE_READ
                     | libfabric_sys::FI_REMOTE_WRITE) as u64,
                 0,
-                self.alloc_manager.next_key() as u64,
+                mr_key,
                 0,
                 mr.as_mut_ptr(),
                 std::ptr::null_mut(),
@@ -1388,28 +1770,14 @@ impl Ofi {
             mr.assume_init()
         };
 
-        // let mr = match mr {
-        //     MaybeDisabledMemoryRegion::Disabled(mr) => {
-        //         match mr {
-        //             DisabledMemoryRegion::EpBind(mr) => {
-        //                 // trace!("Binding memory region to endpoint");
-        //                 mr.enable(&self.comm_group.ep)
-        //                     .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
-        //             }
-        //             DisabledMemoryRegion::RmaEvent(mr) => {
-        //                 // trace!("Binding memory region to domain");
-        //                 mr.enable()
-        //                     .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
-        //                 // This will bind the memory region to the domain
-        //             }
-        //         }
-        //     }
-        //     MaybeDisabledMemoryRegion::Enabled(mr) => mr,
-        // };
+        unsafe { self.bind_and_enable_mr_if_required(mr)? };
 
-        // let remote_alloc_infos = self.pmi_exchange_mr_info(&mem, &mr);
-        let remote_alloc_infos =
-            self.collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), mem_slice, mr);
+        let remote_alloc_infos = self.exchange_mr_info(
+            &(0..self.num_pes).collect::<Vec<_>>(),
+            mem_slice,
+            mr,
+            mr_key,
+        );
 
         let mcast_group = self.create_mc_group(&(0..self.num_pes).collect::<Vec<_>>());
 
@@ -1454,7 +1822,7 @@ impl Ofi {
             let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
-                .expect("Error in allocating aligned memory");
+                .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
             unsafe {
                 std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
             }
@@ -1467,7 +1835,7 @@ impl Ofi {
             let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
-                .expect("Error in allocating aligned memory");
+                .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
             unsafe {
                 std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
             }
@@ -1513,6 +1881,7 @@ impl Ofi {
         };
         let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
 
+        let mr_key = self.alloc_manager.next_key() as u64;
         let mr = unsafe {
             let mut mr = MaybeUninit::<*mut libfabric_sys::fid_mr>::uninit();
             let ret = libfabric_sys::inlined_fi_mr_reg(
@@ -1524,7 +1893,7 @@ impl Ofi {
                     | libfabric_sys::FI_REMOTE_READ
                     | libfabric_sys::FI_REMOTE_WRITE) as u64,
                 0,
-                self.alloc_manager.next_key() as u64,
+                mr_key,
                 0,
                 mr.as_mut_ptr(),
                 std::ptr::null_mut(),
@@ -1536,26 +1905,9 @@ impl Ofi {
             mr.assume_init()
         };
 
-        // let mr = match mr {
-        //     MaybeDisabledMemoryRegion::Disabled(mr) => {
-        //         match mr {
-        //             DisabledMemoryRegion::EpBind(mr) => {
-        //                 // trace!("Binding memory region to endpoint");
-        //                 mr.enable(&self.comm_group.ep)
-        //                     .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
-        //             }
-        //             DisabledMemoryRegion::RmaEvent(mr) => {
-        //                 // trace!("Binding memory region to domain");
-        //                 mr.enable()
-        //                     .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
-        //                 // This will bind the memory region to the domain
-        //             }
-        //         }
-        //     }
-        //     MaybeDisabledMemoryRegion::Enabled(mr) => mr,
-        // };
+        unsafe { self.bind_and_enable_mr_if_required(mr)? };
 
-        let remote_alloc_infos = self.collective_exchange_mr_info(pes, mem_slice, mr);
+        let remote_alloc_infos = self.exchange_mr_info(pes, mem_slice, mr, mr_key);
 
         let mcast_group = self.create_mc_group(pes);
 
@@ -1700,12 +2052,8 @@ impl Ofi {
         self.comm_group.wait_all()
     }
 
-    pub(crate) fn poll_wait_for_tx_cntr(&self) -> Poll<()> {
-        self.comm_group.poll_wait_for_tx_cntr()
-    }
-
-    pub(crate) fn poll_wait_for_rx_cntr(&self) -> Poll<()> {
-        self.comm_group.poll_wait_for_rx_cntr()
+    pub(crate) fn try_wait(&self, my_cnt_val: &mut Option<usize>) {
+        self.comm_group.try_wait(my_cnt_val)
     }
 
     pub(crate) fn poll_wait_for_collectives(&self) -> Poll<()> {
@@ -1721,10 +2069,18 @@ impl Ofi {
         let _lock = self.comm_group.lock.lock();
         self.comm_group.progress()
     }
-}
 
-impl Drop for Ofi {
-    fn drop(&mut self) {
+    /// Explicit, idempotent teardown -- called directly from
+    /// LibfabricSysComm::drop on its own (known-good) thread rather than left
+    /// to fire implicitly whenever the last Arc<Ofi> clone happens to drop.
+    /// PMI barrier calls are not safe from an arbitrary OS thread (Rust's
+    /// Drop runs on whichever thread performs the decrementing drop, which is
+    /// not deterministic); see libfabric_sys_opt_lamellae for the confirmed
+    /// hang this caused there. Drop::drop below calls this too as a fallback.
+    pub(crate) fn final_teardown(&self) {
+        if self.teardown_done.swap(true, Ordering::SeqCst) {
+            return;
+        }
         trace!(target: "drop", "drop libfabric-sys Ofi");
         self.comm_group.wait_all();
         self._my_pmi
@@ -1747,6 +2103,12 @@ impl Drop for Ofi {
             libfabric_sys::fi_freeinfo(self.comm_group.info_entry);
         }
         trace!(target: "drop", "end drop libfabric-sys Ofi");
+    }
+}
+
+impl Drop for Ofi {
+    fn drop(&mut self) {
+        self.final_teardown();
     }
 }
 
@@ -2617,12 +2979,16 @@ impl LibfabricSysAlloc {
                     pe,
                     remote_dst_addr,
                 );
+                let local_desc = self.ofi.local_desc_for(
+                    src_addr[curr_idx..curr_idx + msg_len].as_ptr() as usize,
+                    self.mr_desc,
+                );
                 cg.post_put(blocking, || unsafe {
                     libfabric_sys::inlined_fi_write(
                         cg.ep,
                         src_addr[curr_idx..curr_idx + msg_len].as_ptr().cast(),
                         std::mem::size_of_val(&src_addr[curr_idx..curr_idx + msg_len]),
-                        self.mr_desc,
+                        local_desc,
                         cg.mapped_addresses[pe],
                         remote_dst_addr as u64,
                         remote_key,
@@ -2693,12 +3059,15 @@ impl LibfabricSysAlloc {
             //     std::mem::size_of_val(dst_addr),
             //     dst_addr.len(),
             // );
+            let local_desc = self
+                .ofi
+                .local_desc_for(dst_addr.as_ptr() as usize, self.mr_desc);
             cg.post_get(blocking, || unsafe {
                 libfabric_sys::inlined_fi_read(
                     cg.ep,
                     dst_addr.as_mut_ptr().cast(),
                     std::mem::size_of_val(dst_addr),
-                    self.mr_desc,
+                    local_desc,
                     cg.mapped_addresses[pe],
                     remote_src_addr as u64,
                     remote_key,
@@ -2714,6 +3083,10 @@ impl LibfabricSysAlloc {
                     (*(*self.ofi.comm_group.info_entry).ep_attr).max_msg_size
                         / std::mem::size_of::<T>(),
                 );
+                let local_desc = self.ofi.local_desc_for(
+                    dst_addr[curr_idx..curr_idx + msg_len].as_ptr() as usize,
+                    self.mr_desc,
+                );
                 cg.post_get(blocking, || unsafe {
                     trace!(
                         target: "libfabric-sys",
@@ -2727,7 +3100,7 @@ impl LibfabricSysAlloc {
                         cg.ep,
                         dst_addr[curr_idx..curr_idx + msg_len].as_mut_ptr().cast(),
                         std::mem::size_of_val(&dst_addr[curr_idx..curr_idx + msg_len]),
-                        self.mr_desc,
+                        local_desc,
                         cg.mapped_addresses[pe],
                         remote_src_addr as u64,
                         remote_key,
@@ -2775,12 +3148,15 @@ impl LibfabricSysAlloc {
         let remote_src_addr = remote_alloc_info.mem_address.add(offset);
         let remote_key = remote_alloc_info.key;
         let cg = &self.ofi.comm_group;
+        let local_desc = self
+            .ofi
+            .local_desc_for(dst_addr.as_ptr() as usize, self.mr_desc);
         cg.post_get(blocking, || unsafe {
             libfabric_sys::inlined_fi_read(
                 cg.ep,
                 dst_addr.as_mut_ptr().cast(),
                 std::mem::size_of_val(dst_addr),
-                self.mr_desc,
+                local_desc,
                 cg.mapped_addresses[pe],
                 remote_src_addr as u64,
                 remote_key,

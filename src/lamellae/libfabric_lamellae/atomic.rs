@@ -40,6 +40,7 @@ pub(crate) struct LibfabricAtomicFuture<T> {
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
+    pub(crate) wait_cnt: Option<usize>,
 }
 
 impl<T: Send + 'static> LibfabricAtomicFuture<T> {
@@ -91,12 +92,12 @@ impl<T: Send + 'static> Future for LibfabricAtomicFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        match self.alloc.ofi.poll_wait_for_tx_cntr() {
-            Poll::Pending => {
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
-            Poll::Ready(()) => {}
+        let mut wait_cnt = self.wait_cnt;
+        self.alloc.ofi.try_wait(&mut wait_cnt);
+        self.wait_cnt = wait_cnt;
+        if self.wait_cnt.is_some() {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
         }
         Poll::Ready(())
     }
@@ -112,6 +113,7 @@ pub(crate) struct LibfabricAtomicFetchFuture<T> {
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
+    pub(crate) wait_cnt: Option<usize>,
 }
 
 impl<T: Remote> LibfabricAtomicFetchFuture<T> {
@@ -172,12 +174,12 @@ impl<T: Remote> Future for LibfabricAtomicFetchFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        match self.alloc.ofi.poll_wait_for_rx_cntr() {
-            Poll::Pending => {
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
-            Poll::Ready(()) => {}
+        let mut wait_cnt = self.wait_cnt;
+        self.alloc.ofi.try_wait(&mut wait_cnt);
+        self.wait_cnt = wait_cnt;
+        if self.wait_cnt.is_some() {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
         }
         Poll::Ready(*self.result)
     }
@@ -194,6 +196,7 @@ pub(crate) struct LibfabricAtomicCompareExchangeFuture<T> {
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Option<Arc<[Arc<AMCounters>]>>,
     pub(crate) spawned: bool,
+    pub(crate) wait_cnt: Option<usize>,
 }
 
 impl<T: Remote + PartialEq> LibfabricAtomicCompareExchangeFuture<T> {
@@ -250,12 +253,12 @@ impl<T: Remote + PartialEq> Future for LibfabricAtomicCompareExchangeFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        match self.alloc.ofi.poll_wait_for_rx_cntr() {
-            Poll::Pending => {
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
-            Poll::Ready(()) => {}
+        let mut wait_cnt = self.wait_cnt;
+        self.alloc.ofi.try_wait(&mut wait_cnt);
+        self.wait_cnt = wait_cnt;
+        if self.wait_cnt.is_some() {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
         }
 
         Poll::Ready(compare_exchange_result(*self.result, *self.current))
@@ -277,6 +280,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             offset,
             op,
             spawned: false,
+            wait_cnt: None,
             scheduler: scheduler.clone(),
             counters,
         }
@@ -312,6 +316,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             offset,
             op,
             spawned: false,
+            wait_cnt: None,
             scheduler: scheduler.clone(),
             counters,
         }
@@ -337,6 +342,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             op: op,
             result: Box::new(unsafe { std::mem::zeroed() }),
             spawned: false,
+            wait_cnt: None,
             scheduler: scheduler.clone(),
             counters,
         }
@@ -374,6 +380,7 @@ impl CommAllocAtomic for LibfabricAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            wait_cnt: None,
         }
         .into()
     }
@@ -420,6 +427,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             offset,
             op,
             spawned: false,
+            wait_cnt: None,
             scheduler: scheduler.clone(),
             counters,
         }
@@ -485,6 +493,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             op: op,
             result: Box::new(unsafe { std::mem::zeroed() }),
             spawned: false,
+            wait_cnt: None,
             scheduler: scheduler.clone(),
             counters,
         }
@@ -539,6 +548,7 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
+            wait_cnt: None,
         }
         .into()
     }

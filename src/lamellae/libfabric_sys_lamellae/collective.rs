@@ -71,10 +71,13 @@ impl<T: Remote> LibfabricSysCollectiveAllReduceFuture<T> {
     }
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
-        self.alloc.ofi.wait_all();
-        let mut res = Vec::new();
-        std::mem::swap(&mut self.result, &mut res);
-        res
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.alloc.ofi.wait_all();
+            let mut res = Vec::new();
+            std::mem::swap(&mut self.result, &mut res);
+            res
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -156,7 +159,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveAllReduceIntoBuffe
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -241,7 +245,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveAllReduceInPlaceFu
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -324,15 +329,18 @@ impl<T: Remote> LibfabricSysCollectiveReduceFuture<T> {
     }
     pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
-        self.alloc.ofi.wait_all();
-        match &mut self.target {
-            RootOrBuffer::Root(res) => {
-                let mut res_vec = Vec::new();
-                std::mem::swap(&mut res_vec, res);
-                Some(res_vec)
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.alloc.ofi.wait_all();
+            match &mut self.target {
+                RootOrBuffer::Root(res) => {
+                    let mut res_vec = Vec::new();
+                    std::mem::swap(&mut res_vec, res);
+                    Some(res_vec)
+                }
+                RootOrBuffer::NotRoot(_) => None,
             }
-            RootOrBuffer::NotRoot(_) => None,
-        }
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
@@ -414,7 +422,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveReduceIntoBufferFu
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -708,10 +717,13 @@ impl<T: Remote> LibfabricSysCollectiveAllGatherFuture<T> {
     }
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
-        self.alloc.ofi.wait_all();
-        let mut res = Vec::new();
-        std::mem::swap(&mut self.result, &mut res);
-        res
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.alloc.ofi.wait_all();
+            let mut res = Vec::new();
+            std::mem::swap(&mut self.result, &mut res);
+            res
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -785,7 +797,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveAllGatherIntoBuffe
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -862,15 +875,18 @@ impl<T: Remote> LibfabricSysCollectiveGatherFuture<T> {
     }
     pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
-        self.alloc.ofi.wait_all();
-        match &mut self.target {
-            RootOrBuffer::Root(res) => {
-                let mut res_vec = Vec::new();
-                std::mem::swap(&mut res_vec, res);
-                Some(res_vec)
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.alloc.ofi.wait_all();
+            match &mut self.target {
+                RootOrBuffer::Root(res) => {
+                    let mut res_vec = Vec::new();
+                    std::mem::swap(&mut res_vec, res);
+                    Some(res_vec)
+                }
+                RootOrBuffer::NotRoot(_) => None,
             }
-            RootOrBuffer::NotRoot(_) => None,
-        }
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
@@ -945,7 +961,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveGatherIntoBufferFu
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -1024,10 +1041,13 @@ impl<T: Remote> LibfabricSysCollectiveAllToAllFuture<T> {
     }
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
-        self.alloc.ofi.wait_all();
-        let mut res = Vec::new();
-        std::mem::swap(&mut self.result, &mut res);
-        res
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.alloc.ofi.wait_all();
+            let mut res = Vec::new();
+            std::mem::swap(&mut self.result, &mut res);
+            res
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -1100,7 +1120,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveAllToAllIntoBuffer
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -1183,15 +1204,18 @@ impl<T: Remote> LibfabricSysCollectiveBroadcastFuture<T> {
     }
     pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
-        self.alloc.ofi.wait_all();
-        match &mut self.target {
-            RootSrcOrBuffer::Root(_) => None,
-            RootSrcOrBuffer::NotRoot(items, _) => {
-                let mut res = Vec::new();
-                std::mem::swap(items, &mut res);
-                Some(res)
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.alloc.ofi.wait_all();
+            match &mut self.target {
+                RootSrcOrBuffer::Root(_) => None,
+                RootSrcOrBuffer::NotRoot(items, _) => {
+                    let mut res = Vec::new();
+                    std::mem::swap(items, &mut res);
+                    Some(res)
+                }
             }
-        }
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
@@ -1272,7 +1296,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveBroadcastIntoBuffe
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -1357,10 +1382,13 @@ impl<T: Remote> LibfabricSysCollectiveScatterFuture<T> {
     }
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
-        self.alloc.ofi.wait_all();
-        let mut res = Vec::new();
-        std::mem::swap(&mut self.result, &mut res);
-        res
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.alloc.ofi.wait_all();
+            let mut res = Vec::new();
+            std::mem::swap(&mut self.result, &mut res);
+            res
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -1438,7 +1466,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveScatterIntoBufferF
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
@@ -1528,10 +1557,13 @@ impl<T: Remote> LibfabricSysCollectiveReduceScatterFuture<T> {
     }
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
-        self.alloc.ofi.wait_all();
-        let mut res = Vec::new();
-        std::mem::swap(&mut self.result, &mut res);
-        res
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || {
+            self.alloc.ofi.wait_all();
+            let mut res = Vec::new();
+            std::mem::swap(&mut self.result, &mut res);
+            res
+        })
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<Vec<T>> {
@@ -1618,7 +1650,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricSysCollectiveReduceScatterIntoB
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all();
+        let scheduler = self.scheduler.clone();
+        scheduler.block_in_place(move || self.alloc.ofi.wait_all())
     }
 
     pub(crate) fn spawn(self) -> LamellarTask<()> {
