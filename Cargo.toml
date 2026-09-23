@@ -69,7 +69,7 @@ zerocopy-derive = "0.8.48"
 
 # --- data structures / general utilities ---
 anyhow = "1.0.99"
-derive_more = { version = "1.0.0", features = ["add", "from", "into"] }
+derive_more = { version = "2.1.1", features = ["add", "from", "into"] }
 enum_dispatch = "0.3.8"
 envy = "0.4.2"
 indexmap = "2.11.1"                                                     #lamellar_alloc
