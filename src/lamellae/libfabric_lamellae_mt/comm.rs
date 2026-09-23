@@ -165,6 +165,14 @@ impl Drop for LibfabricMtComm {
         self.ofi.clear_barrier();
         let _ = self.ofi.clear_allocs();
 
+        // Explicitly drive the PMI barrier ourselves, on this thread, rather
+        // than relying on the implicit Arc<Ofi> field-drop to trigger it --
+        // PMI barrier calls are not safe from an arbitrary OS thread, and
+        // Rust's Drop runs on whichever thread drops the last Arc<Ofi>,
+        // which is not deterministic. final_teardown() is idempotent, so a
+        // racing Arc<Ofi>::drop elsewhere is a harmless no-op after this.
+        self.ofi.final_teardown();
+
         trace!(
             "LibfabricMt comm dropped ofi count: {:?}",
             Arc::strong_count(&self.ofi)

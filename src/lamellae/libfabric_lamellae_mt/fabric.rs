@@ -39,7 +39,7 @@ use pmi::{pmi::Pmi, pmi::PmiBuilder};
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
     task::Poll,
@@ -101,6 +101,12 @@ pub(crate) struct Ofi {
      alloc_manager: Arc<AllocInfoManager>,
     comm_groups: Vec<CommGroup>,
     utility_comm_group: Mutex<CommGroup>,
+    /// Guards `final_teardown` so it runs exactly once no matter who calls
+    /// it: LibfabricMtComm::drop calls it explicitly (on a known-good
+    /// thread), and Drop::drop below calls it too as a fallback. PMI
+    /// barrier calls are not safe from an arbitrary OS thread, and Rust's
+    /// implicit Arc-drop can run on any thread.
+    teardown_done: AtomicBool,
 }
 
 impl CommGroup {
@@ -578,6 +584,7 @@ impl Ofi {
             barrier_impl: RwLock::new(BarrierImpl::Pmi(my_pmi)),
             comm_groups,
             utility_comm_group,
+            teardown_done: AtomicBool::new(false),
         });
 
         // ofi.init_barrier()?;
@@ -1469,10 +1476,17 @@ impl Ofi {
             Poll::Pending
         }
     }
-}
 
-impl Drop for Ofi {
-    fn drop(&mut self) {
+    /// Explicit, idempotent teardown -- called directly from
+    /// LibfabricMtComm::drop on its own (known-good) thread rather than
+    /// left to fire implicitly whenever the last Arc<Ofi> clone happens to
+    /// drop. PMI barrier calls are not safe from an arbitrary OS thread; see
+    /// libfabric_sys_opt_lamellae for the confirmed hang this caused there.
+    /// Drop::drop below calls this too as a fallback.
+    pub(crate) fn final_teardown(&self) {
+        if self.teardown_done.swap(true, Ordering::SeqCst) {
+            return;
+        }
         trace!(target: "drop", "drop Ofi");
         for cg in self.comm_groups.iter() {
             let _ = cg.wait_all();
@@ -1482,6 +1496,12 @@ impl Drop for Ofi {
             .barrier(false)
             .expect("PMI Barrier failed during OFI drop");
         trace!(target: "drop", "end drop Ofi");
+    }
+}
+
+impl Drop for Ofi {
+    fn drop(&mut self) {
+        self.final_teardown();
     }
 }
 
