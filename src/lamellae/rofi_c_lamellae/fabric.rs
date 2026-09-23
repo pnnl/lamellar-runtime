@@ -39,7 +39,10 @@ impl RofiC {
             my_pe,
             mem_regions: Arc::new(Mutex::new(Vec::new())),
             wait_flag: Arc::new(AtomicBool::new(false)),
-            wait_cnt_cur: Arc::new(AtomicUsize::new(0)),
+            // Starts at 1, not 0: try_wait's elect-one-waiter check is `my_cnt > fin`. If both
+            // started at 0, ticket #0 would see 0 > 0 == false and skip the real cntr wait,
+            // returning as already-covered before anything had actually drained.
+            wait_cnt_cur: Arc::new(AtomicUsize::new(1)),
             wait_cnt_fin: Arc::new(AtomicUsize::new(0)),
         });
         Ok(world)
