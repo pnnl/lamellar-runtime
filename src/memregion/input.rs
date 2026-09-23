@@ -136,6 +136,17 @@ impl<T: Remote> MemregionRdmaInputInner<T> {
         }
     }
 
+    pub(crate) fn is_registered(&self) -> bool {
+        match self {
+            MemregionRdmaInputInner::LamellarMemRegion(_) => true,
+            MemregionRdmaInputInner::SharedMemRegion(_) => true,
+            MemregionRdmaInputInner::LocalMemRegion(_) => true,
+            MemregionRdmaInputInner::Slice(_) => true,
+            MemregionRdmaInputInner::Owned(_) => false,
+            MemregionRdmaInputInner::ArcVec(_) => false,
+        }
+    }
+
     pub(crate) fn to_bytes(&self) -> Vec<u8> {
         let byte_len = self.len() * std::mem::size_of::<T>();
         let mut bytes = Vec::with_capacity(byte_len);

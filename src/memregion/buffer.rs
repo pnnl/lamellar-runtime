@@ -23,6 +23,11 @@ pub trait AsLamellarBuffer<T: Remote>: Send + 'static {
     fn as_slice(&self) -> &[T];
     /// Returns a mutable slice of the backing data.
     fn as_mut_slice(&mut self) -> &mut [T];
+    /// Whether the backing data lives in lamellar-allocated, network-registered memory.
+    #[doc(hidden)]
+    fn is_registered(&self) -> bool {
+        false
+    }
 }
 
 impl<T: Remote> AsLamellarBuffer<T> for Vec<T> {
@@ -40,6 +45,9 @@ impl<T: Remote> AsLamellarBuffer<T> for LamellarMemoryRegion<T> {
     fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { LamellarMemoryRegion::as_mut_slice(self) }
     }
+    fn is_registered(&self) -> bool {
+        true
+    }
 }
 impl<T: Remote> AsLamellarBuffer<T> for SharedMemoryRegion<T> {
     fn as_slice(&self) -> &[T] {
@@ -47,6 +55,9 @@ impl<T: Remote> AsLamellarBuffer<T> for SharedMemoryRegion<T> {
     }
     fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { SharedMemoryRegion::as_mut_slice(self) }
+    }
+    fn is_registered(&self) -> bool {
+        true
     }
 }
 impl<T: Remote> AsLamellarBuffer<T> for OneSidedMemoryRegion<T> {
@@ -56,6 +67,9 @@ impl<T: Remote> AsLamellarBuffer<T> for OneSidedMemoryRegion<T> {
     fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { OneSidedMemoryRegion::as_mut_slice(self) }
     }
+    fn is_registered(&self) -> bool {
+        true
+    }
 }
 
 impl<T: Remote> AsLamellarBuffer<T> for CommSlice<T> {
@@ -64,6 +78,9 @@ impl<T: Remote> AsLamellarBuffer<T> for CommSlice<T> {
     }
     fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { self.as_mut_slice() }
+    }
+    fn is_registered(&self) -> bool {
+        true
     }
 }
 
@@ -570,6 +587,10 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
     ///```
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { &mut self.data.as_mut().data.as_mut_slice()[self.range.clone()] }
+    }
+
+    pub(crate) fn is_registered(&self) -> bool {
+        unsafe { self.data.as_ref().data.is_registered() }
     }
 
     #[allow(dead_code)]
