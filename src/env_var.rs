@@ -3,13 +3,14 @@
 //!
 //! - `LAMELLAR_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
 //!     - possible values
-//!         - `local` -- default (if none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric`, `enable-libfabric-async`, or `enable-ucx` features are active)
+//!         - `local` -- default (if none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric-sys-opt`, `enable-libfabric`, `enable-libfabric-async`, or `enable-ucx` features are active)
 //!         - `shmem`
 //!         - `rofi_c`  -- only available with the `enable-rofi-c` feature; default if active, checked first
 //!         - `libfabric-sys` -- only available with the `enable-libfabric-sys` feature; default if active and `enable-rofi-c` is not
-//!         - `libfabric` -- only available with the `enable-libfabric` feature; default if active and neither `enable-rofi-c` nor `enable-libfabric-sys` are
-//!         - `libfabric-async` -- only available with the `enable-libfabric-async` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric` are
-//!         - `ucx` -- only available with the `enable-ucx` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric`, `enable-libfabric-async` are
+//!         - `libfabric-sys-opt` -- only available with the `enable-libfabric-sys-opt` feature; default if active and neither `enable-rofi-c` nor `enable-libfabric-sys` are
+//!         - `libfabric` -- only available with the `enable-libfabric` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric-sys-opt` are
+//!         - `libfabric-async` -- only available with the `enable-libfabric-async` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric-sys-opt`, `enable-libfabric` are
+//!         - `ucx` -- only available with the `enable-ucx` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric-sys-opt`, `enable-libfabric`, `enable-libfabric-async` are
 //! - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
 //!     - possible values
 //!         - `lamellar` -- default, work stealing backend
@@ -32,6 +33,9 @@
 //!           This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime
 //!           will print a message at the end of execution with how many additional pools were allocated.
 //!              - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_HEAP_SIZE` to a larger value
+//! - `LAMELLAR_RDMA_STAGING` - (libfabric backend) stage heap-backed RDMA local buffers through the pre-registered
+//!   runtime memory pool so the provider never registers them on the fly. Default: true. Setting it to false restores
+//!   the provider's on-the-fly registration (subject to MR-cache staleness with reused heap memory).
 //! - `LAMELLAR_DEADLOCK_WARNING_TIMEOUT` - the timeout in seconds before a deadlock warning is printed. Defaults to 600, set to 0 to disable. Note this does not cause your application to terminate
 //! - `LAMELLAR_AM_GROUP_BATCH_SIZE` - The maximum number of sub messages that will be sent in a single AMGroup Active Message, default: 10000
 //! - `LAMELLAR_BLOCKING_CALL_WARNING` - flag used to print warnings when users call barriers on worker threads. Default: true
@@ -78,6 +82,8 @@ fn default_backend() -> String {
         return "rofi_c".to_owned();
     } else if cfg!(feature = "enable-libfabric-sys") {
         return "libfabric-sys".to_owned();
+    } else if cfg!(feature = "enable-libfabric-sys-opt") {
+        return "libfabric-sys-opt".to_owned();
     } else if cfg!(feature = "enable-libfabric") {
         return "libfabric".to_owned();
     } else if cfg!(feature = "enable-libfabric-async") {
@@ -104,6 +110,9 @@ pub fn available_backends() -> Vec<&'static str> {
     }
     if cfg!(feature = "enable-libfabric-sys") {
         backends.push("libfabric-sys");
+    }
+    if cfg!(feature = "enable-libfabric-sys-opt") {
+        backends.push("libfabric-sys-opt");
     }
     if cfg!(feature = "enable-libfabric") {
         backends.push("libfabric");
@@ -318,6 +327,10 @@ pub struct Config {
     /// Disable same-node shared-memory fast path for UCX/libfabric backends, default: false
     #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]
     pub disable_on_node_shmem: Option<bool>,
+    /// libfabric backend: stage heap-backed RDMA local buffers through the pre-registered
+    /// runtime memory pool instead of letting the provider register them on the fly, default: true
+    #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]
+    pub rdma_staging: Option<bool>,
     #[serde(default = "default_ucc_oob_init_buffer_size")]
     pub ucc_oob_init_buffer_size: usize,
 }
