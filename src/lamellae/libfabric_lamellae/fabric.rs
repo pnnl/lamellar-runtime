@@ -185,6 +185,14 @@ pub(crate) struct Ofi {
     job_id: usize,
 
     barrier_impl: RwLock<BarrierImpl>,
+    /// Multicast groups used by `collective_exchange_mr_info` and by every allocation's
+    /// `mcast_group`, one per distinct PE set, joined on first use and reused after. Must be
+    /// cached: the coll provider (libfabric 1.22 `prov/coll`) hands out group ids from a fixed
+    /// 256-entry per-endpoint mask on `fi_join_collective` and never returns them on
+    /// `fi_close`, so a join per allocation exhausts the id space after ~254 allocations
+    /// (later joins then all get id 256, and marking it writes one byte past the 32-byte
+    /// mask).
+    mc_groups: Mutex<HashMap<Vec<usize>, MultiCastGroup>>,
     info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
     domain: Domain,
     _fabric: Fabric,
@@ -841,6 +849,7 @@ impl Ofi {
             domain,
             alloc_manager: Arc::new(alloc_manager),
             barrier_impl: RwLock::new(BarrierImpl::Pmi(my_pmi)),
+            mc_groups: Mutex::new(HashMap::new()),
             comm_group,
             runtime_allocs: RwLock::new(Vec::new()),
             staging_enabled: config().rdma_staging.unwrap_or(true),
@@ -1159,6 +1168,18 @@ impl Ofi {
         }
     }
 
+    /// Returns the cached multicast group for `pes`, joining it on first use. Allocations must
+    /// go through this rather than `create_mc_group`: see `mc_groups` (cid exhaustion).
+    fn cached_mc_group(&self, pes: &[usize]) -> Result<MultiCastGroup, libfabric::error::Error> {
+        let mut groups = self.mc_groups.lock();
+        if let Some(mc) = groups.get(pes) {
+            return Ok(mc.clone());
+        }
+        let mc = self.create_mc_group(pes)?;
+        groups.insert(pes.to_vec(), mc.clone());
+        Ok(mc)
+    }
+
     fn create_mc_group(&self, pes: &[usize]) -> Result<MultiCastGroup, libfabric::error::Error> {
         // trace!("Creating MC group of len: {}", pes.len());
         let cg = &self.comm_group;
@@ -1195,7 +1216,7 @@ impl Ofi {
         mem: &[u8],
         mr: &MemoryRegion,
     ) -> Result<HashMap<usize, RemoteMemAddressInfo>, libfabric::error::Error> {
-        let mc = self.create_mc_group(&pes)?;
+        let mc = self.cached_mc_group(&pes)?;
         let cg = &self.comm_group;
 
         let mut mem_info = MemAddressInfo::from_slice(mem, 0, &mr.key().unwrap(), &self.info_entry);
@@ -1272,6 +1293,7 @@ impl Ofi {
     pub(crate) fn clear_barrier(&self) {
         let mut barrier_impl = self.barrier_impl.write();
         *barrier_impl = BarrierImpl::Uninit;
+        self.mc_groups.lock().clear();
     }
 
     pub(crate) fn alloc(
@@ -1478,7 +1500,7 @@ impl Ofi {
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
         let mcast_group = self
-            .create_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
+            .cached_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         let alloc = LibfabricAlloc::new(
             self.clone(),
@@ -1613,7 +1635,7 @@ impl Ofi {
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
         let mcast_group = self
-            .create_mc_group(pes)
+            .cached_mc_group(pes)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
         let alloc = LibfabricAlloc::new(

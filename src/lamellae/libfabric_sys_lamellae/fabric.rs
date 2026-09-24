@@ -471,6 +471,14 @@ pub(crate) struct Ofi {
     /// exchange uses `fi_join_collective`+`fi_allgather` or a PMI-based
     /// manual fallback.
     mr_exchange_via_collective: bool,
+    /// Multicast groups used by `collective_exchange_mr_info` and by every allocation's
+    /// `mcast_group`, one per distinct PE set, joined on first use and reused after. Must be
+    /// cached: the coll provider (libfabric 1.22 `prov/coll`) hands out group ids from a fixed
+    /// 256-entry per-endpoint mask on `fi_join_collective` and never returns them on
+    /// `fi_close`, so a join per allocation exhausts the id space after ~254 allocations
+    /// (later joins then all get id 256, and marking it writes one byte past the 32-byte
+    /// mask). Cleared in `clear_barrier` (before the endpoint is closed).
+    mc_groups: Mutex<HashMap<Vec<usize>, Arc<RawMcGroup>>>,
     comm_group: CommGroup,
     /// Runtime (rt_alloc) sub-allocation pool, shared by any `LibfabricSysAlloc`
     /// reachable via its `ofi: Arc<Ofi>` field. Lives here (rather than on
@@ -978,6 +986,7 @@ impl Ofi {
             domain,
             alloc_manager: Arc::new(alloc_manager),
             mr_exchange_via_collective,
+            mc_groups: Mutex::new(HashMap::new()),
             comm_group,
             runtime_allocs: RwLock::new(Vec::new()),
             staging_enabled: config().rdma_staging.unwrap_or(true),
@@ -1205,6 +1214,16 @@ impl Ofi {
         } == 0;
     }
 
+    /// Returns the cached multicast group for `pes`, joining it on first use. Allocations must
+    /// go through this rather than `create_mc_group`: see `mc_groups` (cid exhaustion).
+    fn cached_mc_group(&self, pes: &[usize]) -> Arc<RawMcGroup> {
+        self.mc_groups
+            .lock()
+            .entry(pes.to_vec())
+            .or_insert_with(|| self.create_mc_group(pes))
+            .clone()
+    }
+
     fn create_mc_group(&self, pes: &[usize]) -> Arc<RawMcGroup> {
         let cg = &self.comm_group;
         let mut av_set_attr = libfabric_sys::fi_av_set_attr {
@@ -1399,7 +1418,7 @@ impl Ofi {
         mem: &[u8],
         mr: *mut libfabric_sys::fid_mr,
     ) -> HashMap<usize, RemoteMemAddressInfo> {
-        let mcast_group = self.create_mc_group(pes);
+        let mcast_group = self.cached_mc_group(pes);
         let cg = &self.comm_group;
 
         let key_bytes = self.build_local_mr_info_bytes(mem, mr);
@@ -1436,6 +1455,15 @@ impl Ofi {
     /// `mr_key_id` must be unique per exchanged allocation; callers pass the
     /// same key used to register the MR (already unique via
     /// `AllocInfoManager::next_key`).
+    /// Uses `barrier(false)` (no `PMIX_COLLECT_DATA`) rather than the generic
+    /// `Pmi::exchange()`: `exchange()` hardcodes `collect_data=true`, which makes
+    /// `PMIx_Fence` gather/broadcast the entire accumulated PMIx KVS namespace on
+    /// every call. Since `mr_key_id` is never reused, that KVS only grows across
+    /// the run -- with `collect_data=true` this path's cost would scale with the
+    /// total number of allocations ever made, not just this one (see the same fix
+    /// in `libfabric_sys_opt_lamellae`, where this was the confirmed root cause of
+    /// an iteration-to-iteration slowdown). `barrier(false)` only synchronizes;
+    /// each PE still lazily fetches exactly the keys it needs via `get()` below.
     fn manual_exchange_mr_info(
         &self,
         pes: &[usize],
@@ -1450,8 +1478,8 @@ impl Ofi {
             .put(&key, &local_bytes)
             .expect("PMI put failed during manual MR-info exchange");
         self._my_pmi
-            .exchange()
-            .expect("PMI exchange failed during manual MR-info exchange");
+            .barrier(false)
+            .expect("PMI barrier failed during manual MR-info exchange");
 
         pes.iter()
             .map(|&pe| {
@@ -1523,6 +1551,7 @@ impl Ofi {
     pub(crate) fn clear_barrier(&self) {
         let mut barrier_impl = self.comm_group.barrier_impl.write();
         *barrier_impl = BarrierImpl::Uninit;
+        self.mc_groups.lock().clear();
     }
 
     pub(crate) fn alloc(
@@ -1779,7 +1808,7 @@ impl Ofi {
             mr_key,
         );
 
-        let mcast_group = self.create_mc_group(&(0..self.num_pes).collect::<Vec<_>>());
+        let mcast_group = self.cached_mc_group(&(0..self.num_pes).collect::<Vec<_>>());
 
         let alloc = LibfabricSysAlloc::new(
             self.clone(),
@@ -1909,7 +1938,7 @@ impl Ofi {
 
         let remote_alloc_infos = self.exchange_mr_info(pes, mem_slice, mr, mr_key);
 
-        let mcast_group = self.create_mc_group(pes);
+        let mcast_group = self.cached_mc_group(pes);
 
         let alloc = LibfabricSysAlloc::new(
             self.clone(),
