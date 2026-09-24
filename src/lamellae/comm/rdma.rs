@@ -12,6 +12,11 @@ use crate::lamellae::libfabric_sys_lamellae::rdma::{
     LibfabricSysGetBufferFuture, LibfabricSysGetFuture, LibfabricSysGetIntoBufferFuture,
     LibfabricSysPutFuture,
 };
+#[cfg(feature = "enable-libfabric-sys-opt")]
+use crate::lamellae::libfabric_sys_opt_lamellae::rdma::{
+    LibfabricSysOptGetBufferFuture, LibfabricSysOptGetFuture, LibfabricSysOptGetIntoBufferFuture,
+    LibfabricSysOptPutFuture,
+};
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::rdma::{
     RofiCGetBufferFuture, RofiCGetFuture, RofiCGetIntoBufferFuture, RofiCPutFuture,
@@ -64,6 +69,8 @@ pub struct RdmaHandle<T: Remote> {
 pub(crate) enum RdmaPutFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysPutFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptPutFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricPutFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -83,6 +90,8 @@ impl<T: Remote> RdmaHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaPutFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaPutFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             RdmaPutFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -105,6 +114,8 @@ impl<T: Remote> RdmaHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaPutFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaPutFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaPutFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -127,6 +138,8 @@ impl<T: Remote> Future for RdmaHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaPutFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaPutFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             RdmaPutFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -156,6 +169,8 @@ pub struct RdmaGetHandle<T: Remote> {
 pub(crate) enum RdmaGetFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysGetFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptGetFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricGetFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -174,6 +189,8 @@ impl<T: Remote> RdmaGetHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -196,6 +213,8 @@ impl<T: Remote> RdmaGetHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -218,6 +237,8 @@ impl<T: Remote> Future for RdmaGetHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -247,6 +268,8 @@ pub struct RdmaGetBufferHandle<T: Remote> {
 pub(crate) enum RdmaGetBufferFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysGetBufferFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptGetBufferFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricGetBufferFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -265,6 +288,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetBufferFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetBufferFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetBufferFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -287,6 +312,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetBufferFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetBufferFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetBufferFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -309,6 +336,8 @@ impl<T: Remote> Future for RdmaGetBufferHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetBufFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetBufFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetBufFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -338,6 +367,8 @@ pub struct RdmaGetIntoBufferHandle<T: Remote, B: AsLamellarBuffer<T>> {
 pub(crate) enum RdmaGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysGetIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptGetIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricGetIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -357,6 +388,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetIntoBufferFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetIntoBufferFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetIntoBufferFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -379,6 +412,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetIntoBufferFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetIntoBufferFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetIntoBufferFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -401,6 +436,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for RdmaGetIntoBufferHandle<T, B>
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             RdmaGetIntoBufferFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            RdmaGetIntoBufferFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             RdmaGetIntoBufferFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]

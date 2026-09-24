@@ -14,6 +14,8 @@ pub(crate) mod shmem_utils;
 
 #[cfg(feature = "enable-libfabric-sys")]
 use crate::lamellae::libfabric_sys_lamellae::LibfabricSys;
+#[cfg(feature = "enable-libfabric-sys-opt")]
+use crate::lamellae::libfabric_sys_opt_lamellae::LibfabricSysOpt;
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
 
@@ -34,11 +36,15 @@ pub(crate) mod libfabric_lamellae;
 pub(crate) mod libfabric_async_lamellae;
 #[cfg(feature = "enable-libfabric-sys")]
 pub(crate) mod libfabric_sys_lamellae;
+#[cfg(feature = "enable-libfabric-sys-opt")]
+pub(crate) mod libfabric_sys_opt_lamellae;
 #[cfg(feature = "enable-ucx")]
 pub(crate) mod ucx_lamellae;
 
 #[cfg(feature = "enable-libfabric-sys")]
 use crate::lamellae::libfabric_sys_lamellae::LibfabricSysBuilder;
+#[cfg(feature = "enable-libfabric-sys-opt")]
+use crate::lamellae::libfabric_sys_opt_lamellae::LibfabricSysOptBuilder;
 #[cfg(feature = "enable-libfabric-async")]
 use libfabric_async_lamellae::{LibfabricAsync, LibfabricAsyncBuilder};
 #[cfg(feature = "enable-libfabric")]
@@ -66,6 +72,10 @@ pub enum Backend {
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric-sys")))]
     /// The LibfabricSys backend for communication
     LibfabricSys,
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric-sys-opt")))]
+    /// The optimized, verbs-only LibfabricSysOpt backend for communication
+    LibfabricSysOpt,
     #[cfg(feature = "enable-libfabric")]
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric")))]
     /// The Libfabric backend for communication
@@ -106,6 +116,12 @@ impl Default for Backend {
                 return Backend::LibfabricSys;
                 #[cfg(not(feature = "enable-libfabric-sys"))]
                 panic!("unable to set libfabric-sys backend, recompile with 'enable-libfabric-sys' feature")
+            }
+            "libfabric-sys-opt" => {
+                #[cfg(feature = "enable-libfabric-sys-opt")]
+                return Backend::LibfabricSysOpt;
+                #[cfg(not(feature = "enable-libfabric-sys-opt"))]
+                panic!("unable to set libfabric-sys-opt backend, recompile with 'enable-libfabric-sys-opt' feature")
             }
             "libfabric" => {
                 #[cfg(feature = "enable-libfabric")]
@@ -291,6 +307,8 @@ pub(crate) enum LamellaeBuilder {
     RofiCBuilder,
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSysBuilder,
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOptBuilder,
     #[cfg(feature = "enable-libfabric")]
     LibfabricBuilder,
     #[cfg(feature = "enable-libfabric-async")]
@@ -332,6 +350,8 @@ pub(crate) enum Lamellae {
     RofiC,
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys,
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt,
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
     #[cfg(feature = "enable-libfabric-async")]
@@ -352,6 +372,8 @@ impl Lamellae {
             Lamellae::RofiC(rofi_c) => rofi_c.comm(),
             #[cfg(feature = "enable-libfabric-sys")]
             Lamellae::LibfabricSys(libfabric_sys) => libfabric_sys.comm(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            Lamellae::LibfabricSysOpt(libfabric_sys_opt) => libfabric_sys_opt.comm(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.comm(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -369,6 +391,8 @@ impl Lamellae {
             Lamellae::RofiC(rofi_c) => rofi_c.wait_all_print(),
             #[cfg(feature = "enable-libfabric-sys")]
             Lamellae::LibfabricSys(libfabric_sys) => libfabric_sys.wait_all_print(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            Lamellae::LibfabricSysOpt(libfabric_sys_opt) => libfabric_sys_opt.wait_all_print(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.wait_all_print(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -423,6 +447,12 @@ pub(crate) fn create_lamellae(backend: Backend, _num_threads: usize) -> Lamellae
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::LibfabricSysBuilder(LibfabricSysBuilder::new(&provider, &domain))
+        }
+        #[cfg(feature = "enable-libfabric-sys-opt")]
+        Backend::LibfabricSysOpt => {
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            LamellaeBuilder::LibfabricSysOptBuilder(LibfabricSysOptBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-libfabric")]
         Backend::Libfabric => {

@@ -22,6 +22,10 @@ use crate::lamellae::libfabric_lamellae::fabric::{LibfabricAlloc, OneSidedLibfab
 use crate::lamellae::libfabric_sys_lamellae::fabric::{
     LibfabricSysAlloc, OneSidedLibfabricSysAlloc,
 };
+#[cfg(feature = "enable-libfabric-sys-opt")]
+use crate::lamellae::libfabric_sys_opt_lamellae::fabric::{
+    LibfabricSysOptAlloc, OneSidedLibfabricSysOptAlloc,
+};
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::fabric::{OneSidedRofiCAlloc, RofiCAlloc};
 #[cfg(feature = "enable-ucx")]
@@ -61,7 +65,8 @@ pub(crate) fn encode_ref_count_and_padding(ref_count: usize, padding: usize) -> 
 #[cfg(any(
     feature = "enable-libfabric",
     feature = "enable-libfabric-async",
-    feature = "enable-libfabric-sys"
+    feature = "enable-libfabric-sys",
+    feature = "enable-libfabric-sys-opt"
 ))]
 pub(crate) fn decode_ref_count_and_padding(encoded: usize) -> (usize, usize) {
     let ref_count = encoded & COUNT_MASK;
@@ -94,7 +99,8 @@ pub(crate) fn decrement_ref_count(counter: &AtomicUsize) -> usize {
 #[cfg(any(
     feature = "enable-libfabric",
     feature = "enable-libfabric-async",
-    feature = "enable-libfabric-sys"
+    feature = "enable-libfabric-sys",
+    feature = "enable-libfabric-sys-opt"
 ))]
 pub(crate) fn get_ref_count(counter: &AtomicUsize) -> usize {
     decode_ref_count(counter.load(Ordering::SeqCst))
@@ -126,12 +132,16 @@ pub(crate) enum CommAllocInner {
     OneSidedShmemAlloc(OneSidedShmemAlloc),
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSysAlloc(LibfabricSysAlloc),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOptAlloc(LibfabricSysOptAlloc),
     #[cfg(feature = "enable-libfabric")]
     LibfabricAlloc(LibfabricAlloc),
     #[cfg(feature = "enable-libfabric-async")]
     LibfabricAsyncAlloc(LibfabricAsyncAlloc),
     #[cfg(feature = "enable-libfabric-sys")]
     OneSidedLibfabricSysAlloc(OneSidedLibfabricSysAlloc),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    OneSidedLibfabricSysOptAlloc(OneSidedLibfabricSysOptAlloc),
     #[cfg(feature = "enable-libfabric")]
     OneSidedLibfabricAlloc(OneSidedLibfabricAlloc),
     #[cfg(feature = "enable-libfabric-async")]
@@ -175,8 +185,14 @@ impl CommAllocInner {
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocAddr(inner_alloc.start())
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocAddr(inner_alloc.start())
             }
         }
@@ -192,9 +208,15 @@ impl CommAllocInner {
             }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => inner_alloc.leak(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => inner_alloc.leak(),
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(_inner_alloc) => {
                 panic!("OneSidedLibfabricSysAlloc cannot be leaked")
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(_inner_alloc) => {
+                panic!("OneSidedLibfabricSysOptAlloc cannot be leaked")
             }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => inner_alloc.leak(),
@@ -230,8 +252,12 @@ impl CommAllocInner {
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => inner_alloc.num_bytes(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => inner_alloc.num_bytes(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-libfabric")]
@@ -276,9 +302,25 @@ impl CommAllocInner {
                     .sub_alloc(offset, size)
                     .expect("Invalid sub allocation"),
             ),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocInner::LibfabricSysOptAlloc(
+                    inner_alloc
+                        .sub_alloc(offset, size)
+                        .expect("Invalid sub allocation"),
+                )
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
                 CommAllocInner::OneSidedLibfabricSysAlloc(
+                    inner_alloc
+                        .sub_alloc(offset, size)
+                        .expect("Invalid sub allocation"),
+                )
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocInner::OneSidedLibfabricSysOptAlloc(
                     inner_alloc
                         .sub_alloc(offset, size)
                         .expect("Invalid sub allocation"),
@@ -361,8 +403,16 @@ impl CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.wait();
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.wait();
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.alloc.wait();
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.alloc.wait();
             }
             #[cfg(feature = "enable-libfabric")]
@@ -440,8 +490,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -502,8 +560,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -559,8 +625,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -622,8 +696,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -683,8 +765,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -745,8 +835,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -801,8 +899,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -863,8 +969,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -923,8 +1037,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -986,8 +1108,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1043,8 +1173,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1107,8 +1245,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1169,8 +1315,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1232,8 +1386,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1294,8 +1456,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1355,8 +1525,16 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1421,8 +1599,16 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1483,8 +1669,16 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1539,8 +1733,16 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_unmanaged(op, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_unmanaged(op, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_unmanaged(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_unmanaged(op, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1601,8 +1803,16 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all(scheduler, counters, op, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all(scheduler, counters, op, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1657,8 +1867,16 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all_unmanaged(op, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all_unmanaged(op, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all_unmanaged(op, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all_unmanaged(op, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1720,8 +1938,16 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1782,8 +2008,16 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
             }
             #[cfg(feature = "enable-libfabric")]
@@ -1850,12 +2084,20 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
             }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
             }
             #[cfg(feature = "enable-libfabric-async")]
@@ -1913,12 +2155,20 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::LibfabricSysAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
             }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::LibfabricSysOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
+            }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
             }
             #[cfg(feature = "enable-libfabric-sys")]
             CommAllocInner::OneSidedLibfabricSysAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CommAllocInner::OneSidedLibfabricSysOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
             }
             #[cfg(feature = "enable-libfabric-async")]

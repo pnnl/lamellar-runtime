@@ -22,6 +22,18 @@ use crate::lamellae::libfabric_sys_lamellae::collective::{
     LibfabricSysCollectiveReduceScatterIntoBufferFuture, LibfabricSysCollectiveScatterFuture,
     LibfabricSysCollectiveScatterIntoBufferFuture,
 };
+#[cfg(feature = "enable-libfabric-sys-opt")]
+use crate::lamellae::libfabric_sys_opt_lamellae::collective::{
+    LibfabricSysOptCollectiveAllGatherFuture, LibfabricSysOptCollectiveAllGatherIntoBufferFuture,
+    LibfabricSysOptCollectiveAllReduceFuture, LibfabricSysOptCollectiveAllReduceInPlaceFuture,
+    LibfabricSysOptCollectiveAllReduceIntoBufferFuture, LibfabricSysOptCollectiveAllToAllFuture,
+    LibfabricSysOptCollectiveAllToAllIntoBufferFuture, LibfabricSysOptCollectiveBroadcastFuture,
+    LibfabricSysOptCollectiveBroadcastIntoBufferFuture, LibfabricSysOptCollectiveGatherFuture,
+    LibfabricSysOptCollectiveGatherIntoBufferFuture, LibfabricSysOptCollectiveReduceFuture,
+    LibfabricSysOptCollectiveReduceIntoBufferFuture, LibfabricSysOptCollectiveReduceScatterFuture,
+    LibfabricSysOptCollectiveReduceScatterIntoBufferFuture, LibfabricSysOptCollectiveScatterFuture,
+    LibfabricSysOptCollectiveScatterIntoBufferFuture,
+};
 use crate::{
     active_messaging::AMCounters, scheduler::Scheduler, AsLamellarBuffer, LamellarBuffer,
     LamellarTask, Remote,
@@ -96,6 +108,8 @@ pub struct CollectiveAllReduceOpHandle<T: Remote> {
 pub(crate) enum CollectiveAllReduceOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveAllReduceFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveAllReduceFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllReduceFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -114,6 +128,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -135,6 +151,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -156,6 +174,8 @@ impl<T: Remote> Future for CollectiveAllReduceOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -180,6 +200,8 @@ pub struct CollectiveAllReduceIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<
 pub(crate) enum CollectiveAllReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveAllReduceIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveAllReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -198,6 +220,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceIntoBufferOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceIntoBufferOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -219,6 +243,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceIntoBufferOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -240,6 +266,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceIntoBuffer
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceIntoBufferOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -264,6 +292,8 @@ pub struct CollectiveAllReduceInPlaceOpHandle<T: Remote, B: AsLamellarBuffer<T>>
 pub(crate) enum CollectiveAllReduceInPlaceOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveAllReduceInPlaceFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveAllReduceInPlaceFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllReduceInPlaceFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -282,6 +312,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceInPlaceOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceInPlaceOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceInPlaceOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -303,6 +335,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceInPlaceOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceInPlaceOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceInPlaceOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -324,6 +358,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceInPlaceOpH
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllReduceInPlaceOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllReduceInPlaceOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllReduceInPlaceOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -348,6 +384,8 @@ pub struct CollectiveReduceOpHandle<T: Remote> {
 pub(crate) enum CollectiveReduceOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveReduceFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveReduceFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -366,6 +404,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -387,6 +427,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -408,6 +450,8 @@ impl<T: Remote> Future for CollectiveReduceOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -432,6 +476,8 @@ pub struct CollectiveReduceIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>>
 pub(crate) enum CollectiveReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveReduceIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -450,6 +496,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceIntoBufferOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceIntoBufferOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -471,6 +519,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceIntoBufferOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -492,6 +542,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceIntoBufferOpH
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceIntoBufferOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -607,6 +659,8 @@ pub struct CollectiveAllGatherOpHandle<T: Remote> {
 pub(crate) enum CollectiveAllGatherOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveAllGatherFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveAllGatherFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllGatherFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -625,6 +679,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllGatherOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllGatherOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -646,6 +702,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllGatherOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllGatherOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -667,6 +725,8 @@ impl<T: Remote> Future for CollectiveAllGatherOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllGatherOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllGatherOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -691,6 +751,8 @@ pub struct CollectiveAllGatherIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<
 pub(crate) enum CollectiveAllGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveAllGatherIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveAllGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -709,6 +771,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllGatherIntoBufferOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllGatherIntoBufferOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -730,6 +794,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllGatherIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllGatherIntoBufferOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -751,6 +817,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllGatherIntoBuffer
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllGatherIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllGatherIntoBufferOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllGatherIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -775,6 +843,8 @@ pub struct CollectiveGatherOpHandle<T: Remote> {
 pub(crate) enum CollectiveGatherOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveGatherFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveGatherFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveGatherFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -793,6 +863,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveGatherOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveGatherOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -814,6 +886,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveGatherOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveGatherOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -835,6 +909,8 @@ impl<T: Remote> Future for CollectiveGatherOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveGatherOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveGatherOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -859,6 +935,8 @@ pub struct CollectiveGatherIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>>
 pub(crate) enum CollectiveGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveGatherIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -877,6 +955,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveGatherIntoBufferOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveGatherIntoBufferOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -898,6 +978,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveGatherIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveGatherIntoBufferOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -919,6 +1001,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveGatherIntoBufferOpH
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveGatherIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveGatherIntoBufferOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveGatherIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -943,6 +1027,8 @@ pub struct CollectiveAllToAllOpHandle<T: Remote> {
 pub(crate) enum CollectiveAllToAllOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveAllToAllFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveAllToAllFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllToAllFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -961,6 +1047,8 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllToAllOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllToAllOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -982,6 +1070,8 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllToAllOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllToAllOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1003,6 +1093,8 @@ impl<T: Remote> Future for CollectiveAllToAllOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllToAllOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllToAllOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1027,6 +1119,8 @@ pub struct CollectiveAllToAllIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T
 pub(crate) enum CollectiveAllToAllIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveAllToAllIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveAllToAllIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveAllToAllIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -1045,6 +1139,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllToAllIntoBufferOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllToAllIntoBufferOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1066,6 +1162,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllToAllIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllToAllIntoBufferOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1087,6 +1185,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllToAllIntoBufferO
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveAllToAllIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveAllToAllIntoBufferOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveAllToAllIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1111,6 +1211,8 @@ pub struct CollectiveBroadcastOpHandle<T: Remote> {
 pub(crate) enum CollectiveBroadcastOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveBroadcastFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveBroadcastFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveBroadcastFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -1129,6 +1231,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveBroadcastOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveBroadcastOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1150,6 +1254,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveBroadcastOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveBroadcastOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1171,6 +1277,8 @@ impl<T: Remote> Future for CollectiveBroadcastOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveBroadcastOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveBroadcastOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1195,6 +1303,8 @@ pub struct CollectiveBroadcastIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<
 pub(crate) enum CollectiveBroadcastIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveBroadcastIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveBroadcastIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveBroadcastIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -1213,6 +1323,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveBroadcastIntoBufferOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveBroadcastIntoBufferOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1234,6 +1346,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveBroadcastIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveBroadcastIntoBufferOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1255,6 +1369,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveBroadcastIntoBuffer
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveBroadcastIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveBroadcastIntoBufferOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveBroadcastIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1279,6 +1395,8 @@ pub struct CollectiveScatterOpHandle<T: Remote> {
 pub(crate) enum CollectiveScatterOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveScatterFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveScatterFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveScatterFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -1297,6 +1415,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveScatterOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveScatterOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1318,6 +1438,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveScatterOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveScatterOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1339,6 +1461,8 @@ impl<T: Remote> Future for CollectiveScatterOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveScatterOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveScatterOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1363,6 +1487,8 @@ pub struct CollectiveScatterIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>
 pub(crate) enum CollectiveScatterIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveScatterIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -1381,6 +1507,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveScatterIntoBufferOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveScatterIntoBufferOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1402,6 +1530,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveScatterIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveScatterIntoBufferOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1423,6 +1553,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveScatterIntoBufferOp
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveScatterIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveScatterIntoBufferOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveScatterIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1447,6 +1579,8 @@ pub struct CollectiveReduceScatterOpHandle<T: Remote> {
 pub(crate) enum CollectiveReduceScatterOpFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveReduceScatterFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveReduceScatterFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceScatterFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -1465,6 +1599,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceScatterOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceScatterOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1486,6 +1622,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceScatterOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceScatterOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1507,6 +1645,8 @@ impl<T: Remote> Future for CollectiveReduceScatterOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceScatterOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceScatterOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1531,6 +1671,8 @@ pub struct CollectiveReduceScatterIntoBufferOpHandle<T: Remote, B: AsLamellarBuf
 pub(crate) enum CollectiveReduceScatterIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysCollectiveReduceScatterIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptCollectiveReduceScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricCollectiveReduceScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -1549,6 +1691,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceScatterIntoBufferOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceScatterIntoBufferOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterIntoBufferOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1570,6 +1714,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceScatterIntoBufferOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceScatterIntoBufferOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterIntoBufferOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -1591,6 +1737,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceScatterIntoBu
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             CollectiveReduceScatterIntoBufferOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            CollectiveReduceScatterIntoBufferOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             CollectiveReduceScatterIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]

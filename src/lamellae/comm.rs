@@ -17,6 +17,9 @@ pub use rdma::Remote;
 #[cfg(feature = "enable-libfabric-sys")]
 use crate::lamellae::libfabric_sys_lamellae::comm::LibfabricSysComm;
 
+#[cfg(feature = "enable-libfabric-sys-opt")]
+use crate::lamellae::libfabric_sys_opt_lamellae::comm::LibfabricSysOptComm;
+
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::comm::LibfabricComm;
 
@@ -67,6 +70,8 @@ pub(crate) enum CollectiveOpKind {
 pub(crate) enum Comm {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(LibfabricSysComm),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(LibfabricSysOptComm),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(LibfabricComm),
     #[cfg(feature = "enable-libfabric-async")]

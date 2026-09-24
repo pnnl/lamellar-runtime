@@ -12,6 +12,11 @@ use crate::lamellae::libfabric_sys_lamellae::atomic::{
     LibfabricSysAtomicCompareExchangeFuture, LibfabricSysAtomicFetchFuture,
     LibfabricSysAtomicFuture,
 };
+#[cfg(feature = "enable-libfabric-sys-opt")]
+use crate::lamellae::libfabric_sys_opt_lamellae::atomic::{
+    LibfabricSysOptAtomicCompareExchangeFuture, LibfabricSysOptAtomicFetchFuture,
+    LibfabricSysOptAtomicFuture,
+};
 #[cfg(feature = "enable-rofi-c")]
 use crate::lamellae::rofi_c_lamellae::atomic::RofiCAtomicFuture;
 #[cfg(feature = "enable-rofi-c")]
@@ -131,6 +136,8 @@ pub struct AtomicOpHandle<T> {
 pub(crate) enum AtomicOpFuture<T> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysAtomicFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptAtomicFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -149,6 +156,8 @@ impl<T: Remote> AtomicOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -171,6 +180,8 @@ impl<T: Remote> AtomicOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -193,6 +204,8 @@ impl<T: Remote> Future for AtomicOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -223,6 +236,8 @@ pub struct AtomicFetchOpHandle<T> {
 pub(crate) enum AtomicFetchOpFuture<T> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysAtomicFetchFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptAtomicFetchFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicFetchFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -241,6 +256,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicFetchOpFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicFetchOpFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -263,6 +280,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicFetchOpFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicFetchOpFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -285,6 +304,8 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicFetchOpFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicFetchOpFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -317,6 +338,8 @@ pub struct AtomicCompareExchangeOpHandle<T> {
 pub(crate) enum AtomicCompareExchangeFuture<T> {
     #[cfg(feature = "enable-libfabric-sys")]
     LibfabricSys(#[pin] LibfabricSysAtomicCompareExchangeFuture<T>),
+    #[cfg(feature = "enable-libfabric-sys-opt")]
+    LibfabricSysOpt(#[pin] LibfabricSysOptAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-libfabric-async")]
@@ -337,6 +360,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicCompareExchangeFuture::LibfabricSys(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicCompareExchangeFuture::LibfabricSysOpt(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -360,6 +385,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicCompareExchangeFuture::LibfabricSys(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicCompareExchangeFuture::LibfabricSysOpt(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -382,6 +409,8 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric-sys")]
             AtomicCompareExchangeFutureProj::LibfabricSys(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-sys-opt")]
+            AtomicCompareExchangeFutureProj::LibfabricSysOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
             AtomicCompareExchangeFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric-async")]
@@ -459,6 +488,7 @@ impl<T> AtomicOp<T> {
     #[cfg(any(
         feature = "enable-libfabric",
         feature = "enable-libfabric-sys",
+        feature = "enable-libfabric-sys-opt",
         feature = "enable-libfabric-async"
     ))]
     pub(crate) fn src(&self) -> *const T {
