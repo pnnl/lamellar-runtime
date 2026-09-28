@@ -41,6 +41,28 @@ fn check_attrs(attrs: &[syn::Attribute]) -> (bool, bool, Vec<syn::Attribute>) {
     (static_field, darc_iter, attrs)
 }
 
+fn is_vec_u8(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(tp) = ty {
+        if tp.qself.is_some() {
+            return false;
+        }
+        if let Some(seg) = tp.path.segments.last() {
+            if seg.ident == "Vec" {
+                if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
+                    if args.args.len() == 1 {
+                        if let Some(syn::GenericArgument::Type(syn::Type::Path(inner))) =
+                            args.args.first()
+                        {
+                            return inner.qself.is_none() && inner.path.is_ident("u8");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
 fn has_static_attr(attrs: &[syn::Attribute]) -> bool {
     attrs
         .iter()
@@ -228,7 +250,13 @@ fn process_fields(
                 if local {
                     fields.add_field(field.clone(), false);
                 } else {
-                    let (static_field, darc_iter, attrs) = check_attrs(&field.attrs);
+                    let (static_field, darc_iter, mut attrs) = check_attrs(&field.attrs);
+                    if is_vec_u8(&field.ty) && !attrs.iter().any(|a| a.path().is_ident("serde")) {
+                        // postcard serializes a plain Vec<u8> element-by-element; serde_bytes
+                        // produces identical wire bytes via a single memcpy
+                        let serde_bytes = format!("{}::serde_bytes", lamellar);
+                        attrs.push(syn::parse_quote! { #[serde(with = #serde_bytes)] });
+                    }
                     field.attrs = attrs;
                     if static_field {
                         static_fields.add_field(field.clone(), darc_iter);

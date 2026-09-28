@@ -14,6 +14,12 @@ use crate::lamellae::{
 use direct_batcher::{MyAmHeader, MyDataHeader, MyUnitHeader};
 use zerocopy::*;
 
+pub(crate) mod adaptive_batcher;
+use adaptive_batcher::AdaptiveBatcher;
+
+pub(crate) mod dispatch;
+pub(crate) mod wire;
+
 pub(crate) mod simple_batcher;
 use simple_batcher::SimpleBatcher;
 
@@ -173,6 +179,13 @@ pub(crate) trait Batcher {
     );
     async fn add_unit_am_to_batch(&self, req_data: ReqMetaData, stall_mark: usize);
 
+    // Bulk form used by stream dispatch for unit replies produced while draining one frame.
+    async fn add_units_to_batch(&self, reqs: Vec<ReqMetaData>, stall_mark: usize) {
+        for req_data in reqs {
+            self.add_unit_am_to_batch(req_data, stall_mark).await;
+        }
+    }
+
     async fn exec_batched_msg(
         &self,
         msg: Msg,
@@ -236,6 +249,7 @@ pub(crate) enum BatcherType {
     VecSimple(VecSimpleBatcher),
     TeamAm(TeamAmBatcher),
     VecTeamAm(VecTeamAmBatcher),
+    Adaptive(AdaptiveBatcher),
 }
 
 #[async_trait]
@@ -271,6 +285,11 @@ impl Batcher for BatcherType {
                     .await
             }
             BatcherType::VecTeamAm(batcher) => {
+                batcher
+                    .add_remote_am_to_batch(req_data, am, am_id, am_bytes, stall_mark)
+                    .await
+            }
+            BatcherType::Adaptive(batcher) => {
                 batcher
                     .add_remote_am_to_batch(req_data, am, am_id, am_bytes, stall_mark)
                     .await
@@ -312,6 +331,11 @@ impl Batcher for BatcherType {
                     .add_return_am_to_batch(req_data, am, am_id, am_bytes, stall_mark)
                     .await
             }
+            BatcherType::Adaptive(batcher) => {
+                batcher
+                    .add_return_am_to_batch(req_data, am, am_id, am_bytes, stall_mark)
+                    .await
+            }
         }
     }
     // //#[tracing::instrument(skip_all)]
@@ -348,6 +372,11 @@ impl Batcher for BatcherType {
                     .add_data_am_to_batch(req_data, darc_bytes, data_bytes, stall_mark)
                     .await
             }
+            BatcherType::Adaptive(batcher) => {
+                batcher
+                    .add_data_am_to_batch(req_data, darc_bytes, data_bytes, stall_mark)
+                    .await
+            }
         }
     }
     // //#[tracing::instrument(skip_all)]
@@ -368,9 +397,22 @@ impl Batcher for BatcherType {
             BatcherType::VecTeamAm(batcher) => {
                 batcher.add_unit_am_to_batch(req_data, stall_mark).await
             }
+            BatcherType::Adaptive(batcher) => {
+                batcher.add_unit_am_to_batch(req_data, stall_mark).await
+            }
         }
     }
     //#[tracing::instrument(skip_all, level = "debug")]
+    async fn add_units_to_batch(&self, reqs: Vec<ReqMetaData>, stall_mark: usize) {
+        match self {
+            BatcherType::Adaptive(batcher) => batcher.add_units_to_batch(reqs, stall_mark).await,
+            _ => {
+                for req_data in reqs {
+                    self.add_unit_am_to_batch(req_data, stall_mark).await;
+                }
+            }
+        }
+    }
     async fn exec_batched_msg(
         &self,
         msg: Msg,
@@ -394,6 +436,9 @@ impl Batcher for BatcherType {
             BatcherType::VecTeamAm(batcher) => {
                 batcher.exec_batched_msg(msg, ser_data, lamellae, ame).await
             }
+            BatcherType::Adaptive(batcher) => {
+                batcher.exec_batched_msg(msg, ser_data, lamellae, ame).await
+            }
         }
     }
 
@@ -411,6 +456,7 @@ impl Batcher for BatcherType {
             BatcherType::VecSimple(b) => b.send_am(req_data, am, am_id, am_bytes, cmd).await,
             BatcherType::TeamAm(b) => b.send_am(req_data, am, am_id, am_bytes, cmd).await,
             BatcherType::VecTeamAm(b) => b.send_am(req_data, am, am_id, am_bytes, cmd).await,
+            BatcherType::Adaptive(b) => b.send_am(req_data, am, am_id, am_bytes, cmd).await,
         }
     }
     async fn send_data_am(&self, req_data: ReqMetaData, darc_bytes: Vec<u8>, data_bytes: Vec<u8>) {
@@ -420,6 +466,7 @@ impl Batcher for BatcherType {
             BatcherType::VecSimple(b) => b.send_data_am(req_data, darc_bytes, data_bytes).await,
             BatcherType::TeamAm(b) => b.send_data_am(req_data, darc_bytes, data_bytes).await,
             BatcherType::VecTeamAm(b) => b.send_data_am(req_data, darc_bytes, data_bytes).await,
+            BatcherType::Adaptive(b) => b.send_data_am(req_data, darc_bytes, data_bytes).await,
         }
     }
     async fn send_unit_am(&self, req_data: ReqMetaData) {
@@ -429,6 +476,7 @@ impl Batcher for BatcherType {
             BatcherType::VecSimple(b) => b.send_unit_am(req_data).await,
             BatcherType::TeamAm(b) => b.send_unit_am(req_data).await,
             BatcherType::VecTeamAm(b) => b.send_unit_am(req_data).await,
+            BatcherType::Adaptive(b) => b.send_unit_am(req_data).await,
         }
     }
 
@@ -447,6 +495,7 @@ impl Batcher for BatcherType {
             BatcherType::VecSimple(b) => b.exec_am(src, data, i, lamellae, ame, executor).await,
             BatcherType::TeamAm(b) => b.exec_am(src, data, i, lamellae, ame, executor).await,
             BatcherType::VecTeamAm(b) => b.exec_am(src, data, i, lamellae, ame, executor).await,
+            BatcherType::Adaptive(b) => b.exec_am(src, data, i, lamellae, ame, executor).await,
         }
     }
     async fn exec_return_am(
@@ -463,6 +512,7 @@ impl Batcher for BatcherType {
             BatcherType::VecSimple(b) => b.exec_return_am(src, data, i, lamellae, ame).await,
             BatcherType::TeamAm(b) => b.exec_return_am(src, data, i, lamellae, ame).await,
             BatcherType::VecTeamAm(b) => b.exec_return_am(src, data, i, lamellae, ame).await,
+            BatcherType::Adaptive(b) => b.exec_return_am(src, data, i, lamellae, ame).await,
         }
     }
     fn exec_data_am(&self, src: usize, data: &[u8], i: &mut usize, ame: &RegisteredActiveMessages) {
@@ -472,6 +522,7 @@ impl Batcher for BatcherType {
             BatcherType::VecSimple(b) => b.exec_data_am(src, data, i, ame),
             BatcherType::TeamAm(b) => b.exec_data_am(src, data, i, ame),
             BatcherType::VecTeamAm(b) => b.exec_data_am(src, data, i, ame),
+            BatcherType::Adaptive(b) => b.exec_data_am(src, data, i, ame),
         }
     }
     fn exec_unit_am(&self, src: usize, data: &[u8], i: &mut usize, ame: &RegisteredActiveMessages) {
@@ -481,6 +532,7 @@ impl Batcher for BatcherType {
             BatcherType::VecSimple(b) => b.exec_unit_am(src, data, i, ame),
             BatcherType::TeamAm(b) => b.exec_unit_am(src, data, i, ame),
             BatcherType::VecTeamAm(b) => b.exec_unit_am(src, data, i, ame),
+            BatcherType::Adaptive(b) => b.exec_unit_am(src, data, i, ame),
         }
     }
 }
@@ -843,7 +895,7 @@ pub(crate) async fn exec_return_am_serde(
 // Serde wire-format send helpers — used by SimpleBatcher and TeamAmBatcher
 // ---------------------------------------------------------------------------
 
-async fn create_serde_buf(
+pub(crate) async fn create_serde_buf(
     header: SerializeHeader,
     size: usize,
     lamellae: &Arc<Lamellae>,

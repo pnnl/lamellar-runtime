@@ -31,6 +31,12 @@ fn impl_lamellar_active_message_trait(
             fn get_id(&self) -> &'static str{
                 stringify!(#am_name)
             }
+            #[inline]
+            fn am_id(&self) -> i32 {
+                // keyed by name only, so sharing one static across generic instances is fine
+                static __LAMELLAR_AM_ID: ::std::sync::atomic::AtomicI32 = ::std::sync::atomic::AtomicI32::new(0);
+                #lamellar::active_messaging::__cached_am_id(&__LAMELLAR_AM_ID, stringify!(#am_name))
+            }
         }
     }
 }

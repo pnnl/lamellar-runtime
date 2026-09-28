@@ -42,6 +42,11 @@ fn impl_am_group_remote_lamellar_active_message_trait(
             fn get_id(&self) -> &'static str{
                 stringify!(#am_group_am_name)//.to_string()
             }
+            #[inline]
+            fn am_id(&self) -> i32 {
+                static __LAMELLAR_AM_ID: ::std::sync::atomic::AtomicI32 = ::std::sync::atomic::AtomicI32::new(0);
+                #lamellar::active_messaging::__cached_am_id(&__LAMELLAR_AM_ID, stringify!(#am_group_am_name))
+            }
         }
     }
 }

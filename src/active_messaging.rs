@@ -1045,6 +1045,24 @@ pub trait LamellarActiveMessage: DarcSerde {
         team: Arc<LamellarTeam>,
     ) -> std::pin::Pin<Box<dyn Future<Output = LamellarReturn> + Send>>;
     fn get_id(&self) -> &'static str;
+    /// Registered wire id of this AM (the proc macros override this with a cached lookup).
+    #[doc(hidden)]
+    fn am_id(&self) -> i32 {
+        registered_active_message::am_id_of(self.get_id())
+    }
+}
+
+/// Resolves `name`'s AM id once and caches it in `cell` (0 = unresolved; ids start at 1).
+#[doc(hidden)]
+#[inline(always)]
+pub fn __cached_am_id(cell: &std::sync::atomic::AtomicI32, name: &'static str) -> i32 {
+    let id = cell.load(std::sync::atomic::Ordering::Relaxed);
+    if id != 0 {
+        return id;
+    }
+    let id = registered_active_message::am_id_of(name);
+    cell.store(id, std::sync::atomic::Ordering::Relaxed);
+    id
 }
 
 #[doc(hidden)]
@@ -1164,6 +1182,7 @@ pub(crate) enum Cmd {
     Data = 2,     //a single data result
     Unit = 3,     //a single unit result
     BatchedMsg = 4, //a batched message, can contain a variety of am types
+    Stream = 5,     //a frame of wire.rs records (stream/adaptive batchers)
                   // BatchedReturnAm, //a batched message, only containing return ams -- not sure this can happen
                   // BatchedData, //a batched message, only containing data results
 }

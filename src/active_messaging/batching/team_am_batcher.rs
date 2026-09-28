@@ -498,6 +498,9 @@ impl Batcher for TeamAmBatcher {
                     self.exec_batched_am(&msg, batch.cnt, &mut ser_data, &mut i, lamellae, &ame)
                         .await;
                 }
+                Cmd::Stream => {
+                    panic!("should not recieve a stream frame within a TeamAm Batcher batched msg")
+                }
             }
         }
         trace!(target: "lamellae_debug", "finished exec_batched_msg  lamellae cnt: {:?}",Arc::strong_count(&lamellae));

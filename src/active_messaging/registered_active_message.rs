@@ -47,14 +47,27 @@ pub(crate) static AMS_IDS: LazyLock<HashMap<&'static str, AmId>> = LazyLock::new
     }
     temp
 });
-pub(crate) static AMS_EXECS: LazyLock<HashMap<AmId, UnpackFn>> = LazyLock::new(|| {
-    let mut temp = HashMap::new();
+#[inline(never)]
+pub(crate) fn am_id_of(name: &'static str) -> AmId {
+    *AMS_IDS.get(name).unwrap()
+}
+
+// dense table indexed by (id - AM_ID_START): ids are assigned contiguously above
+pub(crate) struct AmExecTable(Vec<UnpackFn>);
+impl AmExecTable {
+    #[inline(always)]
+    pub(crate) fn get(&self, id: &AmId) -> Option<&UnpackFn> {
+        self.0.get(id.wrapping_sub(AM_ID_START) as usize)
+    }
+}
+pub(crate) static AMS_EXECS: LazyLock<AmExecTable> = LazyLock::new(|| {
+    let mut temp: Vec<Option<UnpackFn>> = vec![None; AMS_IDS.len()];
     for exec in crate::inventory::iter::<RegisteredAm> {
         // trace!("{:#?}", exec.name);
         let id = AMS_IDS.get(&exec.name).unwrap();
-        temp.insert(*id, exec.exec);
+        temp[(*id - AM_ID_START) as usize] = Some(exec.exec);
     }
-    temp
+    AmExecTable(temp.into_iter().map(|e| e.unwrap()).collect())
 });
 
 #[doc(hidden)]
@@ -141,7 +154,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         match am {
             Am::All(req_data, am) => {
                 // println!("{:?}",am.get_id());
-                let am_id = *(AMS_IDS.get(am.get_id()).unwrap());
+                let am_id = am.am_id();
 
                 if req_data.team.lamellae.comm().backend() != Backend::Local
                     && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err())
@@ -215,8 +228,11 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
                     self.exec_local_am(req_data, am.as_local(), world, team)
                         .await;
+                } else if let BatcherType::Adaptive(b) = &self.batcher {
+                    let am_id = am.am_id();
+                    b.sink_am(req_data, am, am_id, immediate).await;
                 } else {
-                    let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
+                    let am_id = am.am_id();
                     let darc_ser_cnt = match req_data.dst {
                         Some(_) => 1,
                         None => match req_data.team.team_pe_id() {
@@ -264,7 +280,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             }
             Am::Return(req_data, am) => {
                 // println!("Am::Return");
-                let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
+                let am_id = am.am_id();
                 let darc_ser_cnt = match req_data.dst {
                     Some(_) => 1,
                     None => match req_data.team.team_pe_id() {
@@ -437,6 +453,16 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         .fetch_add(1, Ordering::Relaxed)
                 );
             }
+            Cmd::Stream => {
+                let data_bytes = ser_data.data_as_bytes();
+                crate::active_messaging::batching::dispatch::exec_stream_frame(
+                    msg.src as usize,
+                    &data_bytes,
+                    lamellae,
+                    &self,
+                )
+                .await;
+            }
             Cmd::BatchedMsg => {
                 stats!(
                     BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)]
@@ -460,6 +486,20 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
 #[lamellar_prof::prof]
 impl RegisteredActiveMessages {
     //#[tracing::instrument(skip_all, level = "debug")]
+    /// Lets the batcher take `am` synchronously (no per-AM task); returns it if not taken.
+    #[inline]
+    pub(crate) fn try_sink(&self, am: Am) -> Option<Am> {
+        match (&self.batcher, am) {
+            (BatcherType::Adaptive(b), Am::Remote(req_data, am)) => {
+                let am_id = am.am_id();
+                b.try_stage_am(req_data, am, am_id)
+                    .err()
+                    .map(|(req_data, am)| Am::Remote(req_data, am))
+            }
+            (_, am) => Some(am),
+        }
+    }
+
     pub(crate) fn new(batcher: BatcherType, executor: Arc<Executor>) -> RegisteredActiveMessages {
         RegisteredActiveMessages { batcher, executor }
     }

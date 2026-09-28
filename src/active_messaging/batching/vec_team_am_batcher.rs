@@ -543,6 +543,9 @@ impl Batcher for VecTeamAmBatcher {
                 Cmd::BatchedMsg => {
                     unreachable!("VecTeamAmBatcher: unexpected BatchedMsg in payload")
                 }
+                Cmd::Stream => {
+                    unreachable!("VecTeamAmBatcher: unexpected Stream in payload")
+                }
             };
         }
     }

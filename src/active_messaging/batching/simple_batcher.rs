@@ -604,6 +604,9 @@ impl Batcher for SimpleBatcher {
                 Cmd::BatchedMsg => {
                     panic!("should not recieve a batched msg within a Simple Batcher batched msg")
                 }
+                Cmd::Stream => {
+                    panic!("should not recieve a stream frame within a Simple Batcher batched msg")
+                }
             }
         }
         trace!(
