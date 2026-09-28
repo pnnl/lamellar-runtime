@@ -486,7 +486,7 @@ fn create_launch_block(
 
             // Best-effort NUMA domain count on the current host, used to decide
             // whether to bind PEs by NUMA domain instead of plain node. Absence of
-            // a usable hwloc topology just disables NUMA-aware binding.
+            // a usable /sys topology just disables NUMA-aware binding.
             let numa_domains: Option<u32> = ::hpc_launch::numa_domain_count();
 
             // Best-effort physical package (socket) count. PRRTE's binding

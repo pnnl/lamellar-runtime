@@ -92,7 +92,20 @@ pub fn binary_update_block_tokens() -> proc_macro2::TokenStream {
                 }
             }
             let shared_libs_dir = shared_libs_dirs.join(":");
-            if !shared_libs_dir.is_empty() {
+            // Only touch RPATH if the binary actually has unresolved shared
+            // libraries right now. LD_LIBRARY_PATH's build/out/lib entries carry
+            // cargo's per-build hash suffix, so string-comparing them against the
+            // already-embedded RPATH is unreliable across separate builds
+            // (a stale hash never matches, even when the binary already resolves
+            // fine via $ORIGIN/shared_libs or another baked-in dir).
+            let has_missing_libs = std::env::current_exe()
+                .ok()
+                .and_then(|p| std::process::Command::new("ldd").arg(p).output().ok())
+                .map(|out| {
+                    String::from_utf8_lossy(&out.stdout).contains("=> not found")
+                })
+                .unwrap_or(false);
+            if !shared_libs_dir.is_empty() && has_missing_libs {
                 if let Ok(exe_path) = std::env::current_exe() {
                     let readelf_out = std::process::Command::new("readelf")
                         .arg("-d")
@@ -324,22 +337,9 @@ pub fn pe_id() -> Option<u32> {
         .and_then(|s| s.parse().ok())
 }
 
-/// Best-effort count of NUMA domains on the current host. Uses `hwlocality`
-/// when the `enable-numa-detect` feature is enabled, falling back to a
-/// `/sys` scan (and to that same scan unconditionally when the feature is
-/// disabled). Returns `None` if neither method can determine a count.
+/// Best-effort count of NUMA domains on the current host, via a `/sys` scan.
+/// Returns `None` if the count can't be determined.
 pub fn numa_domain_count() -> Option<u32> {
-    #[cfg(feature = "enable-numa-detect")]
-    {
-        use hwlocality::object::types::ObjectType;
-        use hwlocality::Topology;
-        if let Some(count) = Topology::new()
-            .ok()
-            .map(|t| t.objects_with_type(ObjectType::NUMANode).count() as u32)
-        {
-            return Some(count);
-        }
-    }
     numa_domain_count_fs()
 }
 
@@ -366,21 +366,9 @@ fn numa_domain_count_fs() -> Option<u32> {
     }
 }
 
-/// Best-effort count of physical packages (sockets) on the current host.
-/// Uses `hwlocality` when the `enable-numa-detect` feature is enabled,
-/// falling back to a `/sys` scan.
+/// Best-effort count of physical packages (sockets) on the current host,
+/// via a `/sys` scan.
 pub fn package_count() -> Option<u32> {
-    #[cfg(feature = "enable-numa-detect")]
-    {
-        use hwlocality::object::types::ObjectType;
-        use hwlocality::Topology;
-        if let Some(count) = Topology::new()
-            .ok()
-            .map(|t| t.objects_with_type(ObjectType::Package).count() as u32)
-        {
-            return Some(count);
-        }
-    }
     package_count_fs()
 }
 
@@ -412,20 +400,8 @@ fn package_count_fs() -> Option<u32> {
 }
 
 /// Best-effort count of physical cores on the current host (i.e. excluding
-/// hyperthreads/SMT siblings). Uses `hwlocality` when the
-/// `enable-numa-detect` feature is enabled, falling back to a `/sys` scan.
+/// hyperthreads/SMT siblings), via a `/sys` scan.
 pub fn core_count() -> Option<u32> {
-    #[cfg(feature = "enable-numa-detect")]
-    {
-        use hwlocality::object::types::ObjectType;
-        use hwlocality::Topology;
-        if let Some(count) = Topology::new()
-            .ok()
-            .map(|t| t.objects_with_type(ObjectType::Core).count() as u32)
-        {
-            return Some(count);
-        }
-    }
     core_count_fs()
 }
 
@@ -473,20 +449,8 @@ pub fn cores_per_package() -> Option<u32> {
 }
 
 /// Best-effort count of processing units (logical CPUs, including SMT
-/// siblings) on the current host. Uses `hwlocality` when the
-/// `enable-numa-detect` feature is enabled, falling back to a `/sys` scan.
+/// siblings) on the current host, via a `/sys` scan.
 pub fn pu_count() -> Option<u32> {
-    #[cfg(feature = "enable-numa-detect")]
-    {
-        use hwlocality::object::types::ObjectType;
-        use hwlocality::Topology;
-        if let Some(count) = Topology::new()
-            .ok()
-            .map(|t| t.objects_with_type(ObjectType::PU).count() as u32)
-        {
-            return Some(count);
-        }
-    }
     pu_count_fs()
 }
 

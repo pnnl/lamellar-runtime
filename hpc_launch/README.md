@@ -12,7 +12,7 @@ The generated `main` detects whether it's already running as a launched PE (e.g.
 Before launching, it also patches the binary's `RPATH`/`RUNPATH` (via `readelf`/`patchelf`) with the build-output library directories found on `LD_LIBRARY_PATH`, so launched processes can find shared library dependencies without you having to export `LD_LIBRARY_PATH` yourself.
 
 It also exposes standalone helper functions usable outside the macros:
-- `numa_domain_count()`, `package_count()`, `core_count()`, `pu_count()` — best-effort hardware topology detection (via [`hwlocality`](https://crates.io/crates/hwlocality) when the `enable-numa-detect` feature is enabled, falling back to a `/sys` scan otherwise)
+- `numa_domain_count()`, `package_count()`, `core_count()`, `pu_count()` — best-effort hardware topology detection via a `/sys` scan
 - `init_tracing_from_env()` — initializes a [`tracing-subscriber`](https://crates.io/crates/tracing-subscriber) global subscriber from the `LAMELLAR_LOG` environment variable
 
 # Using standalone
@@ -52,8 +52,6 @@ See `--help` after the second `--` for the full set of recognized launch flags (
 - `use-prterun` — launch via `prterun` (PRRTE). Mutually exclusive with `use-srun`. Pulls in and reexports `prrte_sys`.
 - `use-srun` — launch via `srun` (SLURM). Mutually exclusive with `use-prterun`.
 - `with-salloc` — enables `--nodes`/`LAMELLAR_NODES` to request a SLURM allocation via `salloc` and re-invoke the binary inside it, rather than just being parsed and left for the launcher to interpret.
-- `enable-numa-detect` — use `hwlocality` (hwloc bindings) for topology detection instead of the `/sys` fallback.
-- `vendored-hwloc` — build hwloc from source for `hwlocality` (and `prrte-sys`, if also enabled) rather than linking a system install.
 
 ## License
 
