@@ -71,17 +71,15 @@ The distributed backends above depend on native C libraries (PMIx, PRRTE, libfab
 
 For the full breakdown of required packages, backend-by-backend native library tables, and system-install env vars, see [NATIVE_DEPENDENCIES.md](https://github.com/pnnl/lamellar/blob/master/NATIVE_DEPENDENCIES.md) in the parent `lamellar` repo (also mirrored at `NATIVE_DEPENDENCIES.md` in this directory).
 
-**By default on Linux, lamellar vendors PMIx/PRRTE/libevent from source** — every native dependency pulled in by the default feature set (`with-pmix-vendored`, `enable-lamellar-main`, `enable-numa-detect`) is built from source except hwloc, which is auto-detected via system pkg-config by default. This is what you want on clusters/containers where you don't control what's installed, or where installed versions are outdated/incompatible. If no system hwloc/pkg-config is available (e.g. an offline build node), enable `vendored-hwloc` explicitly (see below). On macOS, hwloc's vendored autotools build is known to fail, so `vendored-hwloc` should stay disabled there and a system hwloc relied on instead.
+**By default on Linux, lamellar vendors PMIx/PRRTE/libevent/hwloc from source** — every native dependency pulled in by the default feature set (`with-pmix-vendored`, `enable-lamellar-main`) is built from source, including hwloc, which the vendored PMIx build (`openpmix-src`) compiles from its bundled source and shares with PRRTE. This is what you want on clusters/containers where you don't control what's installed, or where installed versions are outdated/incompatible. To use a system hwloc instead, set `HWLOC_DIR` (see below).
 
 The relevant feature flags:
 - `with-pmix` (**enabled by default**) - selects PMIx as the backend for the `pmi` abstraction crate (used by `enable-libfabric`/`enable-ucx`), via `pmi/with-pmix`. Just a backend selection — doesn't vendor anything by itself, see `vendored-pmi` below.
 - `vendored-pmi` (**enabled by default**) - builds `pmi`'s PMIx (and PMI/PMI2, if those backends are selected instead/as well) from source, via `pmi/vendored`. Without it, `pmi`'s backend links a system install.
 - `with-pmix-vendored` - convenience alias equal to `with-pmix` + `vendored-pmi` together (matches `pmi`'s own feature name).
-- `enable-lamellar-main` (**enabled by default**) - builds PRRTE from source (via `prrte-sys/prrte-src`) for the `#[lamellar::main]` launcher, and pulls in `pmix-sys` as PRRTE's PMIx dependency. hwloc is *not* included here — see `vendored-hwloc` below.
+- `enable-lamellar-main` (**enabled by default**) - builds PRRTE from source (via `prrte-sys/prrte-src`) for the `#[lamellar::main]` launcher, and pulls in `pmix-sys` as PRRTE's PMIx dependency. PRRTE reuses whichever hwloc `pmix-sys` built or linked.
 - `vendored-pmix` (**enabled by default**) - builds PMIx from source (via `pmix-sys/openpmix-src`) for whichever of `enable-lamellar-main` / `enable-rofi-c(-shared)` pulled `pmix-sys` in. Without it, a system PMIx is linked instead — useful on clusters where PMIx is already installed and version-matched to the system Slurm/PRRTE. **Note:** `pmix-sys` is a single shared crate — `vendored-pmi` above requests vendoring for it too (independently, for the `pmi`-crate use case), so both toggles need to be off to get a fully system-linked PMIx.
 - `vendored-libevent` (**enabled by default**) - builds libevent from source for PRRTE (and, when PMIx is also vendored, for PMIx too), via `prrte-sys/vendored-libevent` and `pmix-sys/vendored-libevent`. Without it, a system libevent is linked instead.
-- `vendored-hwloc` (**not enabled by default**) - builds hwloc from source, both for PRRTE (via `prrte-sys/vendored-hwloc`) and for lamellar's own NUMA-domain detection (via `hwlocality/vendored`). Without it, a system hwloc is auto-detected via pkg-config (or pointed to explicitly via `HWLOC_DIR`) — this is the default and the required setting on macOS, where hwloc's vendored autotools build is known to fail. Enable it only if no system hwloc/pkg-config is available.
-- `enable-numa-detect` (**enabled by default**) - enables NUMA-domain detection (via `hwlocality`) used by `#[lamellar::main]` to pick PE-per-node defaults.
 - `enable-rofi-c` / `enable-rofi-c-shared` - build ROFI against its default PMI-1 backend; no `pmix-sys` involved. Add `enable-rofi-c-pmix` / `enable-rofi-c-shared-pmix` on top to switch ROFI to its PMIx backend instead — pulls in `pmix-sys`, with vendoring controlled by the same `vendored-pmix`/`vendored-libevent` toggles above.
 - `system-pmix-launcher` - convenience alias for the default feature set minus `vendored-pmi`/`vendored-pmix`/`vendored-libevent`, for clusters with a system-installed, version-matched PMIx/PRRTE (and libevent) — see the recipe below.
 
@@ -98,7 +96,7 @@ Each native dependency has its own env-var override, checked by the correspondin
 |---|---|---|
 | PMIx | `PMIX_LIB_DIR` + `PMIX_INCLUDE_DIR` (links `pmix-sys` itself) and/or `PMIX_DIR` (PRRTE's own `--with-pmix`, if not pkg-config-discoverable) | drop `vendored-pmix`, and `vendored-pmi` too if `enable-libfabric`/`enable-ucx` are in use — see note above |
 | PRRTE | `PRRTE_LIB_DIR` + `PRRTE_INCLUDE_DIR` + `PRRTE_BIN_DIR` | use `prrte-sys` with `prrte-src` omitted, see `prrte-sys`'s README |
-| hwloc | `PKG_CONFIG_PATH` (e.g. `PKG_CONFIG_PATH=$HWLOC_DIR/lib/pkgconfig`) for `hwlocality` (pkg-config only, ignores `HWLOC_DIR`), **and** `HWLOC_DIR` for PRRTE's own vendored build — both needed together | not vendored by default already — only relevant if you turned on `vendored-hwloc` and want to turn it back off, or just need to point a non-standard hwloc install at pkg-config. **Required on macOS** since vendored hwloc's autotools build fails there |
+| hwloc | `HWLOC_DIR` (install prefix) | no feature to disable — when set, the vendored PMIx build links it instead of building its bundled hwloc, and PRRTE reuses the same one |
 | libevent | `LIBEVENT_DIR` (install prefix) | drop `vendored-libevent` |
 | PMI/PMI2 | `PMI_LIB_DIR` / `PMI2_LIB_DIR` | drop `vendored-pmi` |
 | libfabric | `OFI_DIR` (install prefix) | used automatically if set, no feature to disable |
@@ -106,19 +104,14 @@ Each native dependency has its own env-var override, checked by the correspondin
 | UCC | `UCC_DIR` (install prefix) | used automatically if set, no feature to disable |
 | ROFI | `ROFI_DIR` (install prefix) | used automatically if set, no feature to disable |
 
-`error: failed to run custom build command for `hwlocality-sys v0.7.1`` (pkg-config
-can't find hwloc) means no system hwloc/pkg-config is on the path. Either enable
-`vendored-hwloc` to build hwloc from source, or set `HWLOC_DIR` + add
-`$HWLOC_DIR/lib/pkgconfig` to `PKG_CONFIG_PATH` to point at a system install.
-
-Example, on an HPC cluster with a system-installed, version-matched PMIx/PRRTE/libevent already on `PKG_CONFIG_PATH` (or pointed to via `PMIX_DIR`/`LIBEVENT_DIR`) — hwloc still auto-detected via pkg-config as usual:
+Example, on an HPC cluster with a system-installed, version-matched PMIx/PRRTE/libevent already on `PKG_CONFIG_PATH` (or pointed to via `PMIX_DIR`/`LIBEVENT_DIR`) (set `HWLOC_DIR` too if hwloc isn't found automatically):
 ```toml
 lamellar = { version = "...", default-features = false, features = ["system-pmix-launcher"] }
 ```
 
-Example, PRRTE/PMIx/libevent vendored but hwloc linked from a system install (the macOS case) — this is just the default feature set (hwloc isn't vendored by default, so no feature overrides needed), pointed at a Homebrew hwloc:
+Example, PRRTE/PMIx/libevent vendored but hwloc linked from a system install — this is just the default feature set (no feature overrides needed), pointed at a Homebrew hwloc:
 ```
-HWLOC_DIR=$(brew --prefix hwloc) PKG_CONFIG_PATH=$(brew --prefix hwloc)/lib/pkgconfig cargo build
+HWLOC_DIR=$(brew --prefix hwloc) cargo build
 ```
 Requires `brew install hwloc libevent pkgconf`. If PMIx/PRRTE's `autoreconf` step fails
 with `bad interpreter: /usr/bin/perl5.30: No such file or directory`, your Homebrew
@@ -220,7 +213,7 @@ Instead of hand-writing launcher-native flags (`--map-by node:PE=<N> --np <N>` f
 - `--pes-per-node <N>` — PEs per node
 - `--threads-per-pe <N>` - Threads per pe
 
-Give any or all (`LAMELLAR_PES`/`LAMELLAR_PES_PER_NODE,LAMELLAR_THREADS` env vars work as fallbacks too). If neither `--pes` or `--pes-per-node` is given (and `--nodes` wasn't either): with the `local` backend (the default when no other backend feature is enabled, or set explicitly via `LAMELLAR_BACKEND=local` or `--lamellae shmem`), defaults to a single PE using all available threads; every other backend (e.g. `shmem`) defaults to one PE per NUMA domain on the host. Cores bound per PE come from `--threads-per-pe <N>` (or `LAMELLAR_THREADS` if the flag isn't given); if neither is set, it defaults to `available cores / --pes-per-node` (or just available cores, if `--pes-per-node` wasn't given). For prterun, this is injected as `--map-by node:PE=<N>` — PRRTE's `PE=<N>` already binds each rank to N cpus, so on a host with more than one NUMA domain (detected via the `hwlocality`/hwloc bindings) NUMA-awareness comes from sizing `<N>` correctly rather than an explicit `--bind-to` (PRRTE rejects combining `PE=` with any `--bind-to` other than `core`/`hwt`). If `--pes-per-node` is smaller than the NUMA domain count, a single PE's cores would have to span more than one domain/package, which PRRTE always refuses — in that case `PE=` is dropped entirely and `--map-by node` is used instead, letting the rank float across the whole node. For srun, `--cpu-bind=ldoms` is added when multiple NUMA domains are detected. If you already pass a native flag (`--np`, `--map-by`, `--ntasks[-per-node]`, `--cpus-per-task`, `--cpu-bind`) yourself, it's left alone and nothing is injected on top of it.
+Give any or all (`LAMELLAR_PES`/`LAMELLAR_PES_PER_NODE,LAMELLAR_THREADS` env vars work as fallbacks too). If neither `--pes` or `--pes-per-node` is given (and `--nodes` wasn't either): with the `local` backend (the default when no other backend feature is enabled, or set explicitly via `LAMELLAR_BACKEND=local` or `--lamellae shmem`), defaults to a single PE using all available threads; every other backend (e.g. `shmem`) defaults to one PE per NUMA domain on the host. Cores bound per PE come from `--threads-per-pe <N>` (or `LAMELLAR_THREADS` if the flag isn't given); if neither is set, it defaults to `available cores / --pes-per-node` (or just available cores, if `--pes-per-node` wasn't given). For prterun, this is injected as `--map-by node:PE=<N>` — PRRTE's `PE=<N>` already binds each rank to N cpus, so on a host with more than one NUMA domain (detected via a `/sys` scan) NUMA-awareness comes from sizing `<N>` correctly rather than an explicit `--bind-to` (PRRTE rejects combining `PE=` with any `--bind-to` other than `core`/`hwt`). If `--pes-per-node` is smaller than the NUMA domain count, a single PE's cores would have to span more than one domain/package, which PRRTE always refuses — in that case `PE=` is dropped entirely and `--map-by node` is used instead, letting the rank float across the whole node. For srun, `--cpu-bind=ldoms` is added when multiple NUMA domains are detected. If you already pass a native flag (`--np`, `--map-by`, `--ntasks[-per-node]`, `--cpus-per-task`, `--cpu-bind`) yourself, it's left alone and nothing is injected on top of it.
 
 ```
 cargo run --profile release-dev --example load_store_test -- AtomicArray Block f32 128 -- --pes 8 --pes-per-node 4 --threads-per-pe 4 --lamellae shmem
@@ -230,7 +223,7 @@ cargo run --profile release-dev --example load_store_test -- AtomicArray Block f
 
 - `--lamellae <name>` — sets `LAMELLAR_BACKEND` for the launched job (same values as the `LAMELLAR_BACKEND` env var: `local`, `shmem`, `rofi_c`, `libfabric`, `libfabric-sys`, `libfabric-async`, `ucx`). `--help` lists which of these are actually available in the build (backend features that weren't enabled at compile time aren't offered) and which one is the compiled-in default.
 - `--cmd-queue <variant>` — sets `LAMELLAR_CMD_QUEUE` for the launched job (`batched`, `get` (default), `geteager`, `getslots`, `put`, `putslots`, `puteager`).
-- `--batcher <variant>` — sets `LAMELLAR_BATCHER` for the launched job (`simple` (default), `direct`, `team_am`, `vec_simple` (experimental), `vec_team_am` (experimental)).
+- `--batcher <variant>` — sets `LAMELLAR_BATCHER` for the launched job (`auto` (default: `stream` on shmem-opt, else `adaptive`), `simple`, `adaptive`, `stream`, `direct`, `team_am`, `vec_simple` (experimental), `vec_team_am` (experimental)).
 - `--help` / `-h` — print all launch flags recognized after the second `--` and exit, without launching anything.
 
 ## distributed backends (multi-process, multi-system)
