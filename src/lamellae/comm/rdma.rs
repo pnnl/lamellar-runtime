@@ -1,3 +1,5 @@
+#[cfg(feature = "enable-shmem-opt")]
+use crate::lamellae::shmem_opt_lamellae::rdma::{ShmemOptFuture, ShmemOptGetBufferFuture, ShmemOptGetFuture, ShmemOptGetIntoBufferFuture};
 #[cfg(feature = "enable-libfabric-async")]
 use crate::lamellae::libfabric_async_lamellae::rdma::{
     LibfabricAsyncGetBufferFuture, LibfabricAsyncGetFuture, LibfabricAsyncGetIntoBufferFuture,
@@ -80,6 +82,8 @@ pub(crate) enum RdmaPutFuture<T: Remote> {
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCPutFuture<T>),
     Shmem(#[pin] ShmemFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptFuture<T>),
     // Local(#[pin] LocalFuture<T>),
     Local(#[pin] LocalFuture<T>),
 }
@@ -101,6 +105,8 @@ impl<T: Remote> RdmaHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaPutFuture::RofiC(f) => f.block(),
             RdmaPutFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaPutFuture::ShmemOpt(f) => f.block(),
             RdmaPutFuture::Local(f) => f.block(),
         }
     }
@@ -125,6 +131,8 @@ impl<T: Remote> RdmaHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaPutFuture::RofiC(f) => f.spawn(),
             RdmaPutFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaPutFuture::ShmemOpt(f) => f.spawn(),
             RdmaPutFuture::Local(f) => f.spawn(),
         }
     }
@@ -149,6 +157,8 @@ impl<T: Remote> Future for RdmaHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaPutFutureProj::RofiC(f) => f.poll(cx),
             RdmaPutFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaPutFutureProj::ShmemOpt(f) => f.poll(cx),
             RdmaPutFutureProj::Local(f) => f.poll(cx),
         }
     }
@@ -180,6 +190,8 @@ pub(crate) enum RdmaGetFuture<T: Remote> {
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCGetFuture<T>),
     Shmem(#[pin] ShmemGetFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptGetFuture<T>),
     Local(#[pin] LocalGetFuture<T>),
 }
 
@@ -200,6 +212,8 @@ impl<T: Remote> RdmaGetHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetFuture::RofiC(f) => f.block(),
             RdmaGetFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetFuture::ShmemOpt(f) => f.block(),
             RdmaGetFuture::Local(f) => f.block(),
         }
     }
@@ -224,6 +238,8 @@ impl<T: Remote> RdmaGetHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetFuture::RofiC(f) => f.spawn(),
             RdmaGetFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetFuture::ShmemOpt(f) => f.spawn(),
             RdmaGetFuture::Local(f) => f.spawn(),
         }
     }
@@ -248,6 +264,8 @@ impl<T: Remote> Future for RdmaGetHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetFutureProj::RofiC(f) => f.poll(cx),
             RdmaGetFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetFutureProj::ShmemOpt(f) => f.poll(cx),
             RdmaGetFutureProj::Local(f) => f.poll(cx),
         }
     }
@@ -279,6 +297,8 @@ pub(crate) enum RdmaGetBufferFuture<T: Remote> {
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCGetBufferFuture<T>),
     Shmem(#[pin] ShmemGetBufferFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptGetBufferFuture<T>),
     Local(#[pin] LocalGetBufferFuture<T>),
 }
 
@@ -299,6 +319,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetBufferFuture::RofiC(f) => f.block(),
             RdmaGetBufferFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetBufferFuture::ShmemOpt(f) => f.block(),
             RdmaGetBufferFuture::Local(f) => f.block(),
         }
     }
@@ -323,6 +345,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetBufferFuture::RofiC(f) => f.spawn(),
             RdmaGetBufferFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetBufferFuture::ShmemOpt(f) => f.spawn(),
             RdmaGetBufferFuture::Local(f) => f.spawn(),
         }
     }
@@ -347,6 +371,8 @@ impl<T: Remote> Future for RdmaGetBufferHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetBufFutureProj::RofiC(f) => f.poll(cx),
             RdmaGetBufFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetBufFutureProj::ShmemOpt(f) => f.poll(cx),
             RdmaGetBufFutureProj::Local(f) => f.poll(cx),
         }
     }
@@ -378,6 +404,8 @@ pub(crate) enum RdmaGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCGetIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemGetIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptGetIntoBufferFuture<T, B>),
     // Local(#[pin] LocalFuture<T>),
     Local(#[pin] LocalGetIntoBufferFuture<T, B>),
 }
@@ -399,6 +427,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetIntoBufferFuture::RofiC(f) => f.block(),
             RdmaGetIntoBufferFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetIntoBufferFuture::ShmemOpt(f) => f.block(),
             RdmaGetIntoBufferFuture::Local(f) => f.block(),
         }
     }
@@ -423,6 +453,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetIntoBufferFuture::RofiC(f) => f.spawn(),
             RdmaGetIntoBufferFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetIntoBufferFuture::ShmemOpt(f) => f.spawn(),
             RdmaGetIntoBufferFuture::Local(f) => f.spawn(),
         }
     }
@@ -447,6 +479,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for RdmaGetIntoBufferHandle<T, B>
             #[cfg(feature = "enable-rofi-c")]
             RdmaGetIntoBufferFutureProj::RofiC(f) => f.poll(cx),
             RdmaGetIntoBufferFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            RdmaGetIntoBufferFutureProj::ShmemOpt(f) => f.poll(cx),
             RdmaGetIntoBufferFutureProj::Local(f) => f.poll(cx),
         }
     }

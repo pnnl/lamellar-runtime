@@ -884,13 +884,13 @@ impl CQGetSlots {
         let mut data = self
             .cq
             .comm
-            .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+            .rt_alloc_uninit(vec_data.len(), std::mem::align_of::<u8>());
         while let Err(_) = data {
             async_std::task::yield_now().await;
             data = self
                 .cq
                 .comm
-                .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+                .rt_alloc_uninit(vec_data.len(), std::mem::align_of::<u8>());
         }
         let data = data.unwrap();
         unsafe {

@@ -698,6 +698,7 @@ impl LamellarWorldBuilder {
             my_pe,
             self.num_threads,
             panic.clone(),
+            self.primary_lamellae,
         ));
         trace!("scheduler created");
         // println!(

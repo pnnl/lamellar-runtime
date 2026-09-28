@@ -944,12 +944,12 @@ impl SingleValMultiIndex {
                     unsafe { std::slice::from_raw_parts(indices.as_ptr(), indices.len()).to_vec() };
                 (Some(ScalarValBuf::Inline(inline)), None)
             } else {
-                let mut mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
+                let mut mem_region = unsafe { array.team().try_alloc_one_sided_mem_region_uninit(indices.len()) };
                 while let None = mem_region {
                     // println!("Failed to allocate mem region, retrying...");
                     // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
                     async_std::task::yield_now().await;
-                    mem_region = array.team().try_alloc_one_sided_mem_region(indices.len());
+                    mem_region = unsafe { array.team().try_alloc_one_sided_mem_region_uninit(indices.len()) };
                 }
                 let mem_region = mem_region.unwrap();
                 unsafe {
@@ -1044,12 +1044,12 @@ impl MultiValSingleIndex {
                 };
                 (Some(ScalarValBuf::Inline(inline)), None)
             } else {
-                let mut mem_region = array.team().try_alloc_one_sided_mem_region::<T>(val.len());
+                let mut mem_region = unsafe { array.team().try_alloc_one_sided_mem_region_uninit::<T>(val.len()) };
                 while let None = mem_region {
                     // println!("Failed to allocate mem region, retrying...");
                     // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
                     async_std::task::yield_now().await;
-                    mem_region = array.team().try_alloc_one_sided_mem_region::<T>(val.len());
+                    mem_region = unsafe { array.team().try_alloc_one_sided_mem_region_uninit::<T>(val.len()) };
                 }
                 let mem_region = mem_region.unwrap();
                 let mem_region = unsafe {
@@ -1132,12 +1132,12 @@ impl MultiValMultiIndex {
                 };
                 (Some(ScalarValBuf::Inline(inline)), None)
             } else {
-                let mut mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
+                let mut mem_region = unsafe { array.team().try_alloc_one_sided_mem_region_uninit(idxs_vals.len()) };
                 while let None = mem_region {
                     // println!("Failed to allocate mem region, retrying...");
                     // async_std::task::sleep(std::time::Duration::from_millis(10)).await;
                     async_std::task::yield_now().await;
-                    mem_region = array.team().try_alloc_one_sided_mem_region(idxs_vals.len());
+                    mem_region = unsafe { array.team().try_alloc_one_sided_mem_region_uninit(idxs_vals.len()) };
                 }
                 let mem_region = mem_region.unwrap();
                 unsafe {

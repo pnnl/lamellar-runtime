@@ -107,6 +107,18 @@ pub struct LamellarTeam {
 }
 
 impl LamellarTeam {
+    /// Internal uninitialized one-sided alloc, see `Darc<LamellarTeamRT>::alloc_one_sided_mem_region_uninit`.
+    ///
+    /// # Safety
+    /// The caller must write every element before anything reads it.
+    pub(crate) unsafe fn alloc_one_sided_mem_region_uninit<T: Remote>(
+        &self,
+        size: usize,
+    ) -> OneSidedMemoryRegion<T> {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        self.team.alloc_one_sided_mem_region_uninit(size)
+    }
+
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         world: Option<Arc<LamellarTeam>>,
@@ -2717,6 +2729,37 @@ impl Darc<LamellarTeamRT> {
             trace!(target: "lamellae_debug", "allocated one sided mem region lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
         }
         lmr.ok()
+    }
+
+    /// Like `alloc_one_sided_mem_region`, but the region's contents are left uninitialized.
+    ///
+    /// # Safety
+    /// The caller must write every element before anything reads it.
+    pub(crate) unsafe fn alloc_one_sided_mem_region_uninit<T: Remote>(
+        &self,
+        size: usize,
+    ) -> OneSidedMemoryRegion<T> {
+        let mut lmr = OneSidedMemoryRegion::try_new_uninit(size, self);
+        while let Err(_err) = lmr {
+            std::thread::yield_now();
+            let alloc_fut = self
+                .lamellae
+                .request_new_alloc(size * std::mem::size_of::<T>());
+            self.scheduler.block_on(alloc_fut);
+            lmr = OneSidedMemoryRegion::try_new_uninit(size, self);
+        }
+        lmr.expect("out of memory")
+    }
+
+    /// Like `try_alloc_one_sided_mem_region`, but the region's contents are left uninitialized.
+    ///
+    /// # Safety
+    /// The caller must write every element before anything reads it.
+    pub(crate) unsafe fn try_alloc_one_sided_mem_region_uninit<T: Remote>(
+        &self,
+        size: usize,
+    ) -> Option<OneSidedMemoryRegion<T>> {
+        OneSidedMemoryRegion::try_new_uninit(size, self).ok()
     }
 
     // pub(crate) fn print_cnt(self: &Darc<LamellarTeamRT>) {

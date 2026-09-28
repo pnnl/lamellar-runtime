@@ -30,6 +30,8 @@ use crate::lamellae::libfabric_async_lamellae::comm::LibfabricAsyncComm;
 use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
+#[cfg(feature = "enable-shmem-opt")]
+use crate::lamellae::shmem_opt_lamellae::comm::ShmemOptComm;
 use crate::lamellae::{
     collective::ReduceOp, local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm,
     AllocationType, SerializedData,
@@ -81,6 +83,8 @@ pub(crate) enum Comm {
     #[cfg(feature = "enable-rofi-c")]
     RofiC(RofiCComm),
     Shmem(ShmemComm),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(ShmemOptComm),
     Local(LocalComm),
 }
 
@@ -110,6 +114,10 @@ pub(crate) trait CommMem {
     ) -> error::AllocResult<CommAlloc>;
 
     fn rt_alloc(&self, size: usize, align: usize) -> error::AllocResult<CommAlloc>;
+    /// Like `rt_alloc`, but contents are unspecified; for buffers the caller fully overwrites.
+    fn rt_alloc_uninit(&self, size: usize, align: usize) -> error::AllocResult<CommAlloc> {
+        self.rt_alloc(size, align)
+    }
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn mem_occupied(&self) -> usize;
     fn alloc_pool(&self, min_size: usize);

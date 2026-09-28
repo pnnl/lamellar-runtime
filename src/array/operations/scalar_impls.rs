@@ -298,16 +298,19 @@ fn impl_ops_option_scalar_type_match(
 macro_rules! impl_vec_to_bytes {
     () => {
         async fn vec_to_bytes<T: Remote>(&self, result: Vec<T>) -> OneSidedMemoryRegion<u8> {
-            let mut mem_region = self
-                .array
-                .team()
-                .try_alloc_one_sided_mem_region::<T>(result.len());
+            // fully written by local_copy_from_slice below
+            let mut mem_region = unsafe {
+                self.array
+                    .team()
+                    .try_alloc_one_sided_mem_region_uninit::<T>(result.len())
+            };
             while let None = mem_region {
                 async_std::task::yield_now().await;
-                mem_region = self
-                    .array
-                    .team()
-                    .try_alloc_one_sided_mem_region::<T>(result.len());
+                mem_region = unsafe {
+                    self.array
+                        .team()
+                        .try_alloc_one_sided_mem_region_uninit::<T>(result.len())
+                };
             }
             let mem_region = mem_region.unwrap();
             unsafe {

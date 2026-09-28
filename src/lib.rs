@@ -249,6 +249,10 @@ pub use async_trait;
 //#[doc(hidden)]
 pub use futures_util;
 
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL_ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub mod active_messaging;
 // //#[doc(hidden)]
 pub use active_messaging::prelude::*;
@@ -378,7 +382,8 @@ pub fn serialized_size<T>(obj: &T, _var: bool) -> usize
 where
     T: serde::Serialize,
 {
-    postcard::to_allocvec(obj).unwrap().len()
+    // counting flavor: sizes without allocating or writing the encoding
+    postcard::serialize_with_flavor(obj, postcard::ser_flavors::Size::default()).unwrap()
 }
 
 /// Wrapper function for serializing an object into a buffer.

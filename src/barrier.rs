@@ -23,6 +23,31 @@ use std::task::{Context, Poll, Waker};
 use std::time::Instant;
 use tracing::{debug, trace};
 
+// Native progress words (see `Barrier::native`): each PE has one per round, on a line of its
+// own, set to the barrier id once it starts that round (the pull equivalent of having sent
+// that round's flags). One line per round means each line has only that round's n readers.
+const NATIVE_LINE: usize = 64;
+const NATIVE_LINE_WORDS: usize = NATIVE_LINE / std::mem::size_of::<usize>();
+
+#[inline(always)]
+fn native_word(base: usize, round: usize) -> &'static AtomicUsize {
+    unsafe { &*((base + round * NATIVE_LINE) as *const AtomicUsize) }
+}
+
+// Each round a PE hears from n more distances, so after k rounds it knows about (n + 1)^k PEs.
+fn dissemination_rounds(num_pes: usize, n: usize) -> usize {
+    let mut num_rounds = 0;
+    let mut reach = 1;
+    while reach < num_pes {
+        reach *= n + 1;
+        num_rounds += 1;
+    }
+    num_rounds
+}
+
+// Pure spins between scheduler/progress calls while polling a native progress word.
+const NATIVE_SPINS: u32 = 256;
+
 pub(crate) struct Barrier {
     my_pe: usize, // global pe id
     num_pes: usize,
@@ -35,6 +60,11 @@ pub(crate) struct Barrier {
     cur_barrier_id: Arc<AtomicUsize>,
     barrier_mem_region: Option<MemoryRegion<usize>>, //keep mem region alive
     barrier_buf: Arc<Vec<CommSlice<usize>>>,
+    // Per team index, the address of that PE's first progress line when the backend lets every
+    // team PE load the others' memory (shmem-opt). Each PE stores its own progress and polls
+    // its round partners' words, so a round is one store and n loads instead of n puts.
+    // Valid while `barrier_buf` holds the allocation.
+    native: Option<Arc<Vec<usize>>>,
     // send_buf: Option<MemoryRegion<usize>>,
     panic: Arc<AtomicU8>,
 }
@@ -57,13 +87,11 @@ impl Barrier {
         let num_pes = arch.num_pes();
         // let mut n = std::env::var("LAMELLAR_BARRIER_DISSEMNATION_FACTOR")
         let mut n = config().barrier_dissemination_factor;
-        let num_rounds = if n > 1 && num_pes > 2 {
-            ((num_pes as f64).log2() / (n as f64).log2()).ceil() as usize
-        } else {
+        if n < 1 || num_pes <= 2 {
             n = 1;
-            (num_pes as f64).log2() as usize
-        };
-        let (mem_region, buffs) = if let Ok(_my_index) = arch.team_pe(my_pe) {
+        }
+        let mut num_rounds = dissemination_rounds(num_pes, n);
+        let (mem_region, buffs, native) = if let Ok(_my_index) = arch.team_pe(my_pe) {
             if num_pes > 1 {
                 let alloc = if global_pes == arch.num_pes() {
                     AllocationType::Global
@@ -73,8 +101,14 @@ impl Barrier {
                     AllocationType::Sub(pes)
                 };
                 trace!(target: "lamellae_debug", "creating barrier with alloc {:?} for my_pe {:?} num_pes {:?} num_rounds {:?} n {:?} lamellae cnt: {:?}", alloc, my_pe, num_pes, num_rounds, n, Arc::strong_count(&lamellae));
+                // room for the put flags or, natively, one line per round plus alignment slack
+                // (natively the factor may drop to 1, see below)
+                let len = std::cmp::max(
+                    num_rounds * n,
+                    (dissemination_rounds(num_pes, 1) + 1) * NATIVE_LINE_WORDS,
+                );
                 let mem_region =
-                    MemoryRegion::new(num_rounds * n, &scheduler, None, &lamellae, alloc.clone());
+                    MemoryRegion::new(len, &scheduler, None, &lamellae, alloc.clone());
                 let mem_region_comm_slice = unsafe {
                     mem_region.as_comm_slice().expect(
                         "MemoryRegion should be registered and able to be converted to CommSlice",
@@ -102,13 +136,29 @@ impl Barrier {
                         }
                     }
                 }
-                (Some(mem_region), buffs)
+                let line = (mem_region_comm_slice.inner_alloc.addr().0 + NATIVE_LINE - 1)
+                    & !(NATIVE_LINE - 1);
+                let native = (0..num_pes)
+                    .map(|i| {
+                        let pe = arch.single_iter(i).next().unwrap();
+                        mem_region_comm_slice.inner_alloc.peer_addr(pe, line)
+                    })
+                    .collect::<Option<Vec<usize>>>()
+                    .map(Arc::new);
+                (Some(mem_region), buffs, native)
             } else {
-                (None, vec![])
+                (None, vec![], None)
             }
         } else {
-            (None, vec![])
+            (None, vec![], None)
         };
+        // Natively a round costs one dependent load per partner, so extra partners per round
+        // cost more than the rounds they save: binary dissemination measured fastest on shmem-opt
+        // at every P. An explicitly set factor still wins.
+        if native.is_some() && std::env::var("LAMELLAR_BARRIER_DISSEMINATION_FACTOR").is_err() {
+            n = 1;
+            num_rounds = dissemination_rounds(num_pes, 1);
+        }
 
         let bar = Barrier {
             my_pe,
@@ -122,6 +172,7 @@ impl Barrier {
             barrier_mem_region: mem_region,
             cur_barrier_id: Arc::new(AtomicUsize::new(1)),
             barrier_buf: Arc::new(buffs),
+            native,
             panic,
         };
         // bar.print_bar();
@@ -213,6 +264,45 @@ impl Barrier {
                         self.lamellae.comm().flush_all();
                     }
 
+                    if let Some(words) = &self.native {
+                        for round in 0..self.num_rounds {
+                            let val = barrier_id;
+                            native_word(words[my_index], round).store(val, Ordering::Release);
+                            let stride = (self.n + 1).pow(round as u32);
+                            for i in 1..=self.n {
+                                let team_recv_pe = (my_index + self.num_pes
+                                    - (i * stride) % self.num_pes)
+                                    % self.num_pes;
+                                if team_recv_pe == my_index {
+                                    continue;
+                                }
+                                let w = native_word(words[team_recv_pe], round);
+                                let mut spins = 0u32;
+                                while w.load(Ordering::Acquire) < val {
+                                    spins += 1;
+                                    if spins % NATIVE_SPINS == 0 {
+                                        let recv_pe =
+                                            self.arch.single_iter(team_recv_pe).next().unwrap();
+                                        self.barrier_timeout(
+                                            &mut s,
+                                            my_index,
+                                            round,
+                                            i,
+                                            team_recv_pe as isize,
+                                            recv_pe,
+                                            barrier_id,
+                                        );
+                                        self.lamellae.comm().flush_all();
+                                        wait_func();
+                                    } else {
+                                        std::hint::spin_loop();
+                                    }
+                                }
+                            }
+                        }
+                        self.cur_barrier_id.store(barrier_id + 1, Ordering::SeqCst);
+                        return;
+                    }
                     for round in 0..self.num_rounds {
                         trace!(
                             "[{:?}][ {:?} {:?}] round: {:?} barrier_id: {:?}",
@@ -338,6 +428,7 @@ impl Barrier {
     pub(crate) fn barrier_handle(&self) -> BarrierHandle {
         let mut handle = BarrierHandle {
             barrier_buf: self.barrier_buf.clone(),
+            native: self.native.clone(),
             arch: self.arch.clone(),
             scheduler: self.scheduler.clone(),
             lamellae: self.lamellae.clone(),
@@ -408,6 +499,7 @@ impl Barrier {
 #[pin_project(PinnedDrop)]
 pub struct BarrierHandle {
     barrier_buf: Arc<Vec<CommSlice<usize>>>,
+    native: Option<Arc<Vec<usize>>>,
     arch: Arc<LamellarArchRT>,
     scheduler: Arc<Scheduler>,
     lamellae: Arc<Lamellae>,
@@ -440,6 +532,10 @@ enum State {
 impl BarrierHandle {
     fn do_send_round(&self, round: usize) {
         trace!("do send round {:?}", round);
+        if let Some(words) = &self.native {
+            native_word(words[self.my_index], round).store(self.barrier_id, Ordering::Release);
+            return;
+        }
         // let barrier_slice = &[self.barrier_id];
         // let mut reqs = vec![];
         for i in 1..=self.n {
@@ -466,6 +562,14 @@ impl BarrierHandle {
                 .rem_euclid(self.num_pes as isize) as isize;
             // let recv_pe = self.arch.single_iter(team_recv_pe as usize).next().unwrap();
             if team_recv_pe as usize != self.my_index {
+                if let Some(words) = &self.native {
+                    if native_word(words[team_recv_pe as usize], round).load(Ordering::Acquire)
+                        < self.barrier_id
+                    {
+                        return Some(i);
+                    }
+                    continue;
+                }
                 //safe as  each pe is only capable of writing to its own index
                 if self.barrier_buf[i - 1].as_slice()[round] < self.barrier_id {
                     self.lamellae.comm().thread_flush();

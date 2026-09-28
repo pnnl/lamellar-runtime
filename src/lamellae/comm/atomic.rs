@@ -1,3 +1,5 @@
+#[cfg(feature = "enable-shmem-opt")]
+use crate::lamellae::shmem_opt_lamellae::atomic::{ShmemOptAtomicCompareExchangeFuture, ShmemOptAtomicFetchFuture, ShmemOptAtomicFuture};
 #[cfg(feature = "enable-libfabric-async")]
 use crate::lamellae::libfabric_async_lamellae::atomic::{
     LibfabricAsyncAtomicCompareExchangeFuture, LibfabricAsyncAtomicFetchFuture,
@@ -147,6 +149,8 @@ pub(crate) enum AtomicOpFuture<T> {
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicFuture<T>),
     Shmem(#[pin] ShmemAtomicFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptAtomicFuture<T>),
     Local(#[pin] LocalAtomicFuture<T>),
 }
 
@@ -167,6 +171,8 @@ impl<T: Remote> AtomicOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFuture::RofiC(f) => f.block(),
             AtomicOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicOpFuture::ShmemOpt(f) => f.block(),
             AtomicOpFuture::Local(f) => f.block(),
         }
     }
@@ -191,6 +197,8 @@ impl<T: Remote> AtomicOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFuture::RofiC(f) => f.spawn(),
             AtomicOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicOpFuture::ShmemOpt(f) => f.spawn(),
             AtomicOpFuture::Local(f) => f.spawn(),
         }
     }
@@ -215,6 +223,8 @@ impl<T: Remote> Future for AtomicOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFutureProj::RofiC(f) => f.poll(cx),
             AtomicOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicOpFutureProj::ShmemOpt(f) => f.poll(cx),
             AtomicOpFutureProj::Local(f) => f.poll(cx),
         }
     }
@@ -247,6 +257,8 @@ pub(crate) enum AtomicFetchOpFuture<T> {
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicFetchFuture<T>),
     Shmem(#[pin] ShmemAtomicFetchFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptAtomicFetchFuture<T>),
     Local(#[pin] LocalAtomicFetchFuture<T>),
 }
 
@@ -267,6 +279,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFuture::RofiC(f) => f.block(),
             AtomicFetchOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicFetchOpFuture::ShmemOpt(f) => f.block(),
             AtomicFetchOpFuture::Local(f) => f.block(),
         }
     }
@@ -291,6 +305,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFuture::RofiC(f) => f.spawn(),
             AtomicFetchOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicFetchOpFuture::ShmemOpt(f) => f.spawn(),
             AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
     }
@@ -315,6 +331,8 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFutureProj::RofiC(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicFetchOpFutureProj::ShmemOpt(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
     }
@@ -349,6 +367,8 @@ pub(crate) enum AtomicCompareExchangeFuture<T> {
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicCompareExchangeFuture<T>),
     Shmem(#[pin] ShmemAtomicCompareExchangeFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptAtomicCompareExchangeFuture<T>),
     Local(#[pin] LocalAtomicCompareExchangeFuture<T>),
 }
 
@@ -371,6 +391,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFuture::RofiC(f) => f.block(),
             AtomicCompareExchangeFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicCompareExchangeFuture::ShmemOpt(f) => f.block(),
             AtomicCompareExchangeFuture::Local(f) => f.block(),
         }
     }
@@ -396,6 +418,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFuture::RofiC(f) => f.spawn(),
             AtomicCompareExchangeFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicCompareExchangeFuture::ShmemOpt(f) => f.spawn(),
             AtomicCompareExchangeFuture::Local(f) => f.spawn(),
         }
     }
@@ -420,6 +444,8 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFutureProj::RofiC(f) => f.poll(cx),
             AtomicCompareExchangeFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            AtomicCompareExchangeFutureProj::ShmemOpt(f) => f.poll(cx),
             AtomicCompareExchangeFutureProj::Local(f) => f.poll(cx),
         }
     }

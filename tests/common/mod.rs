@@ -32,8 +32,6 @@ macro_rules! feature_list {
 fn active_features() -> Vec<&'static str> {
     feature_list![
         "enable-lamellar-main",
-        "vendored-hwloc",
-        "enable-numa-detect",
         "with-salloc",
         "enable-stats",
         "enable-rofi-c",
@@ -44,6 +42,8 @@ fn active_features() -> Vec<&'static str> {
         "enable-libfabric-sys",
         "enable-libfabric-async",
         "enable-ucx",
+        "enable-libfabric-sys-opt",
+        "enable-shmem-opt",
         "tokio-executor",
         "disable-runtime-warnings",
         "runtime-warnings-panic",
@@ -54,6 +54,8 @@ fn active_features() -> Vec<&'static str> {
         "with-pmix",
         "with-pmix-vendored",
         "vendored-pmi",
+        "vendored-libevent",
+        "vendored-pmix",
         "enable-prof",
     ]
 }

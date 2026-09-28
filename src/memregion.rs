@@ -795,6 +795,44 @@ pub(crate) enum Mode {
     Shared,
 }
 
+/// Serves a memregion's manual collectives in ticket order. A waiter parks its task until its
+/// ticket comes up instead of yield-spinning, so many queued collectives don't flood the
+/// scheduler with requeues.
+#[derive(Debug, Default)]
+pub(crate) struct CollTicketGate {
+    now_serving: AtomicUsize,
+    waiters: parking_lot::Mutex<std::collections::HashMap<usize, std::task::Waker>>,
+}
+
+impl CollTicketGate {
+    /// Resolves once `ticket` is being served.
+    pub(crate) fn wait(&self, ticket: usize) -> impl std::future::Future<Output = ()> + '_ {
+        std::future::poll_fn(move |cx| {
+            if self.now_serving.load(std::sync::atomic::Ordering::Acquire) == ticket {
+                return std::task::Poll::Ready(());
+            }
+            let mut waiters = self.waiters.lock();
+            // recheck under the lock: `release` bumps the counter before taking it
+            if self.now_serving.load(std::sync::atomic::Ordering::Acquire) == ticket {
+                waiters.remove(&ticket);
+                return std::task::Poll::Ready(());
+            }
+            waiters.insert(ticket, cx.waker().clone());
+            std::task::Poll::Pending
+        })
+    }
+
+    /// Finishes the current ticket and wakes the holder of the next one.
+    pub(crate) fn release(&self) {
+        let next = self.now_serving.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
+        let waker = self.waiters.lock().remove(&next);
+        if let Some(w) = waker {
+            w.wake();
+        }
+    }
+}
+
+
 // this is not intended to be accessed directly by a user
 // it will be wrapped in either a shared region or local region
 // in shared regions its wrapped in a darc which allows us to send
@@ -809,7 +847,7 @@ pub(crate) struct MemoryRegion<T: Remote> {
     // PEs issue collectives against this array in the same program order (standard SPMD
     // assumption already required by this array's other collective protocols).
     pub(crate) coll_ticket: Arc<AtomicUsize>,
-    pub(crate) coll_now_serving: Arc<AtomicUsize>,
+    pub(crate) coll_now_serving: Arc<CollTicketGate>,
     pe: usize,
     backend: Backend,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -845,6 +883,31 @@ impl<T: Remote> MemoryRegion<T> {
         lamellae: &Arc<Lamellae>,
         alloc: AllocationType,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
+        Self::try_new_inner(num_elems, scheduler, counters, lamellae, alloc, true)
+    }
+
+    /// Like `try_new`, but a `Local` region's contents are left uninitialized.
+    ///
+    /// # Safety
+    /// The caller must write every element before anything reads it.
+    pub(crate) unsafe fn try_new_uninit(
+        num_elems: usize, //number of elements of type T
+        scheduler: &Arc<Scheduler>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
+        lamellae: &Arc<Lamellae>,
+        alloc: AllocationType,
+    ) -> Result<MemoryRegion<T>, anyhow::Error> {
+        Self::try_new_inner(num_elems, scheduler, counters, lamellae, alloc, false)
+    }
+
+    fn try_new_inner(
+        num_elems: usize, //number of elements of type T
+        scheduler: &Arc<Scheduler>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
+        lamellae: &Arc<Lamellae>,
+        alloc: AllocationType,
+        zero: bool,
+    ) -> Result<MemoryRegion<T>, anyhow::Error> {
         trace!(
             "creating new lamellar memory region size: {:?} align: {:?}",
             num_elems * std::mem::size_of::<T>(),
@@ -855,10 +918,12 @@ impl<T: Remote> MemoryRegion<T> {
         let alloc = if num_elems > 0 {
             if let AllocationType::Local = alloc {
                 mode = Mode::Local;
-                lamellae.comm().rt_alloc(
-                    num_elems * std::mem::size_of::<T>(),
-                    std::mem::align_of::<T>(),
-                )?
+                let (size, align) = (num_elems * std::mem::size_of::<T>(), std::mem::align_of::<T>());
+                if zero {
+                    lamellae.comm().rt_alloc(size, align)?
+                } else {
+                    lamellae.comm().rt_alloc_uninit(size, align)?
+                }
             } else {
                 let bytes = match &alloc {
                     AllocationType::Local => unreachable!(),
@@ -898,7 +963,7 @@ impl<T: Remote> MemoryRegion<T> {
             alloc,
             coll_sync_alloc,
             coll_ticket: Arc::new(AtomicUsize::new(0)),
-            coll_now_serving: Arc::new(AtomicUsize::new(0)),
+            coll_now_serving: Arc::new(CollTicketGate::default()),
             pe: lamellae.comm().my_pe(),
             scheduler: scheduler.clone(),
             counters: counters,
@@ -938,7 +1003,7 @@ impl<T: Remote> MemoryRegion<T> {
             ),
             coll_sync_alloc: None,
             coll_ticket: Arc::new(AtomicUsize::new(0)),
-            coll_now_serving: Arc::new(AtomicUsize::new(0)),
+            coll_now_serving: Arc::new(CollTicketGate::default()),
             pe: pe,
             // num_elems,
             scheduler: team.scheduler.clone(),
@@ -1003,7 +1068,7 @@ impl<T: Remote> MemoryRegion<T> {
         self.coll_sync_alloc.clone()
     }
 
-    pub(crate) fn get_collective_ticket_state(&self) -> (Arc<AtomicUsize>, Arc<AtomicUsize>) {
+    pub(crate) fn get_collective_ticket_state(&self) -> (Arc<AtomicUsize>, Arc<CollTicketGate>) {
         (self.coll_ticket.clone(), self.coll_now_serving.clone())
     }
 

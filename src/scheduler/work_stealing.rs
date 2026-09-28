@@ -2,7 +2,7 @@ use crate::LAMELLAR_THREAD_ID;
 use crate::active_messaging::batching::simple_batcher::io_task_stats;
 use crate::env_var::config;
 use crate::scheduler::{
-    Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus,
+    Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, ProgressHook, SchedulerStatus,
 };
 use crate::stats;
 
@@ -18,7 +18,8 @@ use std::panic;
 use std::pin::Pin;
 use std::process;
 use std::sync::Arc;
-use std::sync::LazyLock;
+use std::cell::Cell;
+use std::sync::{LazyLock, OnceLock};
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::task::Context;
 use std::task::Poll;
@@ -277,6 +278,20 @@ pub(crate) struct WorkStealing {
     status: Arc<AtomicU8>,
     active_cnt: Arc<AtomicUsize>,
     panic: Arc<AtomicU8>,
+    progress_hook: HookCell,
+}
+
+#[derive(Default)]
+struct HookCell(OnceLock<ProgressHook>);
+impl std::fmt::Debug for HookCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HookCell({})", self.0.get().is_some())
+    }
+}
+
+thread_local! {
+    // a hook may reach code that waits again; only the outermost wait drives progress
+    static IN_PROGRESS_HOOK: Cell<bool> = const { Cell::new(false) };
 }
 
 impl LamellarExecutor for WorkStealing {
@@ -639,7 +654,16 @@ impl LamellarExecutor for WorkStealing {
         };
         if let Some(runnable) = ret {
             runnable.run();
+        } else if let Some(hook) = self.progress_hook.0.get() {
+            if !IN_PROGRESS_HOOK.replace(true) {
+                hook();
+                IN_PROGRESS_HOOK.set(false);
+            }
         }
+    }
+
+    fn set_progress_hook(&self, hook: ProgressHook) {
+        let _ = self.progress_hook.0.set(hook);
     }
 
     fn num_workers(&self) -> usize {
@@ -687,6 +711,7 @@ impl WorkStealing {
             status,
             active_cnt: Arc::new(AtomicUsize::new(0)),
             panic,
+            progress_hook: HookCell::default(),
         };
         ws.init(Arc::new(core_ids), my_pe);
         ws

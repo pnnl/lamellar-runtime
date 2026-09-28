@@ -7,7 +7,6 @@ use crate::array::rdma::private::{LamellarRdmaGet, LamellarRdmaPut, Sealed};
 use crate::array::*;
 use crate::memregion::{
     AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
-    RemoteMemoryRegion,
 };
 
 impl<T: Dist> NativeAtomicArray<T> {
@@ -1289,7 +1288,8 @@ impl<T: Dist> LamellarRdmaGet<T> for NativeAtomicArray<T> {
         num_elems: usize,
         _: Sealed,
     ) -> ArrayRdmaGetBufferHandle<T> {
-        let buf = self.array.team_rt().alloc_one_sided_mem_region(num_elems);
+        // filled by the remote get-buffer AM before the handle returns it
+        let buf = unsafe { self.array.team_rt().alloc_one_sided_mem_region_uninit(num_elems) };
         let req = self.exec_am_pe_tg(
             pe,
             NativeAtomicRemoteGetBufferPeAm {
@@ -1387,7 +1387,8 @@ impl<T: Dist + 'static> LamellarAm for NativeAtomicInitGetBufferAm<T> {
     async fn exec(self) -> Vec<T> {
         let mut reqs = vec![];
         let mut cur_index = 0;
-        let buf = lamellar::team.alloc_one_sided_mem_region::<T>(self.len);
+        // every sub-region is filled by a remote get-buffer AM before it is read
+        let buf = unsafe { lamellar::team.alloc_one_sided_mem_region_uninit::<T>(self.len) };
         let mut bufs = vec![];
         for pe in self
             .array

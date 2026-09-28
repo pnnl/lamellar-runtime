@@ -546,7 +546,7 @@ impl InnerCQ {
                     // let dst_data = dst_data_full.comm_slice_at_byte_offset::<u8>(0, data.len());
                     // let magic_data = dst_data_full.comm_slice_at_byte_offset::<u64>(data.len(), 1);
 
-                    if let Ok(rt_data) = comm.rt_alloc(data.len(), std::mem::align_of::<u8>()) {
+                    if let Ok(rt_data) = comm.rt_alloc_uninit(data.len(), std::mem::align_of::<u8>()) {
                         let mut data_slice = rt_data.as_comm_slice::<u8>();
                         data_slice.copy_from_slice(&data);
                         put_amt.fetch_add(data.len(), Ordering::Relaxed);

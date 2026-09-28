@@ -5,7 +5,7 @@ use crate::{
     lamellae::{CommSlice, Remote},
     memregion::{
         Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RegisteredMemoryRegion,
-        RemoteMemoryRegion, SharedMemoryRegion, SubRegion,
+        SharedMemoryRegion, SubRegion,
     },
     LamellarTeam,
 };
@@ -136,6 +136,12 @@ impl<T: Remote> MemregionRdmaInputInner<T> {
         }
     }
 
+    #[cfg(any(
+        feature = "enable-libfabric",
+        feature = "enable-libfabric-async",
+        feature = "enable-libfabric-sys",
+        feature = "enable-libfabric-sys-opt"
+    ))]
     pub(crate) fn is_registered(&self) -> bool {
         match self {
             MemregionRdmaInputInner::LamellarMemRegion(_) => true,
@@ -331,7 +337,8 @@ impl<T: Remote> TeamFrom<MemregionRdmaInputInner<T>> for LamellarMemoryRegion<T>
             MemregionRdmaInputInner::SharedMemRegion(mr) => LamellarMemoryRegion::Shared(mr),
             MemregionRdmaInputInner::LocalMemRegion(mr) => LamellarMemoryRegion::Local(mr),
             MemregionRdmaInputInner::Slice(s) => {
-                let mem_region = team.alloc_one_sided_mem_region(s.len());
+                // fully written below
+                let mem_region = unsafe { team.alloc_one_sided_mem_region_uninit(s.len()) };
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         s.as_ptr(),
@@ -342,13 +349,15 @@ impl<T: Remote> TeamFrom<MemregionRdmaInputInner<T>> for LamellarMemoryRegion<T>
                 mem_region.into()
             }
             MemregionRdmaInputInner::Owned(v) => {
-                let mem_region = team.alloc_one_sided_mem_region(std::mem::size_of::<T>());
+                // one element, written below
+                let mem_region = unsafe { team.alloc_one_sided_mem_region_uninit(1) };
                 unsafe { mem_region.as_mut_slice()[0] = v };
                 mem_region.into()
             }
             MemregionRdmaInputInner::ArcVec((v, r)) => {
                 let len = r.len();
-                let mem_region = team.alloc_one_sided_mem_region(len);
+                // fully written below
+                let mem_region = unsafe { team.alloc_one_sided_mem_region_uninit(len) };
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         v[r].as_ptr(),

@@ -3,6 +3,7 @@ use crate::active_messaging::batching::simple_batcher::SimpleBatcher;
 use crate::active_messaging::batching::team_am_batcher::TeamAmBatcher;
 use crate::active_messaging::batching::vec_simple_batcher::VecSimpleBatcher;
 use crate::active_messaging::batching::vec_team_am_batcher::VecTeamAmBatcher;
+use crate::active_messaging::batching::adaptive_batcher::AdaptiveBatcher;
 use crate::active_messaging::batching::BatcherType;
 use crate::active_messaging::registered_active_message::RegisteredActiveMessages;
 use crate::active_messaging::*;
@@ -159,7 +160,8 @@ impl<T> Future for LamellarTask<T> {
 
 #[derive(Debug)]
 pub(crate) enum LamellarTaskInner<T> {
-    // Finished(Option<T>),
+    /// Already-complete result; no executor task behind it.
+    Finished(Option<T>),
     LamellarTask(Option<async_task::Task<T, usize>>),
     AsyncStdTask(async_std::task::JoinHandle<T>),
     #[cfg(feature = "tokio-executor")]
@@ -168,6 +170,9 @@ pub(crate) enum LamellarTaskInner<T> {
 
 unsafe impl<T: Send> Send for LamellarTaskInner<T> {}
 unsafe impl<T: Sync> Sync for LamellarTaskInner<T> {}
+// Every variant is Unpin regardless of T (join handles are, and a Finished value is only ever
+// moved out, never pinned), so keep LamellarTask<T> Unpin for all T as it was before Finished.
+impl<T> Unpin for LamellarTaskInner<T> {}
 
 impl<T> Drop for LamellarTaskInner<T> {
     fn drop(self: &mut Self) {
@@ -175,7 +180,7 @@ impl<T> Drop for LamellarTaskInner<T> {
 
         // std::mem::swap(&mut dropped, self);
         match self {
-            // LamellarTaskInner::Finished(_) => {}
+            LamellarTaskInner::Finished(_) => {}
             LamellarTaskInner::LamellarTask(task) => {
                 task.take().expect("task already taken").detach();
             }
@@ -191,7 +196,9 @@ impl<T> Future for LamellarTaskInner<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         unsafe {
             match self.get_unchecked_mut() {
-                // LamellarTaskInner::Finished(val) => Poll::Ready(val.take().unwrap()),
+                LamellarTaskInner::Finished(val) => {
+                    Poll::Ready(val.take().expect("LamellarTask polled after completion"))
+                }
                 LamellarTaskInner::LamellarTask(task) => {
                     if let Some(task) = task {
                         Pin::new_unchecked(task).poll(cx)
@@ -209,6 +216,10 @@ impl<T> Future for LamellarTaskInner<T> {
         }
     }
 }
+
+/// Lamellae progress run by threads waiting in block_on/exec_task when no task is queued;
+/// returns the amount of work done
+pub(crate) type ProgressHook = Box<dyn Fn() -> usize + Send + Sync>;
 
 #[enum_dispatch]
 pub(crate) trait LamellarExecutor {
@@ -252,6 +263,9 @@ pub(crate) trait LamellarExecutor {
         std::thread::yield_now();
     }
 
+    /// Install a progress hook (executors without a spin-wait loop ignore it)
+    fn set_progress_hook(&self, _hook: ProgressHook) {}
+
     fn block_in_place<F, R>(&self, f: F) -> R
     where
         F: FnOnce() -> R,
@@ -292,6 +306,8 @@ pub(crate) struct Scheduler {
     am_stall_mark: Arc<AtomicUsize>,
     status: Arc<AtomicU8>,
     panic: Arc<AtomicU8>,
+    // long running tasks owned by the lamellae (excluded from activity checks)
+    lamellae_tasks: AtomicUsize,
 }
 
 impl Scheduler {
@@ -312,13 +328,27 @@ impl Scheduler {
             am_stall_mark,
             status,
             panic,
+            lamellae_tasks: AtomicUsize::new(3), // Comm Task, Alloc Task, Error Task
         }
+    }
+
+    /// Let waiting threads drive lamellae progress directly (first hook wins)
+    pub(crate) fn set_progress_hook(&self, hook: ProgressHook) {
+        self.executor.set_progress_hook(hook);
+    }
+
+    /// Set how many long running tasks the lamellae keeps alive (default 3)
+    pub(crate) fn set_lamellae_tasks(&self, n: usize) {
+        self.lamellae_tasks.store(n, Ordering::SeqCst);
     }
 
     pub(crate) fn increment_stall_mark(&self) -> usize {
         self.am_stall_mark.fetch_add(1, Ordering::Release)
     }
     pub(crate) fn submit_am(&self, am: Am) {
+        let Some(am) = self.active_message_engine.try_sink(am) else {
+            return;
+        };
         let num_ams = self.num_ams.clone();
         let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
@@ -481,6 +511,16 @@ impl Scheduler {
         self.executor.spawn_task(future, self.executor.clone())
     }
 
+    /// A task whose result is already known (e.g. a completed load/store). Skips the executor and
+    /// the task/outstanding counters entirely: nothing is ever in flight.
+    pub(crate) fn ready_task<T: Send>(&self, val: T) -> LamellarTask<T> {
+        LamellarTask {
+            task: LamellarTaskInner::Finished(Some(val)),
+            executor: self.executor.clone(),
+            task_id: usize::MAX,
+        }
+    }
+
     pub(crate) fn submit_task<F>(&self, task: F)
     where
         F: Future<Output = ()> + Send + 'static,
@@ -638,7 +678,8 @@ impl Scheduler {
 
     pub(crate) fn active(&self, additional: usize) -> bool {
         self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
-            || self.num_tasks.load(Ordering::SeqCst) > 3 + additional // the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task, additional represents a long running task that we dont want to consider when determining if the scheduler is active
+            || self.num_tasks.load(Ordering::SeqCst)
+                > self.lamellae_tasks.load(Ordering::Relaxed) + additional // the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task, additional represents a long running task that we dont want to consider when determining if the scheduler is active
     }
     pub(crate) fn num_workers(&self) -> usize {
         self.executor.num_workers()
@@ -653,7 +694,7 @@ impl Scheduler {
         trace!(target: "drop", "entering shutdown");
         let mut timer = std::time::Instant::now();
         while self.panic.load(Ordering::SeqCst) == 0
-            && (self.num_tasks.load(Ordering::Relaxed) > 3
+            && (self.num_tasks.load(Ordering::Relaxed) > self.lamellae_tasks.load(Ordering::Relaxed)
                 || self.num_ams.load(Ordering::Relaxed) > 0)
         {
             //the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
@@ -695,6 +736,7 @@ impl Scheduler {
         my_pe: usize,
         num_workers: usize,
         panic: Arc<AtomicU8>,
+        backend: crate::lamellae::Backend,
     ) -> Scheduler {
         let am_stall_mark = Arc::new(AtomicUsize::new(0));
         let status = Arc::new(AtomicU8::new(SchedulerStatus::Active as u8));
@@ -715,7 +757,14 @@ impl Scheduler {
             ExecutorType::SingleThread => SingleThread::new().into(),
         });
 
-        let batcher = match config().batcher.as_str() {
+        // auto: the stream ring only exists on shmem-opt, everything else gets adaptive
+        let batcher_name = match config().batcher.as_str() {
+            #[cfg(feature = "enable-shmem-opt")]
+            "auto" if matches!(backend, crate::lamellae::Backend::ShmemOpt) => "stream",
+            "auto" => "adaptive",
+            b => b,
+        };
+        let batcher = match batcher_name {
             "simple" => BatcherType::Simple(SimpleBatcher::new(
                 num_pes,
                 am_stall_mark.clone(),
@@ -744,7 +793,9 @@ impl Scheduler {
                 am_stall_mark.clone(),
                 executor.clone(),
             )),
-            _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple', 'direct', 'vec_simple', 'team_am', or 'vec_team_am'")
+            "adaptive" => BatcherType::Adaptive(AdaptiveBatcher::new(num_pes, executor.clone(), false, backend)),
+            "stream" => BatcherType::Adaptive(AdaptiveBatcher::new(num_pes, executor.clone(), true, backend)),
+            _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple', 'direct', 'vec_simple', 'team_am', 'vec_team_am', 'adaptive', 'stream', or 'auto'")
         };
 
         Scheduler::new(

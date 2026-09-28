@@ -1,6 +1,6 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
-use crate::darc::Darc;
+use crate::darc::{Darc, __NetworkDarc};
 use crate::lamellae::{AllocationType, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
 // use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::LamellarTeamRT;
@@ -126,7 +126,15 @@ pub struct NetMemRegionHandle {
     mr_addr: usize,
     mr_size: usize,
     mr_pe: usize,
-    team: Darc<LamellarTeamRT>, //LamellarTeamRemotePtr,
+    // Carried as a raw `__NetworkDarc` rather than a `Darc` so that decoding a
+    // handle does not unconditionally bump the team darc's remote ref count.
+    // The sender only credits the team once per recipient per frame (see the
+    // `seen` map in `memregion_handle_serde::serialize`), so the receiver must
+    // only materialize a counted `Darc` for the first copy in a frame too --
+    // otherwise several handles sharing one `my_id` (e.g. sub_regions of a
+    // single region in one AM) leave the team darc's dist counts permanently
+    // unbalanced and its teardown in `block_on_outstanding` never converges.
+    team: __NetworkDarc,
     my_id: (usize, usize),
     parent_id: (usize, usize),
 }
@@ -143,7 +151,14 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
         );
         let grand_parent_id = net_handle.parent_id;
         let parent_id = net_handle.my_id;
-        let lamellae = net_handle.team.lamellae.clone();
+        let first_in_batch = MEMREGION_RECV_CTX.with(|ctx| match ctx.borrow_mut().last_mut() {
+            Some(frame) => frame.seen.insert(parent_id, ()).is_none(),
+            None => true,
+        });
+        // Counted team ref matching the sender's per-recipient credit; dropped
+        // after the map lock is released (its remote count is returned via the
+        // darc's normal FinishedAm path).
+        let mut _counted_team: Option<Darc<LamellarTeamRT>> = None;
         // let lamellae = if let Some(lamellae) = LAMELLAES.read().get(&net_handle.team.backend) {
         //     lamellae.clone()
         // } else {
@@ -156,10 +171,14 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
         let mrh = match mrh_map.get(&parent_id) {
             Some(mrh) => {
                 trace!("already existed");
+                if first_in_batch {
+                    _counted_team = Some(net_handle.team.into());
+                }
                 mrh.clone()
             }
             None => {
                 let team: Darc<LamellarTeamRT> = net_handle.team.into();
+                let lamellae = team.lamellae.clone();
                 let mem_region = MemoryRegion::from_remote_addr(
                     net_handle.mr_addr,
                     net_handle.mr_pe,
@@ -193,10 +212,6 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                 mrh
             }
         };
-        let first_in_batch = MEMREGION_RECV_CTX.with(|ctx| match ctx.borrow_mut().last_mut() {
-            Some(frame) => frame.seen.insert(parent_id, ()).is_none(),
-            None => true,
-        });
         mrh.local_ref.fetch_add(1, Ordering::SeqCst);
         if first_in_batch {
             mrh.remote_recv.fetch_add(1, Ordering::SeqCst);
@@ -226,7 +241,7 @@ impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
             mr_addr: mem_reg.orig_addr,
             mr_size: mem_reg.mr.alloc.num_bytes(),
             mr_pe: mem_reg.orig_pe,
-            team: mem_reg.team.clone().into(),
+            team: (&mem_reg.team).into(),
             my_id: mem_reg.my_id,
             parent_id: mem_reg.parent_id,
         }
@@ -558,6 +573,32 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
             &team.lamellae,
             AllocationType::Local,
         )?;
+        Ok(Self::from_mr(mr_t, size, team))
+    }
+
+    /// Like `try_new`, but the region's contents are left uninitialized.
+    ///
+    /// # Safety
+    /// The caller must write every element before anything reads it.
+    pub(crate) unsafe fn try_new_uninit(
+        size: usize,
+        team: &Darc<LamellarTeamRT>,
+    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
+        let mr_t: MemoryRegion<T> = MemoryRegion::try_new_uninit(
+            size,
+            &team.scheduler,
+            team.counters(),
+            &team.lamellae,
+            AllocationType::Local,
+        )?;
+        Ok(Self::from_mr(mr_t, size, team))
+    }
+
+    fn from_mr(
+        mr_t: MemoryRegion<T>,
+        size: usize,
+        team: &Darc<LamellarTeamRT>,
+    ) -> OneSidedMemoryRegion<T> {
         let mr = unsafe { mr_t.to_base::<u8>() };
         let pe = mr.pe;
         let orig_addr = mr.addr().unwrap().into();
@@ -581,13 +622,13 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         ONE_SIDED_MEM_REGIONS
             .lock()
             .insert(mrh.inner.my_id, mrh.inner.clone());
-        Ok(OneSidedMemoryRegion {
+        OneSidedMemoryRegion {
             mr: mrh,
             pe,
             sub_region_offset: 0,
             sub_region_size: size,
             phantom: PhantomData,
-        })
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1164,6 +1205,10 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     pub unsafe fn local_copy_from_slice(&self, src: &[T]) {
         self.as_mut_slice().copy_from_slice(src);
         if let crate::lamellae::Lamellae::Shmem(_) = &*self.lamellae() {
+            std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+        }
+        #[cfg(feature = "enable-shmem-opt")]
+        if let crate::lamellae::Lamellae::ShmemOpt(_) = &*self.lamellae() {
             std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
         }
     }

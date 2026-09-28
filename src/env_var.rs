@@ -18,9 +18,12 @@
 //!         - `tokio` -- only available with the `tokio-executor` feature in which case it is the default executor
 //! - `LAMELLAR_BATCHER` - selects how small active messages are batched for remote operations
 //!     - possible values
-//!         - `simple` -- default, active messages are only batched based on the PE they are sent to
+//!         - `auto` -- default, `stream` on the shmem-opt backend, `adaptive` everywhere else
+//!         - `simple` -- active messages are only batched based on the PE they are sent to
 //!         - `direct` -- stages batched messages into a local Vec before copying into transport buffers at flush time
 //!         - `team_am` -- active messages are batched hierarchically based on the remote PE, team sending the message, and AM id
+//!         - `adaptive` -- per-PE staging buffer, sent inline when the PE has no send in flight, otherwise coalesced until it completes
+//!         - `stream` -- `adaptive`, but small records go straight into a per-PE-pair byte ring (shmem-opt only, falls back to staging elsewhere)
 //! - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE, defaults to [std::thread::available_parallelism] if available or else 4
 //! - `LAMELLAR_HEAP_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 4GB
 //!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc],
@@ -124,6 +127,9 @@ pub fn available_backends() -> Vec<&'static str> {
         backends.push("ucx");
     }
     backends.push("shmem");
+    if cfg!(feature = "enable-shmem-opt") {
+        backends.push("shmem-opt");
+    }
     backends.push("local");
     backends
 }
@@ -136,7 +142,7 @@ fn default_executor() -> String {
 }
 
 fn default_batcher() -> String {
-    "simple".to_owned()
+    "auto".to_owned()
 }
 
 fn default_threads() -> usize {
@@ -290,7 +296,7 @@ pub struct Config {
     #[serde(default = "default_executor")]
     pub executor: String, //lamellar,tokio,async_std
 
-    /// The batcher to use, default: 'simple'
+    /// The batcher to use, default: 'auto' (stream on shmem-opt, adaptive otherwise)
     #[serde(default = "default_batcher")]
     pub batcher: String,
     #[serde(default = "default_threads")]

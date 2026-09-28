@@ -589,6 +589,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         unsafe { &mut self.data.as_mut().data.as_mut_slice()[self.range.clone()] }
     }
 
+    #[cfg(any(
+        feature = "enable-libfabric",
+        feature = "enable-libfabric-async",
+        feature = "enable-libfabric-sys",
+        feature = "enable-libfabric-sys-opt"
+    ))]
     pub(crate) fn is_registered(&self) -> bool {
         unsafe { self.data.as_ref().data.is_registered() }
     }

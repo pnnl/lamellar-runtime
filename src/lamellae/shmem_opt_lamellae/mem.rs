@@ -1,4 +1,4 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 
 use tracing::trace;
 
@@ -13,12 +13,12 @@ use crate::{
         },
         AllocationType,
     },
-    lamellar_alloc::{BTreeAlloc, LamellarAlloc},
+    lamellar_alloc::LamellarAlloc,
 };
 
-use super::comm::{ShmemComm, SHMEM_SIZE};
+use super::comm::ShmemOptComm;
 
-impl CommMem for ShmemComm {
+impl CommMem for ShmemOptComm {
     //#[tracing::instrument(skip(self), level = "debug")]
     fn alloc(
         &self,
@@ -42,12 +42,10 @@ impl CommMem for ShmemComm {
             },
             _ => panic!("unexpected allocation type {:?} in rofi_alloc", alloc_type),
         };
-        unsafe {
-            inner_alloc.zeroize_bytes();
-        }
+        // no zeroize: symmetric ranges are fresh sparse pages or were hole-punched on release
 
         Ok(CommAlloc {
-            inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(inner_alloc)),
+            inner_alloc: Arc::new(CommAllocInner::ShmemOptAlloc(inner_alloc)),
             // alloc_type: CommAllocType::Fabric,
         })
     }
@@ -61,12 +59,12 @@ impl CommMem for ShmemComm {
     //             println!("freeing raw alloc: {:x} should we ever be here?", addr);
     //             self.allocator.free_addr(addr);
     //         }
-    //         CommAllocInner::ShmemAlloc(inner_alloc) => {
+    //         CommAllocInner::ShmemOptAlloc(inner_alloc) => {
     //             trace!("freeing inner_alloc: {:?}", inner_alloc);
     //             self.allocator.free_alloc(&inner_alloc);
     //         }
     //         _ => {
-    //             panic!("free should only be called with ShmemAlloc or Raw addr");
+    //             panic!("free should only be called with ShmemOptAlloc or Raw addr");
     //         }
     //     }
     // }
@@ -89,7 +87,7 @@ impl CommMem for ShmemComm {
                 return true;
             }
         }
-        false
+        self.rt_room(size + align)
     }
 
     // //#[tracing::instrument(skip(self), level = "debug")]
@@ -105,7 +103,7 @@ impl CommMem for ShmemComm {
     //                 }
     //             }
     //         }
-    //         CommAllocInner::ShmemAlloc(inner_alloc) => {
+    //         CommAllocInner::ShmemOptAlloc(inner_alloc) => {
     //             trace!("freeing rt alloc: {:?}", inner_alloc);
     //             let allocs = self.runtime_allocs.read();
     //             for (_, alloc) in allocs.iter() {
@@ -137,23 +135,9 @@ impl CommMem for ShmemComm {
         if config().heap_mode == HeapMode::Static {
             panic!("Error: alloc_pool should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
         }
-        let size = std::cmp::max(
-            min_size * 2 * self.num_pes,
-            SHMEM_SIZE.load(Ordering::SeqCst),
-        ) / self.num_pes;
-        if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
-            // println!("addr: {:x} - {:x}",addr, addr+size);
-            if let CommAllocInner::ShmemAlloc(inner_alloc) = alloc.inner_alloc.as_ref() {
-                let mut new_alloc = BTreeAlloc::new("libfabric_c_mem".to_string());
-                new_alloc.init(inner_alloc.start(), size);
-                self.runtime_allocs
-                    .write()
-                    .push((inner_alloc.clone(), new_alloc));
-            } else {
-                panic!("libfabric alloc pool should only be called with AllocInfo addr");
-            }
-        } else {
-            panic!("[Error] out of system memory");
+        // local: pools are carved from the symmetric rt reservation, no collective needed
+        if !self.grow_rt_pool(min_size) {
+            panic!("[Error] out of shmem rt memory, increase LAMELLAR_SHMEM_REGION");
         }
     }
 
@@ -205,7 +189,7 @@ impl CommMem for ShmemComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr) {
                 return Ok(CommAlloc {
-                    inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(
+                    inner_alloc: Arc::new(CommAllocInner::ShmemOptAlloc(
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
@@ -230,7 +214,7 @@ impl CommMem for ShmemComm {
         trace!("get_alloc_cloned: {:?}", addr);
         if let Ok(inner_alloc) = self.allocator.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
-                inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(inner_alloc)),
+                inner_alloc: Arc::new(CommAllocInner::ShmemOptAlloc(inner_alloc)),
                 // alloc_type: CommAllocType::Fabric,
             });
         }
@@ -239,8 +223,8 @@ impl CommMem for ShmemComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(
-                        inner_alloc.sub_alloc(addr.0, size)?,
+                    inner_alloc: Arc::new(CommAllocInner::ShmemOptAlloc(
+                        inner_alloc.sub_alloc(addr.0 - inner_alloc.start(), size)?,
                     )),
                     // alloc_type: CommAllocType::RtHeap,
                 });
@@ -251,38 +235,46 @@ impl CommMem for ShmemComm {
     }
 }
 
-impl ShmemComm {
+impl ShmemOptComm {
     fn rt_alloc_inner(&self, size: usize, align: usize, zero: bool) -> AllocResult<CommAlloc> {
         // add space for ref count
         let (padding, size, align) = calc_alloc_padding_size_align(size, align);
 
-        let allocs = self.runtime_allocs.read();
-        for (inner_alloc, alloc) in allocs.iter() {
-            if let Some(addr) = alloc.try_malloc(size, align) {
-                trace!(
-                    "new rt alloc: {:x} {} {}",
-                    addr,
-                    addr - inner_alloc.start(),
-                    size
-                );
-                let alloc = inner_alloc.rt_alloc(
-                    alloc.clone(),
-                    addr - inner_alloc.start(),
-                    padding,
-                    size,
-                )?;
-                if zero {
-                    unsafe {
-                        alloc.zeroize_bytes();
+        loop {
+            {
+                let allocs = self.runtime_allocs.read();
+                // newest pool first: older pools are the likeliest to be full
+                for (inner_alloc, alloc) in allocs.iter().rev() {
+                    if let Some(addr) = alloc.try_malloc(size, align) {
+                        trace!(
+                            "new rt alloc: {:x} {} {}",
+                            addr,
+                            addr - inner_alloc.start(),
+                            size
+                        );
+                        let alloc = inner_alloc.rt_alloc(
+                            alloc.clone(),
+                            addr - inner_alloc.start(),
+                            padding,
+                            size,
+                        )?;
+                        if zero {
+                            unsafe {
+                                alloc.zeroize_bytes();
+                            }
+                        }
+
+                        return Ok(CommAlloc {
+                            inner_alloc: Arc::new(CommAllocInner::ShmemOptAlloc(alloc)),
+                            // alloc_type: CommAllocType::RtHeap,
+                        });
                     }
                 }
-
-                return Ok(CommAlloc {
-                    inner_alloc: Arc::new(CommAllocInner::ShmemAlloc(alloc)),
-                    // alloc_type: CommAllocType::RtHeap,
-                });
+            }
+            // grow locally inside the reserved rt range
+            if !self.rt_room(size + align) || !self.grow_rt_pool(size + align) {
+                return Err(AllocError::OutOfMemoryError(size));
             }
         }
-        Err(AllocError::OutOfMemoryError(size))
     }
 }

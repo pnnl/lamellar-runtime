@@ -1,5 +1,5 @@
 use crate::{
-    active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS},
+    active_messaging::registered_active_message::{AmId, AMS_EXECS},
     active_messaging::*,
     barrier::BarrierHandle,
     env_var::config,
@@ -1705,7 +1705,7 @@ impl LamellarSerde for AmGroupAm {
         buf[i..i + AM_GROUP_NUM_LEN].copy_from_slice(num.as_bytes());
         i += AM_GROUP_NUM_LEN;
         for am in &self.ams[self.si..self.ei] {
-            let id = *(AMS_IDS.get(am.get_id()).unwrap());
+            let id = am.am_id();
             buf[i..i + AM_GROUP_ID_LEN].copy_from_slice(id.as_bytes());
             i += AM_GROUP_ID_LEN;
             let bytes = am.serialize();

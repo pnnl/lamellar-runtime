@@ -480,7 +480,7 @@ impl InnerCQ {
             .eager_recv_comm_alloc
             .comm_slice_at_byte_offset::<u64>(byte_offset + EAGER_DATA_SIZE, 1);
 
-        if let Ok(rt_data) = self.comm.rt_alloc(size, std::mem::align_of::<u8>()) {
+        if let Ok(rt_data) = self.comm.rt_alloc_uninit(size, std::mem::align_of::<u8>()) {
             let mut data_slice = rt_data.as_comm_slice::<u8>();
             data_slice.copy_from_slice(&data);
             self.put_amt.fetch_add(size, Ordering::Relaxed);
@@ -696,7 +696,7 @@ impl InnerCQ {
                     let dst_data_full =
                         comm.one_sided_alloc_from_remote_pe_and_addr(dst, ready.daddr, data.len());
 
-                    if let Ok(rt_data) = comm.rt_alloc(data.len(), std::mem::align_of::<u8>()) {
+                    if let Ok(rt_data) = comm.rt_alloc_uninit(data.len(), std::mem::align_of::<u8>()) {
                         let mut data_slice = rt_data.as_comm_slice::<u8>();
                         data_slice.copy_from_slice(&data);
                         put_amt.fetch_add(data.len(), Ordering::Relaxed);

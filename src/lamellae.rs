@@ -8,6 +8,8 @@ pub(crate) mod command_queues_put_eager;
 pub(crate) mod command_queues_put_slots;
 pub(crate) mod local_lamellae;
 pub(crate) mod shmem_lamellae;
+#[cfg(feature = "enable-shmem-opt")]
+pub(crate) mod shmem_opt_lamellae;
 
 #[cfg(feature = "enable-on-node-shmem")]
 pub(crate) mod shmem_utils;
@@ -23,6 +25,8 @@ pub use comm::atomic::{AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, Atomi
 pub use comm::rdma::RdmaHandle;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
+#[cfg(feature = "enable-shmem-opt")]
+use shmem_opt_lamellae::{ShmemOpt, ShmemOptBuilder};
 
 #[cfg(feature = "enable-rofi-c")]
 pub(crate) mod rofi_c_lamellae;
@@ -92,6 +96,10 @@ pub enum Backend {
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
     Shmem,
+    #[cfg(feature = "enable-shmem-opt")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-shmem-opt")))]
+    /// The optimized Shmem backend -- single node, multi process, universal-address shared heap
+    ShmemOpt,
 }
 
 #[derive(Debug, Clone)]
@@ -145,6 +153,12 @@ impl Default for Backend {
             "shmem" => {
                 return Backend::Shmem;
             }
+            "shmem-opt" => {
+                #[cfg(feature = "enable-shmem-opt")]
+                return Backend::ShmemOpt;
+                #[cfg(not(feature = "enable-shmem-opt"))]
+                panic!("unable to set shmem-opt backend, recompile with 'enable-shmem-opt' feature")
+            }
             "local" => {
                 return Backend::Local;
             }
@@ -194,7 +208,8 @@ impl SerializedData {
     //#[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
         let alloc_size = size; //+ ser_data_size_size;
-        let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
+        // header and payload are always fully written before the buffer is sent
+        let alloc = comm.rt_alloc_uninit(alloc_size, std::mem::align_of::<usize>())?;
 
         let ser_data_bytes = alloc.comm_slice_at_byte_offset(0, size);
         let header_bytes = ser_data_bytes.sub_slice(0..SERIALIZE_HEADER_LEN);
@@ -316,6 +331,8 @@ pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-ucx")]
     UcxBuilder,
     ShmemBuilder,
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOptBuilder,
     LocalBuilder,
 }
 
@@ -361,6 +378,8 @@ pub(crate) enum Lamellae {
     // #[cfg(feature = "enable-libfabric")]
     // LibfabricAsync,
     Shmem,
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt,
     Local,
 }
 
@@ -381,6 +400,8 @@ impl Lamellae {
             #[cfg(feature = "enable-ucx")]
             Lamellae::Ucx(ucx) => ucx.comm(),
             Lamellae::Shmem(shmem) => shmem.comm(),
+            #[cfg(feature = "enable-shmem-opt")]
+            Lamellae::ShmemOpt(shmem_opt) => shmem_opt.comm(),
             Lamellae::Local(local) => local.comm(),
         }
     }
@@ -402,7 +423,27 @@ impl Lamellae {
             // #[cfg(feature = "enable-libfabric")]
             // Lamellae::LibfabricAsync => println!("libfabric async - nothing to print"),
             Lamellae::Shmem(shmem) => shmem.wait_all_print(),
+            #[cfg(feature = "enable-shmem-opt")]
+            Lamellae::ShmemOpt(shmem_opt) => shmem_opt.wait_all_print(),
             Lamellae::Local(local) => local.wait_all_print(),
+        }
+    }
+}
+
+impl Lamellae {
+    /// Appends one wire record to this PE's stream to `dst` (see shmem-opt mailbox.rs);
+    /// `fill` encodes it in place. Hands `fill` back if the backend has no stream or no
+    /// room for it right now.
+    #[inline(always)]
+    pub(crate) fn stream_write<F: FnOnce(&mut [u8])>(&self, dst: usize, len: usize, fill: F) -> Result<(), F> {
+        match self {
+            #[cfg(feature = "enable-shmem-opt")]
+            Lamellae::ShmemOpt(shmem_opt) => shmem_opt.stream_write(dst, len, fill),
+            #[allow(unreachable_patterns)]
+            _ => {
+                let _ = (dst, len);
+                Err(fill)
+            }
         }
     }
 }
@@ -469,6 +510,8 @@ pub(crate) fn create_lamellae(backend: Backend, _num_threads: usize) -> Lamellae
         #[cfg(feature = "enable-ucx")]
         Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
+        #[cfg(feature = "enable-shmem-opt")]
+        Backend::ShmemOpt => LamellaeBuilder::ShmemOptBuilder(ShmemOptBuilder::new()),
         Backend::Local => LamellaeBuilder::LocalBuilder(LocalBuilder::new()),
     }
 }

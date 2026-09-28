@@ -807,7 +807,7 @@ impl InnerCQ {
             .eager_recv_comm_alloc
             .comm_slice_at_byte_offset::<u64>(byte_offset + EAGER_DATA_SIZE, 1);
 
-        if let Ok(rt_data) = self.comm.rt_alloc(size, std::mem::align_of::<u8>()) {
+        if let Ok(rt_data) = self.comm.rt_alloc_uninit(size, std::mem::align_of::<u8>()) {
             let mut data_slice = rt_data.as_comm_slice::<u8>();
             data_slice.copy_from_slice(&data);
             self.put_amt.fetch_add(size, Ordering::Relaxed);
@@ -1027,13 +1027,13 @@ impl CQGetEager {
         let mut data = self
             .cq
             .comm
-            .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+            .rt_alloc_uninit(vec_data.len(), std::mem::align_of::<u8>());
         while let Err(_) = data {
             async_std::task::yield_now().await;
             data = self
                 .cq
                 .comm
-                .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+                .rt_alloc_uninit(vec_data.len(), std::mem::align_of::<u8>());
         }
         let data = data.unwrap();
         unsafe {

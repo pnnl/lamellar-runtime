@@ -77,6 +77,19 @@ use crate::lamellae::shmem_lamellae::collective::{
     ShmemCollectiveScatterIntoBufferFuture,
 };
 
+#[cfg(feature = "enable-shmem-opt")]
+use crate::lamellae::shmem_opt_lamellae::collective::{
+    ShmemOptCollectiveAllGatherFuture, ShmemOptCollectiveAllGatherIntoBufferFuture,
+    ShmemOptCollectiveAllReduceFuture, ShmemOptCollectiveAllReduceInPlaceFuture,
+    ShmemOptCollectiveAllReduceIntoBufferFuture, ShmemOptCollectiveAllToAllFuture,
+    ShmemOptCollectiveAllToAllIntoBufferFuture, ShmemOptCollectiveBroadcastFuture,
+    ShmemOptCollectiveBroadcastIntoBufferFuture, ShmemOptCollectiveGatherFuture,
+    ShmemOptCollectiveGatherIntoBufferFuture, ShmemOptCollectiveReduceFuture,
+    ShmemOptCollectiveReduceIntoBufferFuture, ShmemOptCollectiveReduceScatterFuture,
+    ShmemOptCollectiveReduceScatterIntoBufferFuture, ShmemOptCollectiveScatterFuture,
+    ShmemOptCollectiveScatterIntoBufferFuture,
+};
+
 use crate::lamellae::local_lamellae::collective::{
     LocalCollectiveAllGatherFuture, LocalCollectiveAllGatherIntoBufferFuture,
     LocalCollectiveAllReduceFuture, LocalCollectiveAllReduceInPlaceFuture,
@@ -117,6 +130,8 @@ pub(crate) enum CollectiveAllReduceOpFuture<T: Remote> {
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllReduceFuture<T>),
     Shmem(#[pin] ShmemCollectiveAllReduceFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveAllReduceFuture<T>),
     Local(#[pin] LocalCollectiveAllReduceFuture<T>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<T>),
@@ -137,6 +152,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceOpFuture::Ucx(f) => f.block(),
             CollectiveAllReduceOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceOpFuture::ShmemOpt(f) => f.block(),
             CollectiveAllReduceOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -160,6 +177,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceOpFuture::Ucx(f) => f.spawn(),
             CollectiveAllReduceOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveAllReduceOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -183,6 +202,8 @@ impl<T: Remote> Future for CollectiveAllReduceOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveAllReduceOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveAllReduceOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -209,6 +230,8 @@ pub(crate) enum CollectiveAllReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllReduceIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllReduceIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveAllReduceIntoBufferFuture<T, B>),
     Local(#[pin] LocalCollectiveAllReduceIntoBufferFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -229,6 +252,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceIntoBufferOpFuture::Ucx(f) => f.block(),
             CollectiveAllReduceIntoBufferOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceIntoBufferOpFuture::ShmemOpt(f) => f.block(),
             CollectiveAllReduceIntoBufferOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -252,6 +277,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceIntoBufferOpFuture::Ucx(f) => f.spawn(),
             CollectiveAllReduceIntoBufferOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveAllReduceIntoBufferOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -275,6 +302,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceIntoBuffer
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveAllReduceIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveAllReduceIntoBufferOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -301,6 +330,8 @@ pub(crate) enum CollectiveAllReduceInPlaceOpFuture<T: Remote, B: AsLamellarBuffe
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllReduceInPlaceFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllReduceInPlaceFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveAllReduceInPlaceFuture<T, B>),
     Local(#[pin] LocalCollectiveAllReduceInPlaceFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -321,6 +352,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceInPlaceOpFuture::Ucx(f) => f.block(),
             CollectiveAllReduceInPlaceOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceInPlaceOpFuture::ShmemOpt(f) => f.block(),
             CollectiveAllReduceInPlaceOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -344,6 +377,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceInPlaceOpFuture::Ucx(f) => f.spawn(),
             CollectiveAllReduceInPlaceOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceInPlaceOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveAllReduceInPlaceOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -367,6 +402,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceInPlaceOpH
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceInPlaceOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveAllReduceInPlaceOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllReduceInPlaceOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveAllReduceInPlaceOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -393,6 +430,8 @@ pub(crate) enum CollectiveReduceOpFuture<T: Remote> {
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceFuture<T>),
     Shmem(#[pin] ShmemCollectiveReduceFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveReduceFuture<T>),
     Local(#[pin] LocalCollectiveReduceFuture<T>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<T>),
@@ -413,6 +452,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceOpFuture::Ucx(f) => f.block(),
             CollectiveReduceOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceOpFuture::ShmemOpt(f) => f.block(),
             CollectiveReduceOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -436,6 +477,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceOpFuture::Ucx(f) => f.spawn(),
             CollectiveReduceOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveReduceOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -459,6 +502,8 @@ impl<T: Remote> Future for CollectiveReduceOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveReduceOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveReduceOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -485,6 +530,8 @@ pub(crate) enum CollectiveReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveReduceIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveReduceIntoBufferFuture<T, B>),
     Local(#[pin] LocalCollectiveReduceIntoBufferFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -505,6 +552,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceIntoBufferOpFuture::Ucx(f) => f.block(),
             CollectiveReduceIntoBufferOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceIntoBufferOpFuture::ShmemOpt(f) => f.block(),
             CollectiveReduceIntoBufferOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -528,6 +577,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceIntoBufferOpFuture::Ucx(f) => f.spawn(),
             CollectiveReduceIntoBufferOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveReduceIntoBufferOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -551,6 +602,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceIntoBufferOpH
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveReduceIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveReduceIntoBufferOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -668,6 +721,8 @@ pub(crate) enum CollectiveAllGatherOpFuture<T: Remote> {
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllGatherFuture<T>),
     Shmem(#[pin] ShmemCollectiveAllGatherFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveAllGatherFuture<T>),
     Local(#[pin] LocalCollectiveAllGatherFuture<T>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<T>),
@@ -688,6 +743,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherOpFuture::Ucx(f) => f.block(),
             CollectiveAllGatherOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllGatherOpFuture::ShmemOpt(f) => f.block(),
             CollectiveAllGatherOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -711,6 +768,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherOpFuture::Ucx(f) => f.spawn(),
             CollectiveAllGatherOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllGatherOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveAllGatherOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -734,6 +793,8 @@ impl<T: Remote> Future for CollectiveAllGatherOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveAllGatherOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllGatherOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveAllGatherOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -760,6 +821,8 @@ pub(crate) enum CollectiveAllGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllGatherIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllGatherIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveAllGatherIntoBufferFuture<T, B>),
     Local(#[pin] LocalCollectiveAllGatherIntoBufferFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -780,6 +843,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherIntoBufferOpFuture::Ucx(f) => f.block(),
             CollectiveAllGatherIntoBufferOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllGatherIntoBufferOpFuture::ShmemOpt(f) => f.block(),
             CollectiveAllGatherIntoBufferOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -803,6 +868,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherIntoBufferOpFuture::Ucx(f) => f.spawn(),
             CollectiveAllGatherIntoBufferOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllGatherIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveAllGatherIntoBufferOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -826,6 +893,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllGatherIntoBuffer
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveAllGatherIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllGatherIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveAllGatherIntoBufferOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -852,6 +921,8 @@ pub(crate) enum CollectiveGatherOpFuture<T: Remote> {
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveGatherFuture<T>),
     Shmem(#[pin] ShmemCollectiveGatherFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveGatherFuture<T>),
     Local(#[pin] LocalCollectiveGatherFuture<T>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<T>),
@@ -872,6 +943,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherOpFuture::Ucx(f) => f.block(),
             CollectiveGatherOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveGatherOpFuture::ShmemOpt(f) => f.block(),
             CollectiveGatherOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -895,6 +968,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherOpFuture::Ucx(f) => f.spawn(),
             CollectiveGatherOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveGatherOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveGatherOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -918,6 +993,8 @@ impl<T: Remote> Future for CollectiveGatherOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveGatherOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveGatherOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveGatherOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -944,6 +1021,8 @@ pub(crate) enum CollectiveGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveGatherIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveGatherIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveGatherIntoBufferFuture<T, B>),
     Local(#[pin] LocalCollectiveGatherIntoBufferFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -964,6 +1043,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherIntoBufferOpFuture::Ucx(f) => f.block(),
             CollectiveGatherIntoBufferOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveGatherIntoBufferOpFuture::ShmemOpt(f) => f.block(),
             CollectiveGatherIntoBufferOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -987,6 +1068,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherIntoBufferOpFuture::Ucx(f) => f.spawn(),
             CollectiveGatherIntoBufferOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveGatherIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveGatherIntoBufferOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1010,6 +1093,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveGatherIntoBufferOpH
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveGatherIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveGatherIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveGatherIntoBufferOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -1036,6 +1121,8 @@ pub(crate) enum CollectiveAllToAllOpFuture<T: Remote> {
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllToAllFuture<T>),
     Shmem(#[pin] ShmemCollectiveAllToAllFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveAllToAllFuture<T>),
     Local(#[pin] LocalCollectiveAllToAllFuture<T>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<T>),
@@ -1056,6 +1143,8 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllOpFuture::Ucx(f) => f.block(),
             CollectiveAllToAllOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllToAllOpFuture::ShmemOpt(f) => f.block(),
             CollectiveAllToAllOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -1079,6 +1168,8 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllOpFuture::Ucx(f) => f.spawn(),
             CollectiveAllToAllOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllToAllOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveAllToAllOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1102,6 +1193,8 @@ impl<T: Remote> Future for CollectiveAllToAllOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveAllToAllOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllToAllOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveAllToAllOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -1128,6 +1221,8 @@ pub(crate) enum CollectiveAllToAllIntoBufferOpFuture<T: Remote, B: AsLamellarBuf
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllToAllIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllToAllIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveAllToAllIntoBufferFuture<T, B>),
     Local(#[pin] LocalCollectiveAllToAllIntoBufferFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -1148,6 +1243,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllIntoBufferOpFuture::Ucx(f) => f.block(),
             CollectiveAllToAllIntoBufferOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllToAllIntoBufferOpFuture::ShmemOpt(f) => f.block(),
             CollectiveAllToAllIntoBufferOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -1171,6 +1268,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllIntoBufferOpFuture::Ucx(f) => f.spawn(),
             CollectiveAllToAllIntoBufferOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllToAllIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveAllToAllIntoBufferOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1194,6 +1293,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllToAllIntoBufferO
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveAllToAllIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveAllToAllIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveAllToAllIntoBufferOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -1220,6 +1321,8 @@ pub(crate) enum CollectiveBroadcastOpFuture<T: Remote> {
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveBroadcastFuture<T>),
     Shmem(#[pin] ShmemCollectiveBroadcastFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveBroadcastFuture<T>),
     Local(#[pin] LocalCollectiveBroadcastFuture<T>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<T>),
@@ -1240,6 +1343,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastOpFuture::Ucx(f) => f.block(),
             CollectiveBroadcastOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveBroadcastOpFuture::ShmemOpt(f) => f.block(),
             CollectiveBroadcastOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -1263,6 +1368,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastOpFuture::Ucx(f) => f.spawn(),
             CollectiveBroadcastOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveBroadcastOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveBroadcastOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1286,6 +1393,8 @@ impl<T: Remote> Future for CollectiveBroadcastOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveBroadcastOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveBroadcastOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveBroadcastOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -1312,6 +1421,8 @@ pub(crate) enum CollectiveBroadcastIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveBroadcastIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveBroadcastIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveBroadcastIntoBufferFuture<T, B>),
     Local(#[pin] LocalCollectiveBroadcastIntoBufferFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -1332,6 +1443,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastIntoBufferOpFuture::Ucx(f) => f.block(),
             CollectiveBroadcastIntoBufferOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveBroadcastIntoBufferOpFuture::ShmemOpt(f) => f.block(),
             CollectiveBroadcastIntoBufferOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -1355,6 +1468,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastIntoBufferOpFuture::Ucx(f) => f.spawn(),
             CollectiveBroadcastIntoBufferOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveBroadcastIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveBroadcastIntoBufferOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1378,6 +1493,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveBroadcastIntoBuffer
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveBroadcastIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveBroadcastIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveBroadcastIntoBufferOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -1404,6 +1521,8 @@ pub(crate) enum CollectiveScatterOpFuture<T: Remote> {
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveScatterFuture<T>),
     Shmem(#[pin] ShmemCollectiveScatterFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveScatterFuture<T>),
     Local(#[pin] LocalCollectiveScatterFuture<T>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<T>),
@@ -1424,6 +1543,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterOpFuture::Ucx(f) => f.block(),
             CollectiveScatterOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveScatterOpFuture::ShmemOpt(f) => f.block(),
             CollectiveScatterOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -1447,6 +1568,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterOpFuture::Ucx(f) => f.spawn(),
             CollectiveScatterOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveScatterOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveScatterOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1470,6 +1593,8 @@ impl<T: Remote> Future for CollectiveScatterOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveScatterOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveScatterOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveScatterOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -1496,6 +1621,8 @@ pub(crate) enum CollectiveScatterIntoBufferOpFuture<T: Remote, B: AsLamellarBuff
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveScatterIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveScatterIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveScatterIntoBufferFuture<T, B>),
     Local(#[pin] LocalCollectiveScatterIntoBufferFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -1516,6 +1643,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterIntoBufferOpFuture::Ucx(f) => f.block(),
             CollectiveScatterIntoBufferOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveScatterIntoBufferOpFuture::ShmemOpt(f) => f.block(),
             CollectiveScatterIntoBufferOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -1539,6 +1668,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterIntoBufferOpFuture::Ucx(f) => f.spawn(),
             CollectiveScatterIntoBufferOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveScatterIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveScatterIntoBufferOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1562,6 +1693,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveScatterIntoBufferOp
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveScatterIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveScatterIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveScatterIntoBufferOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -1588,6 +1721,8 @@ pub(crate) enum CollectiveReduceScatterOpFuture<T: Remote> {
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceScatterFuture<T>),
     Shmem(#[pin] ShmemCollectiveReduceScatterFuture<T>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveReduceScatterFuture<T>),
     Local(#[pin] LocalCollectiveReduceScatterFuture<T>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<T>),
@@ -1608,6 +1743,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterOpFuture::Ucx(f) => f.block(),
             CollectiveReduceScatterOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceScatterOpFuture::ShmemOpt(f) => f.block(),
             CollectiveReduceScatterOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -1631,6 +1768,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterOpFuture::Ucx(f) => f.spawn(),
             CollectiveReduceScatterOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceScatterOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveReduceScatterOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1654,6 +1793,8 @@ impl<T: Remote> Future for CollectiveReduceScatterOpHandle<T> {
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveReduceScatterOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceScatterOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveReduceScatterOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }
@@ -1680,6 +1821,8 @@ pub(crate) enum CollectiveReduceScatterIntoBufferOpFuture<T: Remote, B: AsLamell
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceScatterIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveReduceScatterIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOpt(#[pin] ShmemOptCollectiveReduceScatterIntoBufferFuture<T, B>),
     Local(#[pin] LocalCollectiveReduceScatterIntoBufferFuture<T, B>),
     #[allow(dead_code)]
     _Phantom(std::marker::PhantomData<(T, B)>),
@@ -1700,6 +1843,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterIntoBufferOpFuture::Ucx(f) => f.block(),
             CollectiveReduceScatterIntoBufferOpFuture::Shmem(f) => f.block(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceScatterIntoBufferOpFuture::ShmemOpt(f) => f.block(),
             CollectiveReduceScatterIntoBufferOpFuture::Local(f) => f.block(),
             _ => unreachable!(),
         }
@@ -1723,6 +1868,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterIntoBufferOpFuture::Ucx(f) => f.spawn(),
             CollectiveReduceScatterIntoBufferOpFuture::Shmem(f) => f.spawn(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceScatterIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
             CollectiveReduceScatterIntoBufferOpFuture::Local(f) => f.spawn(),
             _ => unreachable!(),
         }
@@ -1746,6 +1893,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceScatterIntoBu
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             CollectiveReduceScatterIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
+            #[cfg(feature = "enable-shmem-opt")]
+            CollectiveReduceScatterIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
             CollectiveReduceScatterIntoBufferOpFutureProj::Local(f) => f.poll(cx),
             _ => unreachable!(),
         }

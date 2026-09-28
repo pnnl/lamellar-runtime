@@ -1117,7 +1117,7 @@ impl InnerCQ {
 
         if let Ok(data) = self
             .comm
-            .rt_alloc(cmd.dsize, std::mem::align_of::<CmdMsg>())
+            .rt_alloc_uninit(cmd.dsize, std::mem::align_of::<CmdMsg>())
         {
             trace!(
                 "msg_id: {msg_id} allocated local buffer for get_data at addr: {:?} for cmd from {src}",
@@ -1565,13 +1565,13 @@ impl CQBatched {
         let mut data = self
             .cq
             .comm
-            .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+            .rt_alloc_uninit(vec_data.len(), std::mem::align_of::<u8>());
         while let Err(_) = data {
             async_std::task::yield_now().await;
             data = self
                 .cq
                 .comm
-                .rt_alloc(vec_data.len(), std::mem::align_of::<u8>());
+                .rt_alloc_uninit(vec_data.len(), std::mem::align_of::<u8>());
         }
         let data = data.unwrap();
         unsafe {

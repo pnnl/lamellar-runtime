@@ -1,5 +1,6 @@
 use std::sync::{atomic::AtomicUsize, Arc};
 
+use crate::memregion::CollTicketGate;
 use crate::scheduler::Scheduler;
 use crate::Distribution;
 use crate::{
@@ -445,18 +446,16 @@ pub(crate) async fn do_scatter<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: 
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     root: usize,
 ) -> Vec<T> {
     debug!(target: "collective::ticket", func = "do_scatter", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_scatter", my_ticket, "ticket served, proceeding");
     let res = do_scatter_impl(array, &scheduler, sync_alloc, index, local_length, root).await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_scatter", my_ticket, "released next ticket holder");
     res
 }
@@ -470,19 +469,17 @@ pub(crate) async fn do_scatter_in_buffer<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     root: usize,
     mut result: LamellarBuffer<T, B>,
 ) {
     debug!(target: "collective::ticket", func = "do_scatter_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_scatter_in_buffer", my_ticket, "ticket served, proceeding");
     let res = do_scatter_impl(array, &scheduler, sync_alloc, index, local_length, root).await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_scatter_in_buffer", my_ticket, "released next ticket holder");
     result
         .as_mut_slice()
@@ -546,15 +543,13 @@ pub(crate) async fn do_gather_in_buffer<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     target: RootOrLamellarBuffer<T, B>,
 ) {
     debug!(target: "collective::ticket", func = "do_gather_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_gather_in_buffer", my_ticket, "ticket served, proceeding");
     let my_pe = array.my_pe();
     match target {
@@ -585,7 +580,7 @@ pub(crate) async fn do_gather_in_buffer<
             .await;
         }
     };
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_gather_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -594,15 +589,13 @@ pub(crate) async fn do_gather<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: D
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     root: usize,
 ) -> Option<Vec<T>> {
     debug!(target: "collective::ticket", func = "do_gather", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_gather", my_ticket, "ticket served, proceeding");
     let my_pe = array.my_pe();
     let num_pes = array.num_pes();
@@ -621,7 +614,7 @@ pub(crate) async fn do_gather<A: AtomicArrayOpsForCollectiveOps<T> + Clone, T: D
         &mut res,
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_gather", my_ticket, "released next ticket holder");
 
     if my_pe == root {
@@ -723,19 +716,17 @@ pub(crate) async fn do_all_to_all<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
 ) -> Vec<T> {
     debug!(target: "collective::ticket", func = "do_all_to_all", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_to_all", my_ticket, "ticket served, proceeding");
     let num_pes = array.num_pes();
     let mut res = vec![T::default(); num_pes * local_length]; // allocate result buffer
     do_all_to_all_impl(array, &scheduler, sync_alloc, index, local_length, &mut res).await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_to_all", my_ticket, "released next ticket holder");
     res
 }
@@ -749,15 +740,13 @@ pub(crate) async fn do_all_to_all_in_buffer<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     mut result: LamellarBuffer<T, B>,
 ) {
     debug!(target: "collective::ticket", func = "do_all_to_all_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_to_all_in_buffer", my_ticket, "ticket served, proceeding");
     do_all_to_all_impl(
         array,
@@ -768,7 +757,7 @@ pub(crate) async fn do_all_to_all_in_buffer<
         &mut result.as_mut_slice(),
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_to_all_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -823,18 +812,16 @@ pub(crate) async fn do_broadcast<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     root: usize,
 ) -> Option<Vec<T>> {
     debug!(target: "collective::ticket", func = "do_broadcast", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_broadcast", my_ticket, "ticket served, proceeding");
     let res = do_broadcast_impl(array, &scheduler, sync_alloc, index, local_length, root).await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_broadcast", my_ticket, "released next ticket holder");
     res
 }
@@ -848,14 +835,12 @@ pub(crate) async fn do_broadcast_in_buffer<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     local_length: usize,
     target: RootSrcOrLamellarBuffer<T, B>,
 ) {
     debug!(target: "collective::ticket", func = "do_broadcast_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_broadcast_in_buffer", my_ticket, "ticket served, proceeding");
     let my_pe = array.my_pe();
     match target {
@@ -876,7 +861,7 @@ pub(crate) async fn do_broadcast_in_buffer<
             }
         }
     };
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_broadcast_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -885,7 +870,7 @@ pub(crate) async fn do_all_gather<A, T>(
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
 ) -> Vec<T>
@@ -894,9 +879,7 @@ where
     T: Dist + Default,
 {
     debug!(target: "collective::ticket", func = "do_all_gather", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_gather", my_ticket, "ticket served, proceeding");
     let mut result = vec![T::default(); array.num_pes() * local_length];
     do_all_gather_impl(
@@ -908,7 +891,7 @@ where
         &mut result,
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_gather", my_ticket, "released next ticket holder");
     result
 }
@@ -918,7 +901,7 @@ pub(crate) async fn do_all_gather_in_buffer<A, T, B: AsLamellarBuffer<T>>(
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     mut result: LamellarBuffer<T, B>,
@@ -927,9 +910,7 @@ pub(crate) async fn do_all_gather_in_buffer<A, T, B: AsLamellarBuffer<T>>(
     T: Dist + Default,
 {
     debug!(target: "collective::ticket", func = "do_all_gather_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_gather_in_buffer", my_ticket, "ticket served, proceeding");
     do_all_gather_impl(
         array,
@@ -940,7 +921,7 @@ pub(crate) async fn do_all_gather_in_buffer<A, T, B: AsLamellarBuffer<T>>(
         result.as_mut_slice(),
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_gather_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -1207,15 +1188,13 @@ pub(crate) async fn do_all_reduce<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
 ) -> Vec<T> {
     debug!(target: "collective::ticket", func = "do_all_reduce", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_reduce", my_ticket, "ticket served, proceeding");
     let mut result = vec![T::default(); local_length];
     do_all_reduce_impl(
@@ -1230,7 +1209,7 @@ pub(crate) async fn do_all_reduce<
         &mut result,
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_reduce", my_ticket, "released next ticket holder");
 
     result
@@ -1241,7 +1220,7 @@ pub(crate) async fn do_all_reduce_bitwise<A, T>(
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -1251,9 +1230,7 @@ where
     T: Dist + ElementBitWiseOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_all_reduce_bitwise", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_reduce_bitwise", my_ticket, "ticket served, proceeding");
     let mut result = vec![T::default(); local_length];
     do_all_reduce_impl(
@@ -1268,7 +1245,7 @@ where
         &mut result,
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_reduce_bitwise", my_ticket, "released next ticket holder");
 
     result
@@ -1283,16 +1260,14 @@ pub(crate) async fn do_all_reduce_in_buffer<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
     mut result: LamellarBuffer<T, B>,
 ) {
     debug!(target: "collective::ticket", func = "do_all_reduce_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_reduce_in_buffer", my_ticket, "ticket served, proceeding");
     do_all_reduce_impl(
         array,
@@ -1306,7 +1281,7 @@ pub(crate) async fn do_all_reduce_in_buffer<
         result.as_mut_slice(),
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_reduce_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -1315,7 +1290,7 @@ pub(crate) async fn do_all_reduce_bitwise_in_buffer<A, T, B: AsLamellarBuffer<T>
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -1325,9 +1300,7 @@ pub(crate) async fn do_all_reduce_bitwise_in_buffer<A, T, B: AsLamellarBuffer<T>
     T: Dist + ElementBitWiseOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_all_reduce_bitwise_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_reduce_bitwise_in_buffer", my_ticket, "ticket served, proceeding");
     do_all_reduce_impl(
         array,
@@ -1341,7 +1314,7 @@ pub(crate) async fn do_all_reduce_bitwise_in_buffer<A, T, B: AsLamellarBuffer<T>
         &mut result.as_mut_slice(),
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_reduce_bitwise_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -1350,7 +1323,7 @@ pub(crate) async fn do_all_reduce_comparison<A, T>(
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -1360,9 +1333,7 @@ where
     T: Dist + ElementComparePartialEqOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_all_reduce_comparison", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_reduce_comparison", my_ticket, "ticket served, proceeding");
     let mut result = vec![T::default(); local_length];
     do_all_reduce_impl(
@@ -1377,7 +1348,7 @@ where
         &mut result,
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_reduce_comparison", my_ticket, "released next ticket holder");
 
     result
@@ -1388,7 +1359,7 @@ pub(crate) async fn do_all_reduce_comparison_in_buffer<A, T, B: AsLamellarBuffer
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -1398,9 +1369,7 @@ pub(crate) async fn do_all_reduce_comparison_in_buffer<A, T, B: AsLamellarBuffer
     T: Dist + ElementComparePartialEqOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_all_reduce_comparison_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_all_reduce_comparison_in_buffer", my_ticket, "ticket served, proceeding");
     do_all_reduce_impl(
         array,
@@ -1414,7 +1383,7 @@ pub(crate) async fn do_all_reduce_comparison_in_buffer<A, T, B: AsLamellarBuffer
         &mut result.as_mut_slice(),
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_all_reduce_comparison_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -1508,16 +1477,14 @@ pub(crate) async fn do_reduce<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     root: usize,
     op: ReduceOp,
 ) -> Option<Vec<T>> {
     debug!(target: "collective::ticket", func = "do_reduce", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce", my_ticket, "ticket served, proceeding");
     let my_pe = array.my_pe();
     let mut res = if my_pe == root {
@@ -1538,7 +1505,7 @@ pub(crate) async fn do_reduce<
         &mut res,
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce", my_ticket, "released next ticket holder");
 
     if my_pe == root {
@@ -1556,16 +1523,14 @@ pub(crate) async fn do_reduce_bitwise<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     root: usize,
     op: ReduceOp,
 ) -> Option<Vec<T>> {
     debug!(target: "collective::ticket", func = "do_reduce_bitwise", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_bitwise", my_ticket, "ticket served, proceeding");
     let my_pe = array.my_pe();
     let mut res = if my_pe == root {
@@ -1586,7 +1551,7 @@ pub(crate) async fn do_reduce_bitwise<
         &mut res,
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_bitwise", my_ticket, "released next ticket holder");
 
     if my_pe == root {
@@ -1605,16 +1570,14 @@ pub(crate) async fn do_reduce_in_buffer<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
     target: RootOrLamellarBuffer<T, B>,
 ) {
     debug!(target: "collective::ticket", func = "do_reduce_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_in_buffer", my_ticket, "ticket served, proceeding");
     match target {
         RootOrLamellarBuffer::Root(mut result) => {
@@ -1649,7 +1612,7 @@ pub(crate) async fn do_reduce_in_buffer<
             .await
         }
     };
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -1662,16 +1625,14 @@ pub(crate) async fn do_reduce_bitwise_in_buffer<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
     target: RootOrLamellarBuffer<T, B>,
 ) {
     debug!(target: "collective::ticket", func = "do_reduce_bitwise_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_bitwise_in_buffer", my_ticket, "ticket served, proceeding");
     match target {
         RootOrLamellarBuffer::Root(mut result) => {
@@ -1710,7 +1671,7 @@ pub(crate) async fn do_reduce_bitwise_in_buffer<
             .await
         }
     };
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_bitwise_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -1722,16 +1683,14 @@ pub(crate) async fn do_reduce_comparison<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     root: usize,
     op: ReduceOp,
 ) -> Option<Vec<T>> {
     debug!(target: "collective::ticket", func = "do_reduce_comparison", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_comparison", my_ticket, "ticket served, proceeding");
     let my_pe = array.my_pe();
     let mut res = if my_pe == root {
@@ -1752,7 +1711,7 @@ pub(crate) async fn do_reduce_comparison<
         &mut res,
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_comparison", my_ticket, "released next ticket holder");
 
     if my_pe == root {
@@ -1771,16 +1730,14 @@ pub(crate) async fn do_reduce_comparison_in_buffer<
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
     target: RootOrLamellarBuffer<T, B>,
 ) {
     debug!(target: "collective::ticket", func = "do_reduce_comparison_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_comparison_in_buffer", my_ticket, "ticket served, proceeding");
     match target {
         RootOrLamellarBuffer::Root(mut result) => {
@@ -1819,7 +1776,7 @@ pub(crate) async fn do_reduce_comparison_in_buffer<
             .await
         }
     };
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_comparison_in_buffer", my_ticket, "released next ticket holder");
 }
 
@@ -1928,7 +1885,7 @@ pub(crate) async fn do_reduce_scatter<T, A>(
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -1938,9 +1895,7 @@ where
     T: Dist + ElementArithmeticOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_reduce_scatter", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_scatter", my_ticket, "ticket served, proceeding");
     let res = do_reduce_scatter_impl(
         array,
@@ -1953,7 +1908,7 @@ where
         },
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_scatter", my_ticket, "released next ticket holder");
     res
 }
@@ -1963,7 +1918,7 @@ pub(crate) async fn do_reduce_scatter_bitwise<T, A>(
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -1973,9 +1928,7 @@ where
     T: Dist + ElementBitWiseOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_reduce_scatter_bitwise", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_scatter_bitwise", my_ticket, "ticket served, proceeding");
     let res = do_reduce_scatter_impl(
         array,
@@ -1988,7 +1941,7 @@ where
         },
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_scatter_bitwise", my_ticket, "released next ticket holder");
     res
 }
@@ -1998,7 +1951,7 @@ pub(crate) async fn do_reduce_scatter_in_buffer<T, A, B: AsLamellarBuffer<T>>(
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -2008,9 +1961,7 @@ pub(crate) async fn do_reduce_scatter_in_buffer<T, A, B: AsLamellarBuffer<T>>(
     T: Dist + ElementArithmeticOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_reduce_scatter_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_scatter_in_buffer", my_ticket, "ticket served, proceeding");
     let res = do_reduce_scatter_impl(
         array,
@@ -2023,7 +1974,7 @@ pub(crate) async fn do_reduce_scatter_in_buffer<T, A, B: AsLamellarBuffer<T>>(
         },
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_scatter_in_buffer", my_ticket, "released next ticket holder");
 
     result
@@ -2040,7 +1991,7 @@ pub(crate) async fn do_reduce_scatter_comparison<T, A>(
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -2050,9 +2001,7 @@ where
     T: Dist + ElementComparePartialEqOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_reduce_scatter_comparison", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_scatter_comparison", my_ticket, "ticket served, proceeding");
     let res = do_reduce_scatter_impl(
         array,
@@ -2065,7 +2014,7 @@ where
         },
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_scatter_comparison", my_ticket, "released next ticket holder");
     res
 }
@@ -2075,7 +2024,7 @@ pub(crate) async fn do_reduce_scatter_comparison_in_buffer<T, A, B: AsLamellarBu
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -2085,9 +2034,7 @@ pub(crate) async fn do_reduce_scatter_comparison_in_buffer<T, A, B: AsLamellarBu
     T: Dist + ElementComparePartialEqOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_reduce_scatter_comparison_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_scatter_comparison_in_buffer", my_ticket, "ticket served, proceeding");
 
     let res = do_reduce_scatter_impl(
@@ -2101,7 +2048,7 @@ pub(crate) async fn do_reduce_scatter_comparison_in_buffer<T, A, B: AsLamellarBu
         },
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_scatter_comparison_in_buffer", my_ticket, "released next ticket holder");
 
     result
@@ -2118,7 +2065,7 @@ pub(crate) async fn do_reduce_scatter_bitwise_in_buffer<T, A, B: AsLamellarBuffe
     scheduler: Arc<Scheduler>,
     sync_alloc: Arc<CommAlloc>,
     my_ticket: usize,
-    now_serving: Arc<AtomicUsize>,
+    now_serving: Arc<CollTicketGate>,
     index: usize,
     local_length: usize,
     op: ReduceOp,
@@ -2128,9 +2075,7 @@ pub(crate) async fn do_reduce_scatter_bitwise_in_buffer<T, A, B: AsLamellarBuffe
     T: Dist + ElementBitWiseOps + Default,
 {
     debug!(target: "collective::ticket", func = "do_reduce_scatter_bitwise_in_buffer", my_ticket, "waiting for ticket");
-    while now_serving.load(std::sync::atomic::Ordering::SeqCst) != my_ticket {
-        yield_now().await; // wait for this call's ticket to be served
-    }
+    now_serving.wait(my_ticket).await; // wait for this call's ticket to be served
     debug!(target: "collective::ticket", func = "do_reduce_scatter_bitwise_in_buffer", my_ticket, "ticket served, proceeding");
 
     let res = do_reduce_scatter_impl(
@@ -2144,7 +2089,7 @@ pub(crate) async fn do_reduce_scatter_bitwise_in_buffer<T, A, B: AsLamellarBuffe
         },
     )
     .await;
-    now_serving.fetch_add(1, std::sync::atomic::Ordering::SeqCst); // release the next ticket holder
+    now_serving.release(); // release the next ticket holder
     debug!(target: "collective::ticket", func = "do_reduce_scatter_bitwise_in_buffer", my_ticket, "released next ticket holder");
 
     result

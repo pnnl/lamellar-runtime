@@ -258,6 +258,10 @@ impl<T: Remote> SharedMemoryRegion<T> {
         if let crate::lamellae::Lamellae::Shmem(_) = &*self.lamellae() {
             std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
         }
+        #[cfg(feature = "enable-shmem-opt")]
+        if let crate::lamellae::Lamellae::ShmemOpt(_) = &*self.lamellae() {
+            std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
