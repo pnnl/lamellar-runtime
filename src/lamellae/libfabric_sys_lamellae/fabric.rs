@@ -1716,9 +1716,7 @@ impl Ofi {
                 .len(aligned_size)
                 .map_anon()
                 .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
-            unsafe {
-                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
-            }
+            // anonymous mmap pages are already zero-filled by the kernel
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (LibfabricSysMem::Mmap(Arc::new(mmap)), mem_base_ptr)
         };
@@ -1730,9 +1728,7 @@ impl Ofi {
                 .len(aligned_size)
                 .map_anon()
                 .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
-            unsafe {
-                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
-            }
+            // anonymous mmap pages are already zero-filled by the kernel
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (
                 LibfabricSysMem::Mmap(Arc::new(mmap)),
@@ -1852,9 +1848,7 @@ impl Ofi {
                 .len(aligned_size)
                 .map_anon()
                 .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
-            unsafe {
-                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
-            }
+            // anonymous mmap pages are already zero-filled by the kernel
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (LibfabricSysMem::Mmap(Arc::new(mmap)), mem_base_ptr)
         };
@@ -1865,9 +1859,7 @@ impl Ofi {
                 .len(aligned_size)
                 .map_anon()
                 .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
-            unsafe {
-                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
-            }
+            // anonymous mmap pages are already zero-filled by the kernel
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (
                 LibfabricSysMem::Mmap(Arc::new(mmap)),

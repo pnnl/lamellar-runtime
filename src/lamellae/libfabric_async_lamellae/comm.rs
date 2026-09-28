@@ -12,7 +12,6 @@ use super::{fabric::*, CommandQueue};
 
 use tracing::trace;
 
-use parking_lot::RwLock;
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -20,7 +19,9 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub(crate) struct LibfabricAsyncComm {
     pub(crate) ofi: Arc<OfiAsync>,
-    pub(crate) runtime_allocs: RwLock<Vec<(LibfabricAsyncAlloc, BTreeAlloc)>>, //runtime allocations
+    // runtime_allocs now lives on OfiAsync itself (see OfiAsync::runtime_allocs) --
+    // LibfabricAsyncAlloc/OneSidedLibfabricAsyncAlloc have no path back to
+    // LibfabricAsyncComm, only to OfiAsync, so the pool moved there.
     // pub(crate) fabric_allocs: RwLock<HashMap<usize, CommAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -56,12 +57,14 @@ impl LibfabricAsyncComm {
             )
             .expect("error in ofi alloc");
 
+        let mut initial_pool = BTreeAlloc::new("libfabric_rt_mem".to_string());
+        initial_pool.init(alloc_info.start(), total_mem);
+        ofi.runtime_allocs
+            .write()
+            .push((alloc_info.clone(), initial_pool));
+
         let lib_fabric_comm = LibfabricAsyncComm {
             ofi: ofi.clone(),
-            runtime_allocs: RwLock::new(vec![(
-                alloc_info.clone(),
-                BTreeAlloc::new("libfabric_rt_mem".to_string()),
-            )]),
             // fabric_allocs: RwLock::new(HashMap::new()),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
@@ -71,9 +74,6 @@ impl LibfabricAsyncComm {
             get_amt: Arc::new(AtomicUsize::new(0)),
             // get_cnt: Arc::new(AtomicUsize::new(0)),
         };
-        lib_fabric_comm.runtime_allocs.write()[0]
-            .1
-            .init(alloc_info.start(), total_mem);
         lib_fabric_comm
     }
 
@@ -150,17 +150,27 @@ impl Drop for LibfabricAsyncComm {
                 self.mem_occupied()
             );
         }
-        if self.runtime_allocs.read().len() > 1 {
-            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, HEAP_SIZE.load(Ordering::SeqCst));
+        if self.ofi.runtime_allocs.read().len() > 1 {
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.ofi.runtime_allocs.read().len()-1, HEAP_SIZE.load(Ordering::SeqCst));
             self.print_pools();
         }
-        self.runtime_allocs.write().clear();
+        self.ofi.runtime_allocs.write().clear();
         //maybe we want to implement an ofi finit function which will free all resources or something
         // for (addr, _alloc) in self.fabric_allocs.write().drain(..) {
         //     self.ofi.free(addr).expect("error in ofi free");
         // }
         let _ = self.ofi.clear_allocs();
         let _ = self.ofi.barrier();
+
+        // Explicitly drive the raw PMI barrier ourselves, on this thread,
+        // rather than relying on the implicit Arc<OfiAsync> field-drop to
+        // trigger it -- PMI barrier calls are not safe from an arbitrary OS
+        // thread, and Rust's Drop runs on whichever thread drops the last
+        // Arc<OfiAsync>, which is not deterministic. final_teardown() is
+        // idempotent, so a racing Arc<OfiAsync>::drop elsewhere is a
+        // harmless no-op after this.
+        self.ofi.final_teardown();
+
         trace!(
             "libfabric comm dropped ofi count: {:?}",
             Arc::strong_count(&self.ofi)

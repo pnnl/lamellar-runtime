@@ -62,7 +62,7 @@ impl CommMem for LibfabricAsyncComm {
         // add space for ref count
         let (padding, size, align) = calc_alloc_padding_size_align(size, align);
 
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
                 let alloc = inner_alloc.rt_alloc(
@@ -97,7 +97,7 @@ impl CommMem for LibfabricAsyncComm {
         // add space for ref count
         let (_padding, size, align) = calc_alloc_padding_size_align(size, align);
 
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         for (_, alloc) in allocs.iter() {
             if alloc.fake_malloc(size, align) {
                 return true;
@@ -117,7 +117,7 @@ impl CommMem for LibfabricAsyncComm {
     //                 addr,
     //                 std::backtrace::Backtrace::capture()
     //             );
-    //             let allocs = self.runtime_allocs.read();
+    //             let allocs = self.ofi.runtime_allocs.read();
     //             for (_, alloc) in allocs.iter() {
     //                 if let Ok(_) = alloc.free(addr) {
     //                     info!(
@@ -145,7 +145,7 @@ impl CommMem for LibfabricAsyncComm {
     //                 std::sync::Arc::strong_count(&inner_alloc),
     //                 std::backtrace::Backtrace::capture()
     //             );
-    //             let allocs = self.runtime_allocs.read();
+    //             let allocs = self.ofi.runtime_allocs.read();
     //             for (_, alloc) in allocs.iter() {
     //                 if let Ok(_) = alloc.free(inner_alloc.start()) {
     //                     info!(
@@ -178,7 +178,7 @@ impl CommMem for LibfabricAsyncComm {
     //#[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         for alloc in allocs.iter() {
             let tmp = alloc.1.occupied();
             if tmp > 0 {
@@ -206,7 +206,7 @@ impl CommMem for LibfabricAsyncComm {
                 println!("Allocated new libfabric alloc pool: {:?}", inner_alloc);
                 let mut new_alloc = BTreeAlloc::new("libfabric_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
-                self.runtime_allocs
+                self.ofi.runtime_allocs
                     .write()
                     .push((inner_alloc.clone(), new_alloc));
             } else {
@@ -219,12 +219,12 @@ impl CommMem for LibfabricAsyncComm {
 
     //#[tracing::instrument(skip(self), level = "debug")]
     fn num_pool_allocs(&self) -> usize {
-        self.runtime_allocs.read().len()
+        self.ofi.runtime_allocs.read().len()
     }
 
     //#[tracing::instrument(skip(self), level = "debug")]
     fn print_pools(&self) {
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
         for (_info, alloc) in allocs.iter() {
             println!("{:x} {:?}", alloc.start_addr, alloc.max_size,);
@@ -260,7 +260,7 @@ impl CommMem for LibfabricAsyncComm {
     }
 
     fn local_rt_alloc_from_local_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
-        for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
+        for (inner_alloc, alloc) in self.ofi.runtime_allocs.read().iter() {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
                     inner_alloc: Arc::new(CommAllocInner::LibfabricAsyncAlloc(
@@ -291,7 +291,7 @@ impl CommMem for LibfabricAsyncComm {
             });
         }
 
-        let allocs = self.runtime_allocs.read();
+        let allocs = self.ofi.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {

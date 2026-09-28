@@ -90,10 +90,11 @@ use libfabric::FabInfoCaps;
 use libfabric::MappedAddress;
 use libfabric::MemAddressInfo;
 use libfabric::RemoteMemAddressInfo;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use pmi::pmi::Pmi;
 use pmi::pmi::PmiBuilder;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -131,6 +132,14 @@ pub(crate) struct OfiAsync {
     pub(crate) my_pe: usize,
     mapped_addresses: Vec<MappedAddress>,
     barrier_impl: RwLock<BarrierImpl>,
+    /// Multicast groups used by `collective_exchange_mr_info` and by every allocation's
+    /// `mcast_group`, one per distinct PE set, joined on first use and reused after. Must be
+    /// cached: the coll provider (libfabric 1.22 `prov/coll`) hands out group ids from a fixed
+    /// 256-entry per-endpoint mask on `fi_join_collective` and never returns them on
+    /// `fi_close`, so a join per allocation exhausts the id space after ~254 allocations
+    /// (later joins then all get id 256, and marking it writes one byte past the 32-byte
+    /// mask).
+    mc_groups: Mutex<HashMap<Vec<usize>, MultiCastGroup>>,
     ep: ConnectionlessEndpoint<RmaAtomicCollEp>,
     cq: CompletionQueue<SpinCq>,
     put_cntr: Counter<WaitableCntr>,
@@ -145,6 +154,23 @@ pub(crate) struct OfiAsync {
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
     completion_lock: RwLock<()>,
+    /// Runtime (rt_alloc) sub-allocation pool, shared by any `LibfabricAsyncAlloc`
+    /// reachable via its `ofi: Arc<OfiAsync>` field. Lives here (rather than on
+    /// LibfabricAsyncComm) so that `LibfabricAsyncAlloc`/`OneSidedLibfabricAsyncAlloc` --
+    /// which have no other path back to LibfabricAsyncComm -- can still reach an
+    /// already-registered scratch pool (e.g. from inside `get_buffer`).
+    pub(crate) runtime_allocs: RwLock<Vec<(LibfabricAsyncAlloc, BTreeAlloc)>>,
+    /// `LAMELLAR_RDMA_STAGING` (default on): heap-backed RDMA local buffers are
+    /// staged through `runtime_allocs` so rxm never registers them on the fly.
+    staging_enabled: bool,
+    staging_fallbacks: AtomicUsize,
+    staging_warned: AtomicBool,
+    /// Guards `final_teardown` so it runs exactly once no matter who calls
+    /// it: LibfabricAsyncComm::drop calls it explicitly (on a known-good
+    /// thread), and Drop::drop below calls it too as a fallback. The
+    /// `BarrierImpl::Manual` fallback path in `barrier()` issues a raw PMI
+    /// barrier, which is not safe from an arbitrary OS thread.
+    teardown_done: AtomicBool,
 }
 
 impl std::fmt::Debug for OfiAsync {
@@ -318,9 +344,15 @@ impl OfiAsync {
             mapped_addresses,
             alloc_manager: Arc::new(alloc_manager),
             barrier_impl: RwLock::new(BarrierImpl::Uninit),
+            mc_groups: Mutex::new(HashMap::new()),
             put_cnt: AtomicU64::new(0),
             get_cnt: AtomicU64::new(0),
             completion_lock: RwLock::new(()),
+            runtime_allocs: RwLock::new(Vec::new()),
+            staging_enabled: crate::config().rdma_staging.unwrap_or(true),
+            staging_fallbacks: AtomicUsize::new(0),
+            staging_warned: AtomicBool::new(false),
+            teardown_done: AtomicBool::new(false),
         });
 
         ofi.init_barrier()?;
@@ -627,6 +659,18 @@ impl OfiAsync {
         }
     }
 
+    /// Returns the cached multicast group for `pes`, joining it on first use. Allocations must
+    /// go through this rather than `create_mc_group`: see `mc_groups` (cid exhaustion).
+    fn cached_mc_group(&self, pes: &[usize]) -> Result<MultiCastGroup, libfabric::error::Error> {
+        let mut groups = self.mc_groups.lock();
+        if let Some(mc) = groups.get(pes) {
+            return Ok(mc.clone());
+        }
+        let mc = self.create_mc_group(pes)?;
+        groups.insert(pes.to_vec(), mc.clone());
+        Ok(mc)
+    }
+
     fn create_mc_group(&self, pes: &[usize]) -> Result<MultiCastGroup, libfabric::error::Error> {
         // trace!("Creating MC group of len: {}", pes.len());
         let mut av_set = AddressVectorSetBuilder::new_from_range(
@@ -775,7 +819,7 @@ impl OfiAsync {
         mr: &MemoryRegion,
     ) -> Result<HashMap<usize, RemoteMemAddressInfo>, libfabric::error::Error> {
         let _guard = self.completion_lock.write();
-        let mc = self.create_mc_group(&pes)?;
+        let mc = self.cached_mc_group(&pes)?;
 
         let mut mem_info = MemAddressInfo::from_slice(mem, 0, &mr.key().unwrap(), &self.info_entry);
 
@@ -975,7 +1019,7 @@ impl OfiAsync {
             .collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), &mem, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         let mcast_group = self
-            .create_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
+            .cached_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         let alloc = LibfabricAsyncAlloc::new(
             self.clone(),
@@ -1050,7 +1094,7 @@ impl OfiAsync {
             .collective_exchange_mr_info(pes, &mem, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         let mcast_group = self
-            .create_mc_group(pes)
+            .cached_mc_group(pes)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
         let alloc = LibfabricAsyncAlloc::new(
@@ -1262,16 +1306,111 @@ impl OfiAsync {
     // pub(crate) fn release(&self, addr: &usize) {
     //     self.alloc_manager.remove(addr);
     // }
+
+    /// Non-collective: sub-allocates from the pool of already-mmap'd,
+    /// already-registered `runtime_allocs` entries (created once,
+    /// collectively, at startup / via `alloc_pool()`). Safe to call from a
+    /// single PE without any other PE's participation. Returns
+    /// `Err(AllocError::OutOfMemoryError)` if no pool entry has room --
+    /// callers must not treat this as fatal, only as "pool exhausted, fall
+    /// back to some other allocation strategy."
+    pub(crate) fn rt_alloc(
+        self: &Arc<OfiAsync>,
+        size: usize,
+        align: usize,
+    ) -> AllocResult<LibfabricAsyncAlloc> {
+        // add space for ref count
+        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+
+        let allocs = self.runtime_allocs.read();
+        for (inner_alloc, alloc) in allocs.iter() {
+            if let Some(addr) = alloc.try_malloc(size, align) {
+                let alloc =
+                    inner_alloc.rt_alloc(alloc.clone(), addr - inner_alloc.start(), padding, size)?;
+                trace!(
+                    "new rt alloc (OfiAsync pool): 0x{:x}-0x{:x} {} {} {:?}",
+                    addr,
+                    addr + size,
+                    addr - inner_alloc.start(),
+                    size,
+                    alloc,
+                );
+                return Ok(alloc);
+            }
+        }
+        Err(AllocError::OutOfMemoryError(size))
+    }
+
+    /// Registered scratch memory for an RDMA op whose local buffer would
+    /// otherwise be plain heap/stack memory. With verbs;ofi_rxm the provider
+    /// registers such buffers on the fly through the MR cache, and a cached
+    /// entry can go stale when the heap range is recycled -- a GET then lands
+    /// in old physical pages. A sub-range of our already-registered pool is a
+    /// pure cache hit, so staging removes both the staleness and the per-op
+    /// registration cost.
+    ///
+    /// `None` means "use the caller's own buffer" (staging disabled, empty
+    /// op, or pool exhausted after letting in-flight ops drain).
+    pub(crate) fn staging_alloc(
+        self: &Arc<OfiAsync>,
+        bytes: usize,
+        align: usize,
+    ) -> Option<LibfabricAsyncAlloc> {
+        if !self.staging_enabled || bytes == 0 {
+            return None;
+        }
+        for attempt in 0..3 {
+            match self.rt_alloc(bytes, align) {
+                Ok(alloc) => return Some(alloc),
+                Err(AllocError::OutOfMemoryError(_)) if attempt < 2 => {
+                    let _ = self.progress();
+                }
+                Err(_) => break,
+            }
+        }
+        self.staging_fallbacks.fetch_add(1, Ordering::Relaxed);
+        if !self.staging_warned.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "[LAMELLAR WARNING][{}] registered staging pool exhausted (needed {} bytes); RDMA op falling back to unregistered heap memory, results may be affected by libfabric MR-cache staleness. Remedies: increase LAMELLAR_HEAP_SIZE, verify your results, or set FI_MR_CACHE_MAX_COUNT=0 (slow).",
+                self.my_pe, bytes
+            );
+        }
+        None
+    }
+
+    pub(crate) fn staging_fallbacks(&self) -> usize {
+        self.staging_fallbacks.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn inject_size(&self) -> usize {
+        self.info_entry.tx_attr().inject_size()
+    }
 }
 
-impl Drop for OfiAsync {
-    fn drop(&mut self) {
+impl OfiAsync {
+    /// Explicit, idempotent teardown -- called directly from
+    /// LibfabricAsyncComm::drop on its own (known-good) thread rather than
+    /// left to fire implicitly whenever the last Arc<OfiAsync> clone happens
+    /// to drop. `barrier()`'s `BarrierImpl::Manual` fallback issues a raw PMI
+    /// barrier, which is not safe from an arbitrary OS thread; see
+    /// libfabric_sys_opt_lamellae for the confirmed hang this caused there.
+    /// Drop::drop below calls this too as a fallback.
+    pub(crate) fn final_teardown(&self) {
+        if self.teardown_done.swap(true, Ordering::SeqCst) {
+            return;
+        }
         trace!(target: "drop", "drop OfiAsync");
         let _ = self.barrier();
         let _ = self.wait_for_tx_cntr();
         trace!("wait_all put done");
         let _ = self.wait_for_rx_cntr();
         trace!(target: "drop", "end drop OfiAsync");
+    }
+}
+
+impl Drop for OfiAsync {
+    fn drop(&mut self) {
+        self.final_teardown();
     }
 }
 
@@ -1818,11 +1957,22 @@ impl LibfabricAsyncAlloc {
         self.mr.clone()
     }
 
+    /// MR descriptor for `self`'s own backing memory. Callers routing a
+    /// buffer through a different alloc (e.g. a staging pool allocation)
+    /// must use that alloc's `descriptor()` instead of this one — the
+    /// descriptor must always match whatever memory is actually being
+    /// handed to the RDMA engine, not the alloc the method happens to be
+    /// invoked on.
+    pub(crate) fn descriptor(&self) -> libfabric::mr::MemoryRegionDesc<'_> {
+        self.mr.descriptor()
+    }
+
     pub(crate) unsafe fn inner_put_unmanaged<T: Copy>(
         &self,
         pe: usize,
         offset: usize, //T-sized offset
         src_addr: &[T],
+        local_desc: libfabric::mr::MemoryRegionDesc<'_>,
         sync: bool,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
@@ -1880,7 +2030,7 @@ impl LibfabricAsyncAlloc {
                     .post_put(|| unsafe {
                         self.ofi.ep.write_to(
                             &src_addr[curr_idx..curr_idx + msg_len],
-                            Some(self.mr.descriptor()),
+                            Some(local_desc),
                             &self.ofi.mapped_addresses[pe],
                             remote_dst_addr,
                             &remote_key,
@@ -1905,6 +2055,7 @@ impl LibfabricAsyncAlloc {
         pe: usize,
         offset: usize, //T-sized offset
         src_addr: &[T],
+        local_desc: libfabric::mr::MemoryRegionDesc<'_>,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
@@ -1967,7 +2118,7 @@ impl LibfabricAsyncAlloc {
                     .ep
                     .write_to_async(
                         &src_addr[curr_idx..curr_idx + msg_len],
-                        Some(self.mr.descriptor()),
+                        Some(local_desc),
                         &self.ofi.mapped_addresses[pe],
                         remote_dst_addr,
                         &remote_key,
@@ -1991,6 +2142,7 @@ impl LibfabricAsyncAlloc {
         pe: usize,
         offset: usize,
         dst_addr: &mut [T],
+        local_desc: libfabric::mr::MemoryRegionDesc<'_>,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
@@ -2034,7 +2186,7 @@ impl LibfabricAsyncAlloc {
                     .ep
                     .read_from_async(
                         &mut dst_addr[curr_idx..curr_idx + msg_len],
-                        Some(self.mr.descriptor()),
+                        Some(local_desc),
                         &self.ofi.mapped_addresses[pe],
                         remote_src_addr,
                         &remote_key,
@@ -2055,6 +2207,7 @@ impl LibfabricAsyncAlloc {
         pe: usize,
         offset: usize,
         dst_addr: &mut [T],
+        local_desc: libfabric::mr::MemoryRegionDesc<'_>,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
@@ -2104,7 +2257,7 @@ impl LibfabricAsyncAlloc {
                 .ep
                 .read_from_async(
                     &mut dst_addr[curr_idx..curr_idx + msg_len],
-                    Some(self.mr.descriptor()),
+                    Some(local_desc),
                     &self.ofi.mapped_addresses[pe],
                     remote_src_addr,
                     &remote_key,
@@ -2125,6 +2278,7 @@ impl LibfabricAsyncAlloc {
         pe: usize,
         offset: usize,
         dst_addr: &mut [T],
+        local_desc: libfabric::mr::MemoryRegionDesc<'_>,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
@@ -2150,7 +2304,7 @@ impl LibfabricAsyncAlloc {
             .ep
             .read_from_async(
                 dst_addr,
-                Some(self.mr.descriptor()),
+                Some(local_desc),
                 &self.ofi.mapped_addresses[pe],
                 remote_src_addr,
                 &remote_key,

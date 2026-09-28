@@ -1968,9 +1968,7 @@ impl OptOfi {
                 .len(aligned_size)
                 .map_anon()
                 .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
-            unsafe {
-                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
-            }
+            // anonymous mmap pages are already zero-filled by the kernel
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (LibfabricSysOptMem::Mmap(Arc::new(mmap)), mem_base_ptr)
         };
@@ -1982,9 +1980,7 @@ impl OptOfi {
                 .len(aligned_size)
                 .map_anon()
                 .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
-            unsafe {
-                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
-            }
+            // anonymous mmap pages are already zero-filled by the kernel
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (
                 LibfabricSysOptMem::Mmap(Arc::new(mmap)),
@@ -2104,9 +2100,7 @@ impl OptOfi {
                 .len(aligned_size)
                 .map_anon()
                 .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
-            unsafe {
-                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
-            }
+            // anonymous mmap pages are already zero-filled by the kernel
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (LibfabricSysOptMem::Mmap(Arc::new(mmap)), mem_base_ptr)
         };
@@ -2117,9 +2111,7 @@ impl OptOfi {
                 .len(aligned_size)
                 .map_anon()
                 .map_err(|_| AllocError::OutOfMemoryError(aligned_size))?;
-            unsafe {
-                std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
-            }
+            // anonymous mmap pages are already zero-filled by the kernel
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
             (
                 LibfabricSysOptMem::Mmap(Arc::new(mmap)),
@@ -3479,7 +3471,8 @@ impl LibfabricSysOptAlloc {
     /// `put`/`put_buffer`/`put_all`/`put_all_buffer` paths (Stage 2). Deliberately skips the
     /// inject fast path: `fi_inject_write` accepts no context and generates no completion, so
     /// there is nothing to leak a [`Ticket`] into — every remote chunk here goes through
-    /// `fi_writemsg` with `FI_COMPLETION` regardless of size. Stage 4: each `fi_writemsg` call
+    /// `fi_writemsg` with `FI_COMPLETION` regardless of size (single-iov batches that fit in
+    /// `inject_size` also set `FI_INJECT`, see below). Stage 4: each `fi_writemsg` call
     /// batches up to `tx_attr.rma_iov_limit` `max_msg_size`-sized segments into one message
     /// (one `Ticket` per *batch*, not per segment) instead of issuing one message per segment —
     /// `src_addr`/the remote destination are both flat contiguous buffers, so a batch is just a
@@ -3552,6 +3545,16 @@ impl LibfabricSysOptAlloc {
                 batch_elems += seg_len;
             }
             let mut desc = vec![local_desc; iovs.len()];
+            // Without FI_MR_LOCAL rxm registers every source iov through the MR cache,
+            // and a cache miss (unregistered heap source) mallocs under the memhooks
+            // mm_lock -- which deadlocks against a concurrent free() trimming the heap
+            // (arena lock -> madvise/brk hook -> mm_lock). FI_INJECT makes rxm copy
+            // small payloads into its own registered tx buffer instead; FI_COMPLETION
+            // still delivers a CQ entry carrying our context.
+            let mut flags = libfabric_sys::FI_COMPLETION as u64;
+            if iovs.len() == 1 && batch_elems * elem_size <= self.ofi.inject_size() {
+                flags |= libfabric_sys::FI_INJECT as u64;
+            }
 
             let ticket = Ticket::new();
             let ctx = TicketCtx::leak(ticket.clone());
@@ -3566,7 +3569,7 @@ impl LibfabricSysOptAlloc {
                 data: 0,
             };
             cg.post_ticketed(&cg.put_cnt, || unsafe {
-                libfabric_sys::inlined_fi_writemsg(cg.ep, &msg, libfabric_sys::FI_COMPLETION as u64)
+                libfabric_sys::inlined_fi_writemsg(cg.ep, &msg, flags)
             });
             tickets.push(ticket);
 

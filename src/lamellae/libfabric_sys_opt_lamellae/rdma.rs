@@ -107,10 +107,9 @@ impl<T: Remote> LibfabricSysOptPutFuture<T> {
                 (src.as_slice(), src.is_registered())
             }
         };
-        // Below the inject size rxm copies the source into its own buffers, so an
-        // unregistered heap source is safe as-is; the ticketed fi_writemsg path
-        // never actually injects, but the size gate is kept for parity with the
-        // threshold used elsewhere in this backend and the sibling backend.
+        // Up to the inject size the ticketed fi_writemsg sets FI_INJECT, so rxm
+        // copies the source into its own registered tx buffer and an unregistered
+        // heap source is safe as-is (see `inner_put_ticketed`).
         if !registered && std::mem::size_of_val(src) >= self.alloc.ofi.inject_size() {
             if let Some(staging) = self
                 .alloc
