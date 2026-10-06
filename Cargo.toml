@@ -761,6 +761,18 @@ name = "put_bw"
 path = "examples/bandwidths/put_bw.rs"
 
 [[example]]
+name = "put_bw_mt"
+path = "examples/bandwidths/put_bw_mt.rs"
+
+[[example]]
+name = "put_small_mt"
+path = "examples/bandwidths/put_small_mt.rs"
+
+[[example]]
+name = "get_bw_mt"
+path = "examples/bandwidths/get_bw_mt.rs"
+
+[[example]]
 name = "unsafe_array_put_bw"
 path = "examples/bandwidths/unsafe_array_put_bw.rs"
 
