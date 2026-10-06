@@ -102,13 +102,6 @@ fn default_ucx_shard_mode() -> String {
     "bulk".to_owned()
 }
 
-/// `ucx_opt_lamellae`: minimum spacing (microseconds) between idle-hook progress calls, shared by
-/// all idle threads. 0 = every idle iteration progresses (previous behaviour). Idle threads calling
-/// `ucp_worker_progress` in a tight loop take the same UCX worker lock the active issuers need.
-fn default_ucx_hook_min_us() -> u64 {
-    0
-}
-
 fn default_ucx_shard_bulk_bytes() -> usize {
     0
 }
@@ -332,11 +325,6 @@ pub struct Config {
     /// modes. Default: 0 (every size)
     #[serde(default = "default_ucx_shard_bulk_bytes")]
     pub ucx_shard_bulk_bytes: usize,
-
-    /// `ucx_opt_lamellae`: minimum microseconds between idle-hook progress calls across all idle
-    /// threads (0 = unthrottled). Default: 0
-    #[serde(default = "default_ucx_hook_min_us")]
-    pub ucx_hook_min_us: u64,
 
     /// flag used to print warnings when users call barriers on worker threads. Default: true
     #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]

@@ -892,20 +892,6 @@ impl UcxOptWorld {
         }
     }
 
-    /// D5: accessor for the scheduler progress-hook registration in `ucx_opt_lamellae`'s
-    /// `init_lamellae` -- without a hook calling `try_progress` from the executor's own idle
-    /// loop, a worker that trusts a registered completion-callback waker (see
-    /// `UcxOptRequest::poll_local`'s doc comment) has nothing to fall back on once it is the
-    /// only live task: no other thread would ever call `ucp_worker_progress` again, so a
-    /// completion already sitting on the wire would never be noticed and the waker would never
-    /// fire (confirmed via gdb on a real `put_buffer_test` UnsafeArray np=2 hang: every worker
-    /// thread idling in the work-stealing steal loop, none in any UCX progress/wait code).
-    pub(crate) fn workers(&self) -> Vec<Arc<Worker>> {
-        let mut v = vec![self.worker.clone()];
-        v.extend(self.extra_shards.iter().map(|s| s.worker.clone()));
-        v
-    }
-
     pub(crate) fn barrier(&self) {
         self.pmi.barrier(false).expect(" Failed to perform barrier");
     }

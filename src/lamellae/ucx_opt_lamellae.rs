@@ -45,61 +45,6 @@ impl LamellaeInit for UcxOptBuilder {
         (self.my_pe, self.num_pes)
     }
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
-        // D5: without this, progress only ever happens as a side effect of some future's own
-        // poll() call -- nothing drives `ucp_worker_progress` from the executor's idle loop.
-        // That is fine while some task is still actively polling, but once the last live op on
-        // this PE takes the progress try-lock, runs a capped pass that doesn't finish, and
-        // trusts its registered completion-callback waker (see
-        // `UcxOptRequest::poll_local`'s doc comment), nothing is left to ever call progress
-        // again -- a completion already sitting on the wire is never noticed, so the waker
-        // never fires. Confirmed via gdb on a real hang (`put_buffer_test` UnsafeArray np=2):
-        // every worker thread idling in the work-stealing steal loop, none in any UCX
-        // progress/wait code. Weak ref: this hook must not keep the comm (or the scheduler
-        // that owns the hook slot) alive past shutdown.
-        let workers = match &*self.ucx_comm {
-            Comm::UcxOpt(c) => c.ucx.workers(),
-            _ => unreachable!("UcxOptBuilder constructed a non-UcxOpt Comm"),
-        };
-        let workers_weak = workers.iter().map(Arc::downgrade).collect::<Vec<_>>();
-        drop(workers);
-        // One worker per call, round-robin: every worker still gets progressed, but an idle
-        // thread no longer pays K progress attempts (and K lock probes) per iteration.
-        let next = std::sync::atomic::AtomicUsize::new(0);
-        // Optional rate limit (LAMELLAR_UCX_HOOK_MIN_US): at most one hook progress call per that
-        // many microseconds across all idle threads.
-        let min_ns = crate::config().ucx_hook_min_us * 1000;
-        let start = std::time::Instant::now();
-        let last_ns = std::sync::atomic::AtomicU64::new(0);
-        scheduler.set_progress_hook(Box::new(move || {
-            if min_ns > 0 {
-                let now = start.elapsed().as_nanos() as u64;
-                let prev = last_ns.load(std::sync::atomic::Ordering::Relaxed);
-                if now.saturating_sub(prev) < min_ns
-                    || last_ns
-                        .compare_exchange(
-                            prev,
-                            now,
-                            std::sync::atomic::Ordering::Relaxed,
-                            std::sync::atomic::Ordering::Relaxed,
-                        )
-                        .is_err()
-                {
-                    return 0;
-                }
-            }
-            let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % workers_weak.len();
-            match workers_weak[i].upgrade() {
-                Some(worker) => {
-                    if worker.try_progress(32) {
-                        1
-                    } else {
-                        0
-                    }
-                }
-                None => 0,
-            }
-        }));
-
         let ucx = UcxOpt::new(
             self.my_pe,
             self.num_pes,
