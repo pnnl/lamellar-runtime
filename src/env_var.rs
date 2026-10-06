@@ -11,6 +11,7 @@
 //!         - `libfabric` -- only available with the `enable-libfabric` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric-sys-opt` are
 //!         - `libfabric-async` -- only available with the `enable-libfabric-async` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric-sys-opt`, `enable-libfabric` are
 //!         - `ucx` -- only available with the `enable-ucx` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric-sys-opt`, `enable-libfabric`, `enable-libfabric-async` are
+//!         - `ucx-opt` -- only available with the `enable-ucx-opt` feature; default if active and none of `enable-rofi-c`, `enable-libfabric-sys`, `enable-libfabric-sys-opt`, `enable-libfabric`, `enable-libfabric-async`, `enable-ucx` are
 //! - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
 //!     - possible values
 //!         - `lamellar` -- default, work stealing backend
@@ -80,6 +81,38 @@ fn default_dissemination_factor() -> usize {
     2
 }
 
+/// D5 progress discipline (`ucx_opt_lamellae`): how many `spin_loop()` iterations a
+/// waiter runs before falling back to `yield_now()` when it can't take the worker's
+/// progress lock (i.e. someone else is already progressing it).
+fn default_ucx_spin() -> usize {
+    1000
+}
+
+/// `ucx_opt_lamellae` D4: UCX workers (shards) per PE. Unset means `clamp(threads_per_pe, 4, 16)`,
+/// chosen from the PE sweeps: K=4 is enough with 4 threads per PE and the gain keeps growing up to
+/// K=16 with 16+ threads, where a single shared worker serializes every thread.
+fn default_ucx_workers() -> Option<usize> {
+    None
+}
+
+/// `ucx_opt_lamellae` D4: how data-path ops choose a worker. "pe" = by target PE (default,
+/// keeps per-peer ordering); "bulk" = transfers of at least `ucx_shard_bulk_bytes` are
+/// sharded by issuing thread, everything else stays by target PE.
+fn default_ucx_shard_mode() -> String {
+    "bulk".to_owned()
+}
+
+/// `ucx_opt_lamellae`: minimum spacing (microseconds) between idle-hook progress calls, shared by
+/// all idle threads. 0 = every idle iteration progresses (previous behaviour). Idle threads calling
+/// `ucp_worker_progress` in a tight loop take the same UCX worker lock the active issuers need.
+fn default_ucx_hook_min_us() -> u64 {
+    0
+}
+
+fn default_ucx_shard_bulk_bytes() -> usize {
+    0
+}
+
 fn default_backend() -> String {
     if cfg!(feature = "enable-rofi-c") {
         return "rofi_c".to_owned();
@@ -93,6 +126,8 @@ fn default_backend() -> String {
         return "libfabric-async".to_owned();
     } else if cfg!(feature = "enable-ucx") {
         return "ucx".to_owned();
+    } else if cfg!(feature = "enable-ucx-opt") {
+        return "ucx-opt".to_owned();
     } else {
         return "local".to_owned();
     }
@@ -125,6 +160,9 @@ pub fn available_backends() -> Vec<&'static str> {
     }
     if cfg!(feature = "enable-ucx") {
         backends.push("ucx");
+    }
+    if cfg!(feature = "enable-ucx-opt") {
+        backends.push("ucx-opt");
     }
     backends.push("shmem");
     if cfg!(feature = "enable-shmem-opt") {
@@ -272,6 +310,33 @@ pub struct Config {
     /// The dissemination factor for the n-way barrier, default: 2
     #[serde(default = "default_dissemination_factor")]
     pub barrier_dissemination_factor: usize,
+
+    /// `ucx_opt_lamellae` D5: spin_loop() iterations before yield_now() when a waiter
+    /// can't take the worker's progress lock, default: 1000
+    #[serde(default = "default_ucx_spin")]
+    pub ucx_spin: usize,
+
+    /// `ucx_opt_lamellae` D4: UCX workers per PE. Data-path RDMA/atomic ops use worker
+    /// `LAMELLAR_THREAD_ID % n`; barriers and key exchange stay on worker 0. Clamped to
+    /// [1, 16]. Must be identical on every PE. Default: clamp(threads per PE, 4, 16)
+    #[serde(default = "default_ucx_workers")]
+    pub ucx_workers: Option<usize>,
+
+    /// `ucx_opt_lamellae` D4: worker selection rule. "bulk" (default): transfers of at least
+    /// `ucx_shard_bulk_bytes` are sharded by issuing thread (0 = all sizes); "bulkget"/"bulkput"
+    /// shard only gets/puts that way; "pe": always by target PE.
+    #[serde(default = "default_ucx_shard_mode")]
+    pub ucx_shard_mode: String,
+
+    /// `ucx_opt_lamellae` D4: minimum transfer size (bytes) sharded by thread in the thread-sharded
+    /// modes. Default: 0 (every size)
+    #[serde(default = "default_ucx_shard_bulk_bytes")]
+    pub ucx_shard_bulk_bytes: usize,
+
+    /// `ucx_opt_lamellae`: minimum microseconds between idle-hook progress calls across all idle
+    /// threads (0 = unthrottled). Default: 0
+    #[serde(default = "default_ucx_hook_min_us")]
+    pub ucx_hook_min_us: u64,
 
     /// flag used to print warnings when users call barriers on worker threads. Default: true
     #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]

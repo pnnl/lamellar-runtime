@@ -1,0 +1,423 @@
+use std::{
+    ffi::c_void,
+    mem::MaybeUninit,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
+
+use super::{
+    context::Context, endpoint::Endpoint, error::Error, Shard, UcxOptAlloc, UcxOptBarrier,
+};
+use lamellar_ucx_sys::*;
+use pmi::pmi::Pmi;
+
+use tracing::{debug, trace};
+
+#[derive(Debug, Clone)]
+pub(crate) struct RemoteAddressInfo {
+    pub(crate) addr: usize,
+    /// One unpacked rkey per shard (an rkey is bound to the endpoint it was unpacked against),
+    /// behind a single `Arc` so cloning a peer's entry -- done per PE for every runtime
+    /// sub-allocation, i.e. on every active message -- costs one atomic, as before sharding.
+    pub(crate) rkeys: Arc<Vec<RKey>>,
+}
+
+impl RemoteAddressInfo {
+    #[inline]
+    pub(crate) fn rkey_for(&self, shard: usize) -> &RKey {
+        &self.rkeys[shard]
+    }
+}
+
+fn unpack_all(endpoints: &[Arc<Endpoint>], extra: &[Shard], pe: usize, buf: &[u8]) -> Arc<Vec<RKey>> {
+    let mut v = Vec::with_capacity(1 + extra.len());
+    v.push(RKey::unpack(&endpoints[pe], buf));
+    v.extend(extra.iter().map(|s| RKey::unpack(&s.endpoints[pe], buf)));
+    Arc::new(v)
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MemoryHandle {
+    pub(crate) inner: Arc<MemoryHandleInner>,
+    pub(crate) addr: usize,
+    pub(crate) size: usize,
+}
+
+static MEMREGION_CNT: AtomicUsize = AtomicUsize::new(0);
+
+impl MemoryHandle {
+    #[inline]
+    pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.addr as *mut T,
+                self.size / std::mem::size_of::<T>(),
+            )
+        }
+    }
+    #[inline]
+    pub(crate) fn as_slice<T>(&self) -> &[T] {
+        unsafe {
+            std::slice::from_raw_parts(self.addr as *const T, self.size / std::mem::size_of::<T>())
+        }
+    }
+
+    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> Self {
+        assert!(offset + size <= self.size);
+        MemoryHandle {
+            inner: self.inner.clone(),
+            addr: self.addr + offset,
+            size,
+        }
+    }
+}
+
+/// A memory region allocated through UCP library,
+/// which is optimized for remote memory access operations.
+#[derive(Debug)]
+pub(crate) struct MemoryHandleInner {
+    handle: ucp_mem_h,
+    pub(crate) addr: usize,
+    context: Arc<Context>,
+}
+
+unsafe impl Send for MemoryHandleInner {}
+unsafe impl Sync for MemoryHandleInner {}
+
+impl PartialEq for MemoryHandleInner {
+    fn eq(&self, other: &Self) -> bool {
+        self.context.handle == other.context.handle
+            && self.addr == other.addr
+            && self.handle == other.handle
+    }
+}
+
+impl Eq for MemoryHandleInner {}
+impl std::hash::Hash for MemoryHandleInner {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.context.handle.hash(state);
+        self.addr.hash(state);
+        self.handle.hash(state);
+    }
+}
+
+impl MemoryHandleInner {
+    #[inline]
+    pub(crate) fn as_ptr(&self) -> *const u8 {
+        self.addr as *const u8
+    }
+
+    #[cfg(feature = "enable-on-node-shmem")]
+    pub(crate) fn map_existing(
+        context: &Arc<Context>,
+        addr: *mut c_void,
+        size: usize,
+    ) -> Arc<Self> {
+        let params = ucp_mem_map_params_t {
+            field_mask: (ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_ADDRESS
+                | ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_LENGTH
+                | ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_FLAGS)
+                .0 as u64,
+            address: addr,
+            length: size as _,
+            flags: 0,
+            prot: 0,
+            memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+            exported_memh_buffer: std::ptr::null_mut(),
+        };
+        let mut handle = MaybeUninit::uninit();
+        let status = unsafe { ucp_mem_map(context.handle, &params, handle.as_mut_ptr()) };
+        assert_eq!(status, ucs_status_t::UCS_OK);
+        let handle = unsafe { handle.assume_init() };
+        let mut attr = ucp_mem_attr_t {
+            field_mask: (ucp_mem_attr_field::UCP_MEM_ATTR_FIELD_ADDRESS
+                | ucp_mem_attr_field::UCP_MEM_ATTR_FIELD_LENGTH)
+                .0 as u64,
+            length: size as _,
+            address: std::ptr::null_mut(),
+            mem_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+        };
+        let status = unsafe { ucp_mem_query(handle, &mut attr) };
+        assert_eq!(status, ucs_status_t::UCS_OK);
+
+        Arc::new(MemoryHandleInner {
+            handle,
+            addr: attr.address as _,
+            context: context.clone(),
+        })
+    }
+    // removed mem_handle method, no longer needed
+    pub(crate) fn alloc(context: &Arc<Context>, size: usize) -> Arc<Self> {
+        let params = ucp_mem_map_params_t {
+            field_mask: (ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_LENGTH
+                | ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_FLAGS)
+                .0 as u64,
+            address: std::ptr::null_mut(),
+            length: (size) as _,
+            flags: UCP_MEM_MAP_ALLOCATE as _,
+            prot: 0,
+            memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+            exported_memh_buffer: std::ptr::null_mut(),
+        };
+        let mut handle = MaybeUninit::uninit();
+        let status = unsafe { ucp_mem_map(context.handle, &params, handle.as_mut_ptr()) };
+        assert_eq!(status, ucs_status_t::UCS_OK);
+        let handle = unsafe { handle.assume_init() };
+        let mut attr = ucp_mem_attr_t {
+            field_mask: (ucp_mem_attr_field::UCP_MEM_ATTR_FIELD_ADDRESS
+                | ucp_mem_attr_field::UCP_MEM_ATTR_FIELD_LENGTH)
+                .0 as u64,
+            length: size as _,
+            address: std::ptr::null_mut(),
+            mem_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+        };
+        let status = unsafe { ucp_mem_query(handle, &mut attr) };
+        assert_eq!(status, ucs_status_t::UCS_OK);
+
+        Arc::new(MemoryHandleInner {
+            handle,
+            addr: attr.address as _,
+            context: context.clone(),
+        })
+    }
+
+    /// Packs into the buffer a remote access key (RKEY) object.
+    pub(crate) fn pack(&self) -> RKeyBuffer {
+        let mut buf = MaybeUninit::uninit();
+        let mut len = MaybeUninit::uninit();
+        let status = unsafe {
+            ucp_rkey_pack(
+                self.context.handle,
+                self.handle,
+                buf.as_mut_ptr(),
+                len.as_mut_ptr(),
+            )
+        };
+        assert_eq!(status, ucs_status_t::UCS_OK);
+        RKeyBuffer {
+            buf: unsafe { buf.assume_init() },
+            len: unsafe { len.assume_init() },
+        }
+    }
+
+    //TODO create an exchange that uses a single registered memory region
+
+    pub(crate) fn exchange_key_pmi(
+        &self,
+        endpoints: &[Arc<Endpoint>],
+        extra: &[Shard],
+        pmi: &Arc<dyn Pmi>,
+    ) -> Result<Vec<Option<RemoteAddressInfo>>, Error> {
+        let rkey = self.pack();
+        let mut address_and_key = self.addr.to_ne_bytes().to_vec();
+        // println!("[exchange_key] address: {:x?}", address_and_key);
+        // println!("[exchange_key] key: {:x?}", rkey.as_ref());
+        address_and_key.extend_from_slice(rkey.as_ref());
+        // println!("[exchange_key] address_and_key: {:x?}", address_and_key);
+        let id = format!(
+            "mem_region_address_{}",
+            MEMREGION_CNT.fetch_add(1, Ordering::SeqCst)
+        );
+        // println!("[exchange_key_pmi] len: {}", address_and_key.len());
+        pmi.put(&id, &address_and_key).unwrap();
+        pmi.exchange().unwrap();
+
+        let mut all_rkeys = vec![None; pmi.ranks().len()];
+        for pe in 0..pmi.ranks().len() {
+            let res = pmi.get(&id, &pe).unwrap();
+            // println!("[exchange_key] {pe}: remote address_and_key {:x?}", res);
+            let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
+            // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
+            let rkeys = unpack_all(endpoints, extra, pe, &res[8..]);
+            all_rkeys[pe] = Some(RemoteAddressInfo {
+                addr: remote_address,
+                rkeys,
+            });
+        }
+        Ok(all_rkeys)
+    }
+
+    pub(crate) fn exchange_key_sub_alloc(
+        &self,
+        endpoints: &[Arc<Endpoint>],
+        extra: &[Shard],
+        pes: &[usize],
+        barrier: &UcxOptBarrier,
+        exchange_buffer: &UcxOptAlloc,
+    ) -> Result<Vec<Option<RemoteAddressInfo>>, Error> {
+        // println!("PE {}: Starting exchange_key_sub_alloc with pes: {:?}", exchange_buffer.my_pe, pes);
+        let rkey = self.pack();
+        let mut address_and_key = self.addr.to_ne_bytes().to_vec();
+        // println!("[exchange_key] address: {:x?}", address_and_key);
+        // println!("[exchange_key] key: {:x?}", rkey.as_ref());
+        address_and_key.extend_from_slice(rkey.as_ref());
+        trace!(target: "ucx", "[exchange_key] address_and_key: {:x?}", address_and_key);
+
+        // println!("[exchange_key_alloc] ex_buff  {:?}", exchange_buffer.as_mut_slice::<u8>());
+
+        barrier.sub_barrier(pes);
+
+        for pe in pes {
+            // println!("PE {}: Putting to PE {} in exchange_key_sub_alloc", exchange_buffer.my_pe, pe);
+            unsafe {
+                exchange_buffer.put_inner(
+                    *pe,
+                    exchange_buffer.my_pe * address_and_key.len(),
+                    &address_and_key,
+                    false,
+                    false,
+                )
+            };
+        }
+
+        exchange_buffer.wait_all();
+        // println!("[exchange_key_alloc] ex_buff  {:?}", exchange_buffer.as_mut_slice::<u8>());
+
+        barrier.sub_barrier(pes);
+        let ex_buff_slice = unsafe { exchange_buffer.as_mut_slice::<u8>() };
+        // println!("[exchange_key_alloc] ex_buff size: {} {:?}", ex_buff_slice.len(), ex_buff_slice);
+        // `exchange_buffer` is always allocated against the *global* PE count
+        // (see UcxOptWorld::initial_alloc), even though `pes` here is a subset,
+        // so size the flat table to the global count to keep raw PE ids valid indices.
+        let mut all_rkeys = vec![None; exchange_buffer.num_pes];
+        for pe in pes {
+            let res = ex_buff_slice[pe * address_and_key.len()..(pe + 1) * address_and_key.len()]
+                .to_vec();
+            trace!(target: "ucx", "[exchange_sub_key] {pe}: remote address_and_key {:x?}", res);
+            let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
+            // println!("[exchange_sub_key] {pe}: remote_address: {:x}", remote_address);
+            let rkeys = unpack_all(endpoints, extra, *pe, &res[8..]);
+            all_rkeys[*pe] = Some(RemoteAddressInfo {
+                addr: remote_address,
+                rkeys,
+            });
+        }
+        ex_buff_slice.fill(0);
+        barrier.sub_barrier(pes);
+        Ok(all_rkeys)
+    }
+
+    pub(crate) fn exchange_key_alloc(
+        &self,
+        endpoints: &[Arc<Endpoint>],
+        extra: &[Shard],
+        // pmi: &Arc<PmiX>,
+        barrier: &UcxOptBarrier,
+        exchange_buffer: &UcxOptAlloc,
+    ) -> Result<Vec<Option<RemoteAddressInfo>>, Error> {
+        let rkey = self.pack();
+        let mut address_and_key = self.addr.to_ne_bytes().to_vec();
+        address_and_key.extend_from_slice(rkey.as_ref());
+        // let id = format!(
+        //     "mem_region_address_{}",
+        //     MEMREGION_CNT.fetch_add(1, Ordering::SeqCst)
+        // );
+        trace!(target: "ucx", "[exchange_key_alloc] len: {}", address_and_key.len());
+
+        // pmi.barrier(false).expect("PMI Barrier failed");
+        barrier.barrier();
+        for pe in 0..exchange_buffer.num_pes {
+            unsafe {
+                exchange_buffer.put_inner(
+                    pe,
+                    exchange_buffer.my_pe * address_and_key.len(),
+                    &address_and_key,
+                    false,
+                    false,
+                )
+            };
+        }
+
+        exchange_buffer.wait_all();
+        barrier.barrier();
+        let ex_buff_slice = unsafe { exchange_buffer.as_mut_slice::<u8>() };
+        // trace!(target: "ucx", "[exchange_key_alloc] ex_buff size: {}", ex_buff_slice.len());
+        let mut all_rkeys = vec![None; exchange_buffer.num_pes];
+        for pe in 0..exchange_buffer.num_pes {
+            let res = ex_buff_slice[pe * address_and_key.len()..(pe + 1) * address_and_key.len()]
+                .to_vec();
+            trace!(target: "ucx", "[exchange_key] {pe}: remote address_and_key {:x?}", res);
+            let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
+            // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
+            let rkeys = unpack_all(endpoints, extra, pe, &res[8..]);
+            if remote_address == 0 || rkeys[0].handle.is_null() {
+                panic!("PE {}: Received remote address 0 or null rkey handle, indicating an error in key exchange", pe);
+            }
+            all_rkeys[pe] = Some(RemoteAddressInfo {
+                addr: remote_address,
+                rkeys,
+            });
+        }
+        ex_buff_slice.fill(0);
+        Ok(all_rkeys)
+    }
+}
+
+impl Drop for MemoryHandleInner {
+    fn drop(&mut self) {
+        trace!(target: "drop", "begin drop MemoryHandleInner");
+        debug!("Dropping MemoryHandleInner {:x}", self.addr);
+        // println!("dropping MemoryHandleInner {:x}", self.addr);
+        unsafe { ucp_mem_unmap(self.context.handle, self.handle) };
+        trace!(target: "drop", "end drop MemoryHandleInner");
+    }
+}
+
+/// An owned buffer containing remote access key.
+#[derive(Debug)]
+pub(crate) struct RKeyBuffer {
+    buf: *mut c_void,
+    len: usize,
+}
+
+impl AsRef<[u8]> for RKeyBuffer {
+    fn as_ref(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.buf as _, self.len as _) }
+    }
+}
+
+impl Drop for RKeyBuffer {
+    fn drop(&mut self) {
+        trace!(target: "drop", "begin drop RKeyBuffer");
+        unsafe { ucp_rkey_buffer_release(self.buf as _) }
+        trace!(target: "drop", "end drop RKeyBuffer");
+    }
+}
+
+/// Remote access key.
+#[derive(Debug)]
+pub(crate) struct RKey {
+    pub(crate) handle: ucp_rkey_h,
+}
+
+unsafe impl Send for RKey {}
+unsafe impl Sync for RKey {}
+
+impl RKey {
+    /// Create remote access key from packed buffer.
+    pub(crate) fn unpack(endpoint: &Endpoint, rkey_buffer: &[u8]) -> Self {
+        let mut handle = MaybeUninit::uninit();
+        let status = unsafe {
+            ucp_ep_rkey_unpack(
+                endpoint.handle,
+                rkey_buffer.as_ptr() as _,
+                handle.as_mut_ptr(),
+            )
+        };
+        assert_eq!(status, ucs_status_t::UCS_OK);
+        // println!("unpacked rkey: {:?}", unsafe { handle.assume_init() });
+        RKey {
+            handle: unsafe { handle.assume_init() },
+        }
+    }
+}
+
+impl Drop for RKey {
+    fn drop(&mut self) {
+        trace!(target: "drop", "begin drop RKey");
+        unsafe { ucp_rkey_destroy(self.handle) }
+        trace!(target: "drop", "end drop RKey");
+    }
+}

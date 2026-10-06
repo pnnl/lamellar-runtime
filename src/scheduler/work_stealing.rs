@@ -149,6 +149,7 @@ pub(crate) struct WorkStealingThread {
     work_flag: Arc<AtomicU8>,
     status: Arc<AtomicU8>,
     panic: Arc<AtomicU8>,
+    progress_hook: Arc<HookCell>,
 }
 
 impl WorkStealingThread {
@@ -238,6 +239,21 @@ impl WorkStealingThread {
                             timer = std::time::Instant::now();
                         }
                         runnable.run();
+                    } else if let Some(hook) = worker.progress_hook.0.get() {
+                        // D5 follow-up: this per-thread steal loop is a separate, hand-rolled
+                        // duplicate of exec_task()'s steal logic and historically never called
+                        // the progress hook at all on a steal miss (just thread::yield_now()).
+                        // Since persistent worker threads -- not one-off exec_task() callers
+                        // like wait_all() -- are what actually idle in steady state, this meant
+                        // the hook could go uncalled indefinitely: confirmed via gdb on a real
+                        // hang (put_buffer_test UnsafeArray np=2) where every worker thread sat
+                        // in this exact steal-miss/yield_now loop, zero threads ever inside any
+                        // UCX progress call, while a completion already on the wire never got
+                        // noticed because nobody ever called ucp_worker_progress again.
+                        if !IN_PROGRESS_HOOK.replace(true) {
+                            hook();
+                            IN_PROGRESS_HOOK.set(false);
+                        }
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
                         && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
@@ -278,7 +294,7 @@ pub(crate) struct WorkStealing {
     status: Arc<AtomicU8>,
     active_cnt: Arc<AtomicUsize>,
     panic: Arc<AtomicU8>,
-    progress_hook: HookCell,
+    progress_hook: Arc<HookCell>,
 }
 
 #[derive(Default)]
@@ -711,7 +727,7 @@ impl WorkStealing {
             status,
             active_cnt: Arc::new(AtomicUsize::new(0)),
             panic,
-            progress_hook: HookCell::default(),
+            progress_hook: Arc::new(HookCell::default()),
         };
         ws.init(Arc::new(core_ids), my_pe);
         ws
@@ -754,6 +770,7 @@ impl WorkStealing {
                 work_flag: self.work_flag.clone(),
                 status: self.status.clone(),
                 panic: self.panic.clone(),
+                progress_hook: self.progress_hook.clone(),
             };
             self.threads.push(WorkStealingThread::run(
                 worker,

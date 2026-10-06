@@ -64,6 +64,18 @@ use crate::lamellae::ucx_lamellae::collective::{
     UcxCollectiveReduceScatterIntoBufferFuture, UcxCollectiveScatterFuture,
     UcxCollectiveScatterIntoBufferFuture,
 };
+#[cfg(feature = "enable-ucx-opt")]
+use crate::lamellae::ucx_opt_lamellae::collective::{
+    UcxOptCollectiveAllGatherFuture, UcxOptCollectiveAllGatherIntoBufferFuture,
+    UcxOptCollectiveAllReduceFuture, UcxOptCollectiveAllReduceInPlaceFuture,
+    UcxOptCollectiveAllReduceIntoBufferFuture, UcxOptCollectiveAllToAllFuture,
+    UcxOptCollectiveAllToAllIntoBufferFuture, UcxOptCollectiveBroadcastFuture,
+    UcxOptCollectiveBroadcastIntoBufferFuture, UcxOptCollectiveGatherFuture,
+    UcxOptCollectiveGatherIntoBufferFuture, UcxOptCollectiveReduceFuture,
+    UcxOptCollectiveReduceIntoBufferFuture, UcxOptCollectiveReduceScatterFuture,
+    UcxOptCollectiveReduceScatterIntoBufferFuture, UcxOptCollectiveScatterFuture,
+    UcxOptCollectiveScatterIntoBufferFuture,
+};
 
 use crate::lamellae::shmem_lamellae::collective::{
     ShmemCollectiveAllGatherFuture, ShmemCollectiveAllGatherIntoBufferFuture,
@@ -129,6 +141,8 @@ pub(crate) enum CollectiveAllReduceOpFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllReduceFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllReduceFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveAllReduceFuture<T>),
     Shmem(#[pin] ShmemCollectiveAllReduceFuture<T>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveAllReduceFuture<T>),
@@ -151,6 +165,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             CollectiveAllReduceOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceOpFuture::UcxOpt(f) => f.block(),
             CollectiveAllReduceOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceOpFuture::ShmemOpt(f) => f.block(),
@@ -176,6 +192,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             CollectiveAllReduceOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveAllReduceOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceOpFuture::ShmemOpt(f) => f.spawn(),
@@ -201,6 +219,8 @@ impl<T: Remote> Future for CollectiveAllReduceOpHandle<T> {
             CollectiveAllReduceOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveAllReduceOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -229,6 +249,8 @@ pub(crate) enum CollectiveAllReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllReduceIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveAllReduceIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveAllReduceIntoBufferFuture<T, B>),
@@ -251,6 +273,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
             CollectiveAllReduceIntoBufferOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceIntoBufferOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceIntoBufferOpFuture::UcxOpt(f) => f.block(),
             CollectiveAllReduceIntoBufferOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceIntoBufferOpFuture::ShmemOpt(f) => f.block(),
@@ -276,6 +300,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
             CollectiveAllReduceIntoBufferOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceIntoBufferOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceIntoBufferOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveAllReduceIntoBufferOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
@@ -301,6 +327,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceIntoBuffer
             CollectiveAllReduceIntoBufferOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceIntoBufferOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveAllReduceIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -329,6 +357,8 @@ pub(crate) enum CollectiveAllReduceInPlaceOpFuture<T: Remote, B: AsLamellarBuffe
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllReduceInPlaceFuture<T, B>), // we can reuse the IntoBuffer future for the InPlace operation since the buffer is provided by the caller in both cases
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllReduceInPlaceFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveAllReduceInPlaceFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllReduceInPlaceFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveAllReduceInPlaceFuture<T, B>),
@@ -351,6 +381,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
             CollectiveAllReduceInPlaceOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceInPlaceOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceInPlaceOpFuture::UcxOpt(f) => f.block(),
             CollectiveAllReduceInPlaceOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceInPlaceOpFuture::ShmemOpt(f) => f.block(),
@@ -376,6 +408,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
             CollectiveAllReduceInPlaceOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceInPlaceOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceInPlaceOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveAllReduceInPlaceOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceInPlaceOpFuture::ShmemOpt(f) => f.spawn(),
@@ -401,6 +435,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceInPlaceOpH
             CollectiveAllReduceInPlaceOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceInPlaceOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllReduceInPlaceOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveAllReduceInPlaceOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllReduceInPlaceOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -429,6 +465,8 @@ pub(crate) enum CollectiveReduceOpFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveReduceFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveReduceFuture<T>),
     Shmem(#[pin] ShmemCollectiveReduceFuture<T>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveReduceFuture<T>),
@@ -451,6 +489,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
             CollectiveReduceOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceOpFuture::UcxOpt(f) => f.block(),
             CollectiveReduceOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceOpFuture::ShmemOpt(f) => f.block(),
@@ -476,6 +516,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
             CollectiveReduceOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveReduceOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceOpFuture::ShmemOpt(f) => f.spawn(),
@@ -501,6 +543,8 @@ impl<T: Remote> Future for CollectiveReduceOpHandle<T> {
             CollectiveReduceOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveReduceOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -529,6 +573,8 @@ pub(crate) enum CollectiveReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveReduceIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveReduceIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveReduceIntoBufferFuture<T, B>),
@@ -551,6 +597,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
             CollectiveReduceIntoBufferOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceIntoBufferOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceIntoBufferOpFuture::UcxOpt(f) => f.block(),
             CollectiveReduceIntoBufferOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceIntoBufferOpFuture::ShmemOpt(f) => f.block(),
@@ -576,6 +624,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
             CollectiveReduceIntoBufferOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceIntoBufferOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceIntoBufferOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveReduceIntoBufferOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
@@ -601,6 +651,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceIntoBufferOpH
             CollectiveReduceIntoBufferOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceIntoBufferOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveReduceIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -720,6 +772,8 @@ pub(crate) enum CollectiveAllGatherOpFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllGatherFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllGatherFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveAllGatherFuture<T>),
     Shmem(#[pin] ShmemCollectiveAllGatherFuture<T>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveAllGatherFuture<T>),
@@ -742,6 +796,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
             CollectiveAllGatherOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllGatherOpFuture::UcxOpt(f) => f.block(),
             CollectiveAllGatherOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllGatherOpFuture::ShmemOpt(f) => f.block(),
@@ -767,6 +823,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
             CollectiveAllGatherOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllGatherOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveAllGatherOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllGatherOpFuture::ShmemOpt(f) => f.spawn(),
@@ -792,6 +850,8 @@ impl<T: Remote> Future for CollectiveAllGatherOpHandle<T> {
             CollectiveAllGatherOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllGatherOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveAllGatherOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllGatherOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -820,6 +880,8 @@ pub(crate) enum CollectiveAllGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllGatherIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveAllGatherIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveAllGatherIntoBufferFuture<T, B>),
@@ -842,6 +904,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
             CollectiveAllGatherIntoBufferOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherIntoBufferOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllGatherIntoBufferOpFuture::UcxOpt(f) => f.block(),
             CollectiveAllGatherIntoBufferOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllGatherIntoBufferOpFuture::ShmemOpt(f) => f.block(),
@@ -867,6 +931,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
             CollectiveAllGatherIntoBufferOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherIntoBufferOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllGatherIntoBufferOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveAllGatherIntoBufferOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllGatherIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
@@ -892,6 +958,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllGatherIntoBuffer
             CollectiveAllGatherIntoBufferOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllGatherIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllGatherIntoBufferOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveAllGatherIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllGatherIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -920,6 +988,8 @@ pub(crate) enum CollectiveGatherOpFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveGatherFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveGatherFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveGatherFuture<T>),
     Shmem(#[pin] ShmemCollectiveGatherFuture<T>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveGatherFuture<T>),
@@ -942,6 +1012,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
             CollectiveGatherOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveGatherOpFuture::UcxOpt(f) => f.block(),
             CollectiveGatherOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveGatherOpFuture::ShmemOpt(f) => f.block(),
@@ -967,6 +1039,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
             CollectiveGatherOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveGatherOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveGatherOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveGatherOpFuture::ShmemOpt(f) => f.spawn(),
@@ -992,6 +1066,8 @@ impl<T: Remote> Future for CollectiveGatherOpHandle<T> {
             CollectiveGatherOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveGatherOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveGatherOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveGatherOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1020,6 +1096,8 @@ pub(crate) enum CollectiveGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveGatherIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveGatherIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveGatherIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveGatherIntoBufferFuture<T, B>),
@@ -1042,6 +1120,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
             CollectiveGatherIntoBufferOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherIntoBufferOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveGatherIntoBufferOpFuture::UcxOpt(f) => f.block(),
             CollectiveGatherIntoBufferOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveGatherIntoBufferOpFuture::ShmemOpt(f) => f.block(),
@@ -1067,6 +1147,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
             CollectiveGatherIntoBufferOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherIntoBufferOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveGatherIntoBufferOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveGatherIntoBufferOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveGatherIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1092,6 +1174,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveGatherIntoBufferOpH
             CollectiveGatherIntoBufferOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveGatherIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveGatherIntoBufferOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveGatherIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveGatherIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1120,6 +1204,8 @@ pub(crate) enum CollectiveAllToAllOpFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllToAllFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllToAllFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveAllToAllFuture<T>),
     Shmem(#[pin] ShmemCollectiveAllToAllFuture<T>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveAllToAllFuture<T>),
@@ -1142,6 +1228,8 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
             CollectiveAllToAllOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllToAllOpFuture::UcxOpt(f) => f.block(),
             CollectiveAllToAllOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllToAllOpFuture::ShmemOpt(f) => f.block(),
@@ -1167,6 +1255,8 @@ impl<T: Remote> CollectiveAllToAllOpHandle<T> {
             CollectiveAllToAllOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllToAllOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveAllToAllOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllToAllOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1192,6 +1282,8 @@ impl<T: Remote> Future for CollectiveAllToAllOpHandle<T> {
             CollectiveAllToAllOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllToAllOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveAllToAllOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllToAllOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1220,6 +1312,8 @@ pub(crate) enum CollectiveAllToAllIntoBufferOpFuture<T: Remote, B: AsLamellarBuf
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveAllToAllIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveAllToAllIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveAllToAllIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveAllToAllIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveAllToAllIntoBufferFuture<T, B>),
@@ -1242,6 +1336,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
             CollectiveAllToAllIntoBufferOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllIntoBufferOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllToAllIntoBufferOpFuture::UcxOpt(f) => f.block(),
             CollectiveAllToAllIntoBufferOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllToAllIntoBufferOpFuture::ShmemOpt(f) => f.block(),
@@ -1267,6 +1363,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllToAllIntoBufferOpHandle<T, 
             CollectiveAllToAllIntoBufferOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllIntoBufferOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllToAllIntoBufferOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveAllToAllIntoBufferOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllToAllIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1292,6 +1390,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllToAllIntoBufferO
             CollectiveAllToAllIntoBufferOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveAllToAllIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveAllToAllIntoBufferOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveAllToAllIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveAllToAllIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1320,6 +1420,8 @@ pub(crate) enum CollectiveBroadcastOpFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveBroadcastFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveBroadcastFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveBroadcastFuture<T>),
     Shmem(#[pin] ShmemCollectiveBroadcastFuture<T>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveBroadcastFuture<T>),
@@ -1342,6 +1444,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
             CollectiveBroadcastOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveBroadcastOpFuture::UcxOpt(f) => f.block(),
             CollectiveBroadcastOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveBroadcastOpFuture::ShmemOpt(f) => f.block(),
@@ -1367,6 +1471,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
             CollectiveBroadcastOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveBroadcastOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveBroadcastOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveBroadcastOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1392,6 +1498,8 @@ impl<T: Remote> Future for CollectiveBroadcastOpHandle<T> {
             CollectiveBroadcastOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveBroadcastOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveBroadcastOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveBroadcastOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1420,6 +1528,8 @@ pub(crate) enum CollectiveBroadcastIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveBroadcastIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveBroadcastIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveBroadcastIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveBroadcastIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveBroadcastIntoBufferFuture<T, B>),
@@ -1442,6 +1552,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
             CollectiveBroadcastIntoBufferOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastIntoBufferOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveBroadcastIntoBufferOpFuture::UcxOpt(f) => f.block(),
             CollectiveBroadcastIntoBufferOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveBroadcastIntoBufferOpFuture::ShmemOpt(f) => f.block(),
@@ -1467,6 +1579,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
             CollectiveBroadcastIntoBufferOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastIntoBufferOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveBroadcastIntoBufferOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveBroadcastIntoBufferOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveBroadcastIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1492,6 +1606,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveBroadcastIntoBuffer
             CollectiveBroadcastIntoBufferOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveBroadcastIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveBroadcastIntoBufferOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveBroadcastIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveBroadcastIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1520,6 +1636,8 @@ pub(crate) enum CollectiveScatterOpFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveScatterFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveScatterFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveScatterFuture<T>),
     Shmem(#[pin] ShmemCollectiveScatterFuture<T>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveScatterFuture<T>),
@@ -1542,6 +1660,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
             CollectiveScatterOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveScatterOpFuture::UcxOpt(f) => f.block(),
             CollectiveScatterOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveScatterOpFuture::ShmemOpt(f) => f.block(),
@@ -1567,6 +1687,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
             CollectiveScatterOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveScatterOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveScatterOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveScatterOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1592,6 +1714,8 @@ impl<T: Remote> Future for CollectiveScatterOpHandle<T> {
             CollectiveScatterOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveScatterOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveScatterOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveScatterOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1620,6 +1744,8 @@ pub(crate) enum CollectiveScatterIntoBufferOpFuture<T: Remote, B: AsLamellarBuff
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveScatterIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveScatterIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveScatterIntoBufferFuture<T, B>),
@@ -1642,6 +1768,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
             CollectiveScatterIntoBufferOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterIntoBufferOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveScatterIntoBufferOpFuture::UcxOpt(f) => f.block(),
             CollectiveScatterIntoBufferOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveScatterIntoBufferOpFuture::ShmemOpt(f) => f.block(),
@@ -1667,6 +1795,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
             CollectiveScatterIntoBufferOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterIntoBufferOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveScatterIntoBufferOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveScatterIntoBufferOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveScatterIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1692,6 +1822,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveScatterIntoBufferOp
             CollectiveScatterIntoBufferOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveScatterIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveScatterIntoBufferOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveScatterIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveScatterIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1720,6 +1852,8 @@ pub(crate) enum CollectiveReduceScatterOpFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveReduceScatterFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceScatterFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveReduceScatterFuture<T>),
     Shmem(#[pin] ShmemCollectiveReduceScatterFuture<T>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveReduceScatterFuture<T>),
@@ -1742,6 +1876,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
             CollectiveReduceScatterOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceScatterOpFuture::UcxOpt(f) => f.block(),
             CollectiveReduceScatterOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceScatterOpFuture::ShmemOpt(f) => f.block(),
@@ -1767,6 +1903,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
             CollectiveReduceScatterOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceScatterOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveReduceScatterOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceScatterOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1792,6 +1930,8 @@ impl<T: Remote> Future for CollectiveReduceScatterOpHandle<T> {
             CollectiveReduceScatterOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceScatterOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveReduceScatterOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceScatterOpFutureProj::ShmemOpt(f) => f.poll(cx),
@@ -1820,6 +1960,8 @@ pub(crate) enum CollectiveReduceScatterIntoBufferOpFuture<T: Remote, B: AsLamell
     LibfabricAsync(#[pin] LibfabricAsyncCollectiveReduceScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxCollectiveReduceScatterIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptCollectiveReduceScatterIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemCollectiveReduceScatterIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOpt(#[pin] ShmemOptCollectiveReduceScatterIntoBufferFuture<T, B>),
@@ -1842,6 +1984,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
             CollectiveReduceScatterIntoBufferOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterIntoBufferOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceScatterIntoBufferOpFuture::UcxOpt(f) => f.block(),
             CollectiveReduceScatterIntoBufferOpFuture::Shmem(f) => f.block(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceScatterIntoBufferOpFuture::ShmemOpt(f) => f.block(),
@@ -1867,6 +2011,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
             CollectiveReduceScatterIntoBufferOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterIntoBufferOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceScatterIntoBufferOpFuture::UcxOpt(f) => f.spawn(),
             CollectiveReduceScatterIntoBufferOpFuture::Shmem(f) => f.spawn(),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceScatterIntoBufferOpFuture::ShmemOpt(f) => f.spawn(),
@@ -1892,6 +2038,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceScatterIntoBu
             CollectiveReduceScatterIntoBufferOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             CollectiveReduceScatterIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            CollectiveReduceScatterIntoBufferOpFutureProj::UcxOpt(f) => f.poll(cx),
             CollectiveReduceScatterIntoBufferOpFutureProj::Shmem(f) => f.poll(cx),
             #[cfg(feature = "enable-shmem-opt")]
             CollectiveReduceScatterIntoBufferOpFutureProj::ShmemOpt(f) => f.poll(cx),

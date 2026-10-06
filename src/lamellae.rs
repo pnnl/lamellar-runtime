@@ -44,6 +44,8 @@ pub(crate) mod libfabric_sys_lamellae;
 pub(crate) mod libfabric_sys_opt_lamellae;
 #[cfg(feature = "enable-ucx")]
 pub(crate) mod ucx_lamellae;
+#[cfg(feature = "enable-ucx-opt")]
+pub(crate) mod ucx_opt_lamellae;
 
 #[cfg(feature = "enable-libfabric-sys")]
 use crate::lamellae::libfabric_sys_lamellae::LibfabricSysBuilder;
@@ -55,6 +57,8 @@ use libfabric_async_lamellae::{LibfabricAsync, LibfabricAsyncBuilder};
 use libfabric_lamellae::{Libfabric, LibfabricBuilder};
 #[cfg(feature = "enable-ucx")]
 use ucx_lamellae::{Ucx, UcxBuilder};
+#[cfg(feature = "enable-ucx-opt")]
+use ucx_opt_lamellae::{UcxOpt, UcxOptBuilder};
 
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
@@ -92,6 +96,10 @@ pub enum Backend {
     #[cfg_attr(docsrs, doc(cfg(feature = "enable-ucx")))]
     /// The UCX backend for communication
     Ucx,
+    #[cfg(feature = "enable-ucx-opt")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-ucx-opt")))]
+    /// The optimized UCX backend for communication
+    UcxOpt,
     /// The Local backend -- intended for single process environments
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
@@ -149,6 +157,12 @@ impl Default for Backend {
                 return Backend::Ucx;
                 #[cfg(not(feature = "enable-ucx"))]
                 panic!("unable to set ucx backend, recompile with 'enable-ucx' feature")
+            }
+            "ucx-opt" => {
+                #[cfg(feature = "enable-ucx-opt")]
+                return Backend::UcxOpt;
+                #[cfg(not(feature = "enable-ucx-opt"))]
+                panic!("unable to set ucx-opt backend, recompile with 'enable-ucx-opt' feature")
             }
             "shmem" => {
                 return Backend::Shmem;
@@ -330,6 +344,8 @@ pub(crate) enum LamellaeBuilder {
     LibfabricAsyncBuilder,
     #[cfg(feature = "enable-ucx")]
     UcxBuilder,
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOptBuilder,
     ShmemBuilder,
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOptBuilder,
@@ -375,6 +391,8 @@ pub(crate) enum Lamellae {
     LibfabricAsync,
     #[cfg(feature = "enable-ucx")]
     Ucx,
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt,
     // #[cfg(feature = "enable-libfabric")]
     // LibfabricAsync,
     Shmem,
@@ -399,6 +417,8 @@ impl Lamellae {
             Lamellae::LibfabricAsync(libfabric_async) => libfabric_async.comm(),
             #[cfg(feature = "enable-ucx")]
             Lamellae::Ucx(ucx) => ucx.comm(),
+            #[cfg(feature = "enable-ucx-opt")]
+            Lamellae::UcxOpt(ucx_opt) => ucx_opt.comm(),
             Lamellae::Shmem(shmem) => shmem.comm(),
             #[cfg(feature = "enable-shmem-opt")]
             Lamellae::ShmemOpt(shmem_opt) => shmem_opt.comm(),
@@ -420,6 +440,8 @@ impl Lamellae {
             Lamellae::LibfabricAsync(libfabric_async) => libfabric_async.wait_all_print(),
             #[cfg(feature = "enable-ucx")]
             Lamellae::Ucx(ucx) => ucx.wait_all_print(),
+            #[cfg(feature = "enable-ucx-opt")]
+            Lamellae::UcxOpt(ucx_opt) => ucx_opt.wait_all_print(),
             // #[cfg(feature = "enable-libfabric")]
             // Lamellae::LibfabricAsync => println!("libfabric async - nothing to print"),
             Lamellae::Shmem(shmem) => shmem.wait_all_print(),
@@ -509,6 +531,8 @@ pub(crate) fn create_lamellae(backend: Backend, _num_threads: usize) -> Lamellae
         }
         #[cfg(feature = "enable-ucx")]
         Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),
+        #[cfg(feature = "enable-ucx-opt")]
+        Backend::UcxOpt => LamellaeBuilder::UcxOptBuilder(UcxOptBuilder::new()),
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         #[cfg(feature = "enable-shmem-opt")]
         Backend::ShmemOpt => LamellaeBuilder::ShmemOptBuilder(ShmemOptBuilder::new()),

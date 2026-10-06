@@ -30,6 +30,8 @@ use crate::lamellae::libfabric_async_lamellae::comm::LibfabricAsyncComm;
 use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
+#[cfg(feature = "enable-ucx-opt")]
+use crate::lamellae::ucx_opt_lamellae::comm::UcxOptComm;
 #[cfg(feature = "enable-shmem-opt")]
 use crate::lamellae::shmem_opt_lamellae::comm::ShmemOptComm;
 use crate::lamellae::{
@@ -80,6 +82,8 @@ pub(crate) enum Comm {
     LibfabricAsync(LibfabricAsyncComm),
     #[cfg(feature = "enable-ucx")]
     Ucx(UcxComm),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(UcxOptComm),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(RofiCComm),
     Shmem(ShmemComm),

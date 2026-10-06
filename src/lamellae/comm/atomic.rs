@@ -27,8 +27,12 @@ use crate::lamellae::rofi_c_lamellae::atomic::{
 };
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::atomic::UcxAtomicCompareExchangeFuture;
+#[cfg(feature = "enable-ucx-opt")]
+use crate::lamellae::ucx_opt_lamellae::atomic::UcxOptAtomicCompareExchangeFuture;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
+#[cfg(feature = "enable-ucx-opt")]
+use crate::lamellae::ucx_opt_lamellae::atomic::{UcxOptAtomicFetchFuture, UcxOptAtomicFuture};
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
@@ -146,6 +150,8 @@ pub(crate) enum AtomicOpFuture<T> {
     LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptAtomicFuture<T>),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicFuture<T>),
     Shmem(#[pin] ShmemAtomicFuture<T>),
@@ -168,6 +174,8 @@ impl<T: Remote> AtomicOpHandle<T> {
             AtomicOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicOpFuture::UcxOpt(f) => f.block(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFuture::RofiC(f) => f.block(),
             AtomicOpFuture::Shmem(f) => f.block(),
@@ -194,6 +202,8 @@ impl<T: Remote> AtomicOpHandle<T> {
             AtomicOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicOpFuture::UcxOpt(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFuture::RofiC(f) => f.spawn(),
             AtomicOpFuture::Shmem(f) => f.spawn(),
@@ -220,6 +230,8 @@ impl<T: Remote> Future for AtomicOpHandle<T> {
             AtomicOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicOpFutureProj::UcxOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-c")]
             AtomicOpFutureProj::RofiC(f) => f.poll(cx),
             AtomicOpFutureProj::Shmem(f) => f.poll(cx),
@@ -254,6 +266,8 @@ pub(crate) enum AtomicFetchOpFuture<T> {
     LibfabricAsync(#[pin] LibfabricAsyncAtomicFetchFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicFetchFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptAtomicFetchFuture<T>),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicFetchFuture<T>),
     Shmem(#[pin] ShmemAtomicFetchFuture<T>),
@@ -276,6 +290,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicFetchOpFuture::UcxOpt(f) => f.block(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFuture::RofiC(f) => f.block(),
             AtomicFetchOpFuture::Shmem(f) => f.block(),
@@ -302,6 +318,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicFetchOpFuture::UcxOpt(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFuture::RofiC(f) => f.spawn(),
             AtomicFetchOpFuture::Shmem(f) => f.spawn(),
@@ -328,6 +346,8 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
             AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicFetchOpFutureProj::UcxOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-c")]
             AtomicFetchOpFutureProj::RofiC(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
@@ -364,6 +384,8 @@ pub(crate) enum AtomicCompareExchangeFuture<T> {
     LibfabricAsync(#[pin] LibfabricAsyncAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicCompareExchangeFuture<T>),
+    #[cfg(feature = "enable-ucx-opt")]
+    UcxOpt(#[pin] UcxOptAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(#[pin] RofiCAtomicCompareExchangeFuture<T>),
     Shmem(#[pin] ShmemAtomicCompareExchangeFuture<T>),
@@ -388,6 +410,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicCompareExchangeFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicCompareExchangeFuture::UcxOpt(f) => f.block(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFuture::RofiC(f) => f.block(),
             AtomicCompareExchangeFuture::Shmem(f) => f.block(),
@@ -415,6 +439,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicCompareExchangeFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicCompareExchangeFuture::UcxOpt(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFuture::RofiC(f) => f.spawn(),
             AtomicCompareExchangeFuture::Shmem(f) => f.spawn(),
@@ -441,6 +467,8 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicCompareExchangeFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx-opt")]
+            AtomicCompareExchangeFutureProj::UcxOpt(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-c")]
             AtomicCompareExchangeFutureProj::RofiC(f) => f.poll(cx),
             AtomicCompareExchangeFutureProj::Shmem(f) => f.poll(cx),

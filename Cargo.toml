@@ -54,6 +54,7 @@ tokio = { version = "1.47.1", features = ["full"], optional = true }
 # --- concurrency / sync primitives ---
 core_affinity = "0.8.3"
 crossbeam = "0.8.4"
+event-listener = { version = "5.4.2", optional = true }
 parking_lot = { version = "0.12.4", features = [
     "arc_lock",
     "send_guard",
@@ -201,6 +202,13 @@ enable-libfabric-sys-opt = ["libfabric-sys", "pmi", "libc"]
 enable-shmem-opt = ["libc"]
 enable-libfabric-async = ["libfabric/use-async-std", "pmi"]
 enable-ucx = ["lamellar-ucx-sys", "lamellar-ucc-sys", "pmi", "thiserror"]
+enable-ucx-opt = [
+    "lamellar-ucx-sys",
+    "lamellar-ucc-sys",
+    "pmi",
+    "thiserror",
+    "event-listener",
+]
 
 # --- executor ---
 tokio-executor = ["tokio"]

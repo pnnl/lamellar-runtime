@@ -93,7 +93,8 @@ pub(crate) type AllocResult<T> = Result<T, AllocError>;
     feature = "enable-libfabric-sys-opt",
     feature = "enable-libfabric-async",
     feature = "enable-rofi-c",
-    feature = "enable-ucx"
+    feature = "enable-ucx",
+    feature = "enable-ucx-opt"
 ))]
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum FabricError {
@@ -113,7 +114,8 @@ pub(crate) enum FabricError {
     feature = "enable-libfabric-sys-opt",
     feature = "enable-libfabric-async",
     feature = "enable-rofi-c",
-    feature = "enable-ucx"
+    feature = "enable-ucx",
+    feature = "enable-ucx-opt"
 ))]
 impl std::fmt::Display for FabricError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -141,7 +143,8 @@ impl std::fmt::Display for FabricError {
     feature = "enable-libfabric-sys-opt",
     feature = "enable-libfabric-async",
     feature = "enable-rofi-c",
-    feature = "enable-ucx"
+    feature = "enable-ucx",
+    feature = "enable-ucx-opt"
 ))]
 impl std::error::Error for FabricError {}
 
