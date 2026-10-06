@@ -453,32 +453,44 @@ impl UcxWorld {
         }
         let id = std::any::TypeId::of::<T>();
 
-        if id == std::any::TypeId::of::<u8>() {
-            true
-        } else if id == std::any::TypeId::of::<u16>() {
-            true
-        } else if id == std::any::TypeId::of::<u32>() {
-            true
-        } else if id == std::any::TypeId::of::<u64>() {
-            true
-        } else if id == std::any::TypeId::of::<u128>() {
-            true
-        } else if id == std::any::TypeId::of::<i8>() {
-            true
-        } else if id == std::any::TypeId::of::<i16>() {
-            true
-        } else if id == std::any::TypeId::of::<i32>() {
-            true
-        } else if id == std::any::TypeId::of::<i64>() {
-            true
-        } else if id == std::any::TypeId::of::<i128>() {
-            true
-        } else if id == std::any::TypeId::of::<usize>() {
-            true
-        } else if id == std::any::TypeId::of::<isize>() {
-            true
+        let is_int = id == std::any::TypeId::of::<u8>()
+            || id == std::any::TypeId::of::<u16>()
+            || id == std::any::TypeId::of::<u32>()
+            || id == std::any::TypeId::of::<u64>()
+            || id == std::any::TypeId::of::<u128>()
+            || id == std::any::TypeId::of::<i8>()
+            || id == std::any::TypeId::of::<i16>()
+            || id == std::any::TypeId::of::<i32>()
+            || id == std::any::TypeId::of::<i64>()
+            || id == std::any::TypeId::of::<i128>()
+            || id == std::any::TypeId::of::<usize>()
+            || id == std::any::TypeId::of::<isize>();
+        // ucc.rs's rust_type_to_ucc_dtype maps f32/f64 to UCC_DT_FLOAT32/64, so the UCC binding
+        // layer already supports them; only bitwise reduce ops are semantically invalid on floats.
+        let is_float =
+            id == std::any::TypeId::of::<f32>() || id == std::any::TypeId::of::<f64>();
+
+        if !is_int && !is_float {
+            return false;
+        }
+
+        let is_bitwise_reduce = matches!(
+            op,
+            CollectiveOpKind::AllReduce(AllReduceOp::BitOr)
+                | CollectiveOpKind::AllReduce(AllReduceOp::BitXor)
+                | CollectiveOpKind::AllReduce(AllReduceOp::BitAnd)
+                | CollectiveOpKind::ReduceScatter(AllReduceOp::BitOr)
+                | CollectiveOpKind::ReduceScatter(AllReduceOp::BitXor)
+                | CollectiveOpKind::ReduceScatter(AllReduceOp::BitAnd)
+                | CollectiveOpKind::Reduce(AllReduceOp::BitOr)
+                | CollectiveOpKind::Reduce(AllReduceOp::BitXor)
+                | CollectiveOpKind::Reduce(AllReduceOp::BitAnd)
+        );
+
+        if is_bitwise_reduce {
+            is_int
         } else {
-            false
+            true
         }
     }
     fn initial_alloc(

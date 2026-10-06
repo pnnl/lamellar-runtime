@@ -733,6 +733,10 @@ name = "am_bw_small"
 path = "examples/bandwidths/am_bw_small.rs"
 
 [[example]]
+name = "atomic_f64_collective_latency"
+path = "examples/misc/atomic_f64_collective_latency.rs"
+
+[[example]]
 name = "task_group_am_bw"
 path = "examples/bandwidths/task_group_am_bw.rs"
 
