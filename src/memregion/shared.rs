@@ -1003,7 +1003,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///```
     pub unsafe fn min_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
-        self.mr.as_base::<T>().reduce_all(index, len, ReduceOp::Min)
+        self.mr
+            .as_base::<T>()
+            .reduce_all(self.sub_region_offset + index, len, ReduceOp::Min)
     }
     /// Performs a collective all-reduce maximum over `len` elements starting at `index`.
     /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1030,7 +1032,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///```
     pub unsafe fn max_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
-        self.mr.as_base::<T>().reduce_all(index, len, ReduceOp::Max)
+        self.mr
+            .as_base::<T>()
+            .reduce_all(self.sub_region_offset + index, len, ReduceOp::Max)
     }
     /// Performs a collective all-reduce sum over `len` elements starting at `index`.
     /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1057,7 +1061,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///```
     pub unsafe fn sum_all(&self, index: usize, len: usize) -> CollectiveAllReduceOpHandle<T> {
         // let slice = self.as_slice();
-        self.mr.as_base::<T>().reduce_all(index, len, ReduceOp::Sum)
+        self.mr
+            .as_base::<T>()
+            .reduce_all(self.sub_region_offset + index, len, ReduceOp::Sum)
     }
     /// Performs a collective all-reduce product over `len` elements starting at `index`.
     /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1086,7 +1092,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all(index, len, ReduceOp::Prod)
+            .reduce_all(self.sub_region_offset + index, len, ReduceOp::Prod)
     }
     /// Performs a collective all-reduce bitwise OR over `len` elements starting at `index`.
     /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1115,7 +1121,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all(index, len, ReduceOp::BitOr)
+            .reduce_all(self.sub_region_offset + index, len, ReduceOp::BitOr)
     }
     /// Performs a collective all-reduce bitwise XOR over `len` elements starting at `index`.
     /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1144,7 +1150,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all(index, len, ReduceOp::BitXor)
+            .reduce_all(self.sub_region_offset + index, len, ReduceOp::BitXor)
     }
     /// Performs a collective all-reduce bitwise AND over `len` elements starting at `index`.
     /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1173,7 +1179,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all(index, len, ReduceOp::BitAnd)
+            .reduce_all(self.sub_region_offset + index, len, ReduceOp::BitAnd)
     }
     /// Performs a collective all-reduce minimum, storing results into `buffer`.
     /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1208,7 +1214,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all_into_buffer(index, len, ReduceOp::Min, buffer)
+            .reduce_all_into_buffer(self.sub_region_offset + index, len, ReduceOp::Min, buffer)
     }
     /// Performs a collective all-reduce maximum, storing results into `buffer`.
     /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1243,7 +1249,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all_into_buffer(index, len, ReduceOp::Max, buffer)
+            .reduce_all_into_buffer(self.sub_region_offset + index, len, ReduceOp::Max, buffer)
     }
     /// Performs a collective all-reduce sum, storing results into `buffer`.
     /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1278,7 +1284,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all_into_buffer(index, len, ReduceOp::Sum, buffer)
+            .reduce_all_into_buffer(self.sub_region_offset + index, len, ReduceOp::Sum, buffer)
     }
     /// Performs a collective all-reduce product, storing results into `buffer`.
     /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1313,7 +1319,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all_into_buffer(index, len, ReduceOp::Prod, buffer)
+            .reduce_all_into_buffer(self.sub_region_offset + index, len, ReduceOp::Prod, buffer)
     }
     /// Performs a collective all-reduce bitwise OR, storing results into `buffer`.
     /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1348,7 +1354,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all_into_buffer(index, len, ReduceOp::BitOr, buffer)
+            .reduce_all_into_buffer(self.sub_region_offset + index, len, ReduceOp::BitOr, buffer)
     }
     /// Performs a collective all-reduce bitwise XOR, storing results into `buffer`.
     /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1383,7 +1389,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all_into_buffer(index, len, ReduceOp::BitXor, buffer)
+            .reduce_all_into_buffer(self.sub_region_offset + index, len, ReduceOp::BitXor, buffer)
     }
     /// Performs a collective all-reduce bitwise AND, storing results into `buffer`.
     /// Returns a [`CollectiveAllReduceIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -1418,7 +1424,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_all_into_buffer(index, len, ReduceOp::BitAnd, buffer)
+            .reduce_all_into_buffer(self.sub_region_offset + index, len, ReduceOp::BitAnd, buffer)
     }
     /// Performs an in-place collective all-reduce minimum using `src_and_dst` as both source and destination.
     /// Returns a [`CollectiveAllReduceInPlaceOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -2208,7 +2214,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///```
     pub unsafe fn gather_all(&self, index: usize, len: usize) -> CollectiveAllGatherOpHandle<T> {
         // let slice = self.as_slice();
-        self.mr.as_base::<T>().gather_all(index, len)
+        self.mr
+            .as_base::<T>()
+            .gather_all(self.sub_region_offset + index, len)
     }
     /// Performs a collective all-gather, storing results into `buffer`.
     ///
@@ -2242,7 +2250,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .gather_all_into_buffer(index, len, buffer)
+            .gather_all_into_buffer(self.sub_region_offset + index, len, buffer)
     }
     /// Performs a collective gather to a single PE.
     ///
@@ -2278,7 +2286,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
         root_pe: usize,
     ) -> CollectiveGatherOpHandle<T> {
         // let slice = self.as_slice();
-        self.mr.as_base::<T>().gather(index, len, root_pe)
+        self.mr
+            .as_base::<T>()
+            .gather(self.sub_region_offset + index, len, root_pe)
     }
     /// Performs a collective gather to a single PE, storing results into `target`.
     ///
@@ -2316,7 +2326,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .gather_into_buffer(index, len, root_or_buffer)
+            .gather_into_buffer(self.sub_region_offset + index, len, root_or_buffer)
     }
     /// Broadcasts `len` elements starting at `index` from the root PE to all PEs.
     /// Returns a [`CollectiveAllToAllOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -2343,7 +2353,9 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///```
     pub unsafe fn broadcast_all(&self, index: usize, len: usize) -> CollectiveAllToAllOpHandle<T> {
         // let slice = self.as_slice();
-        self.mr.as_base::<T>().alltoall(index, len)
+        self.mr
+            .as_base::<T>()
+            .alltoall(self.sub_region_offset + index, len)
     }
     /// Broadcasts `len` elements starting at `index` from the root PE to all PEs, storing results into `buffer`.
     /// Returns a [`CollectiveAllToAllIntoBufferOpHandle`] that must be `block()`ed or `spawn()`ed.
@@ -2378,7 +2390,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .alltoall_into_buffer(index, len, buffer)
+            .alltoall_into_buffer(self.sub_region_offset + index, len, buffer)
     }
     /// Performs a collective broadcast from a root PE.
     ///
@@ -2412,6 +2424,10 @@ impl<T: Remote> SharedMemoryRegion<T> {
         len: usize,
     ) -> CollectiveBroadcastOpHandle<T> {
         // let slice = self.as_slice();
+        let src_or_root_pe = match src_or_root_pe {
+            BroadcastInput::Root(index) => BroadcastInput::Root(self.sub_region_offset + index),
+            BroadcastInput::NotRoot(root_pe) => BroadcastInput::NotRoot(root_pe),
+        };
         self.mr.as_base::<T>().broadcast(src_or_root_pe, len)
     }
     /// Performs a collective broadcast from a root PE, storing results into `buffer`.
@@ -2446,6 +2462,14 @@ impl<T: Remote> SharedMemoryRegion<T> {
         len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
+        let root_or_buffer = match root_or_buffer {
+            RootSrcOrLamellarBuffer::Root(index) => {
+                RootSrcOrLamellarBuffer::Root(self.sub_region_offset + index)
+            }
+            RootSrcOrLamellarBuffer::NotRoot(buffer, root_pe) => {
+                RootSrcOrLamellarBuffer::NotRoot(buffer, root_pe)
+            }
+        };
         self.mr
             .as_base::<T>()
             .broadcast_into_buffer(root_or_buffer, len)
