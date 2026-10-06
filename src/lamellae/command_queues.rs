@@ -687,8 +687,8 @@ impl InnerCQ {
                     data_slice.len(),
                     calc_hash(data_slice.as_ptr() as usize, len),
                     cmd.msg_hash,
-                    &data_slice.as_slice()[0..32],
-                    &data_slice.as_slice()[len.saturating_sub(32)..len],
+                    &data_slice.as_slice()[0..std::cmp::min(32, data_slice.len())],
+                    &data_slice.as_slice()[len.saturating_sub(32).min(data_slice.len())..len.min(data_slice.len())],
                     std::thread::current().id(),
                 );
                 timer = std::time::Instant::now();
