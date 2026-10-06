@@ -344,6 +344,19 @@ impl Clone for MemRegionHandle {
 impl Drop for MemRegionHandle {
     fn drop(&mut self) {
         trace!(target: "drop", "begin drop MemRegionHandle");
+        // Fast path: if other local references exist this drop cannot be the last one, so there is
+        // nothing to clean up and the global map lock is not needed. Taking it unconditionally made
+        // every temporary (e.g. the `sub_region(..)` built for each RDMA call) serialize all
+        // threads on one mutex. The decrement is a CAS that only succeeds while the count stays
+        // above zero after it, so it can never be the drop that reaches zero.
+        if self
+            .inner
+            .local_ref
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |c| if c > 1 { Some(c - 1) } else { None })
+            .is_ok()
+        {
+            return;
+        }
         //this means all local instances of this handle have been dropped
         let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let cnt = self.inner.local_ref.fetch_sub(1, Ordering::SeqCst);
