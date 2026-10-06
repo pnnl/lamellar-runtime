@@ -43,3 +43,7 @@ batch_runner*
 /scripts
 *.prterun-*
 
+# cluster job logs and binary snapshots written by the sbatch benchmark/gate scripts
+/sbatch_logs/
+*.sbatch
+*.err
