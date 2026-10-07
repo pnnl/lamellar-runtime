@@ -110,6 +110,17 @@ unsafe extern "C" fn completion_cb(
     unsafe { ucp_request_free(request) };
 }
 
+/// Completion callback for fire-and-forget ops ([`Endpoint::get_untracked`]): nobody observes the
+/// result, so there is no ticket and no `user_data`; the callback only releases the request, which
+/// UCX requires once an in-flight `ucp_*_nbx` request completes.
+unsafe extern "C" fn free_request_cb(
+    request: *mut std::ffi::c_void,
+    _status: ucs_status_t,
+    _user_data: *mut std::ffi::c_void,
+) {
+    unsafe { ucp_request_free(request) };
+}
+
 /// Local-completion state of a [`UcxOptRequest`], independent of the per-`Endpoint` epoch flush
 /// used for remote-completion (see [`EpochFlush`]).
 enum LocalState {
@@ -720,6 +731,50 @@ impl Endpoint {
         });
         UcxOptRequest::new_pending_local(local, self.worker.clone(), None)
     }
+    /// Fire-and-forget get for the unmanaged path: no `Ticket` (no `Arc`, no allocation, nothing the
+    /// completion callback writes that the issuer later touches) and no per-op `UcxOptRequest`.
+    /// Completion is observed only through the worker flush in `wait_all`. An immediate error is
+    /// returned; an asynchronous failure is not reported (same as dropping a ticketed request).
+    pub(crate) fn get_untracked(
+        &self,
+        buf: *const u8,
+        size: usize,
+        remote_addr: usize,
+        rkey: &RKey,
+    ) -> Result<(), Error> {
+        let request = unsafe {
+            ucp_get_nbx(
+                self.handle,
+                buf as _,
+                size as _,
+                remote_addr as _,
+                rkey.handle,
+                &ucp_request_param_t {
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_CALLBACK as u32,
+                    flags: 0,
+                    request: std::ptr::null_mut(),
+                    cb: ucp_request_param_t__bindgen_ty_1 {
+                        send: Some(free_request_cb),
+                    },
+                    datatype: 0,
+                    user_data: std::ptr::null_mut(),
+                    reply_buffer: std::ptr::null_mut(),
+                    memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+                    recv_info: ucp_request_param_t__bindgen_ty_2 {
+                        length: std::ptr::null_mut(),
+                    },
+                    memh: std::ptr::null_mut(),
+                } as _,
+            )
+        };
+        if request.is_null() || UCS_PTR_IS_PTR(request) {
+            Ok(())
+        } else {
+            Error::from_ptr(request)
+        }
+    }
+
     pub(crate) fn atomic_op<T>(
         self: &Arc<Self>,
         op: ucp_atomic_op_t,

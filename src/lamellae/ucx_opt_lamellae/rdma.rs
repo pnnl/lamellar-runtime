@@ -759,7 +759,7 @@ impl CommAllocRdma for UcxOptAlloc {
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
     ) {
-        let _ = unsafe { UcxOptAlloc::inner_get(&self, pe, offset, false, dst.as_mut_slice()) };
+        unsafe { UcxOptAlloc::inner_get_unmanaged(&self, pe, offset, dst.as_mut_slice()) };
     }
 }
 
@@ -1042,6 +1042,6 @@ impl CommAllocRdma for OneSidedUcxOptAlloc {
             "get_into_buffer_unmanaged called on OneSidedUcxOptAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        let _ = unsafe { UcxOptAlloc::inner_get(&self.alloc, pe, offset, false, dst.as_mut_slice()) };
+        unsafe { UcxOptAlloc::inner_get_unmanaged(&self.alloc, pe, offset, dst.as_mut_slice()) };
     }
 }

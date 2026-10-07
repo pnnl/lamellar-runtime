@@ -10,7 +10,7 @@ use crate::lamellae::CollectiveOpKind;
 use context::Context;
 use endpoint::Endpoint;
 pub(crate) use endpoint::UcxOptRequest;
-use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
+use memory_region::{MemoryHandle, MemoryHandleInner, RKey, RemoteAddressInfo};
 pub(crate) use worker::Worker;
 use worker::FlushState;
 
@@ -1759,13 +1759,15 @@ impl UcxOptAlloc {
         }
     }
 
-    pub(crate) unsafe fn inner_get<T: Copy>(
+    /// The part of a get that doesn't depend on how its completion is tracked: picks the shard,
+    /// bounds-checks, satisfies local and same-node targets with a copy, and otherwise returns the
+    /// shard, remote address and rkey for the remote get. `None` means the get is already done.
+    unsafe fn prepare_get<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
-        blocking: bool,
         dst_addr: &mut [T],
-    ) -> Option<UcxOptRequest> {
+    ) -> Option<(usize, usize, &RKey)> {
         let shard = self.shard_idx_sized(pe, dst_addr.len() * std::mem::size_of::<T>(), true);
         let offset = offset * std::mem::size_of::<T>();
         trace!(target: "ucx",
@@ -1800,10 +1802,21 @@ impl UcxOptAlloc {
         } else {
             panic!("inner_get missing remote key for pe {}", pe);
         };
+        Some((shard, remote_addr + offset, rkey))
+    }
+
+    pub(crate) unsafe fn inner_get<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        blocking: bool,
+        dst_addr: &mut [T],
+    ) -> Option<UcxOptRequest> {
+        let (shard, remote_addr, rkey) = self.prepare_get(pe, offset, dst_addr)?;
         let req = self.ep(shard, pe).get(
             dst_addr.as_mut_ptr() as _,
             dst_addr.len() * std::mem::size_of::<T>(),
-            remote_addr + offset,
+            remote_addr,
             rkey,
         );
         if blocking {
@@ -1811,6 +1824,20 @@ impl UcxOptAlloc {
             None
         } else {
             Some(req)
+        }
+    }
+
+    /// Fire-and-forget get for the unmanaged API: completion is observed only through `wait_all`.
+    pub(crate) unsafe fn inner_get_unmanaged<T: Copy>(&self, pe: usize, offset: usize, dst_addr: &mut [T]) {
+        if let Some((shard, remote_addr, rkey)) = self.prepare_get(pe, offset, dst_addr) {
+            self.ep(shard, pe)
+                .get_untracked(
+                    dst_addr.as_mut_ptr() as _,
+                    dst_addr.len() * std::mem::size_of::<T>(),
+                    remote_addr,
+                    rkey,
+                )
+                .expect("get_into_buffer_unmanaged failed");
         }
     }
 
