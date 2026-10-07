@@ -501,13 +501,20 @@ unsafe impl Sync for UccRequest {}
 pub(crate) struct UccRequest {
     req_handle: ucc_coll_req_h,
     req_completed: Arc<AtomicUsize>,
+    /// Count/displacement arrays UCC reads while the collective runs (scatterv); dropped after finalize.
+    _arrays: Vec<Vec<u64>>,
 }
 
 impl UccRequest {
-    pub(crate) fn new(req_handle: ucc_coll_req_h, req_completed: Arc<AtomicUsize>) -> Self {
+    pub(crate) fn new(
+        req_handle: ucc_coll_req_h,
+        req_completed: Arc<AtomicUsize>,
+        arrays: Vec<Vec<u64>>,
+    ) -> Self {
         Self {
             req_handle,
             req_completed,
+            _arrays: arrays,
         }
     }
 
@@ -583,15 +590,25 @@ fn generate_coll_args<T: 'static>(
 }
 
 impl UccTeam {
-    fn post_coll_req(&self, mut coll_args: ucc_coll_args_t) -> Result<UccRequest, Error> {
+    fn post_coll_req(&self, coll_args: ucc_coll_args_t) -> Result<UccRequest, Error> {
+        self.post_coll_req_keeping(coll_args, Vec::new())
+    }
+
+    fn post_coll_req_keeping(
+        &self,
+        mut coll_args: ucc_coll_args_t,
+        arrays: Vec<Vec<u64>>,
+    ) -> Result<UccRequest, Error> {
         let mut coll_req = MaybeUninit::uninit();
         let err =
             unsafe { ucc_collective_init(&mut coll_args, coll_req.as_mut_ptr(), self.handle) };
+        // A failed init leaves the handle uninitialized: return before building a UccRequest, whose
+        // Drop would call ucc_collective_finalize on garbage.
+        Error::from_status(err)?;
         let coll_req = unsafe { coll_req.assume_init() };
         self.req_pending
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let req = UccRequest::new(coll_req, self.req_completed.clone());
-        Error::from_status(err)?; // we check here to make sure the request will be freed even if init failed.
+        let req = UccRequest::new(coll_req, self.req_completed.clone(), arrays);
         let err = unsafe { ucc_collective_post(req.req_handle) };
         Error::from_status(err)?;
         Ok(req)
@@ -626,21 +643,6 @@ impl UccTeam {
             None,
         );
         self.post_coll_req(allgather_args)
-    }
-
-    pub(crate) fn alltoall<T: 'static>(
-        &self,
-        buff: &[T],
-        res: &mut [T],
-    ) -> Result<UccRequest, Error> {
-        let alltoall_args = generate_coll_args::<T>(
-            buff,
-            res,
-            ucc_coll_type_t_UCC_COLL_TYPE_ALLTOALL,
-            None,
-            None,
-        );
-        self.post_coll_req(alltoall_args)
     }
 
     // pub(crate) fn barrier(&self) -> Result<UccRequest, Error> {
@@ -697,20 +699,38 @@ impl UccTeam {
         self.post_coll_req(gather_args)
     }
 
+    /// This UCC build offers Scatterv but not Scatter, so scatter is Scatterv with equal counts: every rank
+    /// receives `res.len()` elements and rank i's chunk starts at `i * res.len()` in the root's buffer.
     pub(crate) fn scatter<T: 'static>(
         &self,
         buff: &[T],
         res: &mut [T],
         root: usize,
     ) -> Result<UccRequest, Error> {
-        let scatter_args = generate_coll_args::<T>(
+        let per_rank = res.len() as u64;
+        let counts = vec![per_rank; self.params.pes.len()];
+        let displacements: Vec<u64> = (0..counts.len() as u64).map(|i| i * per_rank).collect();
+        let mut scatterv_args = generate_coll_args::<T>(
             buff,
             res,
-            ucc_coll_type_t_UCC_COLL_TYPE_SCATTER,
+            ucc_coll_type_t_UCC_COLL_TYPE_SCATTERV,
             Some(root),
             None,
         );
-        self.post_coll_req(scatter_args)
+        scatterv_args.mask = ucc_coll_args_field_UCC_COLL_ARGS_FIELD_FLAGS as u64;
+        scatterv_args.flags = (ucc_coll_args_flags_t_UCC_COLL_ARGS_FLAG_COUNT_64BIT
+            | ucc_coll_args_flags_t_UCC_COLL_ARGS_FLAG_DISPLACEMENTS_64BIT)
+            as u64;
+        scatterv_args.src = ucc_coll_args__bindgen_ty_1 {
+            info_v: ucc_coll_buffer_info_v_t {
+                buffer: buff.as_ptr() as *mut ::std::os::raw::c_void,
+                counts: counts.as_ptr() as *mut ucc_count_t,
+                displacements: displacements.as_ptr() as *mut ucc_aint_t,
+                datatype: rust_type_to_ucc_dtype::<T>(),
+                mem_type: ucc_memory_type_UCC_MEMORY_TYPE_HOST,
+            },
+        };
+        self.post_coll_req_keeping(scatterv_args, vec![counts, displacements])
     }
 
     pub(crate) fn reduce_scatter<T: 'static>(

@@ -42,6 +42,7 @@ fn active_features() -> Vec<&'static str> {
         "enable-libfabric-sys",
         "enable-libfabric-async",
         "enable-ucx",
+        "enable-ucx-opt",
         "enable-libfabric-sys-opt",
         "enable-shmem-opt",
         "tokio-executor",
