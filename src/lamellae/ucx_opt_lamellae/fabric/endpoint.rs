@@ -201,7 +201,9 @@ pub(crate) struct EpochWait {
 
 pub(crate) struct UcxOptRequest {
     local: LocalState,
-    pub(crate) worker: Arc<Worker>,
+    /// Only set while the request is in flight (needed to drive progress); a request that is already
+    /// `Resolved` doesn't clone the worker, so inline-completed ops don't touch the shared refcount.
+    worker: Option<Arc<Worker>>,
     epoch_wait: Option<EpochWait>,
 }
 
@@ -211,7 +213,11 @@ unsafe impl Send for UcxOptRequest {}
 impl UcxOptRequest {
     /// Constructor for the [`issue_ticketed`] result (D1 callback-based completion).
     #[inline]
-    fn new_pending_local(local: LocalState, worker: Arc<Worker>, epoch_wait: Option<EpochWait>) -> Self {
+    fn new_pending_local(local: LocalState, worker: &Arc<Worker>, epoch_wait: Option<EpochWait>) -> Self {
+        let worker = match local {
+            LocalState::Resolved(_) => None,
+            _ => Some(worker.clone()),
+        };
         Self {
             local,
             worker,
@@ -252,7 +258,7 @@ impl UcxOptRequest {
                     self.local = LocalState::Resolved(res);
                     return LocalPoll::Ready(res);
                 }
-                let acquired = progress(&self.worker);
+                let acquired = progress(self.worker.as_ref().expect("in-flight request without a worker"));
                 if ticket.is_done() {
                     let status = ticket.status();
                     let res = Error::from_status(status);
@@ -274,7 +280,7 @@ impl UcxOptRequest {
                 // No waker to register here -- there is no callback to wake it, so (like
                 // plain `ucx_lamellae`'s equivalent path) this relies on the caller re-polling,
                 // which is exactly what `wait()`'s loop below does.
-                let acquired = progress(&self.worker);
+                let acquired = progress(self.worker.as_ref().expect("in-flight request without a worker"));
                 let request = *request;
                 let status = unsafe { ucp_request_check_status(request as _) };
                 if status == ucs_status_t::UCS_INPROGRESS {
@@ -473,7 +479,7 @@ impl Endpoint {
                 },
             )
         });
-        UcxOptRequest::new_pending_local(local, self.worker.clone(), None)
+        UcxOptRequest::new_pending_local(local, &self.worker, None)
     }
 
     /// Non-blocking: is epoch `ew.target` on this endpoint remotely visible yet? Coalesces
@@ -634,7 +640,7 @@ impl Endpoint {
                     } as _,
                 )
             });
-            UcxOptRequest::new_pending_local(local, self.worker.clone(), None)
+            UcxOptRequest::new_pending_local(local, &self.worker, None)
                 .wait()
                 .expect("Failed to wait for UcxOptRequest"); //ensures local buffer can be reused
             return None;
@@ -684,7 +690,7 @@ impl Endpoint {
         let target = self.epoch.posted.fetch_add(1, Ordering::AcqRel) + 1;
         Some(UcxOptRequest::new_pending_local(
             local,
-            self.worker.clone(),
+            &self.worker,
             Some(EpochWait {
                 endpoint: self.clone(),
                 target,
@@ -729,7 +735,7 @@ impl Endpoint {
                 } as _,
             )
         });
-        UcxOptRequest::new_pending_local(local, self.worker.clone(), None)
+        UcxOptRequest::new_pending_local(local, &self.worker, None)
     }
     /// Fire-and-forget get for the unmanaged path: no `Ticket` (no `Arc`, no allocation, nothing the
     /// completion callback writes that the issuer later touches) and no per-op `UcxOptRequest`.
@@ -826,7 +832,7 @@ impl Endpoint {
         } else {
             None
         };
-        let req = UcxOptRequest::new_pending_local(local, self.worker.clone(), epoch_wait);
+        let req = UcxOptRequest::new_pending_local(local, &self.worker, epoch_wait);
         if managed {
             Some(req)
         } else {
@@ -874,7 +880,7 @@ impl Endpoint {
                 },
             )
         });
-        UcxOptRequest::new_pending_local(local, self.worker.clone(), None)
+        UcxOptRequest::new_pending_local(local, &self.worker, None)
     }
     pub(crate) fn atomic_swap<T>(
         self: &Arc<Self>,
@@ -938,7 +944,7 @@ impl Endpoint {
         } else {
             None
         };
-        let req = UcxOptRequest::new_pending_local(local, self.worker.clone(), epoch_wait);
+        let req = UcxOptRequest::new_pending_local(local, &self.worker, epoch_wait);
         if managed {
             Some(req)
         } else {
@@ -984,7 +990,7 @@ impl Endpoint {
                 },
             )
         });
-        UcxOptRequest::new_pending_local(local, self.worker.clone(), None)
+        UcxOptRequest::new_pending_local(local, &self.worker, None)
     }
 
     pub(crate) fn atomic_fetch_op<T>(
@@ -1026,7 +1032,7 @@ impl Endpoint {
                 },
             )
         });
-        UcxOptRequest::new_pending_local(local, self.worker.clone(), None)
+        UcxOptRequest::new_pending_local(local, &self.worker, None)
     }
 }
 
