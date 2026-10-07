@@ -487,6 +487,20 @@ impl UcxWorld {
                 | CollectiveOpKind::Reduce(AllReduceOp::BitAnd)
         );
 
+        // UCC's 128-bit reductions return wrong results (or/prod/and failed on every u128 case run), while
+        // 128-bit data movement (gather, broadcast, alltoall) is correct. Reductions on 128-bit types
+        // take the manual fallback instead.
+        let is_128 = id == std::any::TypeId::of::<u128>() || id == std::any::TypeId::of::<i128>();
+        let is_reduction = matches!(
+            op,
+            CollectiveOpKind::AllReduce(_)
+                | CollectiveOpKind::Reduce(_)
+                | CollectiveOpKind::ReduceScatter(_)
+        );
+        if is_128 && is_reduction {
+            return false;
+        }
+
         if is_bitwise_reduce {
             is_int
         } else {
@@ -1795,7 +1809,7 @@ impl UcxAlloc {
         blocking: bool,
     ) -> Result<Option<UccRequest>, ucc::Error> {
         if let Some(ucc_team) = &self.ucc_team {
-            let req = ucc_team.alltoall(src, result)?;
+            let req = ucc_team.allgather(src, result)?;
             if blocking {
                 self.wait_ucc_request(&req)?;
                 Ok(None)
