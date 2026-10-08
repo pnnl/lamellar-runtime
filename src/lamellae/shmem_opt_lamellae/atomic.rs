@@ -703,3 +703,150 @@ impl CommAllocAtomic for OneSidedShmemOptAlloc {
         shm_atomic_compare_exchange(current, new, &CommAllocAddr(remote_dst_addr))
     }
 }
+
+// --- generated: ShmemOptExternAlloc (copy of the ShmemOptAlloc impl above) ---
+impl CommAllocAtomic for super::external::ShmemOptExternAlloc {
+    fn atomic_op<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        ShmemOptAtomicFuture {
+            op: op,
+            dst: AtomicDst::One(CommAllocAddr(remote_dst_addr)),
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+    fn atomic_op_blocking<T: Remote + 'static>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        shm_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
+    }
+    fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        shm_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
+    }
+    fn atomic_op_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        op: AtomicOp<T>,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_addrs: Vec<CommAllocAddr> = (0..self.num_pes())
+            .map(|pe| {
+                let remote_dst_base = self.pe_base_offset_rel(pe);
+                CommAllocAddr(remote_dst_base + offset)
+            })
+            .collect();
+        ShmemOptAtomicFuture {
+            op: op,
+            dst: AtomicDst::All(remote_dst_addrs),
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        for pe in 0..self.num_pes() {
+            let remote_dst_base = self.pe_base_offset_rel(pe);
+            let remote_dst_addr = remote_dst_base + offset;
+            shm_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
+        }
+    }
+    fn atomic_fetch_op<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicFetchOpHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        ShmemOptAtomicFetchFuture {
+            op,
+            dst: CommAllocAddr(remote_dst_addr),
+            result: MaybeUninit::uninit(),
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        shm_atomic_fetch_op(&op, &CommAllocAddr(remote_dst_addr))
+    }
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        ShmemOptAtomicCompareExchangeFuture {
+            dst: CommAllocAddr(remote_dst_addr),
+            current,
+            new,
+            result: None,
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        shm_atomic_compare_exchange(current, new, &CommAllocAddr(remote_dst_addr))
+    }
+}

@@ -737,6 +737,17 @@ impl ShmemOptAllocator {
         self.heap.barrier();
     }
 
+    /// Collective over every PE: make `len` bytes at `ptr` (memory the caller owns, for example its data segment)
+    /// reachable by all of them. See `external.rs` for what this does to the range.
+    pub(crate) fn register_external(
+        &self,
+        ptr: *mut u8,
+        len: usize,
+    ) -> AllocResult<super::external::ShmemOptExternAlloc> {
+        let _guard = self.alloc_lock.lock();
+        super::external::register(&self.heap, self.my_pe, self.num_pes, self.job_id, ptr, len)
+    }
+
     /// Collective over `pes`. The returned memory is zero: fresh sparse pages, or a range
     /// whose previous owner hole-punched every portion before recycling it.
     //#[tracing::instrument(skip_all, level = "debug")]

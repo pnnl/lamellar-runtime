@@ -920,3 +920,302 @@ impl CommAllocRdma for OneSidedShmemOptAlloc {
         }
     }
 }
+
+// --- generated: ShmemOptExternAlloc (copy of the ShmemOptAlloc impl above) ---
+impl CommAllocRdma for super::external::ShmemOptExternAlloc {
+    fn put<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        ShmemOptFuture {
+            op: Op::Put(src.into(), CommAllocAddr(self.pe_base_offset(pe) + offset)),
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+    fn put_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
+        unsafe {
+            dst.as_mut_ptr::<T>().write_unaligned(src);
+        }
+        fence(Ordering::Release);
+    }
+    fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
+        unsafe {
+            dst.as_mut_ptr::<T>().write_unaligned(src);
+        }
+        fence(Ordering::SeqCst);
+    }
+    fn put_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        ShmemOptFuture {
+            op: Op::PutBuf(src, CommAllocAddr(self.pe_base_offset(pe) + offset)),
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+    fn put_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
+        if !(src.contains(&dst) || src.contains(&(dst + src.num_bytes()))) {
+            unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
+        } else {
+            unsafe {
+                std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
+            }
+        }
+        fence(Ordering::SeqCst);
+    }
+    fn put_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        src: T,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let pe_addrs = (0..self.num_pes())
+            .map(|pe| {
+                let real_dst_base = self.pe_base_offset_rel(pe);
+                let real_dst_addr = real_dst_base + offset;
+                CommAllocAddr(real_dst_addr)
+            })
+            .collect::<Vec<_>>();
+        ShmemOptFuture {
+            op: Op::PutAll(src, pe_addrs),
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        for pe in 0..self.num_pes() {
+            let real_dst_base = self.pe_base_offset_rel(pe);
+            let real_dst_addr = real_dst_base + offset;
+            let dst = CommAllocAddr(real_dst_addr);
+            unsafe {
+                dst.as_mut_ptr::<T>().write_unaligned(src);
+            }
+        }
+        fence(Ordering::SeqCst);
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let pe_addrs = (0..self.num_pes())
+            .map(|pe| {
+                let real_dst_base = self.pe_base_offset_rel(pe);
+                let real_dst_addr = real_dst_base + offset;
+                CommAllocAddr(real_dst_addr)
+            })
+            .collect::<Vec<_>>();
+        ShmemOptFuture {
+            op: Op::PutAllBuf(src, pe_addrs),
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        for pe in 0..self.num_pes() {
+            let real_dst_base = self.pe_base_offset_rel(pe);
+            let real_dst_addr = real_dst_base + offset;
+            let dst = CommAllocAddr(real_dst_addr);
+            if !(src.contains(&dst) || src.contains(&(dst + src.num_bytes()))) {
+                unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
+            } else {
+                unsafe {
+                    std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
+                }
+            }
+        }
+        fence(Ordering::SeqCst);
+    }
+
+    fn get<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaGetHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemOptGetFuture {
+            src: remote_src_addr,
+            alloc: None,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            result: MaybeUninit::uninit(),
+        }
+        .into()
+    }
+
+    fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        fence(Ordering::Acquire);
+        unsafe { remote_src_addr.as_ptr::<T>().read_unaligned() }
+    }
+
+    fn get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> RdmaGetBufferHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemOptGetBufferFuture {
+            src: remote_src_addr,
+            alloc: None,
+            len,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            result: Vec::with_capacity(len),
+        }
+        .into()
+    }
+    fn blocking_get_buffer<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> Vec<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        let mut dst: Vec<T> = Vec::with_capacity(len);
+        fence(Ordering::Acquire);
+        unsafe {
+            std::ptr::copy_nonoverlapping(remote_src_addr.as_ptr::<T>(), dst.as_mut_ptr(), len);
+            dst.set_len(len);
+        }
+        dst
+    }
+
+    fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        _counters: Option<Arc<[Arc<AMCounters>]>>,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemOptGetIntoBufferFuture {
+            src: remote_src_addr,
+            alloc: None,
+            buffer: dst,
+            spawned: false,
+            scheduler: scheduler.clone(),
+        }
+        .into()
+    }
+
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        fence(Ordering::Acquire);
+        unsafe {
+            copy_bytes(
+                remote_src_addr.as_ptr::<T>() as *const u8,
+                dst.as_mut_slice().as_mut_ptr() as *mut u8,
+                dst.len() * std::mem::size_of::<T>(),
+            );
+        }
+    }
+
+    fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        fence(Ordering::SeqCst);
+        unsafe {
+            copy_bytes(
+                remote_src_addr.as_ptr::<T>() as *const u8,
+                dst.as_mut_slice().as_mut_ptr() as *mut u8,
+                dst.len() * std::mem::size_of::<T>(),
+            );
+        }
+    }
+}

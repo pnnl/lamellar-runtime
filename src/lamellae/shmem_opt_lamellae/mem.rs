@@ -50,6 +50,13 @@ impl CommMem for ShmemOptComm {
         })
     }
 
+    fn register_external(&self, ptr: *mut u8, len: usize) -> AllocResult<CommAlloc> {
+        let inner_alloc = self.allocator.register_external(ptr, len)?;
+        Ok(CommAlloc {
+            inner_alloc: Arc::new(CommAllocInner::ShmemOptExternAlloc(inner_alloc)),
+        })
+    }
+
     // //#[tracing::instrument(skip(self), level = "debug")]
     // fn free(&self, alloc: CommAlloc) {
     //     //maybe need to do something more intelligent on the drop of the shmem_alloc

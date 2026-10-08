@@ -1,4 +1,6 @@
 #[cfg(feature = "enable-shmem-opt")]
+use crate::lamellae::shmem_opt_lamellae::external::ShmemOptExternAlloc;
+#[cfg(feature = "enable-shmem-opt")]
 use crate::lamellae::shmem_opt_lamellae::fabric::{OneSidedShmemOptAlloc, ShmemOptAlloc};
 use crate::lamellae::collective::{
     BroadcastInput, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle,
@@ -135,6 +137,9 @@ pub(crate) enum CommAllocInner {
     ShmemAlloc(ShmemAlloc),
     #[cfg(feature = "enable-shmem-opt")]
     ShmemOptAlloc(ShmemOptAlloc),
+    /// Caller-owned memory (e.g. `.data`/`.bss`) made shared with the other PEs; RMA and atomics only.
+    #[cfg(feature = "enable-shmem-opt")]
+    ShmemOptExternAlloc(ShmemOptExternAlloc),
     OneSidedShmemAlloc(OneSidedShmemAlloc),
     #[cfg(feature = "enable-shmem-opt")]
     OneSidedShmemOptAlloc(OneSidedShmemOptAlloc),
@@ -175,6 +180,8 @@ impl CommAllocInner {
         match self {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => inner_alloc.peer_copy_addr(pe, addr),
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => inner_alloc.peer_copy_addr(pe, addr),
             _ => None,
         }
     }
@@ -186,6 +193,8 @@ impl CommAllocInner {
             CommAllocInner::ShmemAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::OneSidedShmemOptAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
@@ -235,6 +244,8 @@ impl CommAllocInner {
             CommAllocInner::ShmemAlloc(inner_alloc) => inner_alloc.leak(),
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => inner_alloc.leak(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => inner_alloc.leak(),
             CommAllocInner::OneSidedShmemAlloc(_inner_alloc) => {
                 panic!("OneSidedShmemAlloc cannot be leaked")
             }
@@ -293,6 +304,8 @@ impl CommAllocInner {
             CommAllocInner::ShmemAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => inner_alloc.num_bytes(),
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => inner_alloc.num_bytes(),
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::OneSidedShmemOptAlloc(inner_alloc) => inner_alloc.num_bytes(),
@@ -343,6 +356,12 @@ impl CommAllocInner {
             ),
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => CommAllocInner::ShmemOptAlloc(
+                inner_alloc
+                    .sub_alloc(offset, size)
+                    .expect("Invalid sub allocation"),
+            ),
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => CommAllocInner::ShmemOptExternAlloc(
                 inner_alloc
                     .sub_alloc(offset, size)
                     .expect("Invalid sub allocation"),
@@ -474,6 +493,10 @@ impl CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.wait();
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                inner_alloc.wait();
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 inner_alloc.wait();
             }
@@ -577,6 +600,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
             }
@@ -663,6 +690,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::put_blocking(inner_alloc, scheduler, src, pe, offset)
             }
@@ -742,6 +773,10 @@ impl CommAllocRdma for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -831,6 +866,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer(inner_alloc, scheduler, counters, src, pe, offset)
             }
@@ -914,6 +953,10 @@ impl CommAllocRdma for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 CommAllocRdma::put_buffer_unmanaged(inner_alloc, src, pe, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -1002,6 +1045,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
             }
@@ -1080,6 +1127,10 @@ impl CommAllocRdma for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -1168,6 +1219,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
             }
@@ -1250,6 +1305,10 @@ impl CommAllocRdma for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -1339,6 +1398,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset)
             }
@@ -1418,6 +1481,10 @@ impl CommAllocRdma for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get(inner_alloc, scheduler, pe, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -1508,6 +1575,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::get_buffer(inner_alloc, scheduler, counters, pe, offset, len)
             }
@@ -1592,6 +1663,10 @@ impl CommAllocRdma for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_buffer(inner_alloc, scheduler, pe, offset, len)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -1681,6 +1756,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
             }
@@ -1767,6 +1846,10 @@ impl CommAllocRdma for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 CommAllocRdma::blocking_get_into_buffer(inner_alloc, scheduler, pe, offset, dst)
             }
@@ -1850,6 +1933,10 @@ impl CommAllocRdma for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer_unmanaged(inner_alloc, pe, offset, dst)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -1942,6 +2029,10 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
             }
@@ -2028,6 +2119,10 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_blocking(scheduler, op, pe, offset)
             }
@@ -2106,6 +2201,10 @@ impl CommAllocAtomic for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_unmanaged(op, pe, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_unmanaged(op, pe, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -2194,6 +2293,10 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all(scheduler, counters, op, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all(scheduler, counters, op, offset)
             }
@@ -2272,6 +2375,10 @@ impl CommAllocAtomic for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all_unmanaged(op, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_all_unmanaged(op, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -2361,6 +2468,10 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             }
@@ -2445,6 +2556,10 @@ impl CommAllocAtomic for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -2535,6 +2650,10 @@ impl CommAllocAtomic for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
             }
@@ -2620,6 +2739,10 @@ impl CommAllocAtomic for CommAllocInner {
             }
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(inner_alloc) => {
                 inner_alloc.atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
             }
             CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
@@ -2712,6 +2835,10 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.reduce_all(scheduler, counters, index, len, op)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2779,6 +2906,10 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2839,6 +2970,10 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.reduce_all_in_place(scheduler, counters, src_and_dst, op)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
             }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
@@ -2914,6 +3049,10 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -2979,6 +3118,10 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
             }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
@@ -3101,6 +3244,10 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.gather_all(scheduler, counters, index, len)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3166,6 +3313,10 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3229,6 +3380,10 @@ impl CommAllocCollectiveGather for CommAllocInner {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.gather(scheduler, counters, index, len, root_pe)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
             }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
@@ -3295,6 +3450,10 @@ impl CommAllocCollectiveGather for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3358,6 +3517,10 @@ impl CommAllocCollectiveAllToAll for CommAllocInner {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.alltoall(scheduler, counters, index, len)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
             }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
@@ -3425,6 +3588,10 @@ impl CommAllocCollectiveAllToAll for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.alltoall_into_buffer(scheduler, counters, index, len, buffer)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3472,6 +3639,10 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
             }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
@@ -3537,6 +3708,10 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3599,6 +3774,10 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
             }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
@@ -3666,6 +3845,10 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
             }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
+            }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
             // }
@@ -3729,6 +3912,10 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
             }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
@@ -3795,6 +3982,10 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             #[cfg(feature = "enable-shmem-opt")]
             CommAllocInner::ShmemOptAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
+            }
+            #[cfg(feature = "enable-shmem-opt")]
+            CommAllocInner::ShmemOptExternAlloc(_inner_alloc) => {
+                panic!("collective operations are not supported on externally registered memory")
             }
             // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
             //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
