@@ -6,7 +6,10 @@ use crate::lamellae::collective::{
     CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle,
     CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle,
 };
-use crate::lamellae::{AllocationType, LamellaeUtil, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
+use crate::lamellae::{
+    AllocationType, AtomicCompareExchangeOpHandle, LamellaeUtil, RdmaGetBufferHandle,
+    RdmaGetIntoBufferHandle,
+};
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
 // use crate::active_messaging::AmDist;
@@ -986,6 +989,1011 @@ impl<T: Remote> SharedMemoryRegion<T> {
             AtomicOp::Write(Box::pin(val)),
         )
     }
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically adds `val` into the element at `index` on the given `pe`, returning the
+    /// previous value.
+    ///
+    /// Returns an [`AtomicFetchOpHandle`] whose `block()` / `.await` resolves to the old `T`.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, my_pe).block();
+    ///     let old = mem_region.atomic_fetch_add(my_pe, my_pe, my_pe + 1).block();
+    ///     assert_eq!(old, my_pe);
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), my_pe + (my_pe + 1));
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_add(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchSum(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically bitwise-ANDs `val` into the element at `index` on the given `pe`, returning the
+    /// previous value.
+    ///
+    /// Returns an [`AtomicFetchOpHandle`] whose `block()` / `.await` resolves to the old `T`.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, my_pe).block();
+    ///     let old = mem_region.atomic_fetch_bit_and(my_pe, my_pe, usize::MAX).block();
+    ///     assert_eq!(old, my_pe);
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_bit_and(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchBitAnd(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically bitwise-ORs `val` into the element at `index` on the given `pe`, returning the
+    /// previous value.
+    ///
+    /// Returns an [`AtomicFetchOpHandle`] whose `block()` / `.await` resolves to the old `T`.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, my_pe).block();
+    ///     let old = mem_region.atomic_fetch_bit_or(my_pe, my_pe, 1 << 8).block();
+    ///     assert_eq!(old, my_pe);
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), my_pe | (1 << 8));
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_bit_or(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchBitOr(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically bitwise-XORs `val` into the element at `index` on the given `pe`, returning the
+    /// previous value.
+    ///
+    /// Returns an [`AtomicFetchOpHandle`] whose `block()` / `.await` resolves to the old `T`.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, my_pe).block();
+    ///     let old = mem_region.atomic_fetch_bit_xor(my_pe, my_pe, usize::MAX).block();
+    ///     assert_eq!(old, my_pe);
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), !my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_bit_xor(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchBitXor(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_store`](Self::atomic_store): atomically stores `val` into the element at `index` on `pe`.
+    ///
+    /// Completes the operation before returning, without creating a handle.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store_blocking(my_pe, my_pe, my_pe);
+    ///     assert_eq!(mem_region.atomic_load_blocking(my_pe, my_pe), my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_store_blocking(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_blocking(pe, self.sub_region_offset + index, AtomicOp::Write(Box::pin(val)))
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_load`](Self::atomic_load): atomically loads the element at `index` on `pe`.
+    ///
+    /// Completes the operation before returning, without creating a handle.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store_blocking(my_pe, my_pe, my_pe);
+    ///     assert_eq!(mem_region.atomic_load_blocking(my_pe, my_pe), my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_load_blocking(&self, pe: usize, index: usize) -> T {
+        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Read(Box::pin(std::mem::zeroed())),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_swap`](Self::atomic_swap): atomically swaps `val` into the element at `index` on `pe`, returning the old value.
+    ///
+    /// Completes the operation before returning, without creating a handle.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store_blocking(my_pe, my_pe, my_pe);
+    ///     assert_eq!(mem_region.atomic_swap_blocking(my_pe, my_pe, 0), my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_swap_blocking(&self, pe: usize, index: usize, val: T) -> T {
+        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Write(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_fetch_add`](Self::atomic_fetch_add): fetch-and-add on the element at `index` on `pe`, returning the old value.
+    ///
+    /// Completes the operation before returning, without creating a handle.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store_blocking(my_pe, my_pe, my_pe);
+    ///     assert_eq!(mem_region.atomic_fetch_add_blocking(my_pe, my_pe, 1), my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_add_blocking(&self, pe: usize, index: usize, val: T) -> T {
+        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchSum(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_fetch_bit_and`](Self::atomic_fetch_bit_and): fetch-and-and on the element at `index` on `pe`, returning the old value.
+    ///
+    /// Completes the operation before returning, without creating a handle.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store_blocking(my_pe, my_pe, my_pe);
+    ///     assert_eq!(mem_region.atomic_fetch_bit_and_blocking(my_pe, my_pe, usize::MAX), my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_bit_and_blocking(&self, pe: usize, index: usize, val: T) -> T {
+        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchBitAnd(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_fetch_bit_or`](Self::atomic_fetch_bit_or): fetch-and-or on the element at `index` on `pe`, returning the old value.
+    ///
+    /// Completes the operation before returning, without creating a handle.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store_blocking(my_pe, my_pe, my_pe);
+    ///     assert_eq!(mem_region.atomic_fetch_bit_or_blocking(my_pe, my_pe, 0), my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_bit_or_blocking(&self, pe: usize, index: usize, val: T) -> T {
+        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchBitOr(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_fetch_bit_xor`](Self::atomic_fetch_bit_xor): fetch-and-xor on the element at `index` on `pe`, returning the old value.
+    ///
+    /// Completes the operation before returning, without creating a handle.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store_blocking(my_pe, my_pe, my_pe);
+    ///     assert_eq!(mem_region.atomic_fetch_bit_xor_blocking(my_pe, my_pe, 0), my_pe);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_bit_xor_blocking(&self, pe: usize, index: usize, val: T) -> T {
+        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchBitXor(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically adds `val` to the element at `index` on the given `pe`.
+    ///
+    /// Returns an [`AtomicOpHandle`] that must be `block()`ed, awaited or `spawn()`ed.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_add(my_pe, my_pe, 3).block();
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), 9);
+    /// }
+    ///```
+    pub unsafe fn atomic_add(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr.as_base::<T>().atomic_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Sum(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_add`](Self::atomic_add): completes before returning.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_add_blocking(my_pe, my_pe, 3);
+    ///     assert_eq!(mem_region.atomic_load_blocking(my_pe, my_pe), 9);
+    /// }
+    ///```
+    pub unsafe fn atomic_add_blocking(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Sum(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Unmanaged form of [`atomic_add`](Self::atomic_add): the operation is issued without a handle
+    /// and is not tracked; synchronize with a barrier or `wait_all` before relying on the result.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    pub unsafe fn atomic_add_unmanaged(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Sum(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically subtracts `val` from the element at `index` on the given `pe`.
+    ///
+    /// Returns an [`AtomicOpHandle`] that must be `block()`ed, awaited or `spawn()`ed.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_sub(my_pe, my_pe, 3).block();
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), 3);
+    /// }
+    ///```
+    pub unsafe fn atomic_sub(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr.as_base::<T>().atomic_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Sub(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_sub`](Self::atomic_sub): completes before returning.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_sub_blocking(my_pe, my_pe, 3);
+    ///     assert_eq!(mem_region.atomic_load_blocking(my_pe, my_pe), 3);
+    /// }
+    ///```
+    pub unsafe fn atomic_sub_blocking(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Sub(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Unmanaged form of [`atomic_sub`](Self::atomic_sub): the operation is issued without a handle
+    /// and is not tracked; synchronize with a barrier or `wait_all` before relying on the result.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    pub unsafe fn atomic_sub_unmanaged(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Sub(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically subtracts `val` from the element at `index` on the given `pe`, returning the previous value.
+    ///
+    /// Returns an [`AtomicFetchOpHandle`] whose `block()` / `.await` resolves to the old `T`.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     assert_eq!(mem_region.atomic_fetch_sub(my_pe, my_pe, 3).block(), 6);
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), 3);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_sub(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchSub(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_fetch_sub`](Self::atomic_fetch_sub).
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     assert_eq!(mem_region.atomic_fetch_sub_blocking(my_pe, my_pe, 3), 6);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_sub_blocking(&self, pe: usize, index: usize, val: T) -> T {
+        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchSub(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically multiplies by `val` the element at `index` on the given `pe`.
+    ///
+    /// Returns an [`AtomicOpHandle`] that must be `block()`ed, awaited or `spawn()`ed.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_mul(my_pe, my_pe, 3).block();
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), 18);
+    /// }
+    ///```
+    pub unsafe fn atomic_mul(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr.as_base::<T>().atomic_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Prod(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_mul`](Self::atomic_mul): completes before returning.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_mul_blocking(my_pe, my_pe, 3);
+    ///     assert_eq!(mem_region.atomic_load_blocking(my_pe, my_pe), 18);
+    /// }
+    ///```
+    pub unsafe fn atomic_mul_blocking(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Prod(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Unmanaged form of [`atomic_mul`](Self::atomic_mul): the operation is issued without a handle
+    /// and is not tracked; synchronize with a barrier or `wait_all` before relying on the result.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    pub unsafe fn atomic_mul_unmanaged(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Prod(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically multiplies by `val` the element at `index` on the given `pe`, returning the previous value.
+    ///
+    /// Returns an [`AtomicFetchOpHandle`] whose `block()` / `.await` resolves to the old `T`.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     assert_eq!(mem_region.atomic_fetch_mul(my_pe, my_pe, 3).block(), 6);
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), 18);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_mul(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchProd(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_fetch_mul`](Self::atomic_fetch_mul).
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     assert_eq!(mem_region.atomic_fetch_mul_blocking(my_pe, my_pe, 3), 6);
+    /// }
+    ///```
+    pub unsafe fn atomic_fetch_mul_blocking(&self, pe: usize, index: usize, val: T) -> T {
+        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::FetchProd(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically bitwise-ANDs `val` into the element at `index` on the given `pe`.
+    ///
+    /// Returns an [`AtomicOpHandle`] that must be `block()`ed, awaited or `spawn()`ed.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_bit_and(my_pe, my_pe, 3).block();
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), 2);
+    /// }
+    ///```
+    pub unsafe fn atomic_bit_and(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr.as_base::<T>().atomic_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitAnd(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_bit_and`](Self::atomic_bit_and): completes before returning.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_bit_and_blocking(my_pe, my_pe, 3);
+    ///     assert_eq!(mem_region.atomic_load_blocking(my_pe, my_pe), 2);
+    /// }
+    ///```
+    pub unsafe fn atomic_bit_and_blocking(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitAnd(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Unmanaged form of [`atomic_bit_and`](Self::atomic_bit_and): the operation is issued without a handle
+    /// and is not tracked; synchronize with a barrier or `wait_all` before relying on the result.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    pub unsafe fn atomic_bit_and_unmanaged(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitAnd(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically bitwise-ORs `val` into the element at `index` on the given `pe`.
+    ///
+    /// Returns an [`AtomicOpHandle`] that must be `block()`ed, awaited or `spawn()`ed.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_bit_or(my_pe, my_pe, 3).block();
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), 7);
+    /// }
+    ///```
+    pub unsafe fn atomic_bit_or(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr.as_base::<T>().atomic_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitOr(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_bit_or`](Self::atomic_bit_or): completes before returning.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_bit_or_blocking(my_pe, my_pe, 3);
+    ///     assert_eq!(mem_region.atomic_load_blocking(my_pe, my_pe), 7);
+    /// }
+    ///```
+    pub unsafe fn atomic_bit_or_blocking(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitOr(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Unmanaged form of [`atomic_bit_or`](Self::atomic_bit_or): the operation is issued without a handle
+    /// and is not tracked; synchronize with a barrier or `wait_all` before relying on the result.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    pub unsafe fn atomic_bit_or_unmanaged(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitOr(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically bitwise-XORs `val` into the element at `index` on the given `pe`.
+    ///
+    /// Returns an [`AtomicOpHandle`] that must be `block()`ed, awaited or `spawn()`ed.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_bit_xor(my_pe, my_pe, 3).block();
+    ///     assert_eq!(mem_region.atomic_load(my_pe, my_pe).block(), 5);
+    /// }
+    ///```
+    pub unsafe fn atomic_bit_xor(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr.as_base::<T>().atomic_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitXor(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_bit_xor`](Self::atomic_bit_xor): completes before returning.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 6).block();
+    ///     mem_region.atomic_bit_xor_blocking(my_pe, my_pe, 3);
+    ///     assert_eq!(mem_region.atomic_load_blocking(my_pe, my_pe), 5);
+    /// }
+    ///```
+    pub unsafe fn atomic_bit_xor_blocking(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_blocking(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitXor(Box::pin(val)),
+        )
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Unmanaged form of [`atomic_bit_xor`](Self::atomic_bit_xor): the operation is issued without a handle
+    /// and is not tracked; synchronize with a barrier or `wait_all` before relying on the result.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    pub unsafe fn atomic_bit_xor_unmanaged(&self, pe: usize, index: usize, val: T) {
+        self.mr.as_base::<T>().atomic_op_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::BitXor(Box::pin(val)),
+        )
+    }
+
     /// Performs a collective all-reduce minimum over `len` elements starting at `index`.
     /// Returns a [`CollectiveAllReduceOpHandle`] that must be `block()`ed or `spawn()`ed.
     ///
@@ -3071,6 +4079,65 @@ impl<T: Remote> SharedMemoryRegion<T> {
 //         unsafe { self.as_slice().unwrap().serialize(s) }
 //     }
 // }
+
+impl<T: Remote + PartialEq> SharedMemoryRegion<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Atomically compares the element at `index` on the given `pe` with `current` and, if they
+    /// are equal, replaces it with `new`.
+    ///
+    /// Returns an [`AtomicCompareExchangeOpHandle`] whose `block()` / `.await` resolves to
+    /// `Ok(previous)` if the exchange happened and `Err(actual)` if it did not.
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the atomic operation; the target PE is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes).block();
+    /// unsafe {
+    ///     mem_region.atomic_store(my_pe, my_pe, 5).block();
+    ///     assert_eq!(mem_region.atomic_compare_exchange(my_pe, my_pe, 5, 6).block(), Ok(5));
+    ///     assert_eq!(mem_region.atomic_compare_exchange(my_pe, my_pe, 5, 7).block(), Err(6));
+    /// }
+    ///```
+    pub unsafe fn atomic_compare_exchange(
+        &self,
+        pe: usize,
+        index: usize,
+        current: T,
+        new: T,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        self.mr
+            .as_base::<T>()
+            .atomic_compare_exchange(pe, self.sub_region_offset + index, current, new)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking form of [`atomic_compare_exchange`](Self::atomic_compare_exchange).
+    ///
+    /// # Safety
+    /// This call is unsafe because the caller must ensure `index` is within bounds.
+    pub unsafe fn atomic_compare_exchange_blocking(
+        &self,
+        pe: usize,
+        index: usize,
+        current: T,
+        new: T,
+    ) -> Result<T, T> {
+        self.mr
+            .as_base::<T>()
+            .atomic_compare_exchange_blocking(pe, self.sub_region_offset + index, current, new)
+    }
+}
 
 //account for subregion stuff
 impl<T: Remote> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
