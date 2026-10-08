@@ -1,7 +1,7 @@
 use crate::{
     config,
     lamellae::{
-        comm::{AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
+        comm::{background_progress_due, AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
         AllocationType, CollectiveOpKind,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
@@ -96,6 +96,12 @@ impl CommProgress for LibfabricSysOptComm {
     }
     fn thread_flush(&self) {
         self.ofi.thread_progress();
+    }
+    /// See [`background_progress_due`]; a collective in flight also keeps progress prompt.
+    fn background_flush(&self) {
+        if self.ofi.collective_in_flight() || background_progress_due() {
+            self.thread_flush();
+        }
     }
     fn wait_all(&self) {
         self.ofi.wait_all();

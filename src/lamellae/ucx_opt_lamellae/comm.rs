@@ -1,7 +1,7 @@
 use crate::{
     config,
     lamellae::{
-        comm::{AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
+        comm::{background_progress_due, AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
         AllocationType, CollectiveOpKind,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
@@ -81,6 +81,12 @@ impl CommShutdown for UcxOptComm {
 impl CommProgress for UcxOptComm {
     fn flush_all(&self) {
         self.ucx.progress();
+    }
+    /// See [`background_progress_due`].
+    fn background_flush(&self) {
+        if background_progress_due() {
+            self.thread_flush();
+        }
     }
     fn wait_all(&self) {
         self.ucx.wait_all();

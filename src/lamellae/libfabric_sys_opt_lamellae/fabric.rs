@@ -179,6 +179,7 @@ impl TicketCtx {
             },
             ticket: Arc::into_raw(ticket),
         });
+        crate::lamellae::comm::TRACKED_INFLIGHT.fetch_add(1, Ordering::Relaxed);
         Box::into_raw(boxed) as *mut std::ffi::c_void
     }
 
@@ -186,6 +187,7 @@ impl TicketCtx {
     /// `ctx` must be a pointer produced by `leak` and not already reclaimed.
     unsafe fn reclaim(ctx: *mut std::ffi::c_void) -> Arc<Ticket> {
         let boxed = Box::from_raw(ctx as *mut TicketCtx);
+        crate::lamellae::comm::TRACKED_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
         Arc::from_raw(boxed.ticket)
     }
 }
@@ -2338,6 +2340,12 @@ impl OptOfi {
     pub(crate) fn progress_all(&self) {
         let _lock = self.comm_group.lock.lock();
         self.comm_group.progress()
+    }
+
+    /// Whether a collective (counted by the older issued/completed scheme, not by tickets) is in flight.
+    pub(crate) fn collective_in_flight(&self) -> bool {
+        self.comm_group.coll_cnt_issued.load(Ordering::Relaxed)
+            != self.comm_group.coll_cnt_completed.load(Ordering::Relaxed)
     }
 
     pub(crate) fn thread_progress(&self) {

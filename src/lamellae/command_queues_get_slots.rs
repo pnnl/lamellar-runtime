@@ -1038,7 +1038,7 @@ impl CQGetSlots {
                 }
             }
 
-            comm.thread_flush();
+            comm.background_flush();
             self.cq.cleanup_transfers();
             async_std::task::yield_now().await;
         }

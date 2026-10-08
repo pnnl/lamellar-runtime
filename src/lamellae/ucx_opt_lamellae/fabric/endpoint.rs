@@ -10,6 +10,8 @@ use std::{
 };
 
 use event_listener::{Event, EventListener, Listener};
+
+use crate::lamellae::comm::TRACKED_INFLIGHT;
 use futures_util::task::AtomicWaker;
 
 // use ucx1_sys::*;
@@ -107,6 +109,7 @@ unsafe extern "C" fn completion_cb(
 ) {
     let ticket = unsafe { Arc::from_raw(user_data as *const Ticket) };
     ticket.complete(status);
+    TRACKED_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
     unsafe { ucp_request_free(request) };
 }
 
@@ -149,17 +152,21 @@ fn issue_ticketed(
 ) -> LocalState {
     let ticket = Ticket::new(scratch);
     let leaked = Arc::into_raw(ticket.clone()) as *mut std::ffi::c_void;
+    // Counted before issuing so a completion that fires on another thread right away cannot decrement first.
+    TRACKED_INFLIGHT.fetch_add(1, Ordering::Relaxed);
     let request = issue(leaked);
     if request.is_null() {
         // Inline completion: per the UCX nbx contract, the callback is never invoked in this
         // case, so `completion_cb` will not reclaim `leaked` -- do it ourselves.
         unsafe { drop(Arc::from_raw(leaked as *const Ticket)) };
+        TRACKED_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
         LocalState::Resolved(Ok(()))
     } else if UCS_PTR_IS_PTR(request) {
         LocalState::Pending(ticket)
     } else {
         // Immediate error: likewise no callback invocation coming.
         unsafe { drop(Arc::from_raw(leaked as *const Ticket)) };
+        TRACKED_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
         LocalState::Resolved(Error::from_ptr(request))
     }
 }

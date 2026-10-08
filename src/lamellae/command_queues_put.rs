@@ -1109,7 +1109,7 @@ impl CQPut {
                 }
             }
 
-            comm.thread_flush();
+            comm.background_flush();
             async_std::task::yield_now().await;
         }
         self.active

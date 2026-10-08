@@ -159,11 +159,41 @@ pub(crate) trait CommMem {
     fn get_alloc_cloned(&self, addr: CommAllocAddr) -> error::AllocResult<CommAlloc>;
 }
 
+/// Ticketed operations (completed by a callback or a CQ entry) currently in flight on the active backend. A
+/// backend that overrides `CommProgress::background_flush` with [`background_progress_due`] increments this when
+/// it issues such an operation and decrements it when it completes.
+pub(crate) static TRACKED_INFLIGHT: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// Whether the receive loop's background progress call should run now: always while a tracked operation is in
+/// flight (futures waiting on it rely on this loop), otherwise at most once per millisecond, which keeps wireup
+/// and target-side work going without contending with issuing threads for the progress lock.
+pub(crate) fn background_progress_due() -> bool {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::OnceLock;
+    const FLOOR_NS: u64 = 1_000_000;
+    if TRACKED_INFLIGHT.load(Ordering::Relaxed) > 0 {
+        return true;
+    }
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    static LAST: AtomicU64 = AtomicU64::new(0);
+    let now = START.get_or_init(std::time::Instant::now).elapsed().as_nanos() as u64 + 1;
+    if now.saturating_sub(LAST.load(Ordering::Relaxed)) < FLOOR_NS {
+        return false;
+    }
+    LAST.store(now, Ordering::Relaxed);
+    true
+}
+
 #[enum_dispatch]
 pub(crate) trait CommProgress {
     fn flush_all(&self);
     fn thread_flush(&self) {
         self.flush_all();
+    }
+    /// The progress call made by the command queue's receive loop. A backend that knows it has nothing in
+    /// flight may skip it.
+    fn background_flush(&self) {
+        self.thread_flush();
     }
     fn wait_all(&self);
     fn thread_wait(&self) {
