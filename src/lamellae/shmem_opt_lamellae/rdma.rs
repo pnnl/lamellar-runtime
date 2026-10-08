@@ -41,6 +41,28 @@ pub(crate) struct ShmemOptFuture<T: Remote> {
     spawned: bool,
 }
 
+
+/// Copy between a remote PE's mapping and a local buffer. Overlapping ranges use memmove. Otherwise memcpy, except when
+/// `dst - src` is a small positive number of bytes modulo 4096 (a malloc'd buffer, which sits 16 bytes into its page, against a
+/// page-aligned heap): the stores then alias the loads in flight and memcpy, memmove and `rep movsb` all fall from ~56 GB/s
+/// to 3.5 GB/s for blocks of 64 KiB and up. Copying 4 KiB chunks from the end backwards avoids that (measured 19 GB/s).
+#[inline]
+unsafe fn copy_bytes(src: *const u8, dst: *mut u8, n: usize) {
+    let (s, d) = (src as usize, dst as usize);
+    if s + n > d && d + n > s {
+        std::ptr::copy(src, dst, n);
+    } else if n >= 16 * 1024 && d.wrapping_sub(s) & 4095 < 64 {
+        let mut off = n;
+        while off > 0 {
+            let c = off.min(4096);
+            off -= c;
+            std::ptr::copy_nonoverlapping(src.add(off), dst.add(off), c);
+        }
+    } else {
+        std::ptr::copy_nonoverlapping(src, dst, n);
+    }
+}
+
 impl<T: Remote> ShmemOptFuture<T> {
     //#[tracing::instrument(skip_all, level = "debug")]
     fn inner_put_buf(src: &MemregionRdmaInputInner<T>, dst: &CommAllocAddr) {
@@ -259,7 +281,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemOptGetIntoBufferFuture<T, B> {
         fence(Ordering::Acquire);
         let dst = self.buffer.as_mut_slice();
         unsafe {
-            std::ptr::copy(
+            copy_bytes(
                 self.src.as_ptr::<T>() as *const u8,
                 dst.as_mut_ptr() as *mut u8,
                 dst.len() * std::mem::size_of::<T>(),
@@ -574,7 +596,7 @@ impl CommAllocRdma for ShmemOptAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         fence(Ordering::Acquire);
         unsafe {
-            std::ptr::copy(
+            copy_bytes(
                 remote_src_addr.as_ptr::<T>() as *const u8,
                 dst.as_mut_slice().as_mut_ptr() as *mut u8,
                 dst.len() * std::mem::size_of::<T>(),
@@ -594,7 +616,7 @@ impl CommAllocRdma for ShmemOptAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         fence(Ordering::SeqCst);
         unsafe {
-            std::ptr::copy(
+            copy_bytes(
                 remote_src_addr.as_ptr::<T>() as *const u8,
                 dst.as_mut_slice().as_mut_ptr() as *mut u8,
                 dst.len() * std::mem::size_of::<T>(),
@@ -869,7 +891,7 @@ impl CommAllocRdma for OneSidedShmemOptAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         fence(Ordering::Acquire);
         unsafe {
-            std::ptr::copy(
+            copy_bytes(
                 remote_src_addr.as_ptr::<T>() as *const u8,
                 dst.as_mut_slice().as_mut_ptr() as *mut u8,
                 dst.len() * std::mem::size_of::<T>(),
@@ -890,7 +912,7 @@ impl CommAllocRdma for OneSidedShmemOptAlloc {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         fence(Ordering::SeqCst);
         unsafe {
-            std::ptr::copy(
+            copy_bytes(
                 remote_src_addr.as_ptr::<T>() as *const u8,
                 dst.as_mut_slice().as_mut_ptr() as *mut u8,
                 dst.len() * std::mem::size_of::<T>(),
