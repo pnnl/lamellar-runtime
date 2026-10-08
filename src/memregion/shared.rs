@@ -4080,6 +4080,83 @@ impl<T: Remote> SharedMemoryRegion<T> {
 //     }
 // }
 
+impl<T: Remote> SharedMemoryRegion<T> {
+    /// Reinterprets this region (or sub-region) as a region of `U`, returning
+    /// [`MemRegionError::MemNotAlignedError`] if the view would not be valid for `U`.
+    ///
+    /// The result covers exactly the same bytes; indices into it count `U`s, so sub-regions and
+    /// atomics on the new region address `U`-sized slots. The view is valid when, for this region
+    /// or sub-region:
+    /// * `size_of::<U>()` is non-zero and divides both its byte offset and its byte length, and
+    /// * the start of the allocation on this PE is a multiple of `align_of::<U>()`.
+    ///
+    /// Symmetric allocations are placed at the same offset on every PE, so the allocation-alignment
+    /// check done on the calling PE stands for all of them. The check is skipped on a PE that holds
+    /// no data for the region (a sub-team allocation seen from outside the team).
+    ///
+    /// The alignment an allocation gets is the one requested for its element type, so a region
+    /// allocated as `u8` is not guaranteed to be suitable for wider types. Allocating as the widest
+    /// type needed (and casting down to `u8` where bytes are wanted) always is.
+    ///
+    /// # Safety
+    /// This call is unsafe because the bytes of the region are reinterpreted: every bit pattern
+    /// that is read through the new view must be a valid `U`, and the caller must not create
+    /// overlapping typed accesses that race.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// // allocated as u64 so that it is aligned for u64
+    /// let words: SharedMemoryRegion<u64> = world.alloc_shared_mem_region(4).block();
+    /// unsafe {
+    ///     let bytes: SharedMemoryRegion<u8> = words.try_cast().unwrap();
+    ///     assert_eq!(bytes.len(), 32);
+    ///     // a byte offset that is not a multiple of 8 cannot be viewed as u64
+    ///     assert!(bytes.sub_region(1..9).try_cast::<u64>().is_err());
+    ///     let back: SharedMemoryRegion<u64> = bytes.sub_region(8..24).try_cast().unwrap();
+    ///     assert_eq!(back.len(), 2);
+    ///     back.atomic_store(my_pe, 0, 7).block();
+    ///     assert_eq!(words.atomic_load(my_pe, 1).block(), 7);
+    /// }
+    ///```
+    pub unsafe fn try_cast<U: Remote>(&self) -> Result<SharedMemoryRegion<U>, MemRegionError> {
+        let (t_size, u_size) = (std::mem::size_of::<T>(), std::mem::size_of::<U>());
+        if u_size == 0 {
+            return Err(MemRegionError::MemNotAlignedError);
+        }
+        let byte_offset = self.sub_region_offset * t_size;
+        let byte_len = self.sub_region_size * t_size;
+        if byte_offset % u_size != 0 || byte_len % u_size != 0 {
+            return Err(MemRegionError::MemNotAlignedError);
+        }
+        if self.mr.mode != Mode::Remote {
+            let base: usize = self.mr.alloc.inner_alloc.addr().into();
+            if base % std::mem::align_of::<U>() != 0 {
+                return Err(MemRegionError::MemNotAlignedError);
+            }
+        }
+        Ok(SharedMemoryRegion {
+            mr: self.mr.clone(),
+            sub_region_offset: byte_offset / u_size,
+            sub_region_size: byte_len / u_size,
+            phantom: PhantomData,
+        })
+    }
+
+    /// Like [`try_cast`](Self::try_cast), but panics if the view would not be valid for `U`.
+    ///
+    /// # Safety
+    /// See [`try_cast`](Self::try_cast).
+    pub unsafe fn cast<U: Remote>(&self) -> SharedMemoryRegion<U> {
+        self.try_cast::<U>()
+            .expect("memory region is not suitably sized or aligned for the requested type")
+    }
+}
+
 impl<T: Remote + PartialEq> SharedMemoryRegion<T> {
     #[doc(alias("One-sided", "onesided"))]
     /// Atomically compares the element at `index` on the given `pe` with `current` and, if they
