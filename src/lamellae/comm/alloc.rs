@@ -132,6 +132,15 @@ pub(crate) fn calc_alloc_padding_size_align(size: usize, align: usize) -> (usize
 
 #[derive(Clone, Debug)]
 pub(crate) enum CommAllocInner {
+    /// A bare address and size with no allocation behind it: nothing owns, pins, registers or frees the memory.
+    ///
+    /// Only valid for memory that is *already* registered with the network and kept alive by something else
+    /// (for example a window into a runtime-owned heap or an active message buffer that is released through
+    /// the command queue). It is NOT for arbitrary caller memory such as a user's stack, heap or `.data`:
+    /// a [`CommSlice`] built on it is assumed to be registered (see `MemregionRdmaInputInner::Slice`), so the
+    /// backends send from it directly with no staging. Caller memory must go through
+    /// `MemregionRdmaInputInner::Unregistered` / `UnregisteredSlice` instead. It can only be the local side
+    /// of a transfer; using it as the remote target panics.
     Raw(usize, usize), //address, size
     LocalAlloc(Arc<LocalAlloc>),
     ShmemAlloc(ShmemAlloc),

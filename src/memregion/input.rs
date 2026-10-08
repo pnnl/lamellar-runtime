@@ -2,7 +2,7 @@ use std::{ops::Range, sync::Arc};
 
 use crate::{
     array::{LamellarArrayRdmaInput, TeamFrom},
-    lamellae::{CommSlice, Remote},
+    lamellae::{CommAllocInner, CommSlice, Remote},
     memregion::{
         Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RegisteredMemoryRegion,
         SharedMemoryRegion, SubRegion,
@@ -25,7 +25,13 @@ pub(crate) enum MemregionRdmaInputInner<T: Remote> {
     LamellarMemRegion(LamellarMemoryRegion<T>),
     SharedMemRegion(SharedMemoryRegion<T>),
     LocalMemRegion(OneSidedMemoryRegion<T>),
+    /// Memory the runtime treats as already registered with the network (`is_registered() == true`); see
+    /// [`CommSlice`] for what the creator must guarantee. Never use this for arbitrary caller memory.
     Slice(CommSlice<T>),
+    /// Borrowed caller memory that is NOT registered with the network and is not owned or copied by the runtime
+    /// (`is_registered() == false`), so backends that need registered sources stage it (or send it inline when
+    /// small). The creator guarantees it stays valid and unmodified until the transfer completes.
+    Unregistered(CommSlice<T>),
     Owned(T),
     ArcVec((Arc<Vec<T>>, Range<usize>)),
 }
@@ -125,12 +131,28 @@ impl<T: Remote> From<T> for MemregionRdmaInput<T> {
 }
 
 impl<T: Remote> MemregionRdmaInputInner<T> {
+    /// Borrow `len` elements of caller memory at `ptr` as an *unregistered* source (see
+    /// [`MemregionRdmaInputInner::Unregistered`]).
+    ///
+    /// # Safety
+    /// `ptr` must be valid for reads of `len` elements and stay valid and unmodified until the transfer using
+    /// the returned input has completed.
+    pub(crate) unsafe fn unregistered_raw(ptr: *const T, len: usize) -> Self {
+        MemregionRdmaInputInner::Unregistered(CommSlice {
+            inner_alloc: Arc::new(CommAllocInner::Raw(
+                ptr as usize,
+                len * std::mem::size_of::<T>(),
+            )),
+            _phantom: std::marker::PhantomData,
+        })
+    }
+
     pub(crate) fn as_slice(&self) -> &[T] {
         match self {
             MemregionRdmaInputInner::LamellarMemRegion(m) => unsafe { m.as_slice() },
             MemregionRdmaInputInner::SharedMemRegion(m) => unsafe { m.as_slice() },
             MemregionRdmaInputInner::LocalMemRegion(m) => unsafe { m.as_slice() },
-            MemregionRdmaInputInner::Slice(s) => s.as_slice(),
+            MemregionRdmaInputInner::Slice(s) | MemregionRdmaInputInner::Unregistered(s) => s.as_slice(),
             MemregionRdmaInputInner::Owned(v) => std::slice::from_ref(v),
             MemregionRdmaInputInner::ArcVec((v, r)) => &v[r.clone()],
         }
@@ -149,6 +171,7 @@ impl<T: Remote> MemregionRdmaInputInner<T> {
             MemregionRdmaInputInner::SharedMemRegion(_) => true,
             MemregionRdmaInputInner::LocalMemRegion(_) => true,
             MemregionRdmaInputInner::Slice(_) => true,
+            MemregionRdmaInputInner::Unregistered(_) => false,
             MemregionRdmaInputInner::Owned(_) => false,
             MemregionRdmaInputInner::ArcVec(_) => false,
         }
@@ -169,7 +192,7 @@ impl<T: Remote> MemregionRdmaInputInner<T> {
             MemregionRdmaInputInner::LamellarMemRegion(m) => unsafe { m.as_ptr().unwrap() },
             MemregionRdmaInputInner::SharedMemRegion(m) => unsafe { m.as_ptr().unwrap() },
             MemregionRdmaInputInner::LocalMemRegion(m) => unsafe { m.as_ptr().unwrap() },
-            MemregionRdmaInputInner::Slice(s) => s.as_ptr(),
+            MemregionRdmaInputInner::Slice(s) | MemregionRdmaInputInner::Unregistered(s) => s.as_ptr(),
             MemregionRdmaInputInner::Owned(v) => v as *const T,
             MemregionRdmaInputInner::ArcVec((v, r)) => v[r.clone()].as_ptr(),
         }
@@ -192,7 +215,7 @@ impl<T: Remote> MemregionRdmaInputInner<T> {
                 let end = start + m.len() * std::mem::size_of::<T>();
                 (*addr >= start) && (*addr < end)
             }
-            MemregionRdmaInputInner::Slice(s) => s.contains(addr),
+            MemregionRdmaInputInner::Slice(s) | MemregionRdmaInputInner::Unregistered(s) => s.contains(addr),
             MemregionRdmaInputInner::Owned(v) => v as *const T as usize == *addr,
             MemregionRdmaInputInner::ArcVec((_v, r)) => r.contains(addr),
         }
@@ -203,7 +226,7 @@ impl<T: Remote> MemregionRdmaInputInner<T> {
             MemregionRdmaInputInner::LamellarMemRegion(m) => m.len(),
             MemregionRdmaInputInner::SharedMemRegion(m) => m.len(),
             MemregionRdmaInputInner::LocalMemRegion(m) => m.len(),
-            MemregionRdmaInputInner::Slice(s) => s.len(),
+            MemregionRdmaInputInner::Slice(s) | MemregionRdmaInputInner::Unregistered(s) => s.len(),
             MemregionRdmaInputInner::Owned(_) => 1,
             MemregionRdmaInputInner::ArcVec((_v, r)) => r.len(),
         }
@@ -225,6 +248,9 @@ impl<T: Remote> MemregionRdmaInputInner<T> {
                 MemregionRdmaInputInner::LocalMemRegion(m.sub_region(range))
             }
             MemregionRdmaInputInner::Slice(s) => MemregionRdmaInputInner::Slice(s.sub_slice(range)),
+            MemregionRdmaInputInner::Unregistered(s) => {
+                MemregionRdmaInputInner::Unregistered(s.sub_slice(range))
+            }
             MemregionRdmaInputInner::Owned(v) => {
                 if range.start_bound() == std::ops::Bound::Included(&0)
                     && (range.end_bound() == std::ops::Bound::Included(&0)
@@ -337,7 +363,7 @@ impl<T: Remote> TeamFrom<MemregionRdmaInputInner<T>> for LamellarMemoryRegion<T>
             MemregionRdmaInputInner::LamellarMemRegion(mr) => mr,
             MemregionRdmaInputInner::SharedMemRegion(mr) => LamellarMemoryRegion::Shared(mr),
             MemregionRdmaInputInner::LocalMemRegion(mr) => LamellarMemoryRegion::Local(mr),
-            MemregionRdmaInputInner::Slice(s) => {
+            MemregionRdmaInputInner::Slice(s) | MemregionRdmaInputInner::Unregistered(s) => {
                 // fully written below
                 let mem_region = unsafe { team.alloc_one_sided_mem_region_uninit(s.len()) };
                 unsafe {

@@ -13,6 +13,20 @@ use crate::{
     AsLamellarBuffer, LamellarBuffer, RdmaHandle, Remote,
 };
 
+/// A typed window onto memory that the runtime treats as **registered with the network** and whose lifetime is
+/// managed elsewhere (the slice itself neither owns nor frees it).
+///
+/// Invariants every producer must uphold, because consumers rely on them without checking:
+/// * the memory is registered (or otherwise directly addressable by the NIC) for as long as the slice, and any
+///   clone or sub-slice of it, is in use. Input and buffer wrappers report `is_registered() == true` for it, which
+///   lets the libfabric backends skip their staging copy;
+/// * the memory stays valid, and is not freed or moved, until the transfer using it completes;
+/// * for a get destination, nothing else reads or writes it while the transfer is in flight.
+///
+/// A slice built over [`CommAllocInner::Raw`] carries no ownership at all, so these are entirely the creator's
+/// responsibility. Do not wrap arbitrary caller memory (stack, heap, `.data`) in one; use
+/// `MemregionRdmaInputInner::Unregistered` (puts) or `UnregisteredSlice` (gets), which declare the memory
+/// unregistered so the backends stage it.
 #[derive(Debug, Clone)]
 pub(crate) struct CommSlice<T> {
     pub(crate) inner_alloc: Arc<CommAllocInner>,

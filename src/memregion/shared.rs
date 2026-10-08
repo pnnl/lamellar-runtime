@@ -4081,6 +4081,116 @@ impl<T: Remote> SharedMemoryRegion<T> {
 // }
 
 impl<T: Remote> SharedMemoryRegion<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking "put" of `len` elements from the local memory at `src` into this region at `index` on `pe`.
+    ///
+    /// `src` is ordinary caller memory (a stack array, a `Vec`, a global); it need not come from Lamellar.
+    /// The runtime does not register it with the network, so a backend that needs a registered source stages
+    /// it through an internal buffer (or sends it inline when small). On return `src` may be reused, but the
+    /// data is not guaranteed to be visible on `pe` yet: call [`wait_all`](Self::wait_all) for that.
+    ///
+    /// # Safety
+    /// `src` must be valid for reads of `len` elements, and `index + len` must be within this region.
+    /// Mutual exclusivity with other readers and writers is not enforced.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the transfer; `pe` is not notified.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<u32> = world.alloc_shared_mem_region(num_pes).block();
+    /// let local = [my_pe as u32 + 1];
+    /// unsafe {
+    ///     mem_region.put_ptr_blocking(my_pe, my_pe, local.as_ptr(), 1);
+    ///     mem_region.wait_all();
+    ///     let mut back = [0u32];
+    ///     mem_region.get_into_ptr_blocking(my_pe, my_pe, back.as_mut_ptr(), 1);
+    ///     assert_eq!(back, local);
+    /// }
+    ///```
+    pub unsafe fn put_ptr_blocking(&self, pe: usize, index: usize, src: *const T, len: usize) {
+        if len == 0 {
+            return;
+        }
+        debug_assert!(index + len <= self.sub_region_size);
+        self.mr
+            .as_base::<T>()
+            .put_buffer(
+                pe,
+                self.sub_region_offset + index,
+                MemregionRdmaInputInner::unregistered_raw(src, len),
+            )
+            .block();
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Unmanaged form of [`put_ptr_blocking`](Self::put_ptr_blocking): the transfer is issued and tracked by no
+    /// handle. `src` must stay valid and unmodified until [`wait_all`](Self::wait_all) (or another fence on
+    /// this PE) has completed.
+    ///
+    /// # Safety
+    /// As [`put_ptr_blocking`](Self::put_ptr_blocking), plus the lifetime requirement on `src` above.
+    pub unsafe fn put_ptr_unmanaged(&self, pe: usize, index: usize, src: *const T, len: usize) {
+        if len == 0 {
+            return;
+        }
+        debug_assert!(index + len <= self.sub_region_size);
+        self.mr.as_base::<T>().put_buffer_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            MemregionRdmaInputInner::unregistered_raw(src, len),
+        );
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Blocking "get" of `len` elements from this region at `index` on `pe` into the local memory at `dst`.
+    ///
+    /// `dst` is ordinary caller memory; the runtime does not register it, so a backend that needs a registered
+    /// destination stages the transfer. When this returns the data is in `dst`.
+    ///
+    /// # Safety
+    /// `dst` must be valid for writes of `len` elements and not accessed by anything else during the call, and
+    /// `index + len` must be within this region.
+    ///
+    /// # One-sided Operation
+    /// The calling PE initiates the transfer; `pe` is not notified. See [`put_ptr_blocking`](Self::put_ptr_blocking)
+    /// for an example.
+    pub unsafe fn get_into_ptr_blocking(&self, pe: usize, index: usize, dst: *mut T, len: usize) {
+        if len == 0 {
+            return;
+        }
+        debug_assert!(index + len <= self.sub_region_size);
+        let buf = LamellarBuffer::from_unregistered_raw(dst, len, self.mr.rdma.clone());
+        self.mr
+            .as_base::<T>()
+            .blocking_get_into_buffer(pe, self.sub_region_offset + index, buf);
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Unmanaged form of [`get_into_ptr_blocking`](Self::get_into_ptr_blocking): `dst` must stay valid, and must not be
+    /// read or written, until [`wait_all`](Self::wait_all) (or another fence on this PE) has completed.
+    ///
+    /// # Safety
+    /// As [`get_into_ptr_blocking`](Self::get_into_ptr_blocking), plus the lifetime requirement on `dst` above.
+    pub unsafe fn get_into_ptr_unmanaged(&self, pe: usize, index: usize, dst: *mut T, len: usize) {
+        if len == 0 {
+            return;
+        }
+        debug_assert!(index + len <= self.sub_region_size);
+        let buf = LamellarBuffer::from_unregistered_raw(dst, len, self.mr.rdma.clone());
+        self.mr
+            .as_base::<T>()
+            .get_into_buffer_unmanaged(pe, self.sub_region_offset + index, buf);
+    }
+}
+
+impl<T: Remote> SharedMemoryRegion<T> {
     /// Reinterprets this region (or sub-region) as a region of `U`, returning
     /// [`MemRegionError::MemNotAlignedError`] if the view would not be valid for `U`.
     ///

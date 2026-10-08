@@ -8,7 +8,7 @@ use std::{
 use tracing::trace;
 
 use crate::{
-    lamellae::{CommProgress, CommSlice, Lamellae, Remote},
+    lamellae::{CommAllocInner, CommProgress, CommSlice, Lamellae, Remote},
     lamellar_team::IntoLamellarTeam,
     memregion::{LamellarMemoryRegion, OneSidedMemoryRegion, SharedMemoryRegion},
 };
@@ -23,7 +23,8 @@ pub trait AsLamellarBuffer<T: Remote>: Send + 'static {
     fn as_slice(&self) -> &[T];
     /// Returns a mutable slice of the backing data.
     fn as_mut_slice(&mut self) -> &mut [T];
-    /// Whether the backing data lives in lamellar-allocated, network-registered memory.
+    /// Whether the backing data lives in network-registered memory. `true` is a promise the backends rely on to
+    /// skip staging, so only report it for memory that really is registered; the default is `false`.
     #[doc(hidden)]
     fn is_registered(&self) -> bool {
         false
@@ -82,6 +83,22 @@ impl<T: Remote> AsLamellarBuffer<T> for CommSlice<T> {
     fn is_registered(&self) -> bool {
         true
     }
+}
+
+/// Caller memory used as the local side of a get: borrowed (not owned, not freed) and NOT registered with the
+/// network, so `is_registered()` is `false` and backends that need a registered destination stage the transfer.
+/// Contrast with [`CommSlice`], which asserts the memory is registered. The creator guarantees the memory stays
+/// valid, and is neither read nor written by anything else, until the transfer completes.
+pub(crate) struct UnregisteredSlice<T>(CommSlice<T>);
+
+impl<T: Remote> AsLamellarBuffer<T> for UnregisteredSlice<T> {
+    fn as_slice(&self) -> &[T] {
+        self.0.as_slice()
+    }
+    fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { self.0.as_mut_slice() }
+    }
+    // is_registered(): the trait default, false
 }
 
 struct BufferInner<T> {
@@ -278,6 +295,34 @@ impl<T: Remote> LamellarBuffer<T, OneSidedMemoryRegion<T>> {
 impl<T: Remote> From<OneSidedMemoryRegion<T>> for LamellarBuffer<T, OneSidedMemoryRegion<T>> {
     fn from(mem_region: OneSidedMemoryRegion<T>) -> Self {
         unsafe { LamellarBuffer::from_one_sided_memory_region(mem_region) }
+    }
+}
+
+impl<T: Remote> LamellarBuffer<T, UnregisteredSlice<T>> {
+    /// Wrap `len` elements of caller memory at `ptr` as an unregistered buffer.
+    ///
+    /// # Safety
+    /// `ptr` must be valid for reads and writes of `len` elements and stay valid, and untouched by anything else,
+    /// until every transfer using the buffer has completed.
+    pub(crate) unsafe fn from_unregistered_raw(
+        ptr: *mut T,
+        len: usize,
+        lamellae: Arc<Lamellae>,
+    ) -> Self {
+        let slice = CommSlice {
+            inner_alloc: Arc::new(CommAllocInner::Raw(
+                ptr as usize,
+                len * std::mem::size_of::<T>(),
+            )),
+            _phantom: PhantomData,
+        };
+        LamellarBuffer {
+            data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(UnregisteredSlice(slice)))).into())
+                .unwrap(),
+            range: 0..len,
+            lamellae,
+            _phantom: PhantomData,
+        }
     }
 }
 
