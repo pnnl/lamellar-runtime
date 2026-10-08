@@ -139,16 +139,37 @@ impl Drop for CachedContext {
     }
 }
 
+/// Memory owned by the program (e.g. its `.data`/`.bss`) that we only register with the fabric;
+/// it is never allocated or freed here. The allocation ref counts live in this struct instead of
+/// past the end of the range (which is where `Mmap`/`Shmem` allocations keep them).
+pub(crate) struct ExternalMem {
+    ptr: usize,
+    len: usize,
+    ref_cnts: [AtomicUsize; 2], // [fabric, runtime]
+}
+
 #[derive(Clone)]
 pub(crate) enum LibfabricMem {
     Mmap(Arc<memmap::MmapMut>),
     #[cfg(feature = "enable-on-node-shmem")]
     Shmem(Arc<ShmemSegment>),
+    External(Arc<ExternalMem>),
 }
 
 impl LibfabricMem {
+    /// Address of the allocation ref count: `idx` 0 is the fabric count, 1 the runtime count.
+    /// Owned memory keeps them `offset` bytes into the allocation; external memory keeps them
+    /// beside it so nothing is written outside the registered range.
+    fn ref_cnt_ptr(&self, offset: usize, idx: usize) -> *const AtomicUsize {
+        match self {
+            LibfabricMem::External(ext) => &ext.ref_cnts[idx] as *const AtomicUsize,
+            _ => unsafe { self.as_ptr().add(offset) as *const AtomicUsize },
+        }
+    }
+
     fn as_ptr(&self) -> *mut u8 {
         match self {
+            LibfabricMem::External(ext) => ext.ptr as *mut u8,
             LibfabricMem::Mmap(mem) => mem.as_ptr() as *mut u8,
             #[cfg(feature = "enable-on-node-shmem")]
             LibfabricMem::Shmem(segment) => segment.base_ptr(),
@@ -157,6 +178,7 @@ impl LibfabricMem {
 
     fn len(&self) -> usize {
         match self {
+            LibfabricMem::External(ext) => ext.len,
             LibfabricMem::Mmap(mem) => mem.len(),
             #[cfg(feature = "enable-on-node-shmem")]
             LibfabricMem::Shmem(segment) => segment.len(),
@@ -1383,6 +1405,75 @@ impl Ofi {
         self.info_entry.tx_attr().inject_size()
     }
 
+    /// Register `mem_slice` with the domain (read/write, local and remote) and enable the MR.
+    fn register_mr(self: &Arc<Ofi>, mem_slice: &mut [u8]) -> AllocResult<MemoryRegion> {
+        let mr = MemoryRegionBuilder::new(mem_slice, HmemIface::System)
+            .requested_key(self.alloc_manager.next_key() as u64)
+            .access_read()
+            .access_write()
+            .access_remote_read()
+            .access_remote_write()
+            .build(&self.domain)
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+
+        let mr = match mr {
+            MaybeDisabledMemoryRegion::Disabled(mr) => {
+                match mr {
+                    DisabledMemoryRegion::EpBind(mr) => {
+                        // trace!("Binding memory region to endpoint");
+                        mr.enable(&self.comm_group.ep)
+                            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
+                    }
+                    DisabledMemoryRegion::RmaEvent(mr) => {
+                        // trace!("Binding memory region to domain");
+                        mr.enable()
+                            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
+                        // This will bind the memory region to the domain
+                    }
+                }
+            }
+            MaybeDisabledMemoryRegion::Enabled(mr) => mr,
+        };
+        Ok(mr)
+    }
+
+    /// Collectively register `len` bytes at `ptr` (owned by the caller, never freed here) and
+    /// exchange the per-PE base addresses and keys. Every PE must call this in the same order;
+    /// `ptr` may differ between PEs. Returned offsets/addresses are relative to each PE's own `ptr`.
+    pub(crate) fn register_external(
+        self: &Arc<Ofi>,
+        ptr: *mut u8,
+        len: usize,
+    ) -> AllocResult<LibfabricAlloc> {
+        let mem_slice = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
+        let mr = self.register_mr(mem_slice)?;
+        let remote_alloc_infos = self
+            .collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), mem_slice, &mr)
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+        let mem = LibfabricMem::External(Arc::new(ExternalMem {
+            ptr: ptr as usize,
+            len,
+            ref_cnts: [AtomicUsize::new(0), AtomicUsize::new(0)],
+        }));
+        let alloc = LibfabricAlloc::new(
+            self.clone(),
+            mem,
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(vec![None; self.num_pes]),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(vec![None; self.num_pes]),
+            mr,
+            remote_alloc_infos,
+            len,
+            0, // no padding: the ref count is not stored in this memory
+            self.alloc_manager.clone(),
+            None, // no multicast group: external ranges are only targets of RMA/atomics
+        )
+        .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+        self.alloc_manager.insert(alloc.clone());
+        Ok(alloc)
+    }
+
     fn full_alloc(self: &Arc<Ofi>, data_size: usize, align: usize) -> AllocResult<LibfabricAlloc> {
         //add space for ref count and padding to align it
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
@@ -1462,33 +1553,7 @@ impl Ofi {
         };
         let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
 
-        let mr = MemoryRegionBuilder::new(mem_slice, HmemIface::System)
-            .requested_key(self.alloc_manager.next_key() as u64)
-            .access_read()
-            .access_write()
-            .access_remote_read()
-            .access_remote_write()
-            .build(&self.domain)
-            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
-
-        let mr = match mr {
-            MaybeDisabledMemoryRegion::Disabled(mr) => {
-                match mr {
-                    DisabledMemoryRegion::EpBind(mr) => {
-                        // trace!("Binding memory region to endpoint");
-                        mr.enable(&self.comm_group.ep)
-                            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
-                    }
-                    DisabledMemoryRegion::RmaEvent(mr) => {
-                        // trace!("Binding memory region to domain");
-                        mr.enable()
-                            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
-                        // This will bind the memory region to the domain
-                    }
-                }
-            }
-            MaybeDisabledMemoryRegion::Enabled(mr) => mr,
-        };
+        let mr = self.register_mr(mem_slice)?;
 
         // let remote_alloc_infos = self.pmi_exchange_mr_info(&mem, &mr);
         let remote_alloc_infos = self
@@ -1906,7 +1971,7 @@ pub(crate) struct LibfabricAlloc {
 impl std::fmt::Debug for LibfabricAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let fabric_ref_count = unsafe {
-            (&*(self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize))
+            (&*(self.mem.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize))
                 .load(Ordering::SeqCst)
         };
 
@@ -1930,13 +1995,13 @@ impl std::fmt::Debug for LibfabricAlloc {
             &format_args!(
                 "{} ({:?}): {}",
                 self.fabric_ref_cnt_offset,
-                unsafe { self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize },
+                self.mem.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize,
                 fabric_ref_count
             ),
         );
         if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
             let rt_ref_count = unsafe {
-                (&*(self.mem.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize))
+                (&*(self.mem.ref_cnt_ptr(self.rt_ref_cnt_offset, 1) as *const AtomicUsize))
                     .load(Ordering::SeqCst)
             };
             let padding = decode_padding(rt_ref_count);
@@ -1946,7 +2011,7 @@ impl std::fmt::Debug for LibfabricAlloc {
                 &format_args!(
                     "{} ({:?}): {}, {}",
                     self.rt_ref_cnt_offset,
-                    unsafe { self.mem.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize },
+                    self.mem.ref_cnt_ptr(self.rt_ref_cnt_offset, 1) as *const AtomicUsize,
                     rt_ref_count,
                     padding,
                 ),
@@ -1963,7 +2028,7 @@ impl Clone for LibfabricAlloc {
             self.increment_rt_ref_count();
         }
         get_ref_count(unsafe {
-            &*(self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize)
+            &*(self.mem.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize)
         });
         trace!(target: "libfabric", "Cloned LibfabricAlloc: {:?}", self);
         Self {
@@ -2099,7 +2164,7 @@ impl LibfabricAlloc {
         //initialize ref count to 1
         // let encoded = encode_ref_count_and_padding(1, padding);
         unsafe {
-            (&*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *mut AtomicUsize))
+            (&*(alloc.mem.ref_cnt_ptr(alloc.fabric_ref_cnt_offset, 0) as *mut AtomicUsize))
                 .store(encoded, Ordering::SeqCst);
         }
         debug!(target: "libfabric", "Created Libfabric allocation: {:?}", alloc);
@@ -2191,7 +2256,7 @@ impl LibfabricAlloc {
         };
 
         unsafe {
-            (&*(alloc.mem.as_ptr().add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize))
+            (&*(alloc.mem.ref_cnt_ptr(alloc.rt_ref_cnt_offset, 1) as *mut AtomicUsize))
                 .store(encoded, Ordering::SeqCst);
         }
 
@@ -2233,7 +2298,7 @@ impl LibfabricAlloc {
             mcast_group: self.mcast_group.clone(),
         };
         get_ref_count(unsafe {
-            &*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize)
+            &*(alloc.mem.ref_cnt_ptr(alloc.fabric_ref_cnt_offset, 0) as *const AtomicUsize)
         });
         debug!(target: "libfabric", "Converted Libfabric alloc to rt-alloc: {:?}", alloc);
         Ok(alloc)
@@ -2254,24 +2319,24 @@ impl LibfabricAlloc {
 
     pub(crate) fn increment_fabric_ref_count(&self) -> usize {
         let ref_count =
-            unsafe { &*(self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
+            unsafe { &*(self.mem.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize) };
         increment_ref_count(ref_count)
     }
 
     pub(crate) fn decrement_fabric_ref_count(&self) -> usize {
         let ref_count =
-            unsafe { &*(self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
+            unsafe { &*(self.mem.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize) };
         decrement_ref_count(ref_count)
     }
 
     pub(crate) fn increment_rt_ref_count(&self) -> usize {
         let ref_count =
-            unsafe { &*(self.mem.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
+            unsafe { &*(self.mem.ref_cnt_ptr(self.rt_ref_cnt_offset, 1) as *const AtomicUsize) };
         increment_ref_count(ref_count)
     }
     pub(crate) fn decrement_rt_ref_count(&self) -> usize {
         let ref_count =
-            unsafe { &*(self.mem.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
+            unsafe { &*(self.mem.ref_cnt_ptr(self.rt_ref_cnt_offset, 1) as *const AtomicUsize) };
         decrement_ref_count(ref_count)
     }
 

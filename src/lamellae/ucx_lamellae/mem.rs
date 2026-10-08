@@ -42,6 +42,13 @@ impl CommMem for UcxComm {
         Ok(comm_alloc)
     }
 
+    fn register_external(&self, ptr: *mut u8, len: usize) -> AllocResult<CommAlloc> {
+        let inner_alloc = self.ucx.register_external(ptr, len)?;
+        Ok(CommAlloc {
+            inner_alloc: Arc::new(CommAllocInner::UcxAlloc(inner_alloc)),
+        })
+    }
+
     //#[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
         // add space for ref count

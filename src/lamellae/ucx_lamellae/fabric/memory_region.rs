@@ -61,6 +61,10 @@ pub(crate) struct MemoryHandleInner {
     handle: ucp_mem_h,
     pub(crate) addr: usize,
     context: Arc<Context>,
+    /// Set only for externally owned memory (see `register_external`): the allocation ref counts
+    /// live here instead of past the end of the registered range, so nothing is written outside
+    /// memory the caller owns. `[fabric, runtime]`.
+    ext_ref_cnts: Option<[AtomicUsize; 2]>,
 }
 
 unsafe impl Send for MemoryHandleInner {}
@@ -86,6 +90,48 @@ impl std::hash::Hash for MemoryHandleInner {
 impl MemoryHandleInner {
     pub(crate) fn as_ptr(&self) -> *const u8 {
         self.addr as *const u8
+    }
+
+    /// Address of the allocation ref count: `idx` 0 is the fabric count, 1 the runtime count.
+    /// Owned memory keeps them `offset` bytes into the allocation; external memory keeps them in
+    /// this struct.
+    pub(crate) fn ref_cnt_ptr(&self, offset: usize, idx: usize) -> *const AtomicUsize {
+        match &self.ext_ref_cnts {
+            Some(cnts) => &cnts[idx] as *const AtomicUsize,
+            None => unsafe { self.as_ptr().add(offset) as *const AtomicUsize },
+        }
+    }
+
+    /// Register `size` bytes of memory the caller already owns (e.g. its `.data`/`.bss`) with UCP so
+    /// peers can target it. Nothing is allocated or freed: dropping the handle only unmaps the
+    /// registration. The base address is the one passed in, not the one `ucp_mem_query` reports
+    /// (UCX's registration cache may round a region out to page boundaries).
+    pub(crate) fn register_external(context: &Arc<Context>, addr: *mut c_void, size: usize) -> Arc<Self> {
+        let params = ucp_mem_map_params_t {
+            field_mask: (ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_ADDRESS
+                | ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_LENGTH
+                | ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_FLAGS)
+                .0 as u64,
+            address: addr,
+            length: size as _,
+            flags: 0, // no UCP_MEM_MAP_ALLOCATE / FIXED: register the existing range
+            prot: 0,
+            memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+            exported_memh_buffer: std::ptr::null_mut(),
+        };
+        let mut handle = MaybeUninit::uninit();
+        let status = unsafe { ucp_mem_map(context.handle, &params, handle.as_mut_ptr()) };
+        assert_eq!(
+            status,
+            ucs_status_t::UCS_OK,
+            "ucp_mem_map could not register {size} bytes at {addr:p} (status {status:?})"
+        );
+        Arc::new(MemoryHandleInner {
+            handle: unsafe { handle.assume_init() },
+            addr: addr as usize,
+            context: context.clone(),
+            ext_ref_cnts: Some([AtomicUsize::new(0), AtomicUsize::new(0)]),
+        })
     }
 
     #[cfg(feature = "enable-on-node-shmem")]
@@ -125,6 +171,7 @@ impl MemoryHandleInner {
             handle,
             addr: attr.address as _,
             context: context.clone(),
+            ext_ref_cnts: None,
         })
     }
     // removed mem_handle method, no longer needed
@@ -159,6 +206,7 @@ impl MemoryHandleInner {
             handle,
             addr: attr.address as _,
             context: context.clone(),
+            ext_ref_cnts: None,
         })
     }
 

@@ -24,6 +24,9 @@ pub(crate) enum AllocError {
     ))]
     FabricAllocationError(i32),
     InvalidSubAlloc(usize, usize),
+    /// the backend cannot perform the requested allocation-like operation (e.g. registering
+    /// externally owned memory)
+    Unsupported(&'static str),
     // NotRTAlloc(usize),
 }
 
@@ -43,6 +46,7 @@ impl std::fmt::Display for AllocError {
                     addr
                 )
             }
+            AllocError::Unsupported(what) => write!(f, "unsupported by this backend: {}", what),
             // AllocError::RemoteNotFound(addr) => {
             //     write!(
             //         f,

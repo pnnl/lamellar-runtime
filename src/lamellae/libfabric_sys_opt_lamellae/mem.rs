@@ -37,6 +37,13 @@ impl CommMem for LibfabricSysOptComm {
         Ok(comm_alloc)
     }
 
+    fn register_external(&self, ptr: *mut u8, len: usize) -> AllocResult<CommAlloc> {
+        let inner_alloc = self.ofi.register_external(ptr, len)?;
+        Ok(CommAlloc {
+            inner_alloc: Arc::new(CommAllocInner::LibfabricSysOptAlloc(inner_alloc)),
+        })
+    }
+
     // #[tracing::instrument(skip(self), level = "debug")]
     // fn free(&self, alloc: CommAlloc) {
     //     assert!(alloc.alloc_type == CommAllocType::Fabric);

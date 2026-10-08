@@ -122,6 +122,14 @@ pub(crate) trait CommMem {
     fn rt_alloc_uninit(&self, size: usize, align: usize) -> error::AllocResult<CommAlloc> {
         self.rt_alloc(size, align)
     }
+
+    /// Collectively register `len` bytes at `ptr` (memory the caller owns, e.g. its data segment)
+    /// so that peers can target it with RDMA. Every PE must call this in the same order; each PE
+    /// may pass a different `ptr`. The returned allocation never frees the memory. Offsets into
+    /// the allocation are relative to each PE's own `ptr`.
+    fn register_external(&self, _ptr: *mut u8, _len: usize) -> error::AllocResult<CommAlloc> {
+        Err(error::AllocError::Unsupported("register_external"))
+    }
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn mem_occupied(&self) -> usize;
     fn alloc_pool(&self, min_size: usize);

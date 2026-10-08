@@ -710,6 +710,68 @@ impl UcxOptWorld {
         Ok(alloc)
     }
 
+    /// Collectively register `len` bytes at `ptr` (owned by the caller, never freed here) and
+    /// exchange the per-PE base addresses and rkeys. Every PE must call this in the same order;
+    /// `ptr` may differ between PEs. Offsets into the returned allocation are relative to each PE's
+    /// own `ptr`.
+    ///
+    /// The packed rkey of an external range must fit the slot size of the key-exchange buffer, which
+    /// was sized at startup from the key of a `ucp_mem_map`-allocated region. Every PE computes the
+    /// same key size for the same kind of memory, so all PEs take the error path together.
+    pub(crate) fn register_external(&self, ptr: *mut u8, len: usize) -> AllocResult<UcxOptAlloc> {
+        let mem_handle =
+            MemoryHandleInner::register_external(&self.context, ptr as *mut std::ffi::c_void, len);
+        let exchange_buffer = self.exchange_buffer.as_ref().unwrap();
+        let needed = (std::mem::size_of::<usize>() + mem_handle.pack().as_ref().len()) * self.num_pes;
+        if needed > exchange_buffer.num_bytes() {
+            return Err(AllocError::Unsupported(
+                "packed rkey of external memory is larger than the key-exchange buffer",
+            ));
+        }
+        let buffer_keys = mem_handle
+            .exchange_key_alloc(
+                &self.endpoints,
+                &self.extra_shards,
+                &self.barrier.as_ref().unwrap().lock().unwrap(),
+                exchange_buffer,
+            )
+            .map_err(|_| AllocError::Unsupported("rkey exchange for external memory failed"))?;
+
+        let mem = MemoryHandle {
+            addr: ptr as usize,
+            size: len,
+            inner: mem_handle.clone(),
+        };
+        let alloc = UcxOptAlloc::new(
+            mem,
+            len,
+            0, // no padding: the ref count is not stored in this memory
+            self.my_pe,
+            self.num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(self.same_node_pes.clone()),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(vec![None; self.num_pes]),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(vec![None; self.num_pes]),
+            self.context.clone(),
+            self.worker.clone(),
+            self.endpoints.clone(),
+            self.extra_shards.clone(),
+            false,
+            buffer_keys.clone(),
+            self.mem_handles.clone(),
+            self.remote_keys.clone(),
+            None, // no UCC team: external ranges are only targets of RMA/atomics
+        )?;
+        self.mem_handles.lock().unwrap().push(alloc.clone());
+        self.remote_keys
+            .lock()
+            .unwrap()
+            .push((alloc.clone(), buffer_keys));
+        Ok(alloc)
+    }
+
     pub(crate) fn alloc(
         &self,
         data_size: usize,
@@ -1208,7 +1270,7 @@ impl From<UcxOptAlloc> for CommAlloc {
 impl std::fmt::Debug for UcxOptAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let fabric_ref_count = unsafe {
-            (&*(self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize))
+            (&*(self.mem.inner.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize))
                 .load(Ordering::SeqCst)
         };
 
@@ -1231,14 +1293,14 @@ impl std::fmt::Debug for UcxOptAlloc {
                 "{} ({:?}) cnt: {}",
                 self.fabric_ref_cnt_offset,
                 unsafe {
-                    self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize
+                    self.mem.inner.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize
                 },
                 fabric_ref_count
             ),
         );
         if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
             let rt_ref_count = unsafe {
-                (&*(self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize))
+                (&*(self.mem.inner.ref_cnt_ptr(self.rt_ref_cnt_offset, 1) as *const AtomicUsize))
                     .load(Ordering::SeqCst)
             };
             let padding = decode_padding(rt_ref_count);
@@ -1249,7 +1311,7 @@ impl std::fmt::Debug for UcxOptAlloc {
                     "{} ({:?}) cnt: {}, padding: {}",
                     self.rt_ref_cnt_offset,
                     unsafe {
-                        self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize
+                        self.mem.inner.ref_cnt_ptr(self.rt_ref_cnt_offset, 1) as *const AtomicUsize
                     },
                     rt_ref_count,
                     padding,
@@ -1368,7 +1430,7 @@ impl UcxOptAlloc {
         };
 
         unsafe {
-            (&*(alloc.mem.inner.as_ptr().add(alloc.fabric_ref_cnt_offset) as *mut AtomicUsize))
+            (&*(alloc.mem.inner.ref_cnt_ptr(alloc.fabric_ref_cnt_offset, 0) as *mut AtomicUsize))
                 .store(encoded, Ordering::SeqCst);
         }
         debug!(target: "ucx", "Created UCX allocation: {:?}", alloc);
@@ -1508,7 +1570,7 @@ impl UcxOptAlloc {
         };
 
         unsafe {
-            (&*(alloc.mem.inner.as_ptr().add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize))
+            (&*(alloc.mem.inner.ref_cnt_ptr(alloc.rt_ref_cnt_offset, 1) as *mut AtomicUsize))
                 .store(encoded, Ordering::SeqCst);
         }
         debug!(target: "ucx", "Created UCX rt-sub-allocation: {:?}", alloc);
@@ -1532,7 +1594,7 @@ impl UcxOptAlloc {
             - std::mem::size_of::<AtomicUsize>();
 
         let encoded_ref_count = unsafe {
-            (&*(self.mem.inner.as_ptr().add(ref_cnt_offset) as *const AtomicUsize))
+            (&*(self.mem.inner.ref_cnt_ptr(ref_cnt_offset, 1) as *const AtomicUsize))
                 .load(Ordering::SeqCst)
         };
 
@@ -1584,27 +1646,27 @@ impl UcxOptAlloc {
 
     pub(crate) fn increment_fabric_ref_count(&self) -> usize {
         let ref_count = unsafe {
-            &*(self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize)
+            &*(self.mem.inner.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize)
         };
         increment_ref_count(ref_count)
     }
 
     pub(crate) fn decrement_fabric_ref_count(&self) -> usize {
         let ref_count = unsafe {
-            &*(self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize)
+            &*(self.mem.inner.ref_cnt_ptr(self.fabric_ref_cnt_offset, 0) as *const AtomicUsize)
         };
         decrement_ref_count(ref_count)
     }
 
     pub(crate) fn increment_rt_ref_count(&self) -> usize {
         let ref_count = unsafe {
-            &*(self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize)
+            &*(self.mem.inner.ref_cnt_ptr(self.rt_ref_cnt_offset, 1) as *const AtomicUsize)
         };
         increment_ref_count(ref_count)
     }
     pub(crate) fn decrement_rt_ref_count(&self) -> usize {
         let ref_count = unsafe {
-            &*(self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize)
+            &*(self.mem.inner.ref_cnt_ptr(self.rt_ref_cnt_offset, 1) as *const AtomicUsize)
         };
         decrement_ref_count(ref_count)
     }
