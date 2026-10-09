@@ -14,8 +14,6 @@ use memory_region::{MemoryHandle, MemoryHandleInner, RKey, RemoteAddressInfo};
 pub(crate) use worker::Worker;
 use worker::FlushState;
 
-#[cfg(feature = "enable-on-node-shmem")]
-use crate::config;
 use crate::{
     lamellae::{
         collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone},

@@ -44,10 +44,7 @@ use crate::{
 };
 
 #[cfg(feature = "enable-on-node-shmem")]
-use crate::{
-    config,
-    lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment},
-};
+use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
 
 unsafe fn close_fid(name: &str, fid: *mut libfabric_sys::fid) {
     if fid.is_null() {
