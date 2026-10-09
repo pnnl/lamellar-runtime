@@ -1850,8 +1850,11 @@ impl Ofi {
             (LibfabricSysMem::Mmap(Arc::new(mmap)), mem_base_ptr)
         };
         #[cfg(feature = "enable-on-node-shmem")]
-        let (mem, mem_base_ptr, same_node_bases, same_node_segments) = if self.disable_on_node_shmem
-        {
+        // A sub-allocation is collective over `pes` only, so PEs outside the group do not advance the
+        // per-process shared-memory allocation id. Naming a segment after that id would let the ids drift
+        // apart between PEs and hang the next world-wide allocation, so sub-allocations never use shared
+        // memory: no same-node peers, and every access goes through the fabric.
+        let (mem, mem_base_ptr, same_node_bases, same_node_segments) = {
             let mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
@@ -1863,38 +1866,6 @@ impl Ofi {
                 mem_base_ptr,
                 vec![None; self.num_pes],
                 vec![None; self.num_pes],
-            )
-        } else {
-            let alloc_id = LIBFABRIC_SYS_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
-            let shmem_id = format!("libfabric_sys_alloc_{}_pe_{}", alloc_id, self.my_pe);
-            let local_segment = Arc::new(attach_shmem_segment(
-                self.job_id,
-                aligned_size,
-                align,
-                &shmem_id,
-                alloc_id,
-                true,
-            ));
-            let mem_base_ptr = local_segment.base_ptr();
-            let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
-            mem_slice.fill(0);
-            let (mut same_node_bases, same_node_segments) = build_same_node_segments(
-                pes,
-                &self.same_node_pes,
-                self.job_id,
-                aligned_size,
-                align,
-                alloc_id,
-                self.my_pe,
-            );
-            let mut same_node_segments = same_node_segments;
-            same_node_bases[self.my_pe] = Some(mem_base_ptr as usize);
-            same_node_segments[self.my_pe] = Some(local_segment.clone());
-            (
-                LibfabricSysMem::Shmem(local_segment),
-                mem_base_ptr,
-                same_node_bases,
-                same_node_segments,
             )
         };
         let mem_slice = unsafe { std::slice::from_raw_parts_mut(mem_base_ptr, aligned_size) };
