@@ -1446,7 +1446,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             self.mr
                 .inner
                 .mr
-                .as_base::<T>()
                 .put(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
@@ -1462,7 +1461,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             self.mr
                 .inner
                 .mr
-                .as_base::<T>()
                 .put_blocking(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
@@ -1477,7 +1475,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             self.mr
                 .inner
                 .mr
-                .as_base::<T>()
                 .put_unmanaged(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
@@ -1497,7 +1494,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             self.mr
                 .inner
                 .mr
-                .as_base::<T>()
                 .put_buffer(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
@@ -1514,7 +1510,7 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         data: impl Into<MemregionRdmaInputInner<T>>,
     ) {
         if self.pe == pe {
-            self.mr.inner.mr.as_base::<T>().put_buffer_unmanaged(
+            self.mr.inner.mr.put_buffer_unmanaged(
                 pe,
                 self.sub_region_offset + index,
                 data,
@@ -1555,7 +1551,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             self.mr
                 .inner
                 .mr
-                .as_base::<T>()
                 .get(pe, self.sub_region_offset + index)
         } else {
             panic!(
@@ -1571,7 +1566,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             self.mr
                 .inner
                 .mr
-                .as_base::<T>()
                 .get_buffer(pe, self.sub_region_offset + index, len)
         } else {
             panic!(
@@ -1588,7 +1582,7 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         data: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
         if self.pe == pe {
-            self.mr.inner.mr.as_base::<T>().get_into_buffer(
+            self.mr.inner.mr.get_into_buffer(
                 pe,
                 self.sub_region_offset + index,
                 data,
@@ -1608,7 +1602,7 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         data: LamellarBuffer<T, B>,
     ) {
         if self.pe == pe {
-            self.mr.inner.mr.as_base::<T>().get_into_buffer_unmanaged(
+            self.mr.inner.mr.get_into_buffer_unmanaged(
                 pe,
                 self.sub_region_offset + index,
                 data,

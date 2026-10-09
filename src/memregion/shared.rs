@@ -917,7 +917,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// world.barrier();
     ///```
     pub unsafe fn atomic_store(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-        self.mr.as_base::<T>().atomic_op(
+        self.mr.atomic_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Write(Box::pin(val)),
@@ -955,7 +955,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     pub unsafe fn atomic_store_unmanaged(&self, pe: usize, index: usize, val: T) {
         //we need to do the offsetting here since we are going directly through the inner alloc
 
-        self.mr.as_base::<T>().atomic_op_unmanaged(
+        self.mr.atomic_op_unmanaged(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Write(Box::pin(val)),
@@ -990,7 +990,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///```
     pub unsafe fn atomic_load(&self, pe: usize, index: usize) -> AtomicFetchOpHandle<T> {
         // let res = MaybeUninit::uninit().assume_init();
-        self.mr.as_base::<T>().atomic_fetch_op(
+        self.mr.atomic_fetch_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Read(Box::pin(std::mem::zeroed())),
@@ -1026,7 +1026,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///```
     pub unsafe fn atomic_swap(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
         // let res = MaybeUninit::uninit().assume_init();
-        self.mr.as_base::<T>().atomic_fetch_op(
+        self.mr.atomic_fetch_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Write(Box::pin(val)),
@@ -1061,7 +1061,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_add(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
-        self.mr.as_base::<T>().atomic_fetch_op(
+        self.mr.atomic_fetch_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchSum(Box::pin(val)),
@@ -1097,7 +1097,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_bit_and(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
-        self.mr.as_base::<T>().atomic_fetch_op(
+        self.mr.atomic_fetch_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchBitAnd(Box::pin(val)),
@@ -1133,7 +1133,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_bit_or(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
-        self.mr.as_base::<T>().atomic_fetch_op(
+        self.mr.atomic_fetch_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchBitOr(Box::pin(val)),
@@ -1169,7 +1169,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_bit_xor(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
-        self.mr.as_base::<T>().atomic_fetch_op(
+        self.mr.atomic_fetch_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchBitXor(Box::pin(val)),
@@ -1202,7 +1202,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_store_blocking(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_blocking(pe, self.sub_region_offset + index, AtomicOp::Write(Box::pin(val)))
+        self.mr.atomic_op_blocking(pe, self.sub_region_offset + index, AtomicOp::Write(Box::pin(val)))
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1231,7 +1231,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_load_blocking(&self, pe: usize, index: usize) -> T {
-        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+        self.mr.atomic_fetch_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Read(Box::pin(std::mem::zeroed())),
@@ -1264,7 +1264,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_swap_blocking(&self, pe: usize, index: usize, val: T) -> T {
-        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+        self.mr.atomic_fetch_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Write(Box::pin(val)),
@@ -1297,7 +1297,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_add_blocking(&self, pe: usize, index: usize, val: T) -> T {
-        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+        self.mr.atomic_fetch_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchSum(Box::pin(val)),
@@ -1330,7 +1330,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_bit_and_blocking(&self, pe: usize, index: usize, val: T) -> T {
-        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+        self.mr.atomic_fetch_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchBitAnd(Box::pin(val)),
@@ -1363,7 +1363,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_bit_or_blocking(&self, pe: usize, index: usize, val: T) -> T {
-        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+        self.mr.atomic_fetch_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchBitOr(Box::pin(val)),
@@ -1396,7 +1396,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_bit_xor_blocking(&self, pe: usize, index: usize, val: T) -> T {
-        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+        self.mr.atomic_fetch_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchBitXor(Box::pin(val)),
@@ -1430,7 +1430,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_add(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-        self.mr.as_base::<T>().atomic_op(
+        self.mr.atomic_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Sum(Box::pin(val)),
@@ -1462,7 +1462,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_add_blocking(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_blocking(
+        self.mr.atomic_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Sum(Box::pin(val)),
@@ -1480,7 +1480,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// The calling PE initiates the atomic operation; the target PE is not notified.
     ///
     pub unsafe fn atomic_add_unmanaged(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_unmanaged(
+        self.mr.atomic_op_unmanaged(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Sum(Box::pin(val)),
@@ -1514,7 +1514,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_sub(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-        self.mr.as_base::<T>().atomic_op(
+        self.mr.atomic_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Sub(Box::pin(val)),
@@ -1546,7 +1546,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_sub_blocking(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_blocking(
+        self.mr.atomic_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Sub(Box::pin(val)),
@@ -1564,7 +1564,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// The calling PE initiates the atomic operation; the target PE is not notified.
     ///
     pub unsafe fn atomic_sub_unmanaged(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_unmanaged(
+        self.mr.atomic_op_unmanaged(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Sub(Box::pin(val)),
@@ -1598,7 +1598,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_sub(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
-        self.mr.as_base::<T>().atomic_fetch_op(
+        self.mr.atomic_fetch_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchSub(Box::pin(val)),
@@ -1629,7 +1629,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_sub_blocking(&self, pe: usize, index: usize, val: T) -> T {
-        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+        self.mr.atomic_fetch_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchSub(Box::pin(val)),
@@ -1663,7 +1663,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_mul(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-        self.mr.as_base::<T>().atomic_op(
+        self.mr.atomic_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Prod(Box::pin(val)),
@@ -1695,7 +1695,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_mul_blocking(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_blocking(
+        self.mr.atomic_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Prod(Box::pin(val)),
@@ -1713,7 +1713,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// The calling PE initiates the atomic operation; the target PE is not notified.
     ///
     pub unsafe fn atomic_mul_unmanaged(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_unmanaged(
+        self.mr.atomic_op_unmanaged(
             pe,
             self.sub_region_offset + index,
             AtomicOp::Prod(Box::pin(val)),
@@ -1747,7 +1747,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_mul(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
-        self.mr.as_base::<T>().atomic_fetch_op(
+        self.mr.atomic_fetch_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchProd(Box::pin(val)),
@@ -1778,7 +1778,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_fetch_mul_blocking(&self, pe: usize, index: usize, val: T) -> T {
-        self.mr.as_base::<T>().atomic_fetch_op_blocking(
+        self.mr.atomic_fetch_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::FetchProd(Box::pin(val)),
@@ -1812,7 +1812,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_bit_and(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-        self.mr.as_base::<T>().atomic_op(
+        self.mr.atomic_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitAnd(Box::pin(val)),
@@ -1844,7 +1844,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_bit_and_blocking(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_blocking(
+        self.mr.atomic_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitAnd(Box::pin(val)),
@@ -1862,7 +1862,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// The calling PE initiates the atomic operation; the target PE is not notified.
     ///
     pub unsafe fn atomic_bit_and_unmanaged(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_unmanaged(
+        self.mr.atomic_op_unmanaged(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitAnd(Box::pin(val)),
@@ -1896,7 +1896,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_bit_or(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-        self.mr.as_base::<T>().atomic_op(
+        self.mr.atomic_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitOr(Box::pin(val)),
@@ -1928,7 +1928,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_bit_or_blocking(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_blocking(
+        self.mr.atomic_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitOr(Box::pin(val)),
@@ -1946,7 +1946,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// The calling PE initiates the atomic operation; the target PE is not notified.
     ///
     pub unsafe fn atomic_bit_or_unmanaged(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_unmanaged(
+        self.mr.atomic_op_unmanaged(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitOr(Box::pin(val)),
@@ -1980,7 +1980,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_bit_xor(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-        self.mr.as_base::<T>().atomic_op(
+        self.mr.atomic_op(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitXor(Box::pin(val)),
@@ -2012,7 +2012,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn atomic_bit_xor_blocking(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_blocking(
+        self.mr.atomic_op_blocking(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitXor(Box::pin(val)),
@@ -2030,7 +2030,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     /// The calling PE initiates the atomic operation; the target PE is not notified.
     ///
     pub unsafe fn atomic_bit_xor_unmanaged(&self, pe: usize, index: usize, val: T) {
-        self.mr.as_base::<T>().atomic_op_unmanaged(
+        self.mr.atomic_op_unmanaged(
             pe,
             self.sub_region_offset + index,
             AtomicOp::BitXor(Box::pin(val)),
@@ -4163,7 +4163,6 @@ impl<T: Remote> SharedMemoryRegion<T> {
         }
         debug_assert!(index + len <= self.sub_region_size);
         self.mr
-            .as_base::<T>()
             .put_buffer(
                 pe,
                 self.sub_region_offset + index,
@@ -4184,7 +4183,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
             return;
         }
         debug_assert!(index + len <= self.sub_region_size);
-        self.mr.as_base::<T>().put_buffer_unmanaged(
+        self.mr.put_buffer_unmanaged(
             pe,
             self.sub_region_offset + index,
             MemregionRdmaInputInner::unregistered_raw(src, len),
@@ -4211,7 +4210,6 @@ impl<T: Remote> SharedMemoryRegion<T> {
         debug_assert!(index + len <= self.sub_region_size);
         let buf = LamellarBuffer::from_unregistered_raw(dst, len, self.mr.rdma.clone());
         self.mr
-            .as_base::<T>()
             .blocking_get_into_buffer(pe, self.sub_region_offset + index, buf);
     }
 
@@ -4228,7 +4226,6 @@ impl<T: Remote> SharedMemoryRegion<T> {
         debug_assert!(index + len <= self.sub_region_size);
         let buf = LamellarBuffer::from_unregistered_raw(dst, len, self.mr.rdma.clone());
         self.mr
-            .as_base::<T>()
             .get_into_buffer_unmanaged(pe, self.sub_region_offset + index, buf);
     }
 }
@@ -4347,7 +4344,6 @@ impl<T: Remote + PartialEq> SharedMemoryRegion<T> {
         new: T,
     ) -> AtomicCompareExchangeOpHandle<T> {
         self.mr
-            .as_base::<T>()
             .atomic_compare_exchange(pe, self.sub_region_offset + index, current, new)
     }
 
@@ -4364,7 +4360,6 @@ impl<T: Remote + PartialEq> SharedMemoryRegion<T> {
         new: T,
     ) -> Result<T, T> {
         self.mr
-            .as_base::<T>()
             .atomic_compare_exchange_blocking(pe, self.sub_region_offset + index, current, new)
     }
 }
@@ -4439,12 +4434,10 @@ impl<T: Remote> SubRegion<T> for SharedMemoryRegion<T> {
 impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
         self.mr
-            .as_base::<T>()
             .put(pe, self.sub_region_offset + index, data)
     }
     unsafe fn put_blocking(&self, pe: usize, index: usize, data: T) {
         self.mr
-            .as_base::<T>()
             .put_blocking(pe, self.sub_region_offset + index, data)
     }
     unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
@@ -4460,7 +4453,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         data: impl Into<MemregionRdmaInputInner<T>>,
     ) -> RdmaHandle<T> {
         self.mr
-            .as_base::<T>()
             .put_buffer(pe, self.sub_region_offset + index, data)
     }
     unsafe fn put_buffer_unmanaged(
@@ -4476,7 +4468,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     }
     unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T> {
         self.mr
-            .as_base::<T>()
             .put_all(self.sub_region_offset + index, data)
     }
     unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
@@ -4491,7 +4482,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         data: impl Into<MemregionRdmaInputInner<T>>,
     ) -> RdmaHandle<T> {
         self.mr
-            .as_base::<T>()
             .put_all_buffer(self.sub_region_offset + index, data)
     }
     unsafe fn put_all_buffer_unmanaged(
@@ -4507,12 +4497,10 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
 
     unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
         self.mr
-            .as_base::<T>()
             .get(pe, self.sub_region_offset + index)
     }
     unsafe fn get_buffer(&self, pe: usize, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
         self.mr
-            .as_base::<T>()
             .get_buffer(pe, self.sub_region_offset + index, len)
     }
     unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
@@ -4522,7 +4510,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         data: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
         self.mr
-            .as_base::<T>()
             .get_into_buffer(pe, self.sub_region_offset + index, data)
     }
     unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
@@ -4532,7 +4519,6 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         data: LamellarBuffer<T, B>,
     ) {
         self.mr
-            .as_base::<T>()
             .get_into_buffer_unmanaged(pe, self.sub_region_offset + index, data);
     }
     // unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {

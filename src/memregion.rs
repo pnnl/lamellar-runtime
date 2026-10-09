@@ -1072,7 +1072,7 @@ impl<T: Remote> MemoryRegion<T> {
         (self.coll_ticket.clone(), self.coll_now_serving.clone())
     }
 
-    pub(crate) unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
+    pub(crate) unsafe fn put<E: Remote>(&self, pe: usize, index: usize, data: E) -> RdmaHandle<E> {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1082,7 +1082,7 @@ impl<T: Remote> MemoryRegion<T> {
             .put(&self.scheduler, self.counters.clone(), data, pe, index)
     }
 
-    pub(crate) unsafe fn put_blocking(&self, pe: usize, index: usize, data: T) {
+    pub(crate) unsafe fn put_blocking<E: Remote>(&self, pe: usize, index: usize, data: E) {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1092,7 +1092,7 @@ impl<T: Remote> MemoryRegion<T> {
             .put_blocking(&self.scheduler, data, pe, index)
     }
 
-    pub(crate) unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
+    pub(crate) unsafe fn put_unmanaged<E: Remote>(&self, pe: usize, index: usize, data: E) {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1115,12 +1115,12 @@ impl<T: Remote> MemoryRegion<T> {
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
     //#[tracing::instrument(skip(self, data), level = "debug")]
-    pub(crate) unsafe fn put_buffer(
+    pub(crate) unsafe fn put_buffer<E: Remote>(
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInputInner<T>>,
-    ) -> RdmaHandle<T> {
+        data: impl Into<MemregionRdmaInputInner<E>>,
+    ) -> RdmaHandle<E> {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     println!("[LAMELLAR INTERNAL ERROR]: cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1131,11 +1131,11 @@ impl<T: Remote> MemoryRegion<T> {
             .put_buffer(&self.scheduler, self.counters.clone(), data, pe, index)
     }
 
-    pub(crate) unsafe fn put_buffer_unmanaged(
+    pub(crate) unsafe fn put_buffer_unmanaged<E: Remote>(
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInputInner<T>>,
+        data: impl Into<MemregionRdmaInputInner<E>>,
     ) {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
@@ -1146,7 +1146,7 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all(&self, offset: usize, data: T) -> RdmaHandle<T> {
+    pub(crate) unsafe fn put_all<E: Remote>(&self, offset: usize, data: E) -> RdmaHandle<E> {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1157,7 +1157,7 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all_unmanaged(&self, offset: usize, data: T) {
+    pub(crate) unsafe fn put_all_unmanaged<E: Remote>(&self, offset: usize, data: E) {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1170,11 +1170,11 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all_buffer(
+    pub(crate) unsafe fn put_all_buffer<E: Remote>(
         &self,
         offset: usize,
-        data: impl Into<MemregionRdmaInputInner<T>>,
-    ) -> RdmaHandle<T> {
+        data: impl Into<MemregionRdmaInputInner<E>>,
+    ) -> RdmaHandle<E> {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1191,10 +1191,10 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     //#[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all_buffer_unmanaged(
+    pub(crate) unsafe fn put_all_buffer_unmanaged<E: Remote>(
         &self,
         offset: usize,
-        data: impl Into<MemregionRdmaInputInner<T>>,
+        data: impl Into<MemregionRdmaInputInner<E>>,
     ) {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
@@ -1211,7 +1211,7 @@ impl<T: Remote> MemoryRegion<T> {
             .put_all_buffer_unmanaged(data, offset);
     }
 
-    pub(crate) unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
+    pub(crate) unsafe fn get<E: Remote>(&self, pe: usize, index: usize) -> RdmaGetHandle<E> {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant get value of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1222,7 +1222,7 @@ impl<T: Remote> MemoryRegion<T> {
             .get(&self.scheduler, self.counters.clone(), pe, index)
     }
 
-    pub(crate) unsafe fn blocking_get(&self, pe: usize, index: usize) -> T {
+    pub(crate) unsafe fn blocking_get<E: Remote>(&self, pe: usize, index: usize) -> E {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant get value of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1243,12 +1243,12 @@ impl<T: Remote> MemoryRegion<T> {
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    pub(crate) unsafe fn get_buffer(
+    pub(crate) unsafe fn get_buffer<E: Remote>(
         &self,
         pe: usize,
         index: usize,
         len: usize,
-    ) -> RdmaGetBufferHandle<T> {
+    ) -> RdmaGetBufferHandle<E> {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant get buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
@@ -1264,7 +1264,7 @@ impl<T: Remote> MemoryRegion<T> {
             .inner_alloc
             .get_buffer(&self.scheduler, self.counters.clone(), pe, index, len)
     }
-    pub(crate) unsafe fn blocking_get_buffer(&self, pe: usize, index: usize, len: usize) -> Vec<T> {
+    pub(crate) unsafe fn blocking_get_buffer<E: Remote>(&self, pe: usize, index: usize, len: usize) -> Vec<E> {
         trace!(
             "get buffer blocking memregion {:?} index: {:?}",
             self.alloc,
@@ -1276,12 +1276,12 @@ impl<T: Remote> MemoryRegion<T> {
             .blocking_get_buffer(&self.scheduler, pe, index, len)
     }
 
-    pub(crate) unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
+    pub(crate) unsafe fn get_into_buffer<E: Remote, B: AsLamellarBuffer<E>>(
         &self,
         pe: usize,
         index: usize,
-        data: LamellarBuffer<T, B>,
-    ) -> RdmaGetIntoBufferHandle<T, B> {
+        data: LamellarBuffer<E, B>,
+    ) -> RdmaGetIntoBufferHandle<E, B> {
         trace!(
             "get into buffer memregion {:?} index: {:?}",
             self.alloc,
@@ -1297,11 +1297,11 @@ impl<T: Remote> MemoryRegion<T> {
         )
     }
 
-    pub(crate) unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
+    pub(crate) unsafe fn blocking_get_into_buffer<E: Remote, B: AsLamellarBuffer<E>>(
         &self,
         pe: usize,
         index: usize,
-        data: LamellarBuffer<T, B>,
+        data: LamellarBuffer<E, B>,
     ) {
         trace!(
             "get into buffer blocking memregion {:?} index: {:?}",
@@ -1314,11 +1314,11 @@ impl<T: Remote> MemoryRegion<T> {
             .blocking_get_into_buffer(&self.scheduler, pe, index, data)
     }
 
-    pub(crate) unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+    pub(crate) unsafe fn get_into_buffer_unmanaged<E: Remote, B: AsLamellarBuffer<E>>(
         &self,
         pe: usize,
         index: usize,
-        data: LamellarBuffer<T, B>,
+        data: LamellarBuffer<E, B>,
     ) {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant get into unmanaged buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
@@ -1334,13 +1334,13 @@ impl<T: Remote> MemoryRegion<T> {
             .get_into_buffer_unmanaged(pe, index, data);
     }
 
-    pub(crate) fn atomic_op(&self, pe: usize, index: usize, op: AtomicOp<T>) -> AtomicOpHandle<T> {
+    pub(crate) fn atomic_op<E: Remote>(&self, pe: usize, index: usize, op: AtomicOp<E>) -> AtomicOpHandle<E> {
         trace!("atomic_op memregion {:?} index: {:?}", self.alloc, index);
         self.alloc
             .inner_alloc
             .atomic_op(&self.scheduler, self.counters.clone(), op, pe, index)
     }
-    pub(crate) fn atomic_op_blocking(&self, pe: usize, index: usize, op: AtomicOp<T>) {
+    pub(crate) fn atomic_op_blocking<E: Remote>(&self, pe: usize, index: usize, op: AtomicOp<E>) {
         trace!(
             "atomic_op blocking memregion {:?} index: {:?}",
             self.alloc,
@@ -1350,7 +1350,7 @@ impl<T: Remote> MemoryRegion<T> {
             .inner_alloc
             .atomic_op_blocking(&self.scheduler, op, pe, index)
     }
-    pub(crate) fn atomic_op_unmanaged(&self, pe: usize, index: usize, op: AtomicOp<T>) {
+    pub(crate) fn atomic_op_unmanaged<E: Remote>(&self, pe: usize, index: usize, op: AtomicOp<E>) {
         trace!(
             "atomic_op unmanaged memregion {:?} index: {:?}",
             self.alloc,
@@ -1359,7 +1359,7 @@ impl<T: Remote> MemoryRegion<T> {
         self.alloc.inner_alloc.atomic_op_unmanaged(op, pe, index)
     }
 
-    pub(crate) fn atomic_op_all(&self, offset: usize, op: AtomicOp<T>) -> AtomicOpHandle<T> {
+    pub(crate) fn atomic_op_all<E: Remote>(&self, offset: usize, op: AtomicOp<E>) -> AtomicOpHandle<E> {
         trace!(
             "atomic_op_all memregion {:?} index: {:?}",
             self.alloc,
@@ -1369,7 +1369,7 @@ impl<T: Remote> MemoryRegion<T> {
             .inner_alloc
             .atomic_op_all(&self.scheduler, self.counters.clone(), op, offset)
     }
-    pub(crate) fn atomic_op_all_unmanaged(&self, offset: usize, op: AtomicOp<T>) {
+    pub(crate) fn atomic_op_all_unmanaged<E: Remote>(&self, offset: usize, op: AtomicOp<E>) {
         trace!(
             "atomic_op_all unmanaged memregion {:?} index: {:?}",
             self.alloc,
@@ -1378,12 +1378,12 @@ impl<T: Remote> MemoryRegion<T> {
         self.alloc.inner_alloc.atomic_op_all_unmanaged(op, offset)
     }
 
-    pub(crate) fn atomic_fetch_op(
+    pub(crate) fn atomic_fetch_op<E: Remote>(
         &self,
         pe: usize,
         index: usize,
-        op: AtomicOp<T>,
-    ) -> AtomicFetchOpHandle<T> {
+        op: AtomicOp<E>,
+    ) -> AtomicFetchOpHandle<E> {
         trace!(
             "atomic_fetch_op memregion {:?} index: {:?}",
             self.alloc,
@@ -1398,7 +1398,7 @@ impl<T: Remote> MemoryRegion<T> {
         )
     }
 
-    pub(crate) fn atomic_fetch_op_blocking(&self, pe: usize, index: usize, op: AtomicOp<T>) -> T {
+    pub(crate) fn atomic_fetch_op_blocking<E: Remote>(&self, pe: usize, index: usize, op: AtomicOp<E>) -> E {
         trace!(
             "atomic_fetch_op memregion {:?} index: {:?}",
             self.alloc,
@@ -1767,14 +1767,14 @@ impl<T: Remote> MemoryRegion<T> {
 }
 
 #[lamellar_prof::prof]
-impl<T: Remote + PartialEq> MemoryRegion<T> {
-    pub(crate) fn atomic_compare_exchange(
+impl<T: Remote> MemoryRegion<T> {
+    pub(crate) fn atomic_compare_exchange<E: Remote + PartialEq>(
         &self,
         pe: usize,
         index: usize,
-        current: T,
-        new: T,
-    ) -> crate::lamellae::AtomicCompareExchangeOpHandle<T> {
+        current: E,
+        new: E,
+    ) -> crate::lamellae::AtomicCompareExchangeOpHandle<E> {
         trace!(
             "atomic_compare_exchange memregion {:?} index: {:?}",
             self.alloc,
@@ -1790,13 +1790,13 @@ impl<T: Remote + PartialEq> MemoryRegion<T> {
         )
     }
 
-    pub(crate) fn atomic_compare_exchange_blocking(
+    pub(crate) fn atomic_compare_exchange_blocking<E: Remote + PartialEq>(
         &self,
         pe: usize,
         index: usize,
-        current: T,
-        new: T,
-    ) -> Result<T, T> {
+        current: E,
+        new: E,
+    ) -> Result<E, E> {
         trace!(
             "atomic_compare_exchange blocking memregion {:?} index: {:?}",
             self.alloc,
