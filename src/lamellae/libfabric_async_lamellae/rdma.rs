@@ -701,7 +701,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                     offset,
                     std::slice::from_ref(&src),
                     local_desc,
-                    false,
+                    std::mem::size_of::<T>() >= self.ofi.inject_size(), // stack src: only inject copies it
                 )
                 .expect("error in put_unmanaged")
             };
@@ -774,7 +774,7 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
                         offset,
                         std::slice::from_ref(&src),
                         local_desc,
-                        false,
+                        std::mem::size_of::<T>() >= self.ofi.inject_size(), // stack src: only inject copies it
                     )
                     .expect("error in put_all_unmanaged")
                 };
@@ -1147,7 +1147,7 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
                     offset,
                     std::slice::from_ref(&src),
                     local_desc,
-                    false,
+                    std::mem::size_of::<T>() >= self.alloc.ofi.inject_size(), // stack src: only inject copies it
                 )
                 .expect("error in put_unmanaged")
             };

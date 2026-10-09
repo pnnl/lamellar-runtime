@@ -443,6 +443,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
                 self.start()
             );
             unsafe { rofi_c_put(std::slice::from_ref(&src), dst, pe).expect("rofi_c_put failed") }
+            // `src` is a stack local that rofi does not copy, so it must complete before we return.
+            self.wait().expect("rofi_c_wait failed");
         } else {
             trace!("rofi_c put unmanaged val locally addr: {:x?}", self.start());
             unsafe { std::ptr::copy(&src as *const T, dst as *mut T, 1) }
@@ -540,6 +542,8 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
                 unsafe { std::ptr::copy(&src as *const T, dst as *mut T, 1) }
             }
         }
+        // `src` is a stack local that rofi does not copy, so every put must complete before we return.
+        self.wait().expect("rofi_c_wait failed");
     }
 
     fn put_all_buffer<T: Remote>(

@@ -646,7 +646,10 @@ impl CommAllocRdma for LibfabricSysAlloc {
             std::mem::size_of::<T>()
         );
         unsafe {
-            LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false);
+            // `src` is a stack local: only the inject path (< inject_size) copies it at post time,
+            // so anything larger must complete before we return.
+            let blocking = std::mem::size_of::<T>() >= self.ofi.inject_size();
+            LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), blocking);
         };
     }
     fn put_buffer<T: Remote>(
@@ -703,9 +706,10 @@ impl CommAllocRdma for LibfabricSysAlloc {
         .into()
     }
     fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        let blocking = std::mem::size_of::<T>() >= self.ofi.inject_size(); // stack src: see put_unmanaged
         for pe in 0..self.num_pes() {
             unsafe {
-                LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false);
+                LibfabricSysAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), blocking);
             };
         }
     }
@@ -867,7 +871,7 @@ impl CommAllocRdma for OneSidedLibfabricSysAlloc {
                 pe,
                 offset,
                 std::slice::from_ref(&src),
-                false,
+                std::mem::size_of::<T>() >= self.alloc.ofi.inject_size(), // stack src: only inject copies it
             );
         };
     }

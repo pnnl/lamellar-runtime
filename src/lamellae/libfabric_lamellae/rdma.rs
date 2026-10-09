@@ -665,8 +665,14 @@ impl CommAllocRdma for LibfabricAlloc {
             std::mem::size_of::<T>()
         );
         unsafe {
-            LibfabricAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
-                .expect("error in put_unmanaged")
+            LibfabricAlloc::inner_put(
+                &self,
+                pe,
+                offset,
+                std::slice::from_ref(&src),
+                std::mem::size_of::<T>() >= self.ofi.inject_size(), // stack src: only inject copies it
+            )
+            .expect("error in put_unmanaged")
         };
     }
     fn put_buffer<T: Remote>(
@@ -733,8 +739,14 @@ impl CommAllocRdma for LibfabricAlloc {
     fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
         for pe in 0..self.num_pes() {
             unsafe {
-                LibfabricAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
-                    .expect("error in put_all_unmanaged")
+                LibfabricAlloc::inner_put(
+                    &self,
+                    pe,
+                    offset,
+                    std::slice::from_ref(&src),
+                    std::mem::size_of::<T>() >= self.ofi.inject_size(), // stack src: only inject copies it
+                )
+                .expect("error in put_all_unmanaged")
             };
         }
     }
@@ -931,8 +943,14 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             pe, self.remote_pe
         );
         unsafe {
-            LibfabricAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src), false)
-                .expect("error in put_unmanaged")
+            LibfabricAlloc::inner_put(
+                &self.alloc,
+                pe,
+                offset,
+                std::slice::from_ref(&src),
+                std::mem::size_of::<T>() >= self.alloc.ofi.inject_size(), // stack src: only inject copies it
+            )
+            .expect("error in put_unmanaged")
         };
     }
     fn put_buffer<T: Remote>(
