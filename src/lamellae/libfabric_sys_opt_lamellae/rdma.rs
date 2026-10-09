@@ -23,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    fabric::{LibfabricSysOptAlloc, OneSidedLibfabricSysOptAlloc, OptOfi, Ticket},
+    fabric::{LibfabricSysOptAlloc, OneSidedLibfabricSysOptAlloc, OptOfi, Staging, Ticket},
     Scheduler,
 };
 
@@ -84,7 +84,7 @@ pub(crate) struct LibfabricSysOptPutFuture<T: Remote> {
     /// path (see `OptOfi::staging_alloc`). Every ticket for this PUT must be
     /// confirmed done (via `tickets`) before this is dropped, since it is the
     /// buffer the RMA is actually reading from.
-    staging: Option<LibfabricSysOptAlloc>,
+    staging: Option<Staging>,
     tickets: Vec<Arc<Ticket>>,
 }
 
@@ -190,7 +190,7 @@ pub(crate) struct LibfabricSysOptGetFuture<T> {
     /// Registered scratch destination (see `OptOfi::staging_alloc`); held until
     /// every ticket for this GET is confirmed done, then copied into `result`
     /// (`copy_out`) and dropped back to the pool.
-    staging: Option<LibfabricSysOptAlloc>,
+    staging: Option<Staging>,
     tickets: Vec<Arc<Ticket>>,
 }
 
@@ -302,7 +302,7 @@ pub(crate) struct LibfabricSysOptGetBufferFuture<T> {
     result: Vec<T>,
     /// Registered scratch destination (see `OptOfi::staging_alloc`). None =>
     /// GET straight into `result`.
-    staging: Option<LibfabricSysOptAlloc>,
+    staging: Option<Staging>,
     tickets: Vec<Arc<Ticket>>,
 }
 
@@ -424,7 +424,7 @@ pub(crate) struct LibfabricSysOptGetIntoBufferFuture<T: Remote, B: AsLamellarBuf
     spawned: bool,
     /// Registered scratch destination, only when `dst`'s backing store is not
     /// itself registered memory (see `OptOfi::staging_alloc`).
-    staging: Option<LibfabricSysOptAlloc>,
+    staging: Option<Staging>,
     tickets: Vec<Arc<Ticket>>,
 }
 
@@ -533,9 +533,10 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricSysOptGetIntoBufferF
 
 /// PUT with no completion handle. Registered sources and sources below the
 /// inject size keep the original fire-and-forget semantics (rxm copies the
-/// latter into its own buffers). A larger heap source is staged through
-/// registered memory and completed synchronously via `wait_all`, since
-/// nothing else could keep the staging block alive until the DMA finishes.
+/// latter into its own buffers). A larger heap source is copied into registered
+/// staging memory, which is parked on the `OptOfi` until the next `wait_all`
+/// (the point the caller's `quiet` contract already requires the source to be
+/// stable until), so the put stays asynchronous.
 unsafe fn put_buffer_unmanaged_impl<T: Remote>(
     alloc: &LibfabricSysOptAlloc,
     pes: impl Iterator<Item = usize>,
@@ -559,7 +560,7 @@ unsafe fn put_buffer_unmanaged_impl<T: Remote>(
             for pe in pes {
                 LibfabricSysOptAlloc::inner_put(alloc, pe, offset, staged, false);
             }
-            alloc.ofi.wait_all();
+            alloc.ofi.park_staging(staging, None);
         }
         None => {
             for pe in pes {
@@ -597,18 +598,34 @@ unsafe fn blocking_get_staged<T: Remote>(
 
 /// GET into a `LamellarBuffer` with no completion handle. A registered
 /// backing store (memregions, `CommSlice`) keeps the original fire-and-forget
-/// semantics; a heap backing store is staged and completed synchronously,
-/// since nothing could otherwise copy the result out later.
+/// semantics. A heap backing store is received into registered staging memory
+/// that is parked on the `OptOfi`; the next `wait_all` copies the result into
+/// the buffer (which the parked copy-out keeps alive) once the transfer is known
+/// complete. If no staging block can be had the get is completed synchronously.
 unsafe fn get_into_buffer_unmanaged_impl<T: Remote, B: AsLamellarBuffer<T>>(
     alloc: &LibfabricSysOptAlloc,
     pe: usize,
     offset: usize,
-    dst: &mut LamellarBuffer<T, B>,
+    mut dst: LamellarBuffer<T, B>,
 ) {
     if dst.is_registered() {
         LibfabricSysOptAlloc::inner_get(alloc, pe, offset, dst.as_mut_slice(), false);
-    } else {
-        blocking_get_staged(alloc, pe, offset, dst.as_mut_slice(), false);
+        return;
+    }
+    match alloc
+        .ofi
+        .staging_alloc(std::mem::size_of_val(dst.as_slice()), std::mem::align_of::<T>())
+    {
+        Some(staging) => {
+            LibfabricSysOptAlloc::inner_get(alloc, pe, offset, staging.as_mut_slice::<T>(), false);
+            alloc.ofi.park_staging(
+                staging,
+                Some(Box::new(move |staging: &Staging| {
+                    dst.as_mut_slice().copy_from_slice(unsafe { staging.as_slice::<T>() });
+                })),
+            );
+        }
+        None => blocking_get_staged(alloc, pe, offset, dst.as_mut_slice(), false),
     }
 }
 
@@ -836,9 +853,9 @@ impl CommAllocRdma for LibfabricSysOptAlloc {
         &self,
         pe: usize,
         offset: usize,
-        mut dst: LamellarBuffer<T, B>,
+        dst: LamellarBuffer<T, B>,
     ) {
-        unsafe { get_into_buffer_unmanaged_impl(&self, pe, offset, &mut dst) };
+        unsafe { get_into_buffer_unmanaged_impl(&self, pe, offset, dst) };
     }
 }
 
@@ -1085,9 +1102,9 @@ impl CommAllocRdma for OneSidedLibfabricSysOptAlloc {
         &self,
         pe: usize,
         offset: usize,
-        mut dst: LamellarBuffer<T, B>,
+        dst: LamellarBuffer<T, B>,
     ) {
         assert_eq!(pe, self.remote_pe, "get_into_buffer_unmanaged called on OneSidedLibfabricSysOptAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
-        unsafe { get_into_buffer_unmanaged_impl(&self.alloc, pe, offset, &mut dst) };
+        unsafe { get_into_buffer_unmanaged_impl(&self.alloc, pe, offset, dst) };
     }
 }

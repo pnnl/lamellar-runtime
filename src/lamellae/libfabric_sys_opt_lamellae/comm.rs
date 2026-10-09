@@ -182,6 +182,7 @@ impl Drop for LibfabricSysOptComm {
         // already-proven-working hardware barrier is still available, removes the
         // need for that fallback entirely.
         self.ofi.wait_all();
+        self.ofi.staging_teardown();
         let _ = self.ofi.barrier();
         self.ofi.clear_barrier();
         let _ = self.ofi.clear_allocs();
