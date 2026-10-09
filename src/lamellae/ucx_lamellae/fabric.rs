@@ -14,8 +14,6 @@ use endpoint::ATOMIC_PUT_TMP;
 use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
 use worker::{FlushState, Worker};
 
-#[cfg(feature = "enable-on-node-shmem")]
-use crate::config;
 use crate::{
     lamellae::{
         collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone},

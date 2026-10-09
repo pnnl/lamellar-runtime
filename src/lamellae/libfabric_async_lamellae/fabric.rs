@@ -2282,15 +2282,16 @@ impl LibfabricAsyncAlloc {
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
-        #[cfg(feature = "enable-on-node-shmem")]
-        if let Some(addr) = self.same_node_addr(pe, offset) {
-            std::ptr::copy_nonoverlapping(
-                addr.as_ptr::<u8>(),
-                dst_addr.as_mut_ptr() as *mut u8,
-                dst_addr.len() * std::mem::size_of::<T>(),
-            );
-            return Ok(());
-        }
+        // The on-node shortcut is not implemented for the async backend (no `same_node_addr`).
+        // #[cfg(feature = "enable-on-node-shmem")]
+        // if let Some(addr) = self.same_node_addr(pe, offset) {
+        //     std::ptr::copy_nonoverlapping(
+        //         addr.as_ptr::<u8>(),
+        //         dst_addr.as_mut_ptr() as *mut u8,
+        //         dst_addr.len() * std::mem::size_of::<T>(),
+        //     );
+        //     return Ok(());
+        // }
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe
