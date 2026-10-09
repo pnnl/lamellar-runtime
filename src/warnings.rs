@@ -11,6 +11,8 @@ pub(crate) enum RuntimeWarning<'a> {
     BlockOn,
     // AsyncDeadlockCustom(&'a str),
     BarrierTimeout(f64),
+    /// (threads this PE will run, cores available to it)
+    Oversubscribed(usize, usize),
 }
 
 impl<'a> RuntimeWarning<'a> {
@@ -52,6 +54,7 @@ impl<'a> RuntimeWarning<'a> {
                 RuntimeWarning::BarrierTimeout(elapsed) => {
                     elapsed > &config().deadlock_warning_timeout
                 }
+                RuntimeWarning::Oversubscribed(_, _) => true,
             }
         } else {
             false
@@ -61,7 +64,7 @@ impl<'a> RuntimeWarning<'a> {
     #[cfg(feature = "runtime-warnings-panic")]
     fn panic(&self, msg: &str) {
         match self {
-            RuntimeWarning::BarrierTimeout(_) => {}
+            RuntimeWarning::BarrierTimeout(_) | RuntimeWarning::Oversubscribed(_, _) => {}
             _ => panic!("{msg}
                 Note this warning causes a panic because you have compiled lamellar with the `runtime-warnings-panic` feature.
                 Recompile without this feature to only print warnings, rather than panic.
@@ -93,6 +96,10 @@ impl<'a> RuntimeWarning<'a> {
                     format!("[LAMELLAR WARNING] You are calling block_on from within an async context, this may result in deadlock! 
                     If you have something like: `world.block_on(my_future)` you can simply change to my_future.await.
                     If this is not the case, please file an issue on github. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning.")
+                }
+                RuntimeWarning::Oversubscribed(threads, cores) => {
+                    format!("[LAMELLAR WARNING] This PE will run {threads} threads but only {cores} cores are available to it, so threads will compete for cores. 
+                    Worker threads poll for work, so this can badly hurt performance. Reduce the thread count (LAMELLAR_THREADS or --threads-per-pe) or give each PE more cores.")
                 }
                 RuntimeWarning::BarrierTimeout(_) => {
                     format!("[LAMELLAR WARNING][{:?}] You have encountered a barrier timeout. Potential deadlock detected.

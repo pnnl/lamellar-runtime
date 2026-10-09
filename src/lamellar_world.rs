@@ -1,3 +1,4 @@
+use crate::warnings::RuntimeWarning;
 use crate::darc::{Darc, DarcInner};
 use crate::{
     active_messaging::*,
@@ -629,6 +630,8 @@ impl LamellarWorldBuilder {
     #[doc(alias = "One-sided")]
     /// Specify the number of threads per PE to use for this execution (the Main thread is included in this count)
     ///
+    /// With the default work stealing executor, a count of 1 runs the single thread executor (the main thread only).
+    ///
     /// # Onesided Operation
     /// While calling `with_num_workers` is onesided and will not cause any issues if different PEs use different numbers of
     /// workers(threads), performance is likely to be inconsistent from PE to PE depending on the number of threads
@@ -677,7 +680,18 @@ impl LamellarWorldBuilder {
         assert!(std::thread::current().id() == *MAIN_THREAD);
 
         // timer = std::time::Instant::now();
-        let max_num_threads = Scheduler::max_threads(&self.executor, self.num_threads);
+        // The work stealing executor always adds a worker thread to the main thread, so a request for a single
+        // thread would run two busy threads on one core. Use the single thread executor for that case instead.
+        let executor = match self.executor {
+            ExecutorType::LamellarWorkStealing if self.num_threads == 1 => ExecutorType::SingleThread,
+            executor => executor,
+        };
+        let max_num_threads = Scheduler::max_threads(&executor, self.num_threads);
+        if let Ok(cores) = std::thread::available_parallelism() {
+            if max_num_threads > cores.get() {
+                RuntimeWarning::Oversubscribed(max_num_threads, cores.get()).print();
+            }
+        }
         let mut lamellae_builder = create_lamellae(self.primary_lamellae, max_num_threads);
         trace!("lamellae created");
         // println!("{:?}: init_lamellae", timer.elapsed());
@@ -693,7 +707,7 @@ impl LamellarWorldBuilder {
         // this could be lazyily provided but this is easy enough to do here
         let panic = Arc::new(AtomicU8::new(0));
         let sched_new = Arc::new(Scheduler::create_scheduler(
-            self.executor,
+            executor,
             num_pes,
             my_pe,
             self.num_threads,
