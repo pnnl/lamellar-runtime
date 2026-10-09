@@ -121,7 +121,7 @@ struct Geom {
 impl Geom {
     fn new(num_pes: usize) -> Geom {
         let slot = env_usize("LAMELLAR_SHMEM_SLOT", 256);
-        let depth = env_usize("LAMELLAR_SHMEM_RING", 4);
+        let depth = env_usize("LAMELLAR_SHMEM_RING", 2);
         let free_depth = env_usize("LAMELLAR_SHMEM_FREE_RING", 4096);
         assert!(
             slot >= 2 * LINE && slot % LINE == 0,
