@@ -19,7 +19,7 @@ static AM_INLINE_BUDGET: LazyLock<usize> = LazyLock::new(|| {
     std::env::var("LAMELLAR_AM_INLINE")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(32)
+        .unwrap_or(4096)
 });
 
 /// Per-frame cache of resolved (team, world) handles; frames rarely touch more than a
