@@ -144,6 +144,10 @@ impl Drop for LibfabricSysOptComm {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         trace!("dropping libfabric-sys comm");
+        // staging blocks cached for reuse (or parked for an unmanaged operation) still count as allocated: complete
+        // the operations in flight and give them back before checking for leaks
+        self.ofi.wait_all();
+        self.ofi.staging_teardown();
         if self.mem_occupied() > 0 {
             println!(
                 "dropping libfabric-sys -- memory in use {:?}",
@@ -182,7 +186,6 @@ impl Drop for LibfabricSysOptComm {
         // already-proven-working hardware barrier is still available, removes the
         // need for that fallback entirely.
         self.ofi.wait_all();
-        self.ofi.staging_teardown();
         let _ = self.ofi.barrier();
         self.ofi.clear_barrier();
         let _ = self.ofi.clear_allocs();
