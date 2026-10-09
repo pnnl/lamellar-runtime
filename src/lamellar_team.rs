@@ -786,6 +786,15 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         mr
     }
 
+    unsafe fn try_register_external_shared_mem_region<T: Remote>(
+        &self,
+        ptr: *mut T,
+        len: usize,
+    ) -> FallibleSharedMemoryRegionHandle<T> {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        SharedMemoryRegion::try_new_external(ptr, len, self.team.clone())
+    }
+
     //#[tracing::instrument(skip_all, level = "debug")]
     fn alloc_shared_mem_region<T: Remote>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);

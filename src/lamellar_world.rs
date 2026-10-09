@@ -158,6 +158,14 @@ impl RemoteMemoryRegion for LamellarWorld {
         self.team.try_alloc_shared_mem_region::<T>(size)
     }
 
+    unsafe fn try_register_external_shared_mem_region<T: Remote>(
+        &self,
+        ptr: *mut T,
+        len: usize,
+    ) -> FallibleSharedMemoryRegionHandle<T> {
+        self.team.try_register_external_shared_mem_region::<T>(ptr, len)
+    }
+
     //#[tracing::instrument(skip_all, level = "debug")]
     fn alloc_shared_mem_region<T: Remote>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         self.team.alloc_shared_mem_region::<T>(size)

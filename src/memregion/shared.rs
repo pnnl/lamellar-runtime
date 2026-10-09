@@ -183,6 +183,49 @@ impl<T: Remote> SharedMemoryRegion<T> {
         }
     }
 
+    pub(crate) unsafe fn try_new_external(
+        ptr: *mut T,
+        len: usize,
+        team: Darc<LamellarTeamRT>,
+    ) -> FallibleSharedMemoryRegionHandle<T> {
+        // raw pointers are not Send; the address is only used again on this PE
+        let ptr = ptr as usize;
+        FallibleSharedMemoryRegionHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(async move {
+                if team.num_pes != team.num_world_pes {
+                    // registering external memory is collective over the whole world, not a sub-team
+                    return Err(anyhow::anyhow!(
+                        "external memory can only be registered by the world team"
+                    ));
+                }
+                team.async_barrier().await;
+                let mr_t: MemoryRegion<T> = MemoryRegion::try_new_external(
+                    ptr as *mut T,
+                    len,
+                    &team.scheduler,
+                    team.counters(),
+                    &team.lamellae,
+                )?;
+                let mr = unsafe { mr_t.to_base::<u8>() };
+                Ok(SharedMemoryRegion {
+                    mr: Darc::async_try_new_with_drop(
+                        team.clone(),
+                        mr,
+                        crate::darc::DarcMode::Darc,
+                        Some(MemoryRegion::<u8>::release_external),
+                    )
+                    .await
+                    .expect("memregions can only be created on a member of the team"),
+                    sub_region_offset: 0,
+                    sub_region_size: len,
+                    phantom: PhantomData,
+                })
+            }),
+        }
+    }
+
     #[doc(alias("One-sided", "onesided"))]
     /// Return a slice of the local (to the calling PE) data of the memory region
     ///

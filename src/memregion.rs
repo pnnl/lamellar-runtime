@@ -1854,6 +1854,45 @@ pub trait RemoteMemoryRegion {
         size: usize,
     ) -> FallibleSharedMemoryRegionHandle<T>;
 
+    #[doc(alias = "Collective")]
+    /// Collectively register `len` elements of memory the caller already owns (for example a global or a buffer
+    /// from another allocator, such as the program's `.data`/`.bss`) as a [`SharedMemoryRegion`], so that other PEs
+    /// can put, get and perform atomics on it.
+    ///
+    /// Every PE must make the call, in the same order relative to other registrations and allocations, but the
+    /// address and length may differ between PEs. Indices into the region are relative to each PE's own range.
+    ///
+    /// The runtime never allocates, moves or frees this memory: dropping the region only deregisters it.
+    /// Only put, get and atomic operations are supported on the result; **collective operations on it panic**.
+    ///
+    /// Returns an error if the backend cannot register external memory, `ptr` is not aligned for `T`, `len` is
+    /// zero, the range overlaps one that is already registered, or the call is made on a sub-team. The error
+    /// should arise the same way on every PE; a failure on only some PEs can leave the others waiting inside the
+    /// collective registration.
+    ///
+    /// Backend notes:
+    /// * libfabric, libfabric_sys_opt, ucx and ucx_opt register the range in place.
+    /// * shmem_opt is opt-in (`LAMELLAR_SHMEM_OPT_EXTERNAL=1`), needs a page-aligned start, and remaps the range
+    ///   `MAP_SHARED` onto a shared file. That remap is permanent: it is not undone when the region is dropped, and
+    ///   the range stays shared with any `fork()`ed child.
+    /// * other backends return an error.
+    ///
+    /// # Safety
+    /// * `ptr` must be valid for reads and writes of `len` elements and must stay mapped and writable until the
+    ///   region (including every clone, and any copy sent to another PE) has been dropped on all PEs.
+    /// * Drop the region, and wait for outstanding unmanaged operations (`wait_all`), before the
+    ///   [`LamellarWorld`](crate::LamellarWorld) is dropped.
+    /// * Mutual exclusivity is not enforced: other PEs may read and write the range at any time.
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `team` to enter the call otherwise deadlock will occur
+    /// (i.e. team barriers are being called internally).
+    unsafe fn try_register_external_shared_mem_region<T: Remote + std::marker::Sized>(
+        &self,
+        ptr: *mut T,
+        len: usize,
+    ) -> FallibleSharedMemoryRegionHandle<T>;
+
     #[doc(alias("One-sided", "onesided"))]
     /// Allocate a one-sided memory region from the internal lamellar heap.
     /// This region only exists on the calling PE, but the returned handle can be
@@ -1889,6 +1928,83 @@ pub trait RemoteMemoryRegion {
         &self,
         size: usize,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error>;
+}
+
+/// Process-wide record of the caller-owned ranges currently registered with the network, as `(start, bytes)`.
+///
+/// The backends key their allocation tables on the base address, so registering the same or an overlapping range
+/// twice would collide; [`MemoryRegion::try_new_external`] rejects it up front. Entries are removed by
+/// [`MemoryRegion::release_external`] when the distributed object holding the region is finally dropped.
+static EXTERNAL_RANGES: std::sync::Mutex<Vec<(usize, usize)>> = std::sync::Mutex::new(Vec::new());
+
+impl<T: Remote> MemoryRegion<T> {
+    /// Register `num_elems` elements of caller-owned memory at `ptr` as a shared region.
+    ///
+    /// The runtime neither allocates nor frees this memory: dropping the region only deregisters it. Backends that
+    /// cannot register external memory return an error. The registration itself is collective across the world, so
+    /// every PE must call this (in the same order relative to other registrations and allocations).
+    ///
+    /// # Safety
+    /// `ptr` must be valid for reads and writes of `num_elems` elements and stay mapped and writable until the
+    /// distributed object holding the returned region has been dropped on every PE.
+    pub(crate) unsafe fn try_new_external(
+        ptr: *mut T,
+        num_elems: usize,
+        scheduler: &Arc<Scheduler>,
+        counters: Option<Arc<[Arc<AMCounters>]>>,
+        lamellae: &Arc<Lamellae>,
+    ) -> Result<MemoryRegion<T>, anyhow::Error> {
+        let size = num_elems * std::mem::size_of::<T>();
+        if size == 0 {
+            return Err(anyhow::anyhow!("cannot register an empty external memory range"));
+        }
+        let start = ptr as usize;
+        if start % std::mem::align_of::<T>() != 0 {
+            return Err(anyhow::anyhow!(
+                "external memory at {start:#x} is not aligned for the requested element type (align {})",
+                std::mem::align_of::<T>()
+            ));
+        }
+        {
+            let mut ranges = EXTERNAL_RANGES.lock().unwrap();
+            if let Some((s, l)) = ranges.iter().find(|&&(s, l)| start < s + l && s < start + size) {
+                return Err(anyhow::anyhow!(
+                    "external memory {start:#x}+{size} overlaps the already registered range {s:#x}+{l}"
+                ));
+            }
+            ranges.push((start, size));
+        }
+        let alloc = match lamellae.comm().register_external(ptr as *mut u8, size) {
+            Ok(alloc) => alloc,
+            Err(e) => {
+                EXTERNAL_RANGES.lock().unwrap().retain(|&(s, _)| s != start);
+                return Err(e.into());
+            }
+        };
+        Ok(MemoryRegion {
+            alloc,
+            coll_sync_alloc: None, // collectives are not supported on external memory
+            coll_ticket: Arc::new(AtomicUsize::new(0)),
+            coll_now_serving: Arc::new(CollTicketGate::default()),
+            pe: lamellae.comm().my_pe(),
+            scheduler: scheduler.clone(),
+            counters,
+            backend: lamellae.comm().backend(),
+            rdma: lamellae.clone(),
+            mode: Mode::Shared,
+            phantom: PhantomData,
+        })
+    }
+}
+
+impl MemoryRegion<u8> {
+    /// Drop hook for the `Darc` that holds an external region: runs once, after every PE has released the object,
+    /// and makes the range registrable again. (Deregistering the memory itself happens when the allocation drops.)
+    pub(crate) fn release_external(&mut self) -> bool {
+        let start: usize = self.alloc.inner_alloc.addr().into();
+        EXTERNAL_RANGES.lock().unwrap().retain(|&(s, _)| s != start);
+        true
+    }
 }
 
 impl<T: Remote> Drop for MemoryRegion<T> {
