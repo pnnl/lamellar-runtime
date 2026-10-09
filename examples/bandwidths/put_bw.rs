@@ -33,15 +33,23 @@ fn main() {
         println!("==================Bandwidth test===========================");
     }
     let mut bws = vec![];
-    for i in 0..30 {
-        let num_bytes = 2_u64.pow(i);
+    // The per-put clock reads serialize the CPU and dominate small-put loops; PUT_NO_SUBTIME=1 skips them (the second time in each result line then reads 0).
+    let sub_timing = std::env::var_os("PUT_NO_SUBTIME").is_none();
+    // PUT_SIZE=<bytes> [PUT_ROUNDS=<n>] repeats one size instead of sweeping 1 B..512 MiB (and skips the array reset), for profiling.
+    let fixed_size: Option<u64> = std::env::var("PUT_SIZE").ok().and_then(|v| v.parse().ok());
+    let rounds: u32 = match fixed_size {
+        Some(_) => std::env::var("PUT_ROUNDS").ok().and_then(|v| v.parse().ok()).unwrap_or(20),
+        None => 30,
+    };
+    for i in 0..rounds {
+        let num_bytes = fixed_size.unwrap_or(2_u64.pow(i));
         let old: f64 = world.MB_sent();
         let mbs_o = world.MB_sent();
         let mut sum = 0;
         let mut cnt = 0;
         let mut exp = 20;
         if num_bytes <= 2048 {
-            exp = 18 + i;
+            exp = 18 + if fixed_size.is_some() { num_bytes.ilog2() } else { i };
         } else if num_bytes >= 4096 {
             exp = 30;
         }
@@ -49,7 +57,7 @@ fn main() {
         let mut sub_time = 0f64;
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                let sub_timer = Instant::now();
+                let sub_timer = sub_timing.then(Instant::now);
                 unsafe {
                     let _ = array.put_buffer_unmanaged(
                         num_pes - 1,
@@ -60,7 +68,9 @@ fn main() {
 
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
-                sub_time += sub_timer.elapsed().as_secs_f64();
+                if let Some(t) = sub_timer {
+                    sub_time += t.elapsed().as_secs_f64();
+                }
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
             }
@@ -97,11 +107,13 @@ fn main() {
         );
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
-        unsafe {
-            for i in array.as_mut_slice() {
-                *i = 255 as u8;
-            }
-        };
+        if fixed_size.is_none() {
+            unsafe {
+                for i in array.as_mut_slice() {
+                    *i = 255 as u8;
+                }
+            };
+        }
         world.barrier();
     }
     if my_pe == 0 {

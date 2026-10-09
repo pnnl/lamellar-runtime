@@ -3,7 +3,7 @@ use std::{
     mem::MaybeUninit,
     pin::Pin,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering},
         Arc,
     },
     task::{Poll, Waker},
@@ -169,6 +169,29 @@ fn issue_ticketed(
         TRACKED_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
         LocalState::Resolved(Error::from_ptr(request))
     }
+}
+
+/// Smallest unmanaged put from registered memory that is issued without waiting for local completion.
+/// Below this size UCX completes the put inline (no request to wait for); at and above it the request-based
+/// completion of one put at a time caps throughput (about 1.4 GB/s at 32 KB with one thread), so the caller is
+/// not made to wait and `wait_all`'s worker flush drains the puts instead.
+pub(crate) const UNMANAGED_NOWAIT_MIN_BYTES: usize = 16 * 1024;
+
+/// Bound on no-wait puts in flight, so one issuer cannot queue unbounded requests inside UCX.
+const NOWAIT_MAX_INFLIGHT: isize = 1024;
+
+/// No-wait puts currently in flight (bounded by [`NOWAIT_MAX_INFLIGHT`]).
+static NOWAIT_INFLIGHT: AtomicIsize = AtomicIsize::new(0);
+
+/// Completion callback for [`Endpoint::put_nowait`]: releases the request and the in-flight counts.
+unsafe extern "C" fn put_nowait_cb(
+    request: *mut std::ffi::c_void,
+    _status: ucs_status_t,
+    _user_data: *mut std::ffi::c_void,
+) {
+    unsafe { ucp_request_free(request) };
+    NOWAIT_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
+    TRACKED_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
 }
 
 /// Issues an nbx call with no completion callback wired at all -- no `UCP_OP_ATTR_FIELD_CALLBACK`,
@@ -597,6 +620,34 @@ impl Endpoint {
         }
     }
 
+    /// Issues one callback-less `ucp_put_nbx` (see [`issue_raw`]).
+    fn put_raw(&self, buf: *const u8, size: usize, remote_addr: usize, rkey: &RKey) -> LocalState {
+        issue_raw(|| unsafe {
+            ucp_put_nbx(
+                self.handle,
+                buf as _,
+                size as _,
+                remote_addr as _,
+                rkey.handle,
+                &ucp_request_param_t {
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
+                        | ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32,
+                    flags: 0,
+                    request: std::ptr::null_mut(),
+                    cb: ucp_request_param_t__bindgen_ty_1 { send: None },
+                    datatype: 0,
+                    user_data: std::ptr::null_mut(),
+                    reply_buffer: std::ptr::null_mut(),
+                    memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+                    recv_info: ucp_request_param_t__bindgen_ty_2 {
+                        length: std::ptr::null_mut(),
+                    },
+                    memh: std::ptr::null_mut(),
+                } as _,
+            )
+        })
+    }
+
     /// Stores a contiguous block of data into remote memory.
     /// blocking here means until the input buffer would be reusable
     /// not until the put has completed remotely
@@ -617,36 +668,14 @@ impl Endpoint {
         managed: bool,
     ) -> Option<UcxOptRequest> {
         if !managed {
-            // Unmanaged: source buffer may not outlive this call, so we always block on local
+            // Unmanaged (this path is for sources that may not outlive the call -- registered sources
+            // of at least `UNMANAGED_NOWAIT_MIN_BYTES` take `put_nowait` instead): block on local
             // completion right here, synchronously, and never need a waker. Skip the
             // ticket/callback machinery entirely (no UCP_OP_ATTR_FIELD_CALLBACK/USER_DATA, no
             // per-op Arc<Ticket> allocation) and just poll the raw UCX request directly, exactly
             // like plain `ucx_lamellae` does -- this is the hot path for unmanaged bandwidth
             // benchmarks (e.g. put_bw), where the ticket allocation/locking was pure overhead.
-            let local = issue_raw(|| unsafe {
-                ucp_put_nbx(
-                    self.handle,
-                    buf as _,
-                    size as _,
-                    remote_addr as _,
-                    rkey.handle,
-                    &ucp_request_param_t {
-                        op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                            | ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32,
-                        flags: 0,
-                        request: std::ptr::null_mut(),
-                        cb: ucp_request_param_t__bindgen_ty_1 { send: None },
-                        datatype: 0,
-                        user_data: std::ptr::null_mut(),
-                        reply_buffer: std::ptr::null_mut(),
-                        memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
-                        recv_info: ucp_request_param_t__bindgen_ty_2 {
-                            length: std::ptr::null_mut(),
-                        },
-                        memh: std::ptr::null_mut(),
-                    } as _,
-                )
-            });
+            let local = self.put_raw(buf, size, remote_addr, rkey);
             UcxOptRequest::new_pending_local(local, &self.worker, None)
                 .wait()
                 .expect("Failed to wait for UcxOptRequest"); //ensures local buffer can be reused
@@ -705,6 +734,52 @@ impl Endpoint {
                 listener: None,
             }),
         ))
+    }
+
+    /// Fire-and-forget put: issues without waiting for local completion. The source must stay valid
+    /// until the next `wait_all` (whose worker flush covers remote completion). Does not set FAST_CMPL,
+    /// which does not combine with a completion callback (see the D5 note in `put`).
+    pub(crate) fn put_nowait(&self, buf: *const u8, size: usize, remote_addr: usize, rkey: &RKey) {
+        // Backpressure: don't let one issuer queue unbounded requests inside UCX.
+        while NOWAIT_INFLIGHT.load(Ordering::Relaxed) >= NOWAIT_MAX_INFLIGHT {
+            self.worker.progress_blocking(32);
+        }
+        NOWAIT_INFLIGHT.fetch_add(1, Ordering::Relaxed);
+        TRACKED_INFLIGHT.fetch_add(1, Ordering::Relaxed);
+        let request = unsafe {
+            ucp_put_nbx(
+                self.handle,
+                buf as _,
+                size as _,
+                remote_addr as _,
+                rkey.handle,
+                &ucp_request_param_t {
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_CALLBACK as u32,
+                    flags: 0,
+                    request: std::ptr::null_mut(),
+                    cb: ucp_request_param_t__bindgen_ty_1 {
+                        send: Some(put_nowait_cb),
+                    },
+                    datatype: 0,
+                    user_data: std::ptr::null_mut(),
+                    reply_buffer: std::ptr::null_mut(),
+                    memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+                    recv_info: ucp_request_param_t__bindgen_ty_2 {
+                        length: std::ptr::null_mut(),
+                    },
+                    memh: std::ptr::null_mut(),
+                } as _,
+            )
+        };
+        if !UCS_PTR_IS_PTR(request) {
+            // Completed inline (NULL) or failed immediately: the callback will not run.
+            NOWAIT_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
+            TRACKED_INFLIGHT.fetch_sub(1, Ordering::Relaxed);
+            if !request.is_null() {
+                Error::from_ptr(request).expect("put_nowait failed");
+            }
+        }
     }
 
     pub(crate) fn get(

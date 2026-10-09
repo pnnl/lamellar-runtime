@@ -456,7 +456,7 @@ impl UcxOptWorld {
                     continue;
                 }
                 unsafe {
-                    buffer.put_inner_on(shard, pe, 0, std::slice::from_ref(&my_pe), false, false);
+                    buffer.put_inner_on(shard, pe, 0, std::slice::from_ref(&my_pe), false, false, false);
                 }
             }
             Self::warmup_flush_all(worker, extra, shard);
@@ -1683,6 +1683,30 @@ impl UcxOptAlloc {
             src_addr,
             blocking,
             managed,
+            false,
+        )
+    }
+
+    /// Unmanaged put whose source may be registered memory. A put of at least
+    /// [`endpoint::UNMANAGED_NOWAIT_MIN_BYTES`] from a registered source returns without waiting for local
+    /// completion: the source must then stay valid until the next `wait_all`, which drains the put.
+    pub(crate) unsafe fn put_inner_unmanaged<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        src_addr: &[T],
+        registered: bool,
+    ) -> Option<UcxOptRequest> {
+        let bytes = std::mem::size_of_val(src_addr);
+        let nowait = registered && bytes >= endpoint::UNMANAGED_NOWAIT_MIN_BYTES;
+        self.put_inner_on(
+            self.shard_idx_sized(pe, bytes, false),
+            pe,
+            offset,
+            src_addr,
+            false,
+            false,
+            nowait,
         )
     }
 
@@ -1694,6 +1718,7 @@ impl UcxOptAlloc {
         src_addr: &[T],
         blocking: bool,
         managed: bool,
+        nowait: bool,
     ) -> Option<UcxOptRequest> {
         let offset = offset * std::mem::size_of::<T>();
         trace!(target: "ucx",
@@ -1742,6 +1767,15 @@ impl UcxOptAlloc {
             remote_addr + offset,
             rkey
         );
+        if nowait {
+            self.ep(shard, pe).put_nowait(
+                src_addr.as_ptr() as _,
+                src_addr.len() * std::mem::size_of::<T>(),
+                remote_addr + offset,
+                rkey,
+            );
+            return None;
+        }
         let req = self.ep(shard, pe).put(
             src_addr.as_ptr() as _,
             src_addr.len() * std::mem::size_of::<T>(),

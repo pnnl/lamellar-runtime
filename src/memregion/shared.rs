@@ -416,12 +416,13 @@ impl<T: Remote> SharedMemoryRegion<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Initiates a remote write of a single element to the given `pe` **without** tracking the
-    /// transfer in the runtime's completion bookkeeping.
+    /// Initiates a remote write of a single element to the given `pe` without returning a
+    /// handle for it.
     ///
-    /// The caller is entirely responsible for ensuring the transfer is complete before accessing
-    /// the destination. [`wait_all`][Self::wait_all] and [`barrier`][crate::LamellarEnv::barrier]
-    /// do **not** track unmanaged operations.
+    /// The transfer cannot be tracked individually and is not counted in the runtime's request
+    /// counters, but [`wait_all`][Self::wait_all] flushes the communication layer: once it
+    /// returns, every earlier unmanaged put from this PE has completed. Until then the
+    /// destination must not be read.
     ///
     /// # Safety
     /// This call is always unsafe because mutual exclusivity is not enforced and there is no
@@ -496,11 +497,14 @@ impl<T: Remote> SharedMemoryRegion<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Initiates a remote write of a contiguous buffer to the given `pe` **without** tracking
-    /// the transfer in the runtime's completion bookkeeping.
+    /// Initiates a remote write of a contiguous buffer to the given `pe` without returning a
+    /// handle for it.
     ///
-    /// The caller is entirely responsible for ensuring the transfer is complete before accessing
-    /// either the source or destination.
+    /// The transfer cannot be tracked individually and is not counted in the runtime's request
+    /// counters, but [`wait_all`][Self::wait_all] flushes the communication layer: once it
+    /// returns, every earlier unmanaged put from this PE has completed. Until then the source
+    /// must stay valid and unmodified (some backends have copied it by the time this call
+    /// returns, others have not) and the destination must not be read.
     ///
     /// # Safety
     /// This call is always unsafe because:
@@ -569,10 +573,12 @@ impl<T: Remote> SharedMemoryRegion<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Broadcasts a single element to **all** PEs at `index` **without** tracking the transfers
-    /// in the runtime's completion bookkeeping.
+    /// Broadcasts a single element to **all** PEs at `index` without returning a handle for the
+    /// transfers.
     ///
-    /// The caller is entirely responsible for ensuring all transfers are complete.
+    /// The transfers cannot be tracked individually, but [`wait_all`][Self::wait_all] flushes
+    /// the communication layer: once it returns, every earlier unmanaged put from this PE has
+    /// completed.
     ///
     /// # Safety
     /// This call is always unsafe because mutual exclusivity is not enforced and there is no
@@ -641,10 +647,12 @@ impl<T: Remote> SharedMemoryRegion<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Broadcasts a contiguous buffer to **all** PEs at `index` **without** tracking the transfers
-    /// in the runtime's completion bookkeeping.
+    /// Broadcasts a contiguous buffer to **all** PEs at `index` without returning a handle for
+    /// the transfers.
     ///
-    /// The caller is entirely responsible for ensuring all transfers are complete.
+    /// The transfers cannot be tracked individually, but [`wait_all`][Self::wait_all] flushes
+    /// the communication layer: once it returns, every earlier unmanaged put from this PE has
+    /// completed. Until then the source must stay valid and unmodified.
     ///
     /// # Safety
     /// This call is always unsafe because:

@@ -717,12 +717,13 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Initiates a remote write of a single element into this memory region **without** tracking
-    /// the transfer in the runtime's completion bookkeeping.
+    /// Initiates a remote write of a single element into this memory region without returning
+    /// a handle for it.
     ///
-    /// The caller is entirely responsible for ensuring the transfer is complete before
-    /// accessing the destination. [`wait_all`][crate::LamellarEnv::wait_all] and
-    /// [`barrier`][crate::LamellarEnv::barrier] do **not** track unmanaged operations.
+    /// The transfer cannot be tracked individually and is not counted in the runtime's request
+    /// counters, but [`wait_all`][crate::LamellarEnv::wait_all] flushes the communication
+    /// layer: once it returns, every earlier unmanaged put from this PE has completed. Until
+    /// then the destination must not be read.
     ///
     /// # Safety
     /// This call is always unsafe because mutual exclusivity is not enforced, and there is
@@ -823,9 +824,11 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     /// Accepts any type that implements `Into<MemregionRdmaInput<T>>`, including
     /// [`OneSidedMemoryRegion<T>`], [`SharedMemoryRegion<T>`], and slices thereof.
     ///
-    /// The caller is entirely responsible for ensuring the transfer is complete before
-    /// accessing either the source or destination. [`wait_all`][crate::LamellarEnv::wait_all]
-    /// and [`barrier`][crate::LamellarEnv::barrier] do **not** track unmanaged operations.
+    /// The transfer cannot be tracked individually and is not counted in the runtime's request
+    /// counters, but [`wait_all`][crate::LamellarEnv::wait_all] flushes the communication
+    /// layer: once it returns, every earlier unmanaged put from this PE has completed. Until
+    /// then the source must stay valid and unmodified (some backends have copied it by the
+    /// time this call returns, others have not) and the destination must not be read.
     ///
     /// # Safety
     /// This call is always unsafe because:

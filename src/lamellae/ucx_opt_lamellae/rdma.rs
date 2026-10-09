@@ -570,9 +570,10 @@ impl CommAllocRdma for UcxOptAlloc {
             src.len(),
             src.len() * std::mem::size_of::<T>()
         );
-        // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
-        // not that the operation has completed on the remote side
-        let _ = unsafe { UcxOptAlloc::put_inner(&self, pe, offset, src.as_slice(), false, false) };
+        // Waiting on the request only ensures the input buffer is free to reuse, not that the put has
+        // completed on the remote side. Registered sources of at least UNMANAGED_NOWAIT_MIN_BYTES are not
+        // even waited on: they must stay valid until the next `wait_all`, which drains the put.
+        let _ = unsafe { UcxOptAlloc::put_inner_unmanaged(&self, pe, offset, src.as_slice(), src.is_registered()) };
     }
     fn put_all<T: Remote>(
         &self,
@@ -641,9 +642,10 @@ impl CommAllocRdma for UcxOptAlloc {
                 src.len(),
                 src.len() * std::mem::size_of::<T>()
             );
-            // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
-            // not that the operation has completed on the remote side
-            let _ = unsafe { UcxOptAlloc::put_inner(&self, pe, offset, src.as_slice(), false, false) };
+            // Waiting on the request only ensures the input buffer is free to reuse, not that the put has
+            // completed on the remote side. Registered sources of at least UNMANAGED_NOWAIT_MIN_BYTES are not
+            // even waited on: they must stay valid until the next `wait_all`, which drains the put.
+            let _ = unsafe { UcxOptAlloc::put_inner_unmanaged(&self, pe, offset, src.as_slice(), src.is_registered()) };
         }
     }
 
@@ -872,10 +874,12 @@ impl CommAllocRdma for OneSidedUcxOptAlloc {
             pe, self.remote_pe
         );
         let src = src.into();
-        // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
-        // not that the operation has completed on the remote side
-        let _ =
-            unsafe { UcxOptAlloc::put_inner(&self.alloc, pe, offset, src.as_slice(), false, false) };
+        // Waiting on the request only ensures the input buffer is free to reuse, not that the put has
+        // completed on the remote side. Registered sources of at least UNMANAGED_NOWAIT_MIN_BYTES are not
+        // even waited on: they must stay valid until the next `wait_all`, which drains the put.
+        let _ = unsafe {
+            UcxOptAlloc::put_inner_unmanaged(&self.alloc, pe, offset, src.as_slice(), src.is_registered())
+        };
     }
     fn put_all<T: Remote>(
         &self,
