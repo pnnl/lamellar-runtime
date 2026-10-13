@@ -778,6 +778,12 @@ path = "examples/bandwidths/put_congested.rs"
 [[example]]
 name = "exchange_bench"
 path = "examples/bandwidths/exchange_bench.rs"
+[[example]]
+name = "onnode_atomic_stress"
+path = "examples/stress_tests/onnode_atomic_stress.rs"
+[[example]]
+name = "onnode_suballoc"
+path = "examples/stress_tests/onnode_suballoc.rs"
 
 [[example]]
 name = "put_bw_mt"
