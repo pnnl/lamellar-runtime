@@ -2049,6 +2049,59 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceScatterIntoBu
     }
 }
 
+/// Elementwise `acc[i] = acc[i] op src[i]` on the host, for the shared-memory lamellae that reduce by reading their peers'
+/// data. Integers wrap, like the atomic ops they replace; floats use the ordinary operators (no bitwise ops on floats).
+pub(crate) fn local_reduce<T: crate::Remote>(op: &ReduceOp, acc: &mut [T], src: &[T]) {
+    macro_rules! int {
+        ($t:ty) => {{
+            let acc = unsafe { std::slice::from_raw_parts_mut(acc.as_mut_ptr() as *mut $t, acc.len()) };
+            let src = unsafe { std::slice::from_raw_parts(src.as_ptr() as *const $t, src.len()) };
+            let it = acc.iter_mut().zip(src.iter());
+            match op {
+                ReduceOp::Sum => it.for_each(|(a, s)| *a = a.wrapping_add(*s)),
+                ReduceOp::Prod => it.for_each(|(a, s)| *a = a.wrapping_mul(*s)),
+                ReduceOp::Min => it.for_each(|(a, s)| *a = (*a).min(*s)),
+                ReduceOp::Max => it.for_each(|(a, s)| *a = (*a).max(*s)),
+                ReduceOp::BitOr => it.for_each(|(a, s)| *a |= *s),
+                ReduceOp::BitXor => it.for_each(|(a, s)| *a ^= *s),
+                ReduceOp::BitAnd => it.for_each(|(a, s)| *a &= *s),
+            }
+            return;
+        }};
+    }
+    macro_rules! float {
+        ($t:ty) => {{
+            let acc = unsafe { std::slice::from_raw_parts_mut(acc.as_mut_ptr() as *mut $t, acc.len()) };
+            let src = unsafe { std::slice::from_raw_parts(src.as_ptr() as *const $t, src.len()) };
+            let it = acc.iter_mut().zip(src.iter());
+            match op {
+                ReduceOp::Sum => it.for_each(|(a, s)| *a += *s),
+                ReduceOp::Prod => it.for_each(|(a, s)| *a *= *s),
+                ReduceOp::Min => it.for_each(|(a, s)| *a = a.min(*s)),
+                ReduceOp::Max => it.for_each(|(a, s)| *a = a.max(*s)),
+                _ => panic!("bitwise reduction on a float type"),
+            }
+            return;
+        }};
+    }
+    let id = std::any::TypeId::of::<T>();
+    if id == std::any::TypeId::of::<u8>() { int!(u8) }
+    if id == std::any::TypeId::of::<u16>() { int!(u16) }
+    if id == std::any::TypeId::of::<u32>() { int!(u32) }
+    if id == std::any::TypeId::of::<u64>() { int!(u64) }
+    if id == std::any::TypeId::of::<u128>() { int!(u128) }
+    if id == std::any::TypeId::of::<usize>() { int!(usize) }
+    if id == std::any::TypeId::of::<i8>() { int!(i8) }
+    if id == std::any::TypeId::of::<i16>() { int!(i16) }
+    if id == std::any::TypeId::of::<i32>() { int!(i32) }
+    if id == std::any::TypeId::of::<i64>() { int!(i64) }
+    if id == std::any::TypeId::of::<i128>() { int!(i128) }
+    if id == std::any::TypeId::of::<isize>() { int!(isize) }
+    if id == std::any::TypeId::of::<f32>() { float!(f32) }
+    if id == std::any::TypeId::of::<f64>() { float!(f64) }
+    panic!("unsupported reduction type {}", std::any::type_name::<T>());
+}
+
 #[derive(Clone)]
 pub(crate) enum ReduceOp {
     Min,

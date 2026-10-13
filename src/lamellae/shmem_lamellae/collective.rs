@@ -30,7 +30,7 @@ use crate::{
             CommAllocCollectiveAllReduce, CommAllocCollectiveAllToAll,
             CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce,
             CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrBuffer,
-            RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer,
+            RootOrLamellarBuffer, local_reduce, RootSrcOrBuffer, RootSrcOrLamellarBuffer,
             RootSrcOrLamellarBufferInner, ScatterInputInner,
         },
         net_atomic_fetch_op,
@@ -41,6 +41,55 @@ use crate::{
     warnings::RuntimeWarning,
     AsLamellarBuffer, BroadcastInput, LamellarBuffer, LamellarTask, Remote, ScatterInput,
 };
+
+/// Every PE reduces all PEs' `len` elements into `out`, by reading its peers' data in place. Unlike `reduce_to_root`
+/// this needs no atomic operations, so it works for any element type `local_reduce` knows, floats included, and every PE
+/// folds the PEs in rank order, so all PEs get the same bits.
+///
+/// Protocol, on the allocation's shared barrier counter (0 on entry, 0 again on return): each PE publishes the index of its
+/// input, bumps the counter (arrive), waits for the counter to reach `n`, reads and folds, and bumps it again (done). Only
+/// PE 0 waits for the counter to reach `2n`; it then resets it, and the other PEs wait for that reset, which tells them
+/// everyone is done. (Waiting for `2n` on every PE would race with the reset: a slow PE could poll after it and miss it.)
+/// Nobody changes its input before then, and `before_return` runs at that point, for example to restore an input that was
+/// staged.
+fn all_reduce_pull<T: Remote>(
+    alloc: &ShmemAlloc,
+    index: usize,
+    len: usize,
+    op: &ReduceOp,
+    out: &mut [T],
+    before_return: impl FnOnce(),
+) {
+    let (n, me) = (alloc.num_pes(), alloc.my_alloc_pe);
+    alloc.coll_set_index(me, index);
+    alloc.coll_inc_barrier();
+    while alloc.coll_get_barrier() < n {
+        std::thread::yield_now();
+    }
+    for pe in 0..n {
+        let addr = alloc.pe_base_offset(pe) + alloc.coll_index(pe) * std::mem::size_of::<T>();
+        let src = unsafe { std::slice::from_raw_parts(addr as *const T, len) };
+        if pe == 0 {
+            out.copy_from_slice(src);
+        } else {
+            local_reduce(op, out, src);
+        }
+    }
+    alloc.coll_inc_barrier();
+    if me == 0 {
+        while alloc.coll_get_barrier() < 2 * n {
+            std::thread::yield_now();
+        }
+        before_return();
+        alloc.coll_reset_barrier();
+    } else {
+        // our own `done` already put the counter above `n`, and only PE 0's reset brings it back below
+        while alloc.coll_get_barrier() >= n {
+            std::thread::yield_now();
+        }
+        before_return();
+    }
+}
 
 fn reduce_to_root<T: Remote>(
     root: usize,
@@ -110,44 +159,14 @@ fn reduce_to_atomic_op<T>(val: T, op: &ReduceOp) -> AtomicOp<T> {
 
 impl<T: Remote> ShmemCollectiveAllReduceFuture<T> {
     fn exec_op(&mut self) {
-        let alloc_slice = unsafe { self.alloc.as_mut_slice() };
-        let my_slice = &mut alloc_slice[self.index..self.index + self.len];
-        let mut to_replace: Vec<T> = (0..my_slice.len())
-            .map(|_| unsafe { std::mem::zeroed() })
-            .collect();
-        to_replace.copy_from_slice(my_slice);
-        let remote_dst_address = reduce_to_root(
-            0,
+        all_reduce_pull(
             &self.alloc,
-            Some(&mut self.result[..]),
             self.index,
             self.len,
             &self.op,
+            &mut self.result[..],
+            || {},
         );
-        if self.alloc.my_alloc_pe == 0 {
-            self.alloc.coll_inc_barrier();
-
-            while self.alloc.coll_get_barrier() != 2 * self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-
-            self.alloc.coll_reset_barrier();
-            my_slice.copy_from_slice(&to_replace);
-        } else {
-            while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-
-            let remote_dst_slice = unsafe {
-                std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)
-            };
-
-            self.result.copy_from_slice(remote_dst_slice);
-            self.alloc.coll_inc_barrier();
-            while self.alloc.coll_get_barrier() >= self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-        }
         self.spawned = true;
     }
 
@@ -209,44 +228,14 @@ pub(crate) struct ShmemCollectiveAllReduceIntoBufferFuture<T: Remote, B: AsLamel
 
 impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        let alloc_slice = unsafe { self.alloc.as_mut_slice() };
-        let my_slice = &mut alloc_slice[self.index..self.index + self.len];
-        let mut to_replace: Vec<T> = (0..my_slice.len())
-            .map(|_| unsafe { std::mem::zeroed() })
-            .collect();
-        to_replace.copy_from_slice(my_slice);
-        let remote_dst_address = reduce_to_root(
-            0,
+        all_reduce_pull(
             &self.alloc,
-            Some(self.result.as_mut_slice()),
             self.index,
             self.len,
             &self.op,
+            self.result.as_mut_slice(),
+            || {},
         );
-        if self.alloc.my_alloc_pe == 0 {
-            self.alloc.coll_inc_barrier();
-
-            while self.alloc.coll_get_barrier() != 2 * self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-
-            self.alloc.coll_reset_barrier();
-            my_slice.copy_from_slice(&to_replace);
-        } else {
-            while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-
-            let remote_dst_slice = unsafe {
-                std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, self.len)
-            };
-
-            self.result.as_mut_slice().copy_from_slice(remote_dst_slice);
-            self.alloc.coll_inc_barrier();
-            while self.alloc.coll_get_barrier() >= self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-        }
         self.spawned = true;
     }
 
@@ -315,47 +304,21 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemCollectiveAllReduceInPlaceFuture<T,
             len * std::mem::size_of::<T>(),
             self.alloc.num_bytes(),
         );
-        // stage the caller's (possibly off-alloc) buffer through this alloc's own
-        // shmem-backed scratch region, since only the alloc's own memory is
-        // remotely RDMA-atomic-writable by other PEs
+        // stage the caller's (possibly off-alloc) buffer through this alloc's own shmem-backed scratch region, since
+        // only the alloc's own memory is visible to the other PEs; the region's previous contents are put back once
+        // every PE has finished reading
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         let my_slice = &mut alloc_slice[0..len];
-        let mut to_replace: Vec<T> = (0..len).map(|_| unsafe { std::mem::zeroed() }).collect();
-        to_replace.copy_from_slice(my_slice);
+        let saved: Vec<T> = my_slice.to_vec();
         my_slice.copy_from_slice(self.result.as_slice());
-
-        let remote_dst_address = reduce_to_root(
-            0,
+        all_reduce_pull(
             &self.alloc,
-            Some(self.result.as_mut_slice()),
             0,
             len,
             &self.op,
+            self.result.as_mut_slice(),
+            || my_slice.copy_from_slice(&saved),
         );
-        if self.alloc.my_alloc_pe == 0 {
-            self.alloc.coll_inc_barrier();
-
-            while self.alloc.coll_get_barrier() != 2 * self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-
-            self.alloc.coll_reset_barrier();
-            my_slice.copy_from_slice(&to_replace);
-        } else {
-            while self.alloc.coll_get_barrier() < self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-
-            let remote_dst_slice =
-                unsafe { std::slice::from_raw_parts(remote_dst_address.unwrap() as *const T, len) };
-
-            self.result.as_mut_slice().copy_from_slice(remote_dst_slice);
-            my_slice.copy_from_slice(&to_replace);
-            self.alloc.coll_inc_barrier();
-            while self.alloc.coll_get_barrier() >= self.alloc.num_pes() {
-                std::thread::yield_now();
-            }
-        }
         self.spawned = true;
     }
 

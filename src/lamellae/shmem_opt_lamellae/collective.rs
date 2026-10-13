@@ -1,5 +1,4 @@
 use std::{
-    any::TypeId,
     future::Future,
     pin::Pin,
     sync::Arc,
@@ -30,7 +29,7 @@ use crate::{
             CollectiveScatterOpFuture, CollectiveScatterOpHandle, CommAllocCollectiveAllGather,
             CommAllocCollectiveAllReduce, CommAllocCollectiveAllToAll,
             CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce,
-            CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrBuffer,
+            CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrBuffer, local_reduce,
             RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer,
             RootSrcOrLamellarBufferInner, ScatterInputInner,
         },
@@ -40,58 +39,6 @@ use crate::{
     warnings::RuntimeWarning,
     AsLamellarBuffer, BroadcastInput, LamellarBuffer, LamellarTask, Remote, ScatterInput,
 };
-
-/// Elementwise `acc[i] = acc[i] op src[i]`. Integers wrap, like the atomic ops they replace.
-fn local_reduce<T: Remote>(op: &ReduceOp, acc: &mut [T], src: &[T]) {
-    macro_rules! int {
-        ($t:ty) => {{
-            let acc = unsafe { std::slice::from_raw_parts_mut(acc.as_mut_ptr() as *mut $t, acc.len()) };
-            let src = unsafe { std::slice::from_raw_parts(src.as_ptr() as *const $t, src.len()) };
-            let it = acc.iter_mut().zip(src.iter());
-            match op {
-                ReduceOp::Sum => it.for_each(|(a, s)| *a = a.wrapping_add(*s)),
-                ReduceOp::Prod => it.for_each(|(a, s)| *a = a.wrapping_mul(*s)),
-                ReduceOp::Min => it.for_each(|(a, s)| *a = (*a).min(*s)),
-                ReduceOp::Max => it.for_each(|(a, s)| *a = (*a).max(*s)),
-                ReduceOp::BitOr => it.for_each(|(a, s)| *a |= *s),
-                ReduceOp::BitXor => it.for_each(|(a, s)| *a ^= *s),
-                ReduceOp::BitAnd => it.for_each(|(a, s)| *a &= *s),
-            }
-            return;
-        }};
-    }
-    macro_rules! float {
-        ($t:ty) => {{
-            let acc = unsafe { std::slice::from_raw_parts_mut(acc.as_mut_ptr() as *mut $t, acc.len()) };
-            let src = unsafe { std::slice::from_raw_parts(src.as_ptr() as *const $t, src.len()) };
-            let it = acc.iter_mut().zip(src.iter());
-            match op {
-                ReduceOp::Sum => it.for_each(|(a, s)| *a += *s),
-                ReduceOp::Prod => it.for_each(|(a, s)| *a *= *s),
-                ReduceOp::Min => it.for_each(|(a, s)| *a = a.min(*s)),
-                ReduceOp::Max => it.for_each(|(a, s)| *a = a.max(*s)),
-                _ => panic!("bitwise reduction on a float type"),
-            }
-            return;
-        }};
-    }
-    let id = TypeId::of::<T>();
-    if id == TypeId::of::<u8>() { int!(u8) }
-    if id == TypeId::of::<u16>() { int!(u16) }
-    if id == TypeId::of::<u32>() { int!(u32) }
-    if id == TypeId::of::<u64>() { int!(u64) }
-    if id == TypeId::of::<u128>() { int!(u128) }
-    if id == TypeId::of::<usize>() { int!(usize) }
-    if id == TypeId::of::<i8>() { int!(i8) }
-    if id == TypeId::of::<i16>() { int!(i16) }
-    if id == TypeId::of::<i32>() { int!(i32) }
-    if id == TypeId::of::<i64>() { int!(i64) }
-    if id == TypeId::of::<i128>() { int!(i128) }
-    if id == TypeId::of::<isize>() { int!(isize) }
-    if id == TypeId::of::<f32>() { float!(f32) }
-    if id == TypeId::of::<f64>() { float!(f64) }
-    panic!("unsupported reduction type {}", std::any::type_name::<T>());
-}
 
 // Chunk the reduction so the accumulator stays in L1 while every peer is folded in.
 const REDUCE_CHUNK_BYTES: usize = 16 * 1024;
