@@ -2,6 +2,8 @@
 /// Test the bandwidth between two PEs using an active message which
 /// contains a vector of N bytes
 /// the active message simply returns immediately.
+/// Env: `AM_LOG2=<n>` runs only the 2^n byte size; `AM_BYTES=1` sends the data with
+/// `serde_bytes` (bulk copy) instead of the element-wise `Vec<u8>` encoding.
 /// --------------------------------------------------------------------
 use lamellar::ActiveMessaging;
 use std::time::Instant;
@@ -13,6 +15,17 @@ struct DataAM {
 
 #[lamellar::am]
 impl LamellarAM for DataAM {
+    async fn exec() {}
+}
+
+#[lamellar::AmData(Clone, Debug)]
+struct BytesAM {
+    #[serde(with = "serde_bytes")]
+    data: Vec<u8>,
+}
+
+#[lamellar::am]
+impl LamellarAM for BytesAM {
     async fn exec() {}
 }
 
@@ -33,7 +46,12 @@ fn main() {
         println!("==================Bandwidth test===========================");
     }
     let mut bws = vec![];
+    let only = std::env::var("AM_LOG2").ok().and_then(|v| v.parse::<u32>().ok());
+    let as_bytes = std::env::var("AM_BYTES").map_or(false, |v| v == "1");
     for i in 0..27 {
+        if only.map_or(false, |o| o != i) {
+            continue;
+        }
         let num_bytes = 2_u64.pow(i);
         let mut _data: std::vec::Vec<u8> = Vec::new(); //vec![; num_bytes as usize];
         for i in 0..num_bytes {
@@ -59,7 +77,11 @@ fn main() {
                 let sub_timer = Instant::now();
                 let d = _data.clone();
                 sub_time += sub_timer.elapsed().as_secs_f64();
-                let _ = world.spawn_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
+                if as_bytes {
+                    let _ = world.spawn_am_pe(num_pes - 1, BytesAM { data: d });
+                } else {
+                    let _ = world.spawn_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
+                }
 
                 sum += num_bytes * 1 as u64;
                 cnt += 1;

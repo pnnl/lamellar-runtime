@@ -765,8 +765,19 @@ name = "get_bw"
 path = "examples/bandwidths/get_bw.rs"
 
 [[example]]
+name = "get_small"
+path = "examples/bandwidths/get_small.rs"
+
+[[example]]
 name = "put_bw"
 path = "examples/bandwidths/put_bw.rs"
+
+[[example]]
+name = "put_congested"
+path = "examples/bandwidths/put_congested.rs"
+[[example]]
+name = "exchange_bench"
+path = "examples/bandwidths/exchange_bench.rs"
 
 [[example]]
 name = "put_bw_mt"
