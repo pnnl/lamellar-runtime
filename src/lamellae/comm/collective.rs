@@ -2433,6 +2433,18 @@ pub(crate) trait CommAllocCollectiveGather {
     ) -> CollectiveGatherIntoBufferOpHandle<T, B>;
 }
 
+/// KNOWN SHORTCOMING: despite the name, this is not an MPI / OpenSHMEM style all-to-all (a personalized exchange where
+/// PE `i` sends a different block to every PE `j`, so the source holds `len * num_pes` elements). As implemented on at
+/// least some lamellae it is an all-gather: every PE contributes the same `len` elements (`src[index..index + len]`) and
+/// receives `len * num_pes` elements (every PE's contribution, in PE order).
+///   * `ucx_opt`: `alltoall_inner` calls `ucc_team.allgather(src, result)`.
+///   * `shmem_opt`: `ShmemOptCollectiveAllToAllFuture::exec_op` calls `gather(...)` with the result sized `len * num_pes`.
+///   * `libfabric_sys_opt`: `alltoall_inner` calls `fi_alltoall` with the source length as the count; whether that is a
+///     true all-to-all was not verified, so the lamellae may not agree with each other.
+/// The region wrapper is `SharedMemoryRegion::broadcast_all`, whose doc describes a root broadcast, which matches neither.
+/// Do not rely on this for a personalized exchange. The OpenSHMEM shim therefore leaves `shmem_alltoall*` /
+/// `shmem_alltoalls*` unimplemented until the runtime has a true all-to-all (source `len * num_pes`, block `j` to PE `j`)
+/// that behaves the same on every lamellae.
 pub(crate) trait CommAllocCollectiveAllToAll {
     fn alltoall<T: Remote>(
         &self,
