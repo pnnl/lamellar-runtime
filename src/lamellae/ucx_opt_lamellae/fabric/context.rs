@@ -1,4 +1,4 @@
-use std::{env, mem::MaybeUninit, sync::Arc};
+use std::{mem::MaybeUninit, sync::Arc};
 
 use lamellar_ucx_sys::*;
 
@@ -15,13 +15,7 @@ pub(crate) struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        // D9: default to the fastest common intra-node/inter-node transport
-        // combination (RC over RDMA verbs + shared memory + self) instead of
-        // letting UCX's own auto-selection pick a slower fallback, but only
-        // when the user hasn't already set UCX_TLS themselves.
-        if env::var_os("UCX_TLS").is_none() {
-            env::set_var("UCX_TLS", "rc_x,self,sm");
-        }
+        // UCX_TLS is left to the user or to UCX's own selection.
 
         let mut handle = MaybeUninit::uninit();
         let status =
