@@ -88,9 +88,11 @@ fn default_ucx_spin() -> usize {
     1000
 }
 
-/// `ucx_opt_lamellae` D4: UCX workers (shards) per PE. Unset means `clamp(threads_per_pe, 4, 16)`,
-/// chosen from the PE sweeps: K=4 is enough with 4 threads per PE and the gain keeps growing up to
-/// K=16 with 16+ threads, where a single shared worker serializes every thread.
+/// `ucx_opt_lamellae` D4: UCX workers (shards) per PE. Unset means `clamp(threads_per_pe, 1, 4)`:
+/// one worker per executor thread, at most 4. A single-threaded PE gets one worker, since extra workers
+/// only add endpoints per peer (every worker connects to every PE at startup): remote atomics were 3.4x
+/// slower with 4 workers than with 1 at 16 nodes x 16 PEs x 1 thread. A PE that is alone on its node with
+/// many threads issuing small puts does better with more (up to 16), so set this explicitly there.
 fn default_ucx_workers() -> Option<usize> {
     None
 }

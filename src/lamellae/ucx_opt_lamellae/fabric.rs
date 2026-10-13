@@ -54,6 +54,12 @@ fn pe_shard(pe: usize, shards: usize) -> usize {
 /// Upper bound on `LAMELLAR_UCX_WORKERS`; keeps `AllocFlushState` a small `Copy` type.
 pub(crate) const MAX_SHARDS: usize = 16;
 
+/// Workers per PE when `LAMELLAR_UCX_WORKERS` is unset: one per executor thread, at most this many.
+/// More workers than this lost bandwidth on large puts and remote-atomic rate in the scaling sweeps
+/// (every worker connects to every PE), except for one PE per node with many threads, which can set
+/// `LAMELLAR_UCX_WORKERS` explicitly.
+const DEFAULT_MAX_WORKERS: usize = 4;
+
 /// One UCX worker plus its endpoints to every PE's matching worker (`endpoints[pe]`).
 #[derive(Clone)]
 pub(crate) struct Shard {
@@ -261,7 +267,7 @@ impl UcxOptWorld {
         let context = Context::new(my_pmi.clone()).unwrap();
         let num_workers = config()
             .ucx_workers
-            .unwrap_or_else(|| config().threads.clamp(4, MAX_SHARDS))
+            .unwrap_or_else(|| config().threads.clamp(1, DEFAULT_MAX_WORKERS))
             .clamp(1, MAX_SHARDS);
         let workers = (0..num_workers)
             .map(|_| context.create_worker().unwrap())
