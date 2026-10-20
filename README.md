@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **This repository is archived and no longer maintained here.**
+> The Lamellar runtime now lives in the [`pnnl/lamellar`](https://github.com/pnnl/lamellar) monorepo at
+> [`lamellar-runtime`](https://github.com/pnnl/lamellar/tree/master/lamellar-runtime).
+> Please open issues and pull requests there. The full commit history was carried over;
+> commit SHAs differ from this repository.
+
 Lamellar - Rust HPC runtime
 =================================================
 
